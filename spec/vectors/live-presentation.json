@@ -204,6 +204,42 @@
         "seriesTimerId": "series-rule"
       },
       "expected": true
+    },
+    {
+      "id": "live-presentation.tv-standard-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1
+      },
+      "expected": 56
+    },
+    {
+      "id": "live-presentation.tv-large-text-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1.3
+      },
+      "expected": 72.8
+    },
+    {
+      "id": "live-presentation.touch-standard-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1
+      },
+      "expected": 60
+    },
+    {
+      "id": "live-presentation.no-shrink-small-font",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 0.85
+      },
+      "expected": 56
     }
   ]
 }

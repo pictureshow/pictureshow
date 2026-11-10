@@ -69,3 +69,9 @@ Program detail uses artwork, title, channel/time/episode metadata, overview and 
 The guide's red recording dot requires a nonblank occurrence TimerId. A SeriesTimerId alone describes a rule and
 does not establish that its filters schedule this particular airing. The accessible program label includes the
 scheduled state when the occurrence exists; visual color is never the only indicator.
+
+
+Round 2 native density contract: at the standard TV 960×540 viewport, the focused-program preview replaces the generic title header,
+and native tabs share a line with the horizontally scrollable guide filters/day strip. The fixed 200dp channel column and one pinned
+28dp ruler leave space for at least six complete 56dp channel lanes at font scale 1.0. Lanes and the preview grow with accessibility
+font scale; extra channels scroll vertically rather than shrinking text. Touch keeps 60dp minimum lanes and a 72dp fixed channel column.

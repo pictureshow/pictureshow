@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -119,6 +120,8 @@ internal fun LiveTvScreen(
         recording != null -> "Delete recording?"
         else -> "Live TV"
     }
+    val guideHeader = tv && !detail && tab == "Guide" && !linear
+    val preview = state.programs.firstOrNull { "p:${it.id}" == returnFocus } ?: state.programs.firstOrNull()
     val canAct = state.actionsAvailable(now)
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
@@ -130,11 +133,27 @@ internal fun LiveTvScreen(
     ) {
         if (tv) {
             Row(
-                Modifier.fillMaxWidth().height(40.dp),
+                Modifier.fillMaxWidth().heightIn(min = if (guideHeader) 64.dp else 40.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                LiveText(title, true, Modifier.weight(1f), heading = true, maxLines = 1)
+                if (guideHeader) {
+                    Column(Modifier.weight(1f).testTag("live:guide-preview")) {
+                        LiveText(preview?.name ?: "Live TV guide", true, heading = true, maxLines = 1)
+                        preview?.let { show ->
+                            LiveText(
+                                "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +
+                                    time.range(show.startDate, show.endDate) + show.episodeTitle?.let { " · $it" }.orEmpty(),
+                                true,
+                                small = true,
+                                maxLines = 1
+                            )
+                            show.overview?.let { LiveText(it, true, small = true, maxLines = 1) }
+                        }
+                    }
+                } else {
+                    LiveText(title, true, Modifier.weight(1f), heading = true, maxLines = 1)
+                }
                 if (!detail) {
                     state.fetchedAt?.let {
                         LiveText("${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}", true, small = true)
@@ -162,21 +181,25 @@ internal fun LiveTvScreen(
                 returnFocus = null
                 restoreFocus = false
             }
-            if (tv) {
-                androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
-                    tabs.forEach { next ->
-                        TvTab(tab == next, onFocus = {
-                        }, onClick = { select(next) }, modifier = Modifier.testTag("live:tab:$next")) {
-                            androidx.tv.material3.Text(next, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+            val navigation: @Composable () -> Unit = {
+                if (tv) {
+                    androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
+                        tabs.forEach { next ->
+                            TvTab(tab == next, onFocus = {
+                            }, onClick = { select(next) }, modifier = Modifier.testTag("live:tab:$next")) {
+                                androidx.tv.material3.Text(next, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+                            }
                         }
                     }
-                }
-            } else {
-                androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) {
-                    tabs.forEach { next ->
-                        androidx.compose.material3.Tab(tab == next, {
-                            select(next)
-                        }, text = { androidx.compose.material3.Text(next, maxLines = 1) }, modifier = Modifier.testTag("live:tab:$next"))
+                } else {
+                    androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) {
+                        tabs.forEach { next ->
+                            androidx.compose.material3.Tab(tab == next, {
+                                select(next)
+                            }, text = {
+                                androidx.compose.material3.Text(next, maxLines = 1)
+                            }, modifier = Modifier.testTag("live:tab:$next"))
+                        }
                     }
                 }
             }
@@ -195,54 +218,73 @@ internal fun LiveTvScreen(
                     }, singleLine = true)
                 }
             }
-            if (tab in listOf("Channels", "Guide")) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    item {
-                        LiveChip("Favorites", favorites, tv) {
-                            favorites = !favorites
-                            returnFocus = null
-                        }
-                    }
-                    if (tab == "Guide") {
+            val filters: @Composable () -> Unit = {
+                if (tab in listOf("Channels", "Guide")) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         item {
-                            LiveChip("Grid", !linear, tv) {
-                                linear = false
+                            LiveChip("Favorites", favorites, tv) {
+                                favorites = !favorites
                                 returnFocus = null
                             }
                         }
-                        item {
-                            LiveChip("List", linear, tv) {
-                                linear = true
-                                returnFocus = null
+                        if (tab == "Guide") {
+                            item {
+                                LiveChip("Grid", !linear, tv) {
+                                    linear = false
+                                    returnFocus = null
+                                }
                             }
-                        }
-                        item {
-                            LiveIcon("earlier", "Earlier", tv, !state.loading) { vm.refresh(state.windowStart - LiveTvViewModel.WINDOW) }
-                        }
-                        item { LiveChip("Now", false, tv, !state.loading) { vm.refresh(System.currentTimeMillis()) } }
-                        item { LiveIcon("later", "Later", tv, !state.loading) { vm.refresh(state.windowStart + LiveTvViewModel.WINDOW) } }
-                        items((0L..6L).toList()) { day ->
-                            val date = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().plusDays(day)
-                            val start = if (day == 0L) now else date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                            val selected = Instant.ofEpochMilli(state.windowStart).atZone(ZoneId.systemDefault()).toLocalDate() == date
-                            LiveChip(time.day(start), selected, tv, !state.loading) { vm.refresh(start) }
-                        }
-                    } else if (!tv) {
-                        item {
-                            state.fetchedAt?.let {
-                                LiveText(
-                                    "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
-                                    false,
-                                    small = true
-                                )
+                            item {
+                                LiveChip("List", linear, tv) {
+                                    linear = true
+                                    returnFocus = null
+                                }
+                            }
+                            item {
+                                LiveIcon("earlier", "Earlier", tv, !state.loading) {
+                                    vm.refresh(state.windowStart - LiveTvViewModel.WINDOW)
+                                }
+                            }
+                            item { LiveChip("Now", false, tv, !state.loading) { vm.refresh(System.currentTimeMillis()) } }
+                            item {
+                                LiveIcon("later", "Later", tv, !state.loading) { vm.refresh(state.windowStart + LiveTvViewModel.WINDOW) }
+                            }
+                            items((0L..6L).toList()) { day ->
+                                val date = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().plusDays(day)
+                                val start = if (day == 0L) now else date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                val selected = Instant.ofEpochMilli(state.windowStart).atZone(ZoneId.systemDefault()).toLocalDate() == date
+                                LiveChip(time.day(start), selected, tv, !state.loading) { vm.refresh(start) }
+                            }
+                        } else if (!tv) {
+                            item {
+                                state.fetchedAt?.let {
+                                    LiveText(
+                                        "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
+                                        false,
+                                        small = true
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
+            if (tv) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(Modifier.width(360.dp)) { navigation() }
+                    Box(Modifier.weight(1f)) { filters() }
+                }
+            } else {
+                navigation()
+                filters()
             }
         }
         if (state.loading || state.writing) {

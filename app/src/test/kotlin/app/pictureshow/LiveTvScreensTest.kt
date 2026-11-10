@@ -154,6 +154,30 @@ class LiveTvScreensTest {
     }
 
     @Test
+    @Config(qualifiers = "w960dp-h540dp-mdpi")
+    fun tvGuideShowsSixCompleteChannelsWithFocusedPreview() {
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            channelRows = (1..8).map { app.pictureshow.core.livetv.LiveChannel("c$it", "Generated $it", "$it") }
+            show = show.copy(
+                channelId = "c1",
+                startDate = now.minusSeconds(30).toString(),
+                endDate = now.plusSeconds(1800).toString(),
+                overview = "An original generated programme description for the focused preview."
+            )
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:p:p").assertIsFocused()
+        compose.onNodeWithTag("live:guide-preview").assertIsDisplayed()
+        val first = compose.onNodeWithTag("live:guide-row:c1").getUnclippedBoundsInRoot()
+        val sixth = compose.onNodeWithTag("live:guide-row:c6").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(first.top <= 170.dp, "Guide chrome must leave room for six channels: $first")
+        assertTrue(sixth.bottom <= 524.dp, "The sixth channel must fit completely in the safe viewport: $sixth")
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h800dp-mdpi")
     fun phoneTabsStayOnOneLineAndChannelIsVisibleWithoutScrolling() {
         val vm = LiveTvViewModel(account, LiveFake())
