@@ -60,12 +60,30 @@ private struct DiagnosticsView: View {
     @State private var showProfile = false
     @FocusState private var refreshFocused: Bool
     var body: some View {
-        ReadingPage(title: "This device") {
-            Button("Refresh", action: refresh).buttonStyle(ProminentActionStyle()).focused($refreshFocused).accessibilityIdentifier("refreshDiagnostics")
-            ForEach(Array(report.enumerated()), id: \.offset) { _, block in ReadingChunks(text: block) }
-            Button(showProfile ? "Hide device profile JSON" : "View device profile JSON") { showProfile.toggle() }.secondaryActionStyle().accessibilityIdentifier("toggleProfile")
-            if showProfile { ReadingChunks(text: profile) }
+        GeometryReader { geometry in
+            ReadingPage(title: diagnosticsTitle(for: geometry.size)) {
+                Button("Refresh", action: refresh).diagnosticsRefreshStyle().focused($refreshFocused).accessibilityIdentifier("refreshDiagnostics")
+                #if os(iOS)
+                Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
+                    .font(.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                if !report.isEmpty {
+                    ShareLink(item: report.joined(separator: "\n\n") + "\n\nDevice profile JSON\n" + profile) {
+                        Label("Share diagnostics", systemImage: "square.and.arrow.up")
+                    }.buttonStyle(ProminentActionStyle()).controlSize(.large).accessibilityIdentifier("shareDiagnostics")
+                }
+                #endif
+                ForEach(Array(report.enumerated()), id: \.offset) { _, block in ReadingChunks(text: block) }
+                Button(showProfile ? "Hide device profile JSON" : "View device profile JSON") { showProfile.toggle() }.secondaryActionStyle().accessibilityIdentifier("toggleProfile")
+                if showProfile { ReadingChunks(text: profile) }
+            }
         }.onAppear { refresh(); refreshFocused = true }
+    }
+    private func diagnosticsTitle(for size: CGSize) -> String {
+        #if os(tvOS)
+        return "This TV"
+        #else
+        return min(size.width, size.height) >= 600 ? "This tablet" : "This phone"
+        #endif
     }
     private func refresh() {
         let audio = AVAudioSession.sharedInstance()
@@ -119,6 +137,16 @@ extension View {
         focusable()
         #else
         self
+        #endif
+    }
+}
+
+private extension View {
+    @ViewBuilder func diagnosticsRefreshStyle() -> some View {
+        #if os(iOS)
+        buttonStyle(.bordered).controlSize(.large)
+        #else
+        buttonStyle(ProminentActionStyle())
         #endif
     }
 }

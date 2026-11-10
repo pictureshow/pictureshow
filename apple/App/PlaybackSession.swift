@@ -106,8 +106,10 @@ final class ViewingAVPlayer: AVPlayer {
     @Published private(set) var skipSegment: MediaSegment?
     @Published private(set) var nextItem: MediaItem?
     @Published private(set) var nextCountdown: Int?
+    @Published private(set) var nextCardVisible = false
+    @Published private(set) var speedLimitation: String?
     @Published private(set) var extrasError: String?
-    @Published var panelOpen = false
+    @Published var panelOpen = false { didSet { if panelOpen { nextCountdown = nil } } }
     @Published var controlsVisible = false
     @Published private(set) var subtitleDelayMs = 0
     let externalSubtitles: ExternalTextSubtitles
@@ -412,6 +414,7 @@ final class ViewingAVPlayer: AVPlayer {
     func togglePlayback() {
         guard !closed, isForeground else { return }
         pauseIntent.toggle(); isPaused = pauseIntent
+        if pauseIntent { nextCountdown = nil }
         if timelineReady { if pauseIntent { pausePlayer() } else { playPlayer() } }
         enqueueProgress()
     }
@@ -469,6 +472,7 @@ final class ViewingAVPlayer: AVPlayer {
     @discardableResult func selectPlaybackSpeed(_ requested: Double, encodedOutput: Bool = false) -> Bool {
         let accepted = speedState.select(requested, encodedOutput: encodedOutput)
         playbackRate = speedState.rate
+        speedLimitation = accepted ? nil : PlaybackSpeeds.unsupportedOutputNotice
         player.defaultRate = Float(playbackRate)
         player.currentItem?.audioTimePitchAlgorithm = .timeDomain
         if timelineReady, isForeground, !pauseIntent {
@@ -479,6 +483,16 @@ final class ViewingAVPlayer: AVPlayer {
         return accepted
     }
 
+    /// A requested rate is not proof of output acceptance. Check the running
+    /// player's rate, and fail back to normal if AVKit/output cannot retain it.
+    func verifyPlaybackRate() {
+        guard timelineReady, player.timeControlStatus == .playing, player.rate > 0,
+              abs(Double(player.rate) - playbackRate) > 0.01 else { return }
+        _ = speedState.select(1, encodedOutput: false); playbackRate = speedState.rate
+        speedLimitation = "This playback output could not apply the selected speed. Playback is at 1×. Try reopening playback on this device."
+        player.defaultRate = 1
+        if !pauseIntent { playPlayer() }
+    }
     var playbackSpeedWarning: String? { PlaybackSpeeds.warning(isTranscoding: decision?.method == .transcode) }
     private func pausePlayer() {
         if let player = player as? ViewingAVPlayer { player.pauseFromViewing() }
@@ -500,7 +514,7 @@ final class ViewingAVPlayer: AVPlayer {
     func backgrounded() {
         guard !closed else { return }
         if isForeground { stopGeneration += 1 }
-        isForeground = false
+        isForeground = false; nextCountdown = nil
         trackLabels.cancelOpen(); pauseIntent = true; isPaused = true
         pausePlayer(); enqueueProgress(); logLifecycle()
     }
@@ -548,10 +562,20 @@ final class ViewingAVPlayer: AVPlayer {
         let duration = player.currentItem?.duration.seconds ?? .nan
         return duration.isFinite && duration > 0 && duration <= 86400 ? duration : nil
     }
-    var subtitleTimingAvailable: Bool { false }
+    var subtitleTimingAvailable: Bool { externalSubtitles.selected != nil }
+    func adjustSubtitleDelay(by milliseconds: Int?) {
+        guard subtitleTimingAvailable else { return }
+        subtitleDelayMs = milliseconds.map { max(-10_000, min(10_000, subtitleDelayMs + $0)) / 100 * 100 } ?? 0
+        refreshSubtitleCue()
+    }
+    private func refreshSubtitleCue() {
+        let seconds = player.currentTime().seconds
+        let fullMs = (seconds.isFinite ? Ticks.from(seconds: seconds) : positionTicks) / 10_000
+        subtitleCue = externalSubtitles.text(atFullMediaMs: fullMs - Int64(subtitleDelayMs))
+    }
     var subtitleTimingExplanation: String {
         if externalSubtitles.selected != nil {
-            return "These external text subtitles use Pictureshow’s video overlay. Per-viewing subtitle timing adjustment is not available."
+            return "These external text subtitles use Pictureshow’s video overlay. Earlier and Later adjust timing for this viewing."
         }
         return decision?.method == .transcode && (decision?.subtitleIndex ?? -1) >= 0
         ? "These subtitles are burned into the video by the server. Timing and appearance cannot be changed."
@@ -566,7 +590,8 @@ final class ViewingAVPlayer: AVPlayer {
     private func tick() {
         guard timelineReady, !closed else { return }
         positionTicks = currentTicks
-        subtitleCue = externalSubtitles.text(atFullMediaMs: Ticks.from(seconds: player.currentTime().seconds.isFinite ? player.currentTime().seconds : Ticks.seconds(positionTicks)) / 10_000)
+        verifyPlaybackRate()
+        refreshSubtitleCue()
         let now = Date(), elapsed = min(1, now.timeIntervalSince(lastTickTime)); lastTickTime = now
         let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         if !pauseIntent && (waiting || lastObservedTicks == positionTicks) {
@@ -588,27 +613,32 @@ final class ViewingAVPlayer: AVPlayer {
         skipSegment = PlaybackExtras.activeSegment(segments, positionMs: positionTicks / 10_000, modes: modes)
         if let segment = skipSegment, modes[segment.type] == .automatic, !pauseIntent, !waiting,
            !skipped.contains(segment.id) { skipped.insert(segment.id); seek(toTicks: segment.endTicks); skipSegment = nil }
-        guard let duration = durationSeconds, nextItem != nil, !continuationCancelled,
+        updateNextCard(elapsed: elapsed, now: now, waiting: waiting)
+    }
+    /// Presentation adapter: the portable policy owns the displayed wall-clock number.
+    /// The media clock remains unchanged by playback speed.
+    func updateNextCard(elapsed: Double, now: Date = Date(), waiting: Bool = false, reader: Bool? = nil, durationSeconds observedDuration: Double? = nil, mediaPositionTicks observedPosition: Int64? = nil, preparing: Bool? = nil) {
+        let positionTicks = observedPosition ?? self.positionTicks
+        guard let duration = observedDuration ?? durationSeconds, nextItem != nil, !continuationCancelled,
               let trigger = PlaybackExtras.nextTrigger(durationMs: Int64(duration * 1000), segments: segments),
-              positionTicks / 10_000 >= trigger else { nextCountdown = nil; return }
+              positionTicks / 10_000 >= trigger else { nextCardVisible = false; nextCountdown = nil; return }
+        nextCardVisible = true
         let credits = PlaybackExtras.creditsStart(durationMs: Int64(duration * 1000), segments: segments) != nil
-        // tvOS reports native transport visibility. iOS has no equivalent public
-        // AVKit callback, so keep its early credits action manual rather than
-        // interrupt a viewer who may be using the native scrubber. Physical EOS
-        // still uses the ordinary guarded continuation path on both platforms.
         #if os(tvOS)
-        let permitsEarlyContinuation = true
+        let transportObscures = controlsVisible
         #else
-        let permitsEarlyContinuation = false
+        let transportObscures = false
         #endif
-        if credits && permitsEarlyContinuation && isForeground && !pauseIntent && !waiting && !panelOpen && !controlsVisible && now.timeIntervalSince(lastSeekTime) > 2 && !UIAccessibility.isVoiceOverRunning {
-            countdownElapsed += elapsed
-            nextCountdown = max(0, 10 - Int(countdownElapsed))
-            if countdownElapsed >= 10 { Task { await advance(automatic: true) } }
-        } else { nextCountdown = credits ? max(0, 10 - Int(countdownElapsed)) : max(0, Int(duration - Ticks.seconds(positionTicks))) }
+        let suspended = transportObscures || !isForeground || pauseIntent || waiting || (preparing ?? waitingForVideo) || panelOpen || now.timeIntervalSince(lastSeekTime) <= 2
+        let autoPlay = !(reader ?? UIAccessibility.isVoiceOverRunning)
+        if credits && !suspended && autoPlay { countdownElapsed += max(0, min(1, elapsed)) }
+        nextCountdown = NextEpisodeCard.seconds(wallSeconds: max(0, 10 - Int64(countdownElapsed)),
+            creditsCountdown: credits, mediaLeftMs: max(0, Int64(duration * 1_000) - positionTicks / 10_000),
+            speed: playbackRate, autoPlay: autoPlay, ended: false, suspended: suspended).map(Int.init)
+        if credits && countdownElapsed >= 10 && !suspended && autoPlay { Task { await advance(automatic: true) } }
     }
     func skip() { guard let segment = skipSegment else { return }; skipped.insert(segment.id); seek(toTicks: segment.endTicks); skipSegment = nil }
-    func cancelContinuation() { continuationCancelled = true; nextCountdown = nil }
+    func cancelContinuation() { continuationCancelled = true; nextCardVisible = false; nextCountdown = nil }
     private func loadExtras() {
         let item = item
         extrasTask = Task { [weak self] in
@@ -637,7 +667,7 @@ final class ViewingAVPlayer: AVPlayer {
                 // completed this item. Retain completion errors for detail Retry.
                 _ = await completeIfNeeded()
                 guard !closed, isForeground, stopGeneration == lifecycleVersion else { return }
-                nextCountdown = 0; pauseIntent = true; isPaused = true; return
+                nextCardVisible = true; nextCountdown = nil; pauseIntent = true; isPaused = true; return
             }
         }
         _ = await completeIfNeeded()
@@ -689,11 +719,11 @@ final class ViewingAVPlayer: AVPlayer {
             switching = false; return
         }
         guard isForeground, stopGeneration == lifecycleVersion, (!automatic || !pauseIntent) else { switching = false; return }
-        externalSubtitles.release(); subtitleCue = nil
-        speedState.beginNextViewing(); playbackRate = speedState.rate; player.defaultRate = Float(playbackRate)
+        externalSubtitles.release(); subtitleCue = nil; subtitleDelayMs = 0
+        speedState.beginNextViewing(); playbackRate = speedState.rate; speedLimitation = nil; player.defaultRate = Float(playbackRate)
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; seekFallbackTicks = nil; nativeSeekPending = false
         viewingID = UUID(); reportSequence = 0; audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
-        continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
+        nextCardVisible = false; continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
         switching = false
@@ -875,7 +905,7 @@ final class ViewingAVPlayer: AVPlayer {
            subtitle == -1 || externalTextStream(subtitle, source: current.source) != nil {
             current.subtitleIndex = subtitle; decision = current
             observeSubtitleSelection(current.subtitleIndex)
-            selectExternalText(for: current); subtitleCue = externalSubtitles.text(atFullMediaMs: currentTicks / 10_000)
+            selectExternalText(for: current); subtitleCue = externalSubtitles.text(atFullMediaMs: currentTicks / 10_000 - Int64(subtitleDelayMs))
             enqueueProgress()
             return // A text choice does not replace, pause or seek the A/V item.
         }

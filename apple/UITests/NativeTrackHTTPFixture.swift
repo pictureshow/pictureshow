@@ -9,6 +9,9 @@ import XCTest
 final class NativeTrackHTTPFixture {
     static let itemID = "native-track-fixture-title"
     static let sourceID = "native-track-fixture-source"
+    static let nextItemID = "native-track-fixture-next"
+    static let remoteItemID = "33333333333333333333333333333333"
+    static let remoteSessionID = "native-fixture-tv-session"
     static let selectedAudioIndex = 12
     static let selectedSubtitleIndex = 35
     static let trackCount = 45
@@ -23,6 +26,9 @@ final class NativeTrackHTTPFixture {
         let subtitleIndex: Int?
         let positionTicks: Int64?
         let paused: Bool?
+        let playCommand: String?
+        let itemIDs: String?
+        let observedAt: TimeInterval
     }
     struct Snapshot {
         let requests: [RequestRecord]
@@ -34,9 +40,16 @@ final class NativeTrackHTTPFixture {
         var stoppedCount: Int { requests.filter { $0.path == "/Sessions/Playing/Stopped" }.count }
         var menuWorkerRequests: [RequestRecord] { requests.filter { $0.path.hasPrefix("/fixture-menu-worker/") } }
         var encodingStopCount: Int { requests.filter { $0.method == "DELETE" && $0.path == "/Videos/ActiveEncodings" }.count }
+        var remotePlayCommands: [RequestRecord] { requests.filter { $0.method == "POST" && $0.path == "/Sessions/" + NativeTrackHTTPFixture.remoteSessionID + "/Playing" } }
+        var remoteSessionReadCount: Int { requests.filter { $0.method == "GET" && $0.path == "/Sessions" }.count }
     }
     private let media: Data
     private let durationTicks: Int64
+    private let conversionReasons: [String]?
+    private let episodeContinuation: Bool
+    private let remoteTarget: Bool
+    private let compactTracks: Bool
+    private let captionText: String
     private let listener: NWListener
     private let queue = DispatchQueue(label: "pictureshow.native-track-fixture")
     private let lock = NSLock()
@@ -51,6 +64,9 @@ final class NativeTrackHTTPFixture {
     private var heldPlaybackInfo: [(NWConnection, Data)] = []
     private var sourceVersion = 0
     private var nextPlaybackFails = false
+    private var remoteRequestedTitlePlaying = false
+    /// Changes only the next synthetic Sessions observation, never dispatches.
+    func observeRequestedRemoteTitle() { lock.lock(); remoteRequestedTitlePlaying = true; lock.unlock() }
     func holdInitialPlaybackInfo() { lock.lock(); playbackInfoHeld = true; lock.unlock() }
     func useReplacementSource() { lock.lock(); sourceVersion += 1; lock.unlock() }
     func failNextPlaybackInfo() { lock.lock(); nextPlaybackFails = true; lock.unlock() }
@@ -83,7 +99,10 @@ final class NativeTrackHTTPFixture {
     }
     /// PICTURESHOW_TEST_MEDIA_FILE belongs to the XCTest runner environment, not
     /// the app. Its path is neither returned in receipts nor logged by this helper.
-    init(mediaFile: URL? = nil, durationSeconds: Double = 5) throws {
+    init(mediaFile: URL? = nil, durationSeconds: Double = 5, conversionReasons: [String]? = nil, episodeContinuation: Bool = false, remoteTarget: Bool = false, compactTracks: Bool = false, captionText: String = "Synthetic native menu fixture caption.") throws {
+        self.conversionReasons = conversionReasons; self.episodeContinuation = episodeContinuation
+        self.remoteTarget = remoteTarget; self.compactTracks = compactTracks
+        self.captionText = captionText
         let file: URL
         if let mediaFile { file = mediaFile }
         else if let value = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_MEDIA_FILE"], !value.isEmpty {
@@ -133,7 +152,8 @@ final class NativeTrackHTTPFixture {
         app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = address
         app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Native fixture viewer"
         app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = "synthetic-native-fixture-password"
-        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = Self.itemID
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = remoteTarget ? Self.remoteItemID : Self.itemID
+        app.launchEnvironment["PICTURESHOW_SEEK_DIAGNOSTICS"] = "1"
     }
     /// Reuses the owner's existing activate helper. Wait failures are setup errors,
     /// not test assertions or selected/focused-state judgments.
@@ -187,15 +207,26 @@ final class NativeTrackHTTPFixture {
             }
             let payload = bytes.subdata(in: separator.upperBound..<(separator.upperBound + length))
             let body = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] ?? [:]
-            self.route(connection, method: String(line[0]), path: url.path, headers: headers, body: body)
+            self.route(connection, method: String(line[0]), path: url.path, query: URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [], headers: headers, body: body)
         }
     }
-    private func route(_ connection: NWConnection, method: String, path: String, headers: [String: String], body: [String: Any]) {
+    private func route(_ connection: NWConnection, method: String, path: String, query: [URLQueryItem], headers: [String: String], body: [String: Any]) {
         let record = RequestRecord(method: method, path: path, audioIndex: (body["AudioStreamIndex"] as? NSNumber)?.intValue,
                                    subtitleIndex: (body["SubtitleStreamIndex"] as? NSNumber)?.intValue,
                                    positionTicks: (body["PositionTicks"] as? NSNumber)?.int64Value,
-                                   paused: body["IsPaused"] as? Bool)
+                                   paused: body["IsPaused"] as? Bool,
+                                   playCommand: query.first { $0.name == "playCommand" }?.value,
+                                   itemIDs: query.first { $0.name == "itemIds" }?.value,
+                                   observedAt: ProcessInfo.processInfo.systemUptime)
         lock.lock(); records.append(record); lock.unlock()
+        if path == "/Sessions/" + Self.remoteSessionID + "/Playing" {
+            guard remoteTarget, method == "POST", record.playCommand == "PlayNow", record.itemIDs == Self.remoteItemID else {
+                respond(connection, status: "400 Bad Request"); return
+            }
+            // HTTP acceptance deliberately leaves NowPlayingItem on the old
+            // title. Only a later explicit fixture observation changes it.
+            respond(connection, status: "204 No Content"); return
+        }
         if path.hasPrefix("/fixture-menu-worker/") {
             let generation = path.split(separator: "/").dropFirst().first.flatMap { Int($0) } ?? -1
             lock.lock()
@@ -211,22 +242,27 @@ final class NativeTrackHTTPFixture {
         if path.hasPrefix("/fixture-subtitles/"), path.hasSuffix(".vtt") {
             let stream = Int(URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent)
             guard let stream, (23...45).contains(stream) else { respond(connection, status: "404 Not Found"); return }
-            let cue = Data("WEBVTT\n\n00:00.000 --> 23:59:59.999\nSynthetic native menu fixture caption.\n".utf8)
+            let cue = Data("WEBVTT\n\n00:00.000 --> 23:59:59.999\n\(captionText)\n".utf8)
             respond(connection, contentType: "text/vtt; charset=utf-8", data: cue, head: method == "HEAD"); return
         }
         let response: Any
         switch path {
         case "/System/Info/Public": response = ["ProductName": "Jellyfin Server", "Version": "12.0.0", "Id": "native-track-fixture", "ServerName": "Native track fixture"]
-        case "/Users/AuthenticateByName": response = ["AccessToken": "synthetic-native-fixture-token", "User": ["Id": "native-fixture-viewer", "Name": "Native fixture viewer"]]
+        case "/Users/AuthenticateByName": response = ["AccessToken": "synthetic-native-fixture-token", "User": ["Id": "33333333333333333333333333333333", "Name": "Native fixture viewer"]]
         case "/QuickConnect/Enabled": response = false
         case "/Users/Public": response = [] as [String]
-        case "/Users/Me", "/Users/native-fixture-viewer": response = ["Id": "native-fixture-viewer", "Name": "Native fixture viewer", "Configuration": ["SubtitleMode": "Default", "SubtitleLanguagePreference": "eng"]]
+        case "/Users/Me", "/Users/33333333333333333333333333333333": response = ["Id": "33333333333333333333333333333333", "Name": "Native fixture viewer", "Configuration": ["SubtitleMode": "Default", "SubtitleLanguagePreference": "eng"]]
         case "/Items/" + Self.itemID: response = movie()
+        case "/Items/" + Self.remoteItemID: response = movie()
         case "/Items/" + Self.itemID + "/PlaybackInfo":
             response = consumePlaybackFailure() ? ["ErrorCode": "NoCompatibleStream"] as [String: Any]
                 : ["MediaSources": [source()], "PlaySessionId": "native-fixture-play-session"]
         case "/Items": response = ["Items": [movie()], "TotalRecordCount": 1]
         case "/Items/Latest": response = [movie()]
+        case "/Shows/native-fixture-series/Episodes": response = ["Items": episodeContinuation ? [movie(), nextEpisode()] : [], "TotalRecordCount": episodeContinuation ? 2 : 0]
+        case "/MediaSegments/" + Self.itemID:
+            response = ["Items": episodeContinuation ? [["Id": "native-fixture-outro", "Type": "Outro", "StartTicks": 900_000_000, "EndTicks": durationTicks]] : []]
+        case "/Sessions": response = remoteTarget ? remoteSessions() : []
         case "/Sessions/Playing", "/Sessions/Playing/Progress", "/Sessions/Playing/Stopped", "/Sessions/Logout", "/Videos/ActiveEncodings", "/Users/Configuration": response = [:] as [String: String]
         case "/UserPlayedItems/" + Self.itemID, "/UserFavoriteItems/" + Self.itemID: response = userData()
         default: response = ["Items": [], "TotalRecordCount": 0] as [String: Any]
@@ -241,10 +277,31 @@ final class NativeTrackHTTPFixture {
         respond(connection, contentType: "application/json", data: data, head: method == "HEAD")
     }
     private func userData() -> [String: Any] { ["Played": false, "IsFavorite": false, "PlaybackPositionTicks": 0] }
+    private func remoteSessions() -> [[String: Any]] {
+        lock.lock(); let requested = remoteRequestedTitlePlaying; lock.unlock()
+        return [["Id": Self.remoteSessionID, "DeviceId": "native-fixture-tv-device", "DeviceName": "Synthetic fixture TV", "Client": "Jellyfin TV fixture",
+                 "UserId": "33333333333333333333333333333333", "UserName": "Native fixture viewer", "SupportsRemoteControl": true, "PlayableMediaTypes": ["Video"], "SupportedCommands": [],
+                 "NowPlayingItem": ["Id": requested ? Self.remoteItemID : "22222222222222222222222222222222", "Name": requested ? "Synthetic native track menu film" : "Previously playing synthetic title", "RunTimeTicks": durationTicks],
+                 "PlayState": ["PositionTicks": 0, "IsPaused": false, "CanSeek": true]]]
+    }
     private func movie() -> [String: Any] {
-        ["Id": Self.itemID, "Name": "Synthetic native track menu film", "Type": "Movie", "ProductionYear": 2026,
+        var item: [String: Any] = ["Id": remoteTarget ? Self.remoteItemID : Self.itemID, "Name": "Synthetic native track menu film", "Type": episodeContinuation ? "Episode" : "Movie", "ProductionYear": 2026,
          "Overview": "A synthetic source for native track-menu setup.", "RunTimeTicks": durationTicks,
          "UserData": userData(), "MediaSources": [source()], "Chapters": []]
+        if episodeContinuation {
+            item["SeriesId"] = "native-fixture-series"; item["SeasonId"] = "native-fixture-season"
+            item["ParentIndexNumber"] = 1; item["IndexNumber"] = 1
+            #if os(tvOS)
+            let nearEndTicks: Int64 = 1_000_000_000 // Leave room for AVKit's transport to idle away.
+            #else
+            let nearEndTicks: Int64 = 1_150_000_000
+            #endif
+            item["Chapters"] = [["Name": "Opening", "StartPositionTicks": 0], ["Name": "Near end", "StartPositionTicks": nearEndTicks]]
+        }
+        return item
+    }
+    private func nextEpisode() -> [String: Any] {
+        ["Id": Self.nextItemID, "Name": "Following synthetic episode", "Type": "Episode", "SeriesId": "native-fixture-series", "SeasonId": "native-fixture-season", "ParentIndexNumber": 1, "IndexNumber": 2, "RunTimeTicks": durationTicks, "UserData": userData()]
     }
     private func source() -> [String: Any] {
         lock.lock(); let version = sourceVersion; lock.unlock()
@@ -261,9 +318,18 @@ final class NativeTrackHTTPFixture {
              "Title": "Synthetic caption option \(index)\(suffix)", "DisplayTitle": "Synthetic caption option \(index)\(suffix)",
              "IsDefault": index == Self.selectedSubtitleIndex] as [String: Any]
         }
-        return ["Id": Self.sourceID, "Container": "mp4", "SupportsDirectPlay": true, "SupportsDirectStream": false,
+        if compactTracks { streams = streams.filter { stream in let index = stream["Index"] as? Int; return index == 0 || index == Self.selectedAudioIndex || index == Self.selectedSubtitleIndex } }
+        var result: [String: Any] = ["Id": Self.sourceID, "Container": "mp4", "Bitrate": 8_000_000, "SupportsDirectPlay": conversionReasons == nil, "SupportsDirectStream": false,
                 "SupportsTranscoding": false, "DefaultAudioStreamIndex": Self.selectedAudioIndex,
                 "DefaultSubtitleStreamIndex": Self.selectedSubtitleIndex, "RunTimeTicks": durationTicks, "MediaStreams": streams]
+        if let conversionReasons {
+            var components = URLComponents()
+            components.path = "/Videos/" + Self.itemID + "/stream"
+            components.queryItems = [URLQueryItem(name: "VideoCodec", value: "h264"), URLQueryItem(name: "AudioCodec", value: "aac"), URLQueryItem(name: "TranscodeReasons", value: conversionReasons.joined(separator: ","))]
+            result["TranscodingUrl"] = components.string
+            result["SupportsTranscoding"] = true
+        }
+        return result
     }
     private func serveMedia(_ connection: NWConnection, method: String, range: String?) {
         guard method == "GET" || method == "HEAD" else { respond(connection, status: "405 Method Not Allowed"); return }

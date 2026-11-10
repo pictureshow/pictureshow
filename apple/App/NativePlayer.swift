@@ -13,8 +13,14 @@ struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var panel: String?
+    @StateObject private var noticePresentation = ConversionNoticePresentation()
     @State private var closing = false
     @State private var orientationError: String?
+    #if os(tvOS)
+    @State private var returnToPlaySurface = false
+    @State private var foregroundPlayVisible = false
+    @FocusState private var foregroundPlayFocused: Bool
+    #endif
     @ObservedObject private var trackMenus: TrackLabelCache
     init(session: PlaybackSession, close: @escaping () async -> Void) {
         self.session = session; self.close = close
@@ -23,55 +29,25 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack(alignment: .top) {
             #if os(iOS)
-            // Keep app actions outside AVKit's viewport: iOS exposes no transport-menu
-            // extension or visibility callback. An overlay collides with native controls.
-            VStack(spacing: 0) {
-                NativePlayer(session: session, close: finish)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let orientationError { Text(orientationError).font(.caption).padding(8) }
-                if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
-                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(ProminentActionStyle()).padding(8)
-                }
-                if let next = session.nextItem, session.nextCountdown != nil {
-                    HStack {
-                        Button("Play next: \(next.name)") { Task { await session.advance() } }
-                        Button("Cancel next episode") { session.cancelContinuation() }
-                    }.buttonStyle(ProminentActionStyle()).padding(8)
-                }
-                Text(session.item.name).font(.subheadline.weight(.medium)).lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 4)
-                    .background(Theme.surface).accessibilityAddTraits(.isHeader).accessibilityIdentifier("playerTitle")
-                HStack(spacing: 0) {
-                    Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
-                    Button("Audio and subtitles", systemImage: "captions.bubble") {
-                        guard session.error == nil, !session.terminal else { return }
-                        trackMenus.requestOpen()
-                    }.accessibilityIdentifier("playerTracks")
-                        .accessibilityValue(trackMenus.waitingToOpen ? "Preparing audio and subtitles" : "")
-                    Button("Seek", systemImage: "slider.horizontal.3") { trackMenus.cancelOpen(); panel = "seek" }.accessibilityIdentifier("playerSeek")
-                    Button("Chapters", systemImage: "list.bullet") { trackMenus.cancelOpen(); panel = "chapters" }.accessibilityIdentifier("playerChapters")
-                    Button("Rotate portrait or landscape", systemImage: "rotate.right") { rotate() }.accessibilityIdentifier("rotatePlayer")
-                    #if DEBUG
-                    if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
-                        Button("Replace fixture source", systemImage: "arrow.triangle.2.circlepath") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
-                            .accessibilityIdentifier("fixtureReplaceTrackSource")
-                    }
-                    #endif
-                    Spacer(minLength: 4)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(session.status).accessibilityIdentifier("playbackMethod")
-                        Text(clock(session.positionTicks)).monospacedDigit().accessibilityIdentifier("playbackPosition")
-                    }.font(.caption).fixedSize(horizontal: false, vertical: true)
-                }
-                .buttonStyle(PlayerActionStyle()).labelStyle(.iconOnly)
-                .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.surface)
-            }
+            TouchPlayer(session: session, noticePresentation: noticePresentation, panel: $panel, finish: finish, tracks: { trackMenus.requestOpen() })
             #else
             NativePlayer(session: session, close: finish, openPendingTracks: {
                 trackMenus.requestOpen()
                 panel = "tracks"
+            }, openPanel: { kind in trackMenus.cancelOpen(); panel = kind }, panelKind: panel, closePanel: { panel = nil }, backgroundSurfaceFocus: { surface in
+                let ownPlayHadFocus = foregroundPlayVisible && foregroundPlayFocused
+                returnToPlaySurface = (surface || ownPlayHadFocus) && !session.panelOpen && !UIAccessibility.isVoiceOverRunning
+                // Remount on return so the one-time focus handoff also works
+                // after Home while the foreground Play action was focused.
+                foregroundPlayVisible = false
+                foregroundPlayFocused = false
             }).ignoresSafeArea()
+            #endif
+            #if os(tvOS)
+            foregroundPlayOverlay
+            ConversionNoticeBanner(session: session, presentation: noticePresentation, fits: true, obscured: session.panelOpen || session.error != nil, openInfo: { panel = "info" })
+                .frame(maxWidth: 780, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 36).padding(.horizontal, 48)
             #endif
             if session.waitingForVideo || session.error != nil || session.reportError != nil {
                 VStack(spacing: 20) {
@@ -89,8 +65,18 @@ struct PlayerScreen: View {
         .onDisappear { session.beginClosing() }
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase, initial: true) { _, value in
-            if value == .active { session.foregrounded() } else { session.backgrounded() }
+            if value == .active {
+                session.foregrounded()
+                #if os(tvOS)
+                foregroundPlayVisible = returnToPlaySurface && session.isPaused && !session.panelOpen && !UIAccessibility.isVoiceOverRunning
+                returnToPlaySurface = false
+                #endif
+            } else { session.backgrounded() }
         }
+        #if os(tvOS)
+        .onChange(of: session.isPaused) { _, paused in if !paused { foregroundPlayVisible = false } }
+        .onChange(of: session.panelOpen) { _, open in if open { foregroundPlayVisible = false } }
+        #endif
         .onChange(of: trackMenus.openMenu) { _, value in
             #if os(iOS)
             if value != nil { panel = "tracks" }
@@ -101,10 +87,33 @@ struct PlayerScreen: View {
             session.panelOpen = value != nil
             if old == "tracks", value == nil { trackMenus.cancelOpen() }
         }
+        #if os(iOS)
         .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
             PlayerOptions(session: session, kind: panel ?? "tracks") { panel = nil }
         }
+        #endif
     }
+
+    #if os(tvOS)
+    @ViewBuilder private var foregroundPlayOverlay: some View {
+        if foregroundPlayVisible {
+                Button {
+                    foregroundPlayVisible = false
+                    if session.isPaused { session.togglePlayback() }
+                } label: {
+                    Label("Play", systemImage: "play.fill").font(.title2).padding(20)
+                }
+                .buttonStyle(ProminentActionStyle())
+                .focused($foregroundPlayFocused)
+                .accessibilityIdentifier("foregroundPlay")
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .onAppear { foregroundPlayFocused = true }
+                .onChange(of: foregroundPlayFocused) { old, value in
+                    if old && !value && scenePhase == .active { foregroundPlayVisible = false }
+                }
+            }
+    }
+    #endif
 
     private func rotate() {
         #if os(iOS)
@@ -279,6 +288,8 @@ struct PlayerOptions: View {
     @State private var presentation: TrackMenuPresentation?
     @State private var audio: Int?
     @State private var subtitle: Int?
+    @FocusState private var selectedChapter: Int?
+    @AccessibilityFocusState private var readerChapter: Int?
     #if os(tvOS)
     @FocusState private var pendingCancelFocused: Bool
     #endif
@@ -293,16 +304,40 @@ struct PlayerOptions: View {
     var body: some View {
         let _ = session.diagnostics.record("phonePlayerOptions.body")
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
+                #if os(tvOS)
+                Text(panelTitle).font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary).accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("playerOptionsHeading")
+                    .listRowBackground(Color.clear)
+                #endif
                 if kind == "seek" {
                     SeekOptions(session: session)
+                } else if kind == "speed" {
+                    SpeedOptions(session: session, done: closePanel)
+                } else if kind == "info" {
+                    PlaybackInfoRows(session: session)
                 } else if kind == "chapters" {
                     if session.chapters.isEmpty { Text("No chapters are available.") }
                     ForEach(Array(session.chapters.enumerated()), id: \.offset) { index, chapter in
                         Button { session.seek(toTicks: chapter.startTicks); closePanel() } label: {
-                            HStack { ChapterArtwork(session: session, index: index); Text("\(chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name) · \(clock(chapter.startTicks))") }.frame(maxWidth: .infinity, alignment: .leading).minimumTouchTarget()
+                            HStack {
+                                ChapterArtwork(session: session, index: index)
+                                Text(chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name)
+                                Spacer()
+                                #if os(iOS)
+                                Text(clock(chapter.startTicks)).monospacedDigit().foregroundStyle(Color.secondary)
+                                Image(systemName: "checkmark").foregroundStyle(Theme.accent).opacity(currentChapter(index) ? 1 : 0).frame(width: 20).accessibilityHidden(true)
+                                #else
+                                Text(clock(chapter.startTicks)).monospacedDigit().foregroundStyle(.secondary)
+                                if currentChapter(index) { Image(systemName: "checkmark").foregroundStyle(.primary).accessibilityHidden(true) }
+                                #endif
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                                .touchSecondaryInk()
                         }
                             .accessibilityValue(currentChapter(index) ? "Current chapter" : "")
+                            .focused($selectedChapter, equals: index).accessibilityFocused($readerChapter, equals: index).id(index)
                     }
                 } else {
                     if menu == nil {
@@ -330,32 +365,57 @@ struct PlayerOptions: View {
                     } else {
                         if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
                         #if DEBUG
-                        if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
-                            Button("Replace fixture source") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
-                                .accessibilityIdentifier("fixtureReplaceTrackSourceInPanel")
-                        }
+                        fixtureReplacementAction
                         #endif
                         Section("Audio") {
                             track("Off", index: -1, type: "Audio", selected: audio == -1)
                             ForEach(menu?.audio ?? []) { track(trackTitle($0), index: $0.id, type: "Audio", selected: audio == $0.id) }
                         }
-                        Section("Subtitles") {
+                        Section {
                             track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
                             ForEach(menu?.subtitles ?? []) { track(trackTitle($0), index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
-                            Text(session.subtitleTimingExplanation).font(.caption)
+                            Text(String(format: "Subtitle delay: %+.1f s", Double(session.subtitleDelayMs) / 1000)).accessibilityIdentifier("subtitleDelayValue")
+                            ViewThatFits(in: .horizontal) {
+                                HStack { subtitleDelayButtons }
+                                VStack(alignment: .leading) { subtitleDelayButtons }
+                            }
+                            #if os(iOS)
+                            // Each timing action is independent inside this List row.
+                            .buttonStyle(.bordered)
+                            #endif
                             if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
+                        } header: { Text("Subtitles") } footer: {
+                            Text(session.subtitleTimingAvailable ? "Timing changes apply to this viewing only." : session.subtitleTimingExplanation)
                         }
                         if let error = session.extrasError { Text(error) }
                     }
                 }
+                #if os(tvOS)
+                if kind != "tracks" || menu != nil {
+                    Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone")
+                }
+                #endif
             }
-            .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : trackPanelTitle)
+            .minimumTouchListRows()
+            .accessibilityIdentifier("playerOptionsList")
+            #if os(tvOS)
+            .contentMargins(.horizontal, 32, for: .scrollContent)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
+            .onAppear {
+                guard kind == "chapters", let index = session.chapters.indices.last(where: { currentChapter($0) }) else { return }
+                proxy.scrollTo(index, anchor: .center); selectedChapter = index; readerChapter = index
+            }
+            #if os(iOS)
+            .pictureshowNavigationTitle(panelTitle)
             .toolbar {
                 if kind != "tracks" || menu != nil {
-                    ToolbarItem(placement: .cancellationAction) {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone")
                     }
                 }
+            }
+            #endif
             }
         }
         #if os(tvOS)
@@ -380,6 +440,18 @@ struct PlayerOptions: View {
         .onAppear { if kind == "tracks" && menu == nil { pendingCancelFocused = true } }
         #endif
     }
+    #if DEBUG
+    @ViewBuilder private var fixtureReplacementAction: some View {
+        if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
+            Button("Replace fixture source", action: replaceFixtureSource)
+                .accessibilityIdentifier("fixtureReplaceTrackSourceInPanel")
+        }
+    }
+    private func replaceFixtureSource() {
+        let replacementIndex: Int = session.decision?.audioIndex == 13 ? 14 : 13
+        Task { await session.selectTrack(type: "Audio", index: replacementIndex) }
+    }
+    #endif
     private func trackTitle(_ value: TrackLabel) -> String {
         #if os(tvOS)
         return value.menuTitle
@@ -393,6 +465,9 @@ struct PlayerOptions: View {
         #else
         return "Audio and subtitles"
         #endif
+    }
+    private var panelTitle: String {
+        kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : kind == "speed" ? "Speed" : kind == "info" ? "Playback info" : trackPanelTitle
     }
     private func closePanel() { done(); dismiss() }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
@@ -409,9 +484,31 @@ struct PlayerOptions: View {
                 await session.selectTrack(type: type, index: index, menuGeneration: presentation.menu.generation)
             }
         } label: {
-            HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }.minimumTouchTarget()
+            HStack {
+                Text(title.replacingOccurrences(of: " · ", with: "\u{00A0}· "))
+                Spacer()
+                if selected {
+                    #if os(tvOS)
+                    Image(systemName: "checkmark").foregroundStyle(.primary).accessibilityHidden(true)
+                    #else
+                    Image(systemName: "checkmark").foregroundStyle(Theme.accent).accessibilityHidden(true)
+                    #endif
+                }
+            }.touchSecondaryInk()
         }
             .accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
+    }
+    @ViewBuilder private func timingLabel(_ title: String) -> some View {
+        #if os(iOS)
+        Text(title).fixedSize().frame(maxWidth: .infinity).minimumTouchTarget()
+        #else
+        Text(title).fixedSize().minimumTouchTarget()
+        #endif
+    }
+    @ViewBuilder private var subtitleDelayButtons: some View {
+        Button { session.adjustSubtitleDelay(by: -100) } label: { timingLabel("Earlier") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs <= -10_000).accessibilityIdentifier("subtitleEarlier")
+        Button { session.adjustSubtitleDelay(by: nil) } label: { timingLabel("Reset") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs == 0).accessibilityIdentifier("subtitleReset")
+        Button { session.adjustSubtitleDelay(by: 100) } label: { timingLabel("Later") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs >= 10_000).accessibilityIdentifier("subtitleLater")
     }
     private func currentChapter(_ index: Int) -> Bool {
         session.chapters[index].startTicks <= session.positionTicks && (index + 1 == session.chapters.count || session.chapters[index + 1].startTicks > session.positionTicks)
@@ -422,14 +519,28 @@ struct NativePlayer: UIViewControllerRepresentable {
     @ObservedObject var session: PlaybackSession
     var close: () -> Void
     var openPendingTracks: () -> Void
+    var openPanel: (String) -> Void
+    var panelKind: String?
+    var closePanel: () -> Void
+    var backgroundSurfaceFocus: (Bool) -> Void
+    var didAppear: () -> Void
+    var touchControlsHeight: CGFloat?
+    var touchCaptionTrailingInset: CGFloat = 0
+    var touchCaptionExclusionFrames: [CGRect] = []
     @ObservedObject private var trackMenus: TrackLabelCache
-    init(session: PlaybackSession, close: @escaping () -> Void, openPendingTracks: @escaping () -> Void = {}) {
-        self.session = session; self.close = close; self.openPendingTracks = openPendingTracks; trackMenus = session.trackLabels
+    init(session: PlaybackSession, close: @escaping () -> Void, openPendingTracks: @escaping () -> Void = {}, openPanel: @escaping (String) -> Void = { _ in }, panelKind: String? = nil, closePanel: @escaping () -> Void = {}, backgroundSurfaceFocus: @escaping (Bool) -> Void = { _ in }, didAppear: @escaping () -> Void = {}, touchControlsHeight: CGFloat? = nil, touchCaptionTrailingInset: CGFloat = 0, touchCaptionExclusionFrames: [CGRect] = []) {
+        self.session = session; self.close = close; self.openPendingTracks = openPendingTracks; self.openPanel = openPanel; self.panelKind = panelKind; self.closePanel = closePanel; self.backgroundSurfaceFocus = backgroundSurfaceFocus; self.didAppear = didAppear; self.touchControlsHeight = touchControlsHeight; self.touchCaptionTrailingInset = touchCaptionTrailingInset; self.touchCaptionExclusionFrames = touchCaptionExclusionFrames; trackMenus = session.trackLabels
     }
     func makeUIViewController(context: Context) -> PictureshowPlayerViewController {
         let controller = PictureshowPlayerViewController()
         controller.player = session.player; controller.delegate = context.coordinator
-        controller.showsPlaybackControls = true; controller.videoGravity = .resizeAspect
+        #if os(tvOS)
+        controller.showsPlaybackControls = true
+        #else
+        controller.showsPlaybackControls = false
+        controller.allowsVideoFrameAnalysis = false
+        #endif
+         controller.videoGravity = .resizeAspect
         controller.allowsPictureInPicturePlayback = false
         // Identify the native video frame without changing accessibility grouping.
         // Touch tests must reveal controls inside this frame, not the app strip.
@@ -438,6 +549,7 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
         controller.installInformation(session: session)
         controller.installTrackMenuCancellation(session.trackLabels)
+        controller.installResumeFocusCapture()
         #endif
         updateUIViewController(controller, context: context)
         return controller
@@ -445,16 +557,24 @@ struct NativePlayer: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: PictureshowPlayerViewController, context: Context) {
         session.diagnostics.record("nativePlayer.snapshot")
         context.coordinator.close = close
+        controller.onDidAppear = didAppear
+        controller.touchControlsHeight = touchControlsHeight
+        controller.touchCaptionTrailingInset = touchCaptionTrailingInset
+        controller.touchCaptionExclusionFrames = touchCaptionExclusionFrames
         let subtitleSelection = session.externalSubtitles.revision
         controller.subtitleDidDisplay = { [weak session] in session?.externalSubtitles.didDisplayVisibleText(selection: subtitleSelection) }
         controller.showSubtitle(session.subtitleCue, controlsVisible: session.controlsVisible, preferences: session.preferences)
         #if os(tvOS)
-        let continuation = session.nextCountdown != nil ? session.nextItem : nil
-        context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
+        controller.view.accessibilityValue = session.controlsVisible ? "Controls visible" : "Controls hidden"
+        controller.onBackgroundSurfaceFocus = backgroundSurfaceFocus
+        controller.updateOptionsPresentation(kind: panelKind, session: session, close: closePanel)
+        let continuation = session.nextCardVisible ? session.nextItem : nil
+        context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown, visible: session.nextCardVisible)
         // Keep the early loading action while its sheet is open. Rebuild the
         // complete native menu after Back/selection dismisses that sheet.
         let preparedSignature = session.trackLabels.openMenu == nil ? session.trackLabels.prepared?.generation ?? -1 : -1
         let signature = "\(session.trackLabels.cacheRevision)|\(preparedSignature)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        context.coordinator.speedAction?.title = "Speed: \(PlaybackSpeeds.label(session.playbackRate))"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
@@ -494,12 +614,15 @@ struct NativePlayer: UIViewControllerRepresentable {
             let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
             })
+            let speed = UIAction(title: "Speed: \(PlaybackSpeeds.label(session.playbackRate))", image: UIImage(systemName: "speedometer"), identifier: .init("playerSpeed")) { _ in openPanel("speed") }
+            context.coordinator.speedAction = speed
+            let information = UIAction(title: "Playback info", image: UIImage(systemName: "info.circle"), identifier: .init("playerInfo")) { _ in openPanel("info") }
             let stop = UIAction(title: "Back to details", image: UIImage(systemName: "stop.fill"), identifier: UIAction.Identifier("closePlayer")) { _ in close() }
             // Contextual actions are hidden while AVKit's transport is visible. Keep
             // the same continuation reachable in the native bar during that state.
             let continuationMenus: [UIMenuElement] = context.coordinator.continuationTransportActions
             controller.transportBarCustomMenuItems = continuationMenus
-                + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
+                + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [speed, information, stop]
         }
         var contextActions: [UIAction] = []
         if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
@@ -513,11 +636,13 @@ struct NativePlayer: UIViewControllerRepresentable {
             // AVKit owns the visible pills. Republish their retained actions
             // when the title changes, without replacing the focused action.
             controller.contextualActions = contextActions
+            controller.view.setNeedsLayout()
         }
         #endif
     }
     func makeCoordinator() -> Coordinator { Coordinator(session: session, close: close) }
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        var speedAction: UIAction?
         let session: PlaybackSession
         var close: () -> Void
         var menuSignature = "", actionSignature = ""
@@ -526,22 +651,22 @@ struct NativePlayer: UIViewControllerRepresentable {
         private var continuationID: String?
         var continuationTransportActions: [UIAction] = []
         var continuationContextActions: [UIAction] = []
-        func updateContinuation(_ next: MediaItem?, countdown: Int?) {
-            guard let next, let countdown else {
+        func updateContinuation(_ next: MediaItem?, countdown: Int?, visible: Bool = true) {
+            guard let next, visible else {
                 continuationID = nil; continuationTransportActions = []; continuationContextActions = []
                 return
             }
             if continuationID != next.id {
                 continuationID = next.id
                 func play(_ identifier: String) -> UIAction {
-                    UIAction(title: identifier == "playNext" ? "Next (\(countdown))" : "Play next: \(next.name) (\(countdown))", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
-                        guard let self, self.session.nextItem?.id == next.id, self.session.nextCountdown != nil else { return }
+                    UIAction(title: identifier == "playNext" ? countdown.map { "Next (\($0))" } ?? "Play now" : "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? ""), image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
+                        guard let self, self.session.nextItem?.id == next.id, self.session.nextCardVisible else { return }
                         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
                         Task { await self.session.advance() }
                     }
                 }
                 func cancel(_ identifier: String) -> UIAction {
-                    UIAction(title: identifier == "cancelNext" ? "Cancel" : "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                    UIAction(title: identifier == "cancelNext" ? "Cancel" : "Cancel next episode", image: UIImage(systemName: "xmark.circle"), identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
                 continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
@@ -549,9 +674,9 @@ struct NativePlayer: UIViewControllerRepresentable {
             }
             // Keep the narrow contextual pill readable; the transport action
             // retains the episode name. Reuse actions across countdown ticks.
-            continuationContextActions.first?.title = "Next (\(countdown))"
+            continuationContextActions.first?.title = countdown.map { "Next (\($0))" } ?? "Play now"
             #if os(tvOS)
-            continuationTransportActions.first?.title = "Play next: \(next.name) (\(countdown))"
+            continuationTransportActions.first?.title = "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? "")
             #endif
         }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool {
@@ -583,6 +708,14 @@ struct NativePlayer: UIViewControllerRepresentable {
 /// Optional plain-text captions live in AVKit's video overlay, never in its asset.
 /// Loading failure cannot hold the transport or change its media clock.
 final class PictureshowPlayerViewController: AVPlayerViewController {
+    var onDidAppear: (() -> Void)?
+    var touchControlsHeight: CGFloat?
+    var touchCaptionTrailingInset: CGFloat = 0
+    var touchCaptionExclusionFrames: [CGRect] = []
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        onDidAppear?()
+    }
     var subtitleDidDisplay: (() -> Void)?
     private let caption = UILabel()
     private var controlsVisible = false
@@ -603,11 +736,56 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         }, kMACaptionAppearanceSettingsChangedNotification, nil, .deliverImmediately)
     }
     deinit {
+        #if os(tvOS)
+        if let resumeFocusObserver { NotificationCenter.default.removeObserver(resumeFocusObserver) }
+        #endif
         if observesCaptionAppearance {
             CFNotificationCenterRemoveObserver(CFNotificationCenterGetLocalCenter(), Unmanaged.passUnretained(self).toOpaque(), CFNotificationName(rawValue: kMACaptionAppearanceSettingsChangedNotification), nil)
         }
     }
     #if os(tvOS)
+    private var optionsHost: UIHostingController<PlayerOptions>?
+    var onBackgroundSurfaceFocus: ((Bool) -> Void)?
+    private var resumeFocusObserver: NSObjectProtocol?
+    private var lastNativeFocusWasSurface = false
+    private func isPlaybackSurface(_ item: UIFocusItem?) -> Bool? {
+        guard let focused = item as? UIView, focused.window != nil else { return nil }
+        let rect = focused.convert(focused.bounds, to: view)
+        return rect.width > view.bounds.width * 0.75 && rect.height > view.bounds.height * 0.75
+    }
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if let surface = isPlaybackSurface(context.nextFocusedItem), UIApplication.shared.applicationState == .active {
+            lastNativeFocusWasSurface = surface
+        }
+    }
+    func installResumeFocusCapture() {
+        guard resumeFocusObserver == nil else { return }
+        resumeFocusObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let surface = self.isPlaybackSurface(UIFocusSystem(for: self.view)?.focusedItem) ?? self.lastNativeFocusWasSurface
+                self.onBackgroundSurfaceFocus?(surface)
+            }
+        }
+    }
+    func updateOptionsPresentation(kind: String?, session: PlaybackSession, close: @escaping () -> Void) {
+        if let kind {
+            guard optionsHost == nil, presentedViewController == nil else { return }
+            // Present from AVKit itself so UIKit returns remote input and focus
+            // to the player, rather than to the outer SwiftUI full-screen cover.
+            let host = UIHostingController(rootView: PlayerOptions(session: session, kind: kind, done: close))
+            if #available(tvOS 26.0, *) { host.modalPresentationStyle = .formSheet }
+            // Keep the player mounted on older tvOS too: a covering fullScreen
+            // presentation would make PlayerScreen.onDisappear close viewing.
+            else { host.modalPresentationStyle = .overFullScreen }
+            optionsHost = host
+            present(host, animated: true)
+        } else if let host = optionsHost {
+            optionsHost = nil
+            if !host.isBeingDismissed { host.dismiss(animated: true) }
+        }
+    }
     private weak var trackMenus: TrackLabelCache?
     private var trackMenuObservation: AnyCancellable?
     func installTrackMenuCancellation(_ menus: TrackLabelCache) {
@@ -628,6 +806,9 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
                 switch press.type {
                 case .leftArrow: direction = "left"
                 case .rightArrow: direction = "right"
+                case .upArrow: direction = "up"
+                case .downArrow: direction = "down"
+                case .menu: direction = "menu"
                 case .select: direction = "select"
                 case .playPause: direction = "playPause"
                 default: continue
@@ -648,7 +829,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         viewIfLoaded?.setNeedsLayout()
     }
     func installInformation(session: PlaybackSession) {
-        let info = PlaybackInformationController(rootView: PlaybackInformation(session: session))
+        let info = PlaybackInformationController(rootView: NativeViewingInformation(session: session))
         info.title = "Pictureshow"
         info.preferredContentSize = CGSize(width: 1200, height: 250)
         info.onVisibilityChange = { [weak self, weak session] visible in
@@ -661,6 +842,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         observeCaptionAppearance()
+        caption.accessibilityIdentifier = "playerSubtitle"
         caption.numberOfLines = 0; caption.textAlignment = .center
         caption.textColor = .white; caption.isUserInteractionEnabled = false
         caption.isAccessibilityElement = false // Clock/cue ticks are not announcements.
@@ -686,6 +868,62 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         caption.layer.shadowRadius = 2; caption.layer.shadowOffset = CGSize(width: 1, height: 1)
         view.setNeedsLayout()
     }
+    #if os(iOS)
+    static func touchCaptionHeight(text: String?, preferences: PlaybackPreferences, width: CGFloat) -> CGFloat {
+        guard let text, !text.isEmpty else { return 0 }
+        let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 22 * CGFloat(preferences.subtitleSize.scale ?? Double(MACaptionAppearanceGetRelativeCharacterSize(.user, nil)))))
+        return ceil((text as NSString).boundingRect(with: CGSize(width: max(1, width), height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height) + 8
+    }
+    #endif
+    static func captionHorizontalRange(video: CGRect, overlay: CGRect, trailingExclusion: CGFloat, excludedLeadingEdge: CGFloat? = nil) -> ClosedRange<CGFloat> {
+        let left = video.minX + video.width * 0.05
+        // Exclude the actual overlay band. A narrow video may already end
+        // before the card, so subtracting the card width from it is incorrect.
+        let right = min(video.maxX - video.width * 0.05, overlay.maxX - trailingExclusion, excludedLeadingEdge.map { $0 - 12 } ?? overlay.maxX)
+        return left...max(left + 1, right)
+    }
+    #if os(iOS)
+    /// Place at full centered width first. Only actual rectangle collisions
+    /// constrain captions; a card entirely above them cannot rewrap the cue.
+    static func captionFrame(video: CGRect, horizontal: ClosedRange<CGFloat>, bottom: CGFloat, obstacles: [CGRect], heightForWidth: (CGFloat) -> CGFloat) -> CGRect {
+        let width = max(1, horizontal.upperBound - horizontal.lowerBound)
+        let bottom = min(video.maxY, max(video.minY, bottom))
+        let usable = CGRect(x: horizontal.lowerBound, y: video.minY, width: width, height: max(0, bottom - video.minY))
+        let occupied = obstacles.filter { !$0.isNull && !$0.isEmpty }.map { $0.insetBy(dx: -12, dy: -12) }
+        let preferredHeight = min(video.height * 0.6, max(0, heightForWidth(width)))
+        let preferred = CGRect(x: usable.minX, y: max(usable.minY, bottom - preferredHeight), width: width, height: min(preferredHeight, usable.height))
+        guard occupied.contains(where: { $0.intersects(preferred) }) else { return preferred }
+        // Subtract every occupied rectangle before choosing a placement. Moving
+        // around one card must not rewrap the cue back under an earlier notice.
+        var regions = [usable]
+        for obstacle in occupied {
+            regions = regions.flatMap { region -> [CGRect] in
+                let overlap = region.intersection(obstacle)
+                guard !overlap.isNull, !overlap.isEmpty else { return [region] }
+                return [
+                    CGRect(x: region.minX, y: region.minY, width: region.width, height: max(0, overlap.minY - region.minY)),
+                    CGRect(x: region.minX, y: overlap.maxY, width: region.width, height: max(0, region.maxY - overlap.maxY)),
+                    CGRect(x: region.minX, y: region.minY, width: max(0, overlap.minX - region.minX), height: region.height),
+                    CGRect(x: overlap.maxX, y: region.minY, width: max(0, region.maxX - overlap.maxX), height: region.height)
+                ].filter { $0.width > 0 && $0.height > 0 }
+            }
+        }
+        let minimumWidth = min(150, width)
+        let readable = regions.filter { $0.width >= minimumWidth }
+        let candidates = readable.isEmpty ? regions : readable
+        func fits(_ region: CGRect) -> Bool { heightForWidth(region.width) <= region.height }
+        let chosen = candidates.sorted { a, b in
+            if fits(a) != fits(b) { return fits(a) }
+            let aFull = a.width >= width - 1, bFull = b.width >= width - 1
+            if aFull != bFull { return aFull }
+            if abs(a.maxY - b.maxY) > 1 { return a.maxY > b.maxY }
+            return a.width > b.width
+        }.first
+        guard let region = chosen else { return .zero }
+        let height = max(0, min(video.height * 0.6, region.height, heightForWidth(region.width)))
+        return CGRect(x: region.minX, y: region.maxY - height, width: region.width, height: height)
+    }
+    #endif
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         guard let overlay = contentOverlayView else { return }
@@ -701,26 +939,42 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         let video = overlay.convert(videoBounds, from: view).intersection(overlay.bounds)
         #endif
         guard !video.isNull, video.width > 0, video.height > 0 else { caption.frame = .zero; return }
-        let captionWidth = video.width * 0.9
+        let horizontal = Self.captionHorizontalRange(video: video, overlay: overlay.bounds, trailingExclusion: touchCaptionTrailingInset)
+        let captionLeft = horizontal.lowerBound
+        let captionWidth = horizontal.upperBound - horizontal.lowerBound
         #if os(tvOS)
         // AVKit's title, transport and Info tabs occupy the lower video band.
         // Keep external text above that band while the native controls appear.
+        // Contextual Skip/Next/Cancel remain visible after the transport hides.
+        // Keep every Ask action and reserve their native lower action lane, too.
+        let restingInset = min(48, video.height * 0.08)
+        let contextualLaneTop = overlay.bounds.maxY - max(160, overlay.bounds.height * 0.18)
+        let contextualInset = max(restingInset, video.maxY - contextualLaneTop)
         let inset = informationVisible ? video.height * 0.55
-            : controlsVisible ? video.height * 0.4 : min(48, video.height * 0.08)
+            : controlsVisible ? video.height * 0.4
+            : !contextualActions.isEmpty ? contextualInset : restingInset
         #else
         let inset = controlsVisible ? min(240, video.height * 0.35) : min(48, video.height * 0.08)
         #endif
         // Oversized cues retain their preferred type size and truncate within
         // the space above native UI instead of drawing behind the panel.
-        let captionHeight = min(video.height * 0.6, video.height - inset,
-                                caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
-        caption.frame = CGRect(x: video.midX - captionWidth / 2, y: max(video.minY, video.maxY - inset - captionHeight), width: captionWidth, height: captionHeight)
+        let bottom = min(video.maxY - inset, touchControlsHeight.map { overlay.bounds.maxY - $0 - 12 } ?? video.maxY)
+        let captionHeight = max(0, min(video.height * 0.6, bottom - video.minY,
+                                caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8))
+        #if os(iOS)
+        let obstacles = view.window.map { window in touchCaptionExclusionFrames.map { overlay.convert($0, from: window) } } ?? []
+        caption.frame = Self.captionFrame(video: video, horizontal: horizontal, bottom: bottom, obstacles: obstacles) { width in
+            caption.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height + 8
+        }
+        #else
+        caption.frame = CGRect(x: captionLeft, y: max(video.minY, bottom - captionHeight), width: captionWidth, height: captionHeight)
+        #endif
         if view.window != nil, !caption.isHidden, captionHeight > 0, !(caption.text ?? "").isEmpty { subtitleDidDisplay?() }
     }
 }
 
 #if os(tvOS)
-private final class PlaybackInformationController: UIHostingController<PlaybackInformation> {
+private final class PlaybackInformationController: UIHostingController<NativeViewingInformation> {
     var onVisibilityChange: (@MainActor (Bool) -> Void)?
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -733,7 +987,7 @@ private final class PlaybackInformationController: UIHostingController<PlaybackI
 }
 #endif
 
-private struct PlaybackInformation: View {
+private struct NativeViewingInformation: View {
     @ObservedObject var session: PlaybackSession
     var body: some View {
         let _ = session.diagnostics.record("expandedInfo.body")

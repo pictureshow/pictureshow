@@ -12,6 +12,44 @@ private final class OriginRedirects: NSObject, URLSessionTaskDelegate, @unchecke
     }
 }
 
+/// An authorized session after the shared target filter and privacy policy have run.
+public struct RemotePlaybackTarget: Identifiable, @unchecked Sendable {
+    public let reducerValue: [String: Any]
+    public var id: String { reducerValue["session"] as? String ?? "" }
+    public var name: String { reducerValue["name"] as? String ?? "Unnamed device" }
+    public var client: String { reducerValue["client"] as? String ?? "" }
+    public var sameViewer: Bool { reducerValue["sameViewer"] as? Bool ?? false }
+    public var duplicateName: Bool { reducerValue["duplicateName"] as? Bool ?? false }
+    public var viewerName: String? { reducerValue["viewerName"] as? String }
+    public var playingTitle: String? { (reducerValue["now"] as? [String: Any])?["title"] as? String }
+}
+
+extension JellyfinClient {
+    /// No activity-age filter: a quiet persistent socket is still a usable target.
+    public func remotePlaybackTargets(account: Account) async throws -> [RemotePlaybackTarget] {
+        let data = try await request(server: account.server, path: "Sessions", query: [URLQueryItem(name: "controllableByUserId", value: account.userId)], token: account.accessToken, identity: account.deviceID, timeout: 3)
+        guard let sessions = try JSONSerialization.jsonObject(with: data) as? [Any] else { throw ClientError.invalidResponse }
+        return try RemoteReducers.targets(sessions, viewer: account.userId, selfDevice: account.deviceID).map { RemotePlaybackTarget(reducerValue: $0) }
+    }
+
+    /// A receipt is transport evidence only. The controller reducer confirms playback from observation.
+    public func sendRemotePlayback(account: Account, target: RemotePlaybackTarget, operation: String, itemID: String? = nil, ticks: Int64? = nil) async throws -> PlaybackHTTPOutcome {
+        var command: [String: Any] = ["op": operation, "items": itemID.map { [$0] } ?? []]
+        if let ticks { command["ticks"] = String(ticks) }
+        let wire = try RemoteReducers.request(target: target.reducerValue, command: command)
+        guard let requestValue = wire["request"] as? [String: Any], let path = requestValue["path"] as? String, let method = requestValue["method"] as? String, let query = requestValue["query"] as? [String: String] else { throw ClientError.invalidResponse }
+        var outcome: PlaybackHTTPOutcome?
+        do {
+            _ = try await request(account: account, path: path, method: method, query: query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }, body: requestValue["body"] as? [String: Any], includeUserID: false, receipt: { outcome = $0 })
+        } catch {
+            if let outcome { return outcome }
+            throw error
+        }
+        guard let outcome else { throw ClientError.invalidResponse }
+        return outcome
+    }
+}
+
 public final class JellyfinClient: @unchecked Sendable {
     public let deviceID: String
     private let session: URLSession

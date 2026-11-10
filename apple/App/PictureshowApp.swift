@@ -8,7 +8,7 @@ import CryptoKit
 
 @main struct PictureshowApp: App {
     @StateObject private var model = AppModel()
-    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large).minimumTouchListRows() } }
+    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large).minimumTouchListRows().pictureshowTestDynamicType() } }
 }
 
 enum Theme {
@@ -41,6 +41,14 @@ struct AccountSnapshot: Codable {
 
 @MainActor final class AppModel: ObservableObject {
     @Published var account: Account?
+    // A target belongs to one server/viewer. Every queue dispatch revalidates its
+    // exact session with the server; remembering it is never permission evidence.
+    @Published private(set) var remoteAttachments: [String: RemotePlaybackTarget] = [:]
+    func attachedRemote(for account: Account) -> RemotePlaybackTarget? { remoteAttachments[account.localKey] }
+    func attachRemote(_ target: RemotePlaybackTarget, for account: Account) {
+        guard self.account?.localKey == account.localKey else { return }
+        remoteAttachments[account.localKey] = target
+    }
     @Published var snapshot = AccountSnapshot()
     @Published var storageError: String?
     @Published var signInServer: Server?
@@ -392,7 +400,15 @@ struct AccountSnapshot: Codable {
     func playerClosed(_ session: PlaybackSession) async {
         guard activePlayback?.id == session.id else { return }
         session.beginClosing(); activePlayback = nil; playbackSaving = true; playbackSaveError = nil
-        if player?.id == session.id { dismissingPlayback = session; player = nil }
+        if player?.id == session.id {
+            dismissingPlayback = session
+            var transaction = Transaction()
+            if !DetailFeedback.catalogArrivalUsesAnimation(accessibilityEnabled: UIAccessibility.isVoiceOverRunning,
+                sourceIsPlayback: true, destinationIsCatalog: true, returning: true) {
+                transaction.disablesAnimations = true; transaction.animation = nil
+            }
+            withTransaction(transaction) { player = nil }
+        }
         refreshID = UUID(); let accountVersion = accountGeneration
         Task {
             await session.stop()
@@ -662,3 +678,16 @@ struct TouchShell: View {
     private func open(_ item: MediaItem, tab index: Int) { performCatalogNavigation { paths[index].append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
 }
 #endif
+
+private extension View {
+    /// Explicit test environment projection, never an operating-system setting.
+    @ViewBuilder func pictureshowTestDynamicType() -> some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DYNAMIC_TYPE"] == "accessibility3" {
+            dynamicTypeSize(.accessibility3)
+        } else { self }
+        #else
+        self
+        #endif
+    }
+}

@@ -4,7 +4,7 @@ import XCTest
 
 final class PlaybackInformationTests: XCTestCase {
     func testCodecAndResolutionNeverInventMissingValues() {
-        XCTAssertEqual(PlaybackInformation.codec("h264"), "H264")
+        XCTAssertEqual(PlaybackInformation.codec("h264"), "H.264")
         XCTAssertEqual(PlaybackInformation.codec("aac_5.1"), "AAC_5.1")
         XCTAssertEqual(PlaybackInformation.codec("vp9/encoded"), "Not reported")
         XCTAssertEqual(PlaybackInformation.codec(String(repeating: "a", count: 33)), "Not reported")
@@ -12,6 +12,24 @@ final class PlaybackInformationTests: XCTestCase {
         XCTAssertEqual(PlaybackInformation.resolution(width: 1920, height: 1080), "1920 × 1080")
         XCTAssertEqual(PlaybackInformation.resolution(width: 0, height: 1080), "Not reported")
         XCTAssertEqual(PlaybackInformation.resolution(width: 1920, height: nil), "Not reported")
+    }
+
+    func testCodecAliasesShareOneNameAndDoNotChangeContainers() {
+        for alias in ["h264", "H.264", "avc", "avc1", "AVC3"] {
+            XCTAssertEqual(PlaybackInformation.codec(alias), "H.264", alias)
+        }
+        for alias in ["hevc", "H265", "h.265", "hvc1", "hev1"] {
+            XCTAssertEqual(PlaybackInformation.codec(alias), "HEVC", alias)
+        }
+        for (alias, name) in [("av01", "AV1"), ("vp08", "VP8"), ("vp09", "VP9"), ("mpeg2video", "MPEG-2"), ("wvc1", "VC-1"), ("ac3", "AC-3"), ("ec-3", "E-AC-3")] {
+            XCTAssertEqual(PlaybackInformation.codec(alias), name)
+        }
+        XCTAssertEqual(PlaybackInformation.codec("future_codec"), "FUTURE_CODEC")
+        XCTAssertEqual(PlaybackInformation.container("avc1"), "AVC1")
+        XCTAssertEqual(PlaybackInformation.container("mkv"), "MKV")
+        XCTAssertEqual(PlaybackInformation.container("mp4,mov"), "Not reported")
+        XCTAssertEqual(PlaybackInformation.codec("h264/token"), "Not reported")
+        XCTAssertEqual(PlaybackInformation.codec("https://media.example.test"), "Not reported")
     }
 
     func testBitrateFormattingMatchesThePortablePolicy() {

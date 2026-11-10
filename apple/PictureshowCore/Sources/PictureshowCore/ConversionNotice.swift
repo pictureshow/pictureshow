@@ -16,18 +16,18 @@ public struct ConversionNotice: Equatable, Sendable {
         let videos = query.filter { $0.name.caseInsensitiveCompare("VideoCodec") == .orderedSame }
         let copied = PlaybackInformation.method(method, url: url) != "Transcode" || (videos.count == 1 && videos[0].value?.lowercased() == "copy")
         let categories: [(Set<String>, String, String)] = [
-            (["videocodecnotsupported"], "Its video format won't play on %@.", "a 1080p H.264 copy"),
-            (["videorangetypenotsupported"], "Its HDR format won't play on %@.", "an SDR copy"),
-            (["videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"], "Its video encoding is too demanding for %@.", "an 8-bit 1080p H.264 copy"),
-            (["videoresolutionnotsupported"], "Its resolution is too high for %@.", "a 1080p copy"),
-            (["videoframeratenotsupported"], "Its frame rate is too high for %@.", "a 30 fps copy"),
-            (["interlacedvideonotsupported"], "Its interlaced video won't play on %@.", "a deinterlaced copy"),
-            (["anamorphicvideonotsupported"], "Its non-square pixels won't display on %@.", "a square-pixel copy"),
-            (["videorotationnotsupported"], "Its rotation won't display on %@.", "an upright copy")
+            (["videocodecnotsupported"], "This video format cannot play directly on %@, so the server is converting the video.", "a 1080p H.264 copy"),
+            (["videorangetypenotsupported"], "This HDR format cannot play directly on %@, so the server is converting the video.", "an SDR copy"),
+            (["videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"], "The video encoding is too demanding for %@, so the server is converting the video.", "an 8-bit 1080p H.264 copy"),
+            (["videoresolutionnotsupported"], "The resolution is too high for %@, so the server is converting the video.", "a 1080p copy"),
+            (["videoframeratenotsupported"], "The frame rate is too high for %@, so the server is converting the video.", "a 30 fps copy"),
+            (["interlacedvideonotsupported"], "Interlaced video cannot play directly on %@, so the server is converting the video.", "a deinterlaced copy"),
+            (["anamorphicvideonotsupported"], "The non-square pixels cannot display correctly on %@, so the server is converting the video.", "a square-pixel copy"),
+            (["videorotationnotsupported"], "The rotation cannot display correctly on %@, so the server is converting the video.", "an upright copy")
         ]
         let title = "Converting this video for \(device)"
         if !copied, let category = categories.first(where: { !$0.0.isDisjoint(with: codes) }) {
-            return Self(title: title, reason: category.1.replacingOccurrences(of: "%@", with: device), fix: "It still plays, and \(category.2) on the server plays directly.")
+            return Self(title: title, reason: category.1.replacingOccurrences(of: "%@", with: device), fix: "\(category.2.prefix(1).uppercased())\(category.2.dropFirst()) on the server would play without conversion.")
         }
         return burnedIn ? Self(title: title, reason: "The selected subtitles must be burned in for \(device).", fix: subtitleFix) : nil
     }

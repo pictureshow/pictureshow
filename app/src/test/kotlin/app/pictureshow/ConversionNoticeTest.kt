@@ -127,7 +127,7 @@ class ConversionNoticeTest {
         assertNull(node.config.getOrNull(SemanticsProperties.Focused), "the notice must not be an input-focus target")
         compose.onNodeWithText("Converting this video for this TV").assertExists()
         compose.onNodeWithText(
-            "Its video format won't play on this TV. It still plays, and a 1080p H.264 copy on the server plays directly. " +
+            "This video format cannot play directly on this TV, so the server is converting the video. A 1080p H.264 copy on the server would play without conversion. " +
                 "Press Down, then choose Playback info."
         ).assertExists()
         // The remote still drives the focused control.
@@ -307,7 +307,7 @@ class ConversionNoticeTest {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("an 8-bit 1080p H.264 copy on the server plays directly", substring = true).assertExists()
+        compose.onNodeWithText("An 8-bit 1080p H.264 copy on the server would play without conversion", substring = true).assertExists()
         val card = compose.onNodeWithTag("player:conversion-notice").getBoundsInRoot()
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(card.bottom <= root.bottom / 2, "card $card stays in the top half of $root")

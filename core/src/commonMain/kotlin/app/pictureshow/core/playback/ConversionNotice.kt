@@ -25,25 +25,25 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
          * platform this app runs on decodes 8-bit SDR H.264 at 1080p.
          */
         private val categories: List<Triple<Set<String>, String, String>> = listOf(
-            Triple(setOf("videocodecnotsupported"), "Its video format won't play on %s.", copy("a 1080p H.264 copy")),
-            Triple(setOf("videorangetypenotsupported"), "Its HDR format won't play on %s.", copy("an SDR copy")),
+            Triple(setOf("videocodecnotsupported"), "This video format cannot play directly on %s, so the server is converting the video.", copy("a 1080p H.264 copy")),
+            Triple(setOf("videorangetypenotsupported"), "This HDR format cannot play directly on %s, so the server is converting the video.", copy("an SDR copy")),
             Triple(
                 setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"),
-                "Its video encoding is too demanding for %s.",
+                "The video encoding is too demanding for %s, so the server is converting the video.",
                 copy("an 8-bit 1080p H.264 copy")
             ),
-            Triple(setOf("videoresolutionnotsupported"), "Its resolution is too high for %s.", copy("a 1080p copy")),
-            Triple(setOf("videoframeratenotsupported"), "Its frame rate is too high for %s.", copy("a 30 fps copy")),
-            Triple(setOf("interlacedvideonotsupported"), "Its interlaced video won't play on %s.", copy("a deinterlaced copy")),
-            Triple(setOf("anamorphicvideonotsupported"), "Its non-square pixels won't display on %s.", copy("a square-pixel copy")),
-            Triple(setOf("videorotationnotsupported"), "Its rotation won't display on %s.", copy("an upright copy"))
+            Triple(setOf("videoresolutionnotsupported"), "The resolution is too high for %s, so the server is converting the video.", copy("a 1080p copy")),
+            Triple(setOf("videoframeratenotsupported"), "The frame rate is too high for %s, so the server is converting the video.", copy("a 30 fps copy")),
+            Triple(setOf("interlacedvideonotsupported"), "Interlaced video cannot play directly on %s, so the server is converting the video.", copy("a deinterlaced copy")),
+            Triple(setOf("anamorphicvideonotsupported"), "The non-square pixels cannot display correctly on %s, so the server is converting the video.", copy("a square-pixel copy")),
+            Triple(setOf("videorotationnotsupported"), "The rotation cannot display correctly on %s, so the server is converting the video.", copy("an upright copy"))
         )
         private const val SUBTITLE = "The selected subtitles must be burned in for %s."
 
         /** Text subtitles are sent alongside the picture, so choosing them, or none, stops the burn-in. */
         const val SUBTITLE_FIX = "Choose text subtitles, such as SRT, or turn them off to avoid it."
 
-        private fun copy(what: String) = "It still plays, and $what on the server plays directly."
+        private fun copy(what: String) = "${what.replaceFirstChar { it.uppercase() }} on the server would play without conversion."
 
         fun title(device: String = DEVICE): String = "Converting this video for $device"
 

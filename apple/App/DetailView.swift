@@ -22,6 +22,9 @@ enum DetailCommand: Equatable {
     @Published var seasons: [MediaItem] = []
     @Published var episodes: [MediaItem] = []
     @Published var selectedSeason: String?
+    @Published private(set) var loadingSelectedSeason = false
+    @Published private(set) var retainedSeasonID: String?
+    private var pendingFeedback = DetailPendingFeedback()
     @Published var target: MediaItem?
     @Published var reading = false
     @Published var readPresentationID = UUID()
@@ -67,8 +70,8 @@ enum DetailCommand: Equatable {
     func leave() {
         detailDiagnostic("event=readLeave generation=\(epoch) reading=\(reading) uptime=\(ProcessInfo.processInfo.systemUptime)")
         departed = true; epoch = UUID(); readTask?.cancel(); readTask = nil
-        reading = false; retrying = false; retryingWrite = false
-        pending = []; queuedAt = nil; cue = nil; requestCueKey = nil
+        reading = false; retrying = false; retryingWrite = false; retainedSeasonID = nil; loadingSelectedSeason = false
+        pending = []; queuedAt = nil; cue = nil; requestCueKey = nil; pendingFeedback = DetailPendingFeedback()
     }
     var empty: Bool {
         DetailAvailability.showEmptyState(itemType: item?.type, loading: reading, readSucceeded: fresh, readFailed: readError != nil, episodeCount: episodes.count, seasonCount: seasons.count)
@@ -82,7 +85,7 @@ enum DetailCommand: Equatable {
         // Automatic transport generations retain the same error episode and Retry slot.
     }
     func publishReadFailure(_ message: String) {
-        reading = false; retrying = false; fresh = false; recoveryVisible = true
+        reading = false; retrying = false; fresh = false; recoveryVisible = true; loadingSelectedSeason = false
         let key = DetailFeedback.failureKey(readRecovery: true, retrying: false, writeAttempt: nil)
         let previous = readFailure
         readFailure = DetailFeedback.presentFailure(previous: previous, key: key, message: message)
@@ -96,8 +99,10 @@ enum DetailCommand: Equatable {
     func publishRead(_ result: DetailPublication, publication: UUID) {
         let initial = header == nil
         item = result.item; if header == nil { header = result.item }
+        let seasonRemoved = retainedSeasonID.map { retained in !result.seasons.contains(where: { $0.id == retained }) } ?? false
         seasons = result.seasons; episodes = result.episodes; selectedSeason = result.season; target = result.target
-        reading = false; fresh = true; readError = nil; deadline = nil; publishedRefreshID = publication; cue = nil
+        if seasonRemoved { retainedSeasonID = nil; focusRequest = recoveryTarget }
+        reading = false; fresh = true; readError = nil; deadline = nil; publishedRefreshID = publication; cue = nil; loadingSelectedSeason = false
         if recoveryVisible { focusRequest = recoveryTarget }
         else if initial && result.item.type != "Person" { focusRequest = recoveryTarget }
     }
@@ -221,7 +226,26 @@ enum DetailCommand: Equatable {
             }
         }
     }
-    func chooseSeason(_ id: String, model: AppModel) { selectedSeason = id; if let item { deadline = nil; refresh(id: item.id, model: model, restart: true) } }
+    func chooseSeason(_ id: String, model: AppModel) {
+        guard seasons.contains(where: { $0.id == id }), !model.playbackSaving, !writing else { return }
+        guard id != selectedSeason else { return }
+        retainedSeasonID = id; selectedSeason = id
+        // The Seasons subtree stays mounted; the old season's episode tiles do
+        // not belong under this new selection while its dependent read is held.
+        episodes = []; loadingSelectedSeason = true
+        if let item { deadline = nil; refresh(id: item.id, model: model, restart: true) }
+    }
+    func seasonFocusChanged(_ key: String?) {
+        guard let retainedSeasonID else { return }
+        if key != "season-\(retainedSeasonID)" && key != "seasonStart" && key != "seasonEnd" { self.retainedSeasonID = nil }
+    }
+    func updatePendingFeedback(waiting: Bool, graceExpired: Bool, focused: String?, resumed: Bool, cancelled: Bool) {
+        guard let target = pendingFeedback.update(waiting: waiting, graceExpired: graceExpired, focused: focused, resumed: resumed, cancelled: cancelled) else { return }
+        let action: String
+        switch target { case "play": action = "Play"; case "startOver": action = "Play from start"; case "watched": action = "Watched"; default: action = "Favorite" }
+        cue = AccessibilityCue(message: "\(action) when ready. Please wait.", urgent: false)
+        pendingFeedback.submitted()
+    }
     @discardableResult func offer(_ command: DetailCommand, model: AppModel) -> Bool {
         guard readError == nil, enqueue(command) else { return false }
         if case .watched = command, let item { model.acceptedPlayedChoice(itemID: item.id) }
@@ -284,11 +308,16 @@ private struct DetailTimeout: LocalizedError { var errorDescription: String? { "
 struct DetailView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let id: String
     var open: (MediaItem) -> Void
     @StateObject private var state = DetailState()
     @FocusState private var focused: String?
     @State private var opener = "play"
+    @State private var remoteItem: MediaItem?
+    @State private var remoteOperation = "play-now"
+    @State private var remoteFromStart = false
+    @State private var localRemotePlayback: (MediaItem, Bool)?
     @AccessibilityFocusState private var accessibilityFocused: String?
     @State private var contentRevealed = false
     @State private var returnedFromPlayback = false
@@ -301,131 +330,45 @@ struct DetailView: View {
     @State private var handoffInFlight = false
     @State private var stableActions = false
     @State private var didPublishAction = false
+    #if os(iOS)
+    @State private var scrollOffset: CGFloat = 0
+    @State private var displayTitleBottom: CGFloat = .infinity
+    @State private var liveTitleBottom: CGFloat = .infinity
+    private var compactTitleVisible: Bool {
+        if #available(iOS 18.0, *) { return scrollOffset > displayTitleBottom + Theme.gutter }
+        return liveTitleBottom < 0
+    }
+    #endif
     #if os(tvOS)
     @ScaledMetric(relativeTo: .body) private var recoveryLaneHeight: CGFloat = 160
     #endif
     var body: some View {
+        detailBody
+            .sheet(item: $remoteItem, onDismiss: restoreRemoteOpener) { item in
+                if let account = model.account {
+                    RemotePlayView(item: item, account: account, client: model.client, operation: remoteOperation, fromStart: remoteFromStart, onThisDevice: {
+                        guard model.account?.localKey == account.localKey else { return }
+                        localRemotePlayback = (item, !remoteFromStart); remoteItem = nil
+                    }, attachedTarget: model.attachedRemote(for: account), onAttached: { target in
+                        model.attachRemote(target, for: account)
+                    }).id(account.localKey)
+                }
+            }
+            .onChange(of: model.account?.localKey) { _, _ in remoteItem = nil; localRemotePlayback = nil }
+    }
+    private func restoreRemoteOpener() {
+        focused = "playOnDevice"; accessibilityFocused = "playOnDevice"
+        if let (item, resume) = localRemotePlayback {
+            localRemotePlayback = nil
+            Task { await model.play(item, resume: resume, audio: nil, subtitle: nil) }
+        }
+    }
+    private func showRemote(_ item: MediaItem, operation: String = "play-now", fromStart: Bool = false) {
+        opener = "playOnDevice"; remoteOperation = operation; remoteFromStart = fromStart; remoteItem = item
+    }
+    private var detailBody: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if let item = state.item, item.type == "Person" {
-                        Text(item.name).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
-                        if let overview = item.overview { Text(overview).selectableReading() }
-                        PersonFilmography(id: item.id, open: open)
-                    } else if let header = state.header, let item = state.item {
-                        hero(header, current: model.presented(item))
-                        if item.type == "Series" {
-                            Text("Seasons").font(.title2.bold()).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden)
-                            ScrollView(.horizontal) { HStack(spacing: 18) { ForEach(state.seasons) { season in Button { guard !guarded, state.readError == nil else { return }; opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model) } label: { Text(season.name).minimumTouchTarget() }.secondaryActionStyle().tint(state.fresh && !state.reading && state.selectedSeason == season.id ? Theme.accent : Theme.muted).detailActionState(value: state.selectedSeason == season.id ? "Selected" : "", unavailable: state.readError != nil, held: guarded, label: season.name).accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)").id("season-\(season.id)") } }.padding(.vertical, 8) }
-                        }
-                        if ["Series", "Season"].contains(item.type) {
-                            if state.empty { Text("No episodes are available.").foregroundStyle(Theme.muted) }
-                            else { CatalogShelf(title: "Episodes", items: state.episodes.map { model.presented($0) }, wide: true, horizontalInset: 0, open: open) }
-                        }
-                        if !item.people.isEmpty {
-                            Text("Cast and crew").font(.title2.bold()).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden)
-                            ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.secondaryButtonText) }.minimumTouchTarget() }.secondaryActionStyle().accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
-                        }
-                        if header != item, let overview = item.overview, overview != header.overview { Text("More details").font(.title2).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden); Text(overview).accessibilityHidden(metadataHidden) }
-                    } else if coldPending {
-                        // Publish the destination's real guarded slots before metadata
-                        // arrives. Their intents use this state's existing bounded queue.
-                        actionRow(MediaItem(id: id, name: "", type: "Movie"), horizontal: coldActionsHorizontal)
-                        ProgressView("Loading item…").accessibilityHidden(true)
-                    } else if state.reading { ProgressView("Loading item…") }
-                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button { Task { await model.retryPlaybackSave() } } label: { Text(model.playbackSaving ? "Saving progress…" : "Retry saving progress").minimumTouchTarget() }.disabled(model.playbackSaving).secondaryActionStyle().accessibilityIdentifier("retryProgress") }
-                    if let notice = state.notice { Text(notice).foregroundStyle(Theme.muted) }
-                }.padding(Theme.gutter)
-                    .accessibilityHidden(!coldPending && DetailFeedback.arrivalAwaitsAction(loading: state.reading, contentRevealed: contentRevealed, returningFromPlayback: returnedFromPlayback))
-            }
-            .overlay(alignment: .top) {
-                if state.header != nil && (model.playbackSaving || state.reading || state.writing) {
-                    Text(model.playbackSaving ? (state.fresh ? "Item loaded. Saving progress…" : "Saving progress…") : state.writing ? "Saving change…" : state.item?.type == "Series" || state.item?.type == "Season" ? "Loading episodes…" : "Loading item…")
-                        .padding(12).background(Theme.surface.opacity(0.95), in: Capsule()).padding(.top, 8).accessibilityIdentifier("detailStatus").allowsHitTesting(false)
-                }
-            }
-            #if os(iOS)
-            .safeAreaInset(edge: .bottom, spacing: 0) { recoveryPanel }
-            #else
-            // The bottom lane is reserved from the first frame, including healthy
-            // states. Recovery stays outside the content and does not resize its
-            // viewport; native focus may still scroll to the selected action.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                ZStack {
-                    Color.clear.allowsHitTesting(false)
-                    recoveryPanel
-                }
-                .frame(maxWidth: .infinity, minHeight: recoveryLaneHeight, maxHeight: recoveryLaneHeight, alignment: .center)
-                .background(Theme.background)
-            }
-            #endif
-            .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(state.header?.name ?? "Details", opaqueTVTitle: true)
-            .announceCue(state.cue)
-            .announceStatus(state.notice)
-            .accessibilityHidden(model.player != nil)
-            .task(id: id) { state.startInitialRead(id: id, model: model) }
-            .onAppear { visible = true; state.appear(); resumeIfActive(); focused = opener; returnedFromPlayback = contentRevealed }
-            .onDisappear { visible = false; resumed = false; accessibilityFocused = nil; pendingPresentation = false; state.leave() }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active { resumeIfActive() } else { resumed = false; pendingPresentation = false; accessibilityFocused = nil; state.cue = nil }
-            }
-            .task(id: PendingPresentation(generation: state.readPresentationID, waiting: guarded, active: visible && resumed && scenePhase == .active && model.player == nil)) {
-                pendingPresentation = false
-                guard guarded, visible, resumed, scenePhase == .active, model.player == nil else { return }
-                do { try await Task.sleep(for: .milliseconds(1_500)) } catch { return }
-                guard !Task.isCancelled else { return }
-                pendingPresentation = true
-                detailDiagnostic("event=heldLabelsPublished")
-            }
-            .onChange(of: readySnapshot, initial: true) { _, snapshot in
-                if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable, presented: pendingPresentation, cancelled: requestCancelledReady || state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil) {
-                    let cue = AccessibilityCue(message: message, urgent: false)
-                    detailDiagnostic("event=readyGenerated cue=\(cue.id) selected=\(snapshot.focused ?? "none") active=\(snapshot.active)")
-                    state.cue = cue
-                }
-            }
-            .onChange(of: model.refreshID) { _, _ in state.refreshIfNeeded(id: id, model: model) }
-            .onChange(of: model.playbackSaving) { _, saving in stableActions = true; if !saving { state.refreshIfNeeded(id: id, model: model) } }
-            .onChange(of: state.reading) { _, value in
-                if value && state.header == nil { stableActions = true }
-                if !value { contentRevealed = state.item != nil; state.drain(model: model) }
-            }
-            .onChange(of: state.focusRequest) { _, request in
-                guard let request else { return }
-                let ownsSelection = focused == "detailRetry" || accessibilityFocused == "detailRetry" || (focused == nil && accessibilityFocused == nil) || !didPublishAction
-                handoffInFlight = true
-                if request == "detailRetry" || ownsSelection {
-                    // VoiceOver's current heading/action remains the reader's location on failure.
-                    // The owned failure cue names Retry without moving or replaying focus speech.
-                    if request != "detailRetry" || !UIAccessibility.isVoiceOverRunning {
-                        proxy.scrollTo(request, anchor: .center); focused = request; accessibilityFocused = request
-                    }
-                    if request != "detailRetry" { didPublishAction = true }
-                }
-                state.focusRequest = nil
-                // Let the target be committed before removing the recovery surface. A
-                // lifecycle interruption still reveals the usable page on the next turn.
-                Task { @MainActor in
-                    // Keep both targets attached across the focus update, including
-                    // a render pass on slower devices. Do not let an older handoff
-                    // dismiss a newer failed Retry.
-                    try? await Task.sleep(for: .milliseconds(50))
-                    if state.fresh, !state.reading {
-                        state.finishRecoveryHandoff()
-                        handoffFinished = true
-                    }
-                    handoffInFlight = false
-                }
-            }
-            .onChange(of: state.pending) { _, pending in if !pending.isEmpty { requestCancelledReady = true }; state.reconcileRequestCue() }
-            .onChange(of: guarded) { _, held in if !held { requestCancelledReady = false } }
-            .onChange(of: state.activeCommand) { _, _ in state.reconcileRequestCue() }
-            .onChange(of: focused) { _, focus in state.requestFocusChanged(focus); if let focus { opener = focus; if state.item != nil, focus != "detailRetry", !handoffInFlight { handoffFinished = true }; proxy.scrollTo(focus, anchor: .center) } }
-            .onChange(of: accessibilityFocused) { _, focus in
-                // VoiceOver can leave the action for page text without changing
-                // keyboard/remote focus. Nil selection ends acceptance as well.
-                if UIAccessibility.isVoiceOverRunning { state.requestFocusChanged(focus) }
-                if let focus { opener = focus; if state.item != nil, focus != "detailRetry", !handoffInFlight { handoffFinished = true }; proxy.scrollTo(focus, anchor: .center) } }
+            detailFocusContent(proxy: proxy)
             #if os(tvOS)
             .onPlayPauseCommand {
                 guard (coldPending || state.item.map { $0.isPlayable || ["Series", "Season"].contains($0.type) } == true), state.readError == nil else { return }
@@ -438,10 +381,289 @@ struct DetailView: View {
             #endif
         }
     }
+    // Opaque view boundaries keep each result-builder/modifier expression small
+    // without introducing new state, identities or type-erased containers.
+    private var detailScrollContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                if let item = state.item, item.type == "Person" {
+                    Text(item.name).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                    if let overview = item.overview { Text(overview).selectableReading() }
+                    PersonFilmography(id: item.id, open: open)
+                } else if let header = state.header, let item = state.item {
+                    hero(header, current: model.presented(item))
+                    if item.type == "Series" {
+                        Text("Seasons").font(.title2.bold()).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden)
+                        seasonShelf
+                    }
+                    if ["Series", "Season"].contains(item.type) { episodeSection }
+                    if !item.people.isEmpty {
+                        Text("Cast and crew").font(.title2.bold()).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden)
+                        ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.secondaryButtonText) }.minimumTouchTarget() }.secondaryActionStyle().accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
+                    }
+                    if header != item, let overview = item.overview, overview != header.overview { Text("More details").font(.title2).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden); Text(overview).accessibilityHidden(metadataHidden) }
+                } else if coldPending {
+                    // Publish the destination's real guarded slots before metadata
+                    // arrives. Their intents use this state's existing bounded queue.
+                    actionRow(MediaItem(id: id, name: "", type: "Movie"), horizontal: coldActionsHorizontal)
+                    ProgressView("Loading item…").accessibilityHidden(true)
+                } else if state.reading { ProgressView("Loading item…") }
+                if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button { Task { await model.retryPlaybackSave() } } label: { Text(model.playbackSaving ? "Saving progress…" : "Retry saving progress") }.disabled(model.playbackSaving).catalogActionStyle().accessibilityIdentifier("retryProgress") }
+                if let notice = state.notice { Text(notice).foregroundStyle(Theme.muted) }
+            }
+            .coordinateSpace(name: "detailContent")
+            .padding(Theme.gutter)
+            #if os(tvOS)
+            // Recovery owns this trailing content margin, never a shorter
+            // UIScrollView viewport or an opaque empty healthy-state inset.
+            .padding(.bottom, recoveryLaneHeight)
+            #endif
+                .accessibilityHidden(!retainsSeasonSelection && !coldPending && DetailFeedback.arrivalAwaitsAction(loading: state.reading, contentRevealed: contentRevealed, returningFromPlayback: returnedFromPlayback))
+        }
+    }
+    private func detailSurface(proxy: ScrollViewProxy) -> some View {
+        detailScrollContent
+        #if os(iOS)
+        .coordinateSpace(name: "detailScroll")
+        .modifier(NativeScrollOffset(offset: $scrollOffset))
+        .onPreferenceChange(DetailTitleContentBottom.self) { displayTitleBottom = $0 }
+        .onPreferenceChange(DetailTitleViewportBottom.self) { liveTitleBottom = $0 }
+        #endif
+        .overlay(alignment: .top) {
+            if state.header != nil && !state.loadingSelectedSeason && (model.playbackSaving || state.reading || state.writing) {
+                Text(model.playbackSaving ? (state.fresh ? "Item loaded. Saving progress…" : "Saving progress…") : state.writing ? "Saving change…" : state.item?.type == "Series" || state.item?.type == "Season" ? "Loading episodes…" : "Loading item…")
+                    .padding(12).background(Theme.surface.opacity(0.95), in: Capsule()).padding(.top, 8).accessibilityIdentifier("detailStatus").allowsHitTesting(false)
+            }
+        }
+        #if os(iOS)
+        .safeAreaInset(edge: .bottom, spacing: 0) { recoveryPanel }
+        #else
+        // The viewport stays full height. A permanent trailing content
+        // margin supplies scroll room; only a real recovery paints a lane.
+        .overlay(alignment: .bottom) {
+            if recoveryPresented {
+                recoveryPanel
+                    .frame(maxWidth: .infinity, minHeight: recoveryLaneHeight, maxHeight: recoveryLaneHeight, alignment: .center)
+                    .background(Theme.background)
+            }
+        }
+        .onChange(of: recoveryPresented) { _, presented in
+            if presented, let selection = UIAccessibility.isVoiceOverRunning ? accessibilityFocused : focused, selection != "detailRetry" {
+                // Keep the same action/reader location, but reveal it above
+                // the overlay without changing any published row geometry.
+                proxy.scrollTo(selection, anchor: .top)
+            }
+        }
+        #endif
+        .background(Theme.background.ignoresSafeArea())
+        #if os(tvOS)
+        .toolbar(.hidden, for: .navigationBar)
+        #else
+        .navigationTitle(compactTitleVisible ? state.header?.name ?? "Details" : "")
+        #endif
+    }
+    private func detailLifecycleContent(proxy: ScrollViewProxy) -> some View {
+        detailSurface(proxy: proxy)
+        .announceCue(state.cue)
+        .announceStatus(state.notice)
+        .accessibilityHidden(model.player != nil)
+        .task(id: id) { state.startInitialRead(id: id, model: model) }
+        .onAppear { visible = true; state.appear(); resumeIfActive(); focused = opener; returnedFromPlayback = contentRevealed }
+        .onDisappear { visible = false; resumed = false; focused = nil; accessibilityFocused = nil; pendingPresentation = false; state.leave() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { resumeIfActive() } else { resumed = false; pendingPresentation = false; accessibilityFocused = nil; state.cue = nil }
+        }
+        .task(id: pendingSnapshot) { await publishHeldLabels() }
+        .onChange(of: readySnapshot, initial: true) { _, snapshot in
+            state.updatePendingFeedback(waiting: guarded, graceExpired: pendingPresentation, focused: snapshot.focused, resumed: snapshot.active, cancelled: requestCancelledReady || state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil)
+            if readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable, presented: pendingPresentation, cancelled: requestCancelledReady || state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil) != nil {
+                let cue = AccessibilityCue(message: DetailFeedback.readyCue(actionLabel: readyActionLabel(snapshot.focused)), urgent: false)
+                detailDiagnostic("event=readyGenerated cue=\(cue.id) selected=\(snapshot.focused ?? "none") active=\(snapshot.active)")
+                state.cue = cue
+            }
+        }
+        .onChange(of: model.refreshID) { _, _ in state.refreshIfNeeded(id: id, model: model) }
+        .onChange(of: model.playbackSaving) { _, saving in stableActions = true; if !saving { state.refreshIfNeeded(id: id, model: model) } }
+        .onChange(of: state.reading) { _, value in
+            if value && state.header == nil { stableActions = true }
+            if !value { contentRevealed = state.item != nil; state.drain(model: model) }
+        }
+    }
+    private func detailFocusContent(proxy: ScrollViewProxy) -> some View {
+        detailLifecycleContent(proxy: proxy)
+        .onChange(of: state.focusRequest) { _, request in
+            guard let request else { return }
+            let ownsSelection = focused == "detailRetry" || accessibilityFocused == "detailRetry" || (focused == nil && accessibilityFocused == nil) || !didPublishAction
+            handoffInFlight = true
+            if request == "detailRetry" || ownsSelection {
+                // VoiceOver's current heading/action remains the reader's location on failure.
+                // The owned failure cue names Retry without moving or replaying focus speech.
+                if request != "detailRetry" || !UIAccessibility.isVoiceOverRunning {
+                    proxy.scrollTo(request, anchor: .center); focused = request; accessibilityFocused = request
+                }
+                if request != "detailRetry" { didPublishAction = true }
+            }
+            state.focusRequest = nil
+            // Let the target be committed before removing the recovery surface. A
+            // lifecycle interruption still reveals the usable page on the next turn.
+            Task { @MainActor in
+                // Keep both targets attached across the focus update, including
+                // a render pass on slower devices. Do not let an older handoff
+                // dismiss a newer failed Retry.
+                try? await Task.sleep(for: .milliseconds(50))
+                if state.fresh, !state.reading {
+                    state.finishRecoveryHandoff()
+                    handoffFinished = true
+                }
+                handoffInFlight = false
+            }
+        }
+        .onChange(of: state.pending) { _, pending in if !pending.isEmpty { requestCancelledReady = true }; state.reconcileRequestCue() }
+        .onChange(of: guarded) { _, held in if !held { requestCancelledReady = false } }
+        .onChange(of: state.activeCommand) { _, _ in state.reconcileRequestCue() }
+        .onChange(of: focused) { _, focus in state.requestFocusChanged(focus); if !UIAccessibility.isVoiceOverRunning { state.seasonFocusChanged(focus) }; if let focus { opener = focus; if state.item != nil, focus != "detailRetry", !handoffInFlight { handoffFinished = true }; proxy.scrollTo(focus, anchor: retainedSelectionAnchor) } }
+        .onChange(of: accessibilityFocused) { _, focus in
+            // VoiceOver can leave the action for page text without changing
+            // keyboard/remote focus. Nil selection ends acceptance as well.
+            if UIAccessibility.isVoiceOverRunning { state.requestFocusChanged(focus); state.seasonFocusChanged(focus) }
+            if let focus { opener = focus; if state.item != nil, focus != "detailRetry", !handoffInFlight { handoffFinished = true }; proxy.scrollTo(focus, anchor: retainedSelectionAnchor) } }
+    }
+    private var pendingSnapshot: PendingPresentation {
+        PendingPresentation(generation: state.readPresentationID, waiting: guarded, active: visible && resumed && scenePhase == .active && model.player == nil)
+    }
+    @MainActor private func publishHeldLabels() async {
+        pendingPresentation = false
+        guard guarded, visible, resumed, scenePhase == .active, model.player == nil else { return }
+        do { try await Task.sleep(for: .milliseconds(1_500)) } catch { return }
+        guard !Task.isCancelled else { return }
+        pendingPresentation = true
+        detailDiagnostic("event=heldLabelsPublished")
+    }
+    private var recoveryPresented: Bool { state.recoveryVisible || state.writeFailure != nil }
+    private var retainedSelectionAnchor: UnitPoint {
+        #if os(tvOS)
+        recoveryPresented ? .top : .center
+        #else
+        .center
+        #endif
+    }
+    @ViewBuilder private var episodeSection: some View {
+        #if os(tvOS)
+        if state.loadingSelectedSeason {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Episodes").font(.title2.bold()).accessibilityAddTraits(.isHeader)
+                ProgressView("Loading episodes…").accessibilityIdentifier("episodesLoading")
+            }
+        } else if state.empty {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Episodes").font(.title2.bold()).accessibilityAddTraits(.isHeader)
+                Text("No episodes are available.").foregroundStyle(Theme.muted)
+            }
+        }
+        else { CatalogShelf(title: "Episodes", items: state.episodes.map { model.presented($0) }, wide: true, horizontalInset: 0, pageSectionHeading: true, open: open) }
+        #else
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Episodes").font(.title2.bold()).accessibilityAddTraits(.isHeader)
+            if state.loadingSelectedSeason { ProgressView("Loading episodes…").accessibilityIdentifier("episodesLoading") }
+            else if state.empty { Text("No episodes are available.").foregroundStyle(Theme.muted) }
+            else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16, alignment: .top)], alignment: .leading, spacing: 24) {
+                    ForEach(state.episodes) { raw in
+                        let episode = model.presented(raw)
+                        Button { open(episode) } label: { CatalogCard(item: episode, wide: true, fillsAvailableWidth: true) }
+                            .buttonStyle(PosterButtonStyle()).accessibilityLabel(episode.accessibleTitle).accessibilityIdentifier("item-\(episode.id)")
+                    }
+                }
+            }
+        }
+        #endif
+    }
+    private var retainsSeasonSelection: Bool {
+        let key = UIAccessibility.isVoiceOverRunning ? accessibilityFocused : focused
+        let selectedID = state.retainedSeasonID ?? key.flatMap { $0.hasPrefix("season-") ? String($0.dropFirst(7)) : nil } ?? ""
+        return DetailAvailability.retainsSeasonFocus(selectedSection: key?.hasPrefix("season-") == true || key == "seasonStart" || key == "seasonEnd" ? "seasons" : "", restored: contentRevealed, semanticsRevealed: !metadataHidden, selectedId: selectedID, seasonIds: state.seasons.map(\.id))
+    }
+    private var seasonShelf: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 18) {
+                    ForEach(state.seasons) { season in
+                        if seasonBoundaryVisible(season.id, start: true) { seasonBoundary(start: true, season: season) }
+                        Button {
+                            guard state.readError == nil else { return }
+                            opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model)
+                        } label: {
+                            #if os(tvOS)
+                            TelevisionChoiceLabel(title: season.name, selected: state.selectedSeason == season.id)
+                                .padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 48).contentShape(Rectangle())
+                            #else
+                            Text(season.name).padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 48).contentShape(Rectangle())
+                            #endif
+                        }
+                        .modifier(SeasonChoiceStyle(selected: state.selectedSeason == season.id))
+                        .detailActionState(value: state.selectedSeason == season.id ? "Selected" : "", unavailable: state.readError != nil, held: guarded && !retainsSeasonSelection, label: season.name)
+                        .accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)")
+                        .accessibilityFocused($accessibilityFocused, equals: "season-\(season.id)").id("season-\(season.id)")
+                        .accessibilityAddTraits(state.selectedSeason == season.id ? [.isSelected] : [])
+                        #if os(tvOS)
+                        .onMoveCommand { direction in
+                            if direction == .left && season.id == state.seasons.first?.id { focused = "season-\(season.id)" }
+                            else if direction == .right && season.id == state.seasons.last?.id { focused = "season-\(season.id)" }
+                        }
+                        #endif
+                        .accessibilityScrollAction { edge in
+                            #if os(tvOS)
+                            if edge == .leading && season.id == state.seasons.first?.id { accessibilityFocused = "seasonStart" }
+                            else if edge == .trailing && season.id == state.seasons.last?.id { accessibilityFocused = "seasonEnd" }
+                            #endif
+                        }
+                        if seasonBoundaryVisible(season.id, start: false) { seasonBoundary(start: false, season: season) }
+                    }
+                }.padding(.vertical, 12)
+            }.televisionFocusSection()
+                .onChange(of: accessibilityFocused) { _, key in
+                    if let key, key.hasPrefix("season-") { proxy.scrollTo(key, anchor: .center) }
+                }
+        }
+    }
+    private func seasonBoundaryVisible(_ id: String, start: Bool) -> Bool {
+        #if os(tvOS)
+        return UIAccessibility.isVoiceOverRunning && id == (start ? state.seasons.first?.id : state.seasons.last?.id) && (accessibilityFocused == "season-\(id)" || accessibilityFocused == (start ? "seasonStart" : "seasonEnd"))
+        #else
+        return false
+        #endif
+    }
+    private func seasonBoundary(start: Bool, season: MediaItem) -> some View {
+        Text(start ? "Start of Seasons" : "End of Seasons").font(.caption).foregroundStyle(Theme.muted)
+            .accessibilityElement(children: .ignore).accessibilityFocused($accessibilityFocused, equals: start ? "seasonStart" : "seasonEnd")
+            .accessibilityIdentifier(start ? "seasonStart" : "seasonEnd")
+            .accessibilityScrollAction { edge in
+                if (start && edge == .trailing) || (!start && edge == .leading) { accessibilityFocused = "season-\(season.id)" }
+            }
+    }
+    private func readyActionLabel(_ key: String?) -> String {
+        switch key {
+        case "play": return state.item.map(primaryLabel) ?? "Play"
+        case "startOver": return "Play from start"
+        case "watched": return state.item?.isWatched == true ? "Mark unwatched" : "Mark watched"
+        default: return state.item?.userData.isFavorite == true ? "Remove favorite" : "Add favorite"
+        }
+    }
     private func hero(_ header: MediaItem, current item: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             Artwork(item: header, wide: true).frame(maxWidth: .infinity).frame(height: heroHeight).clipShape(RoundedRectangle(cornerRadius: 18))
             Text(header.name).modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("detailTitle").accessibilityFocused($accessibilityFocused, equals: "heading").accessibilityHidden(metadataHidden)
+                #if os(tvOS)
+                .id("heading")
+                #else
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(key: DetailTitleContentBottom.self, value: geometry.frame(in: .named("detailContent")).maxY)
+                            .preference(key: DetailTitleViewportBottom.self, value: geometry.frame(in: .named("detailScroll")).maxY)
+                    }
+                }
+                #endif
             Text(metadata(header)).foregroundStyle(Theme.muted).accessibilityHidden(metadataHidden)
             // Published action slots stay in one order while final reports and fresh reads run.
             #if os(tvOS)
@@ -500,43 +722,89 @@ struct DetailView: View {
         return ReadySnapshot(held: pendingPresentation && (!state.fresh || state.reading || model.playbackSaving), focused: selected, active: visible && resumed && scenePhase == .active && model.player == nil && state.readError == nil && state.writeError == nil && state.pending.isEmpty && state.activeCommand == nil, usable: usable)
     }
     @ViewBuilder private func actionRow(_ item: MediaItem, horizontal: Bool) -> some View {
-        let layout = horizontal ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+        #if os(tvOS)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) { playActions(item); remotePlayAction; mutationActions(item) }
+            VStack(alignment: .leading, spacing: 16) { playActions(item); remotePlayAction; mutationActions(item) }
+        }
+        #else
+        VStack(alignment: .leading, spacing: 12) {
+            // Primary playback stays full width. Secondary actions use equal
+            // columns at ordinary sizes and one stable list at very large type.
+            playActions(item)
+            if dynamicTypeSize >= .xxxLarge {
+                VStack(alignment: .leading, spacing: 12) { remotePlayAction; mutationActions(item) }
+            } else {
+                HStack(alignment: .top, spacing: 12) { remotePlayAction; mutationActions(item) }
+                    .labelStyle(DetailSecondaryLabelStyle())
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+        #endif
+    }
+    @ViewBuilder private func playActions(_ item: MediaItem) -> some View {
+        let playRequest = state.requestedLabel(.play(true))
+        let playLabel = playRequest ?? (unavailablePlay ? DetailFeedback.unavailableActionLabel(target: "primary") : primaryLabel(item))
+        if item.isPlayable || ["Series", "Season"].contains(item.type) {
+            Button { opener = "play"; offer(.play(true), key: "play") } label: {
+                Label(playLabel, systemImage: playRequest != nil ? "checkmark" : "play.fill").modifier(DetailActionWidth())
+            }.catalogActionStyle(prominent: true).modifier(DetailActionWidth())
+                .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play", pending: "Play when ready", actual: playLabel, unavailable: unavailablePlay), requestStatus: playRequest, acceptsHeldRequest: true)
+                .disabled(state.requested(.play(false)))
+                .accessibilityFocused($accessibilityFocused, equals: "play").focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
+        }
+        if item.isPlayable && (stableActions || coldPending || item.userData.playbackPositionTicks > 0) { startOverButton }
+    }
+    @ViewBuilder private var remotePlayAction: some View {
+        if let target = state.target {
+            Menu {
+                Button("Play on TV") { showRemote(target) }.accessibilityIdentifier("remote-mode-play-now")
+                Button("Play next on TV") { showRemote(target, operation: "play-next") }.accessibilityIdentifier("remote-mode-play-next")
+                Button("Add to TV queue") { showRemote(target, operation: "add-to-queue") }.accessibilityIdentifier("remote-mode-add-to-queue")
+                Button("Play on TV from start") { showRemote(target, fromStart: true) }.accessibilityIdentifier("remote-mode-from-start")
+            } label: {
+                Label("Play on TV", systemImage: "tv")
+                    #if os(tvOS)
+                    .foregroundStyle(Theme.background)
+                    #endif
+                    .modifier(DetailActionWidth())
+            }
+                #if os(tvOS)
+                // Menu owns its native activation; a primitive Button style
+                // would replace its label/ink and leave an empty filled target.
+                .buttonStyle(.bordered)
+                #else
+                .catalogActionStyle()
+                #endif
+                .modifier(DetailActionWidth()).disabled(guarded || unavailablePlay)
+                .accessibilityLabel("Play on TV")
+                .focused($focused, equals: "playOnDevice").accessibilityFocused($accessibilityFocused, equals: "playOnDevice")
+                .id("playOnDevice").accessibilityIdentifier("playOnDevice")
+        }
+    }
+    @ViewBuilder private func mutationActions(_ item: MediaItem) -> some View {
         let watchedCommand: DetailCommand = .watched(!item.isWatched)
         let favoriteCommand: DetailCommand = .favorite(!item.userData.isFavorite)
         let watchedRequest = state.requestedLabel(watchedCommand)
         let favoriteRequest = state.requestedLabel(favoriteCommand)
-        let playRequest = state.requestedLabel(.play(true))
-        let watchedLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "played") : watchedRequest != nil ? watchedRequest! : item.isWatched ? "Mark unwatched" : "Mark watched"
-        let favoriteLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "favorite") : favoriteRequest != nil ? favoriteRequest! : item.userData.isFavorite ? "Remove favorite" : "Add favorite"
-        let playLabel = playRequest != nil ? playRequest! : state.requested(.play(false)) ? "Start already requested" : unavailablePlay ? DetailFeedback.unavailableActionLabel(target: "primary") : primaryLabel(item)
-        layout {
-            if item.isPlayable || ["Series", "Season"].contains(item.type) {
-                Button { opener = "play"; offer(.play(true), key: "play") } label: {
-                    Label(playLabel, systemImage: "play.fill").minimumTouchTarget()
-                }.buttonStyle(ProminentActionStyle())
-                    .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play", pending: "Play when ready", actual: playLabel, unavailable: unavailablePlay), requestStatus: playRequest, acceptsHeldRequest: true)
-                    .accessibilityFocused($accessibilityFocused, equals: "play").focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
-            }
-            if !stableActions && item.isPlayable && item.userData.playbackPositionTicks > 0 { startOverButton }
-            Button { opener = "watched"; offer(watchedCommand, key: "watched") } label: {
-                Label(watchedLabel, systemImage: state.readError == nil && item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").minimumTouchTarget()
-            }.secondaryActionStyle()
-                .detailActionState(value: actionValue(item.isWatched ? "Watched" : "Unwatched", unavailable: state.empty), unavailable: state.empty || state.readError != nil, held: guarded, label: semanticLabel(plain: item.isWatched ? "Mark unwatched" : "Mark watched", pending: item.isWatched ? "Mark unwatched when ready" : "Mark watched when ready", actual: watchedLabel, unavailable: state.empty || state.readError != nil), requestStatus: watchedRequest, acceptsHeldRequest: true)
-                .accessibilityFocused($accessibilityFocused, equals: "watched").focused($focused, equals: "watched").id("watched").accessibilityIdentifier("watched")
-            Button { opener = "favorite"; offer(favoriteCommand, key: "favorite") } label: {
-                Label(favoriteLabel, systemImage: state.readError == nil && item.userData.isFavorite ? "heart.fill" : "heart").minimumTouchTarget()
-            }.secondaryActionStyle()
-                .detailActionState(value: actionValue(item.userData.isFavorite ? "Favorite" : "Not favorite"), unavailable: state.readError != nil, held: guarded, label: semanticLabel(plain: item.userData.isFavorite ? "Remove favorite" : "Add favorite", pending: item.userData.isFavorite ? "Remove favorite when ready" : "Add favorite when ready", actual: favoriteLabel, unavailable: state.readError != nil), requestStatus: favoriteRequest, acceptsHeldRequest: true)
-                .accessibilityFocused($accessibilityFocused, equals: "favorite").focused($focused, equals: "favorite").id("favorite").accessibilityIdentifier("favorite")
-            if (stableActions || coldPending) && item.isPlayable { startOverButton }
-        }
+        let watchedLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "played") : watchedRequest ?? (item.isWatched ? "Mark unwatched" : "Mark watched")
+        let favoriteLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "favorite") : favoriteRequest ?? (item.userData.isFavorite ? "Remove favorite" : "Add favorite")
+        Button { opener = "watched"; offer(watchedCommand, key: "watched") } label: {
+            Label(watchedLabel, systemImage: state.readError == nil && item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").modifier(DetailActionWidth())
+        }.catalogActionStyle().modifier(DetailActionWidth())
+            .detailActionState(value: actionValue(item.isWatched ? "Watched" : "Unwatched", unavailable: state.empty), unavailable: state.empty || state.readError != nil, held: guarded, label: semanticLabel(plain: item.isWatched ? "Mark unwatched" : "Mark watched", pending: item.isWatched ? "Mark unwatched when ready" : "Mark watched when ready", actual: watchedLabel, unavailable: state.empty || state.readError != nil), requestStatus: watchedRequest, acceptsHeldRequest: true)
+            .accessibilityFocused($accessibilityFocused, equals: "watched").focused($focused, equals: "watched").id("watched").accessibilityIdentifier("watched")
+        Button { opener = "favorite"; offer(favoriteCommand, key: "favorite") } label: {
+            Label(favoriteLabel, systemImage: state.readError == nil && item.userData.isFavorite ? "heart.fill" : "heart").modifier(DetailActionWidth())
+        }.catalogActionStyle().modifier(DetailActionWidth())
+            .detailActionState(value: actionValue(item.userData.isFavorite ? "Favorite" : "Not favorite"), unavailable: state.readError != nil, held: guarded, label: semanticLabel(plain: item.userData.isFavorite ? "Remove favorite" : "Add favorite", pending: item.userData.isFavorite ? "Remove favorite when ready" : "Add favorite when ready", actual: favoriteLabel, unavailable: state.readError != nil), requestStatus: favoriteRequest, acceptsHeldRequest: true)
+            .accessibilityFocused($accessibilityFocused, equals: "favorite").focused($focused, equals: "favorite").id("favorite").accessibilityIdentifier("favorite")
     }
     private var startOverButton: some View {
         let request = state.requestedLabel(.play(false))
         let label = request != nil ? request! : state.requested(.play(true)) ? "Play already requested" : unavailablePlay ? DetailFeedback.unavailableActionLabel(target: "from-start") : "Play from start"
         return Button { opener = "startOver"; offer(.play(false), key: "startOver") } label: {
-            Text(label).minimumTouchTarget()
-        }.secondaryActionStyle().focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver")
+            Label(label, systemImage: request != nil ? "checkmark" : "backward.end.fill").modifier(DetailActionWidth())
+        }.catalogActionStyle().modifier(DetailActionWidth()).disabled(state.requested(.play(true))).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver")
             .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play from start", pending: "Play from start when ready", actual: label, unavailable: unavailablePlay), requestStatus: request, acceptsHeldRequest: true).accessibilityFocused($accessibilityFocused, equals: "startOver")
     }
     private func semanticLabel(plain: String, pending: String, actual: String, unavailable: Bool) -> String {
@@ -568,8 +836,8 @@ struct DetailView: View {
                 Button {
                     guard !state.reading else { return }
                     state.refresh(id: id, model: model, deliberate: true)
-                } label: { Text(state.reading || state.fresh ? "Retrying…" : "Retry").minimumTouchTarget() }
-                .buttonStyle(ProminentActionStyle()).focused($focused, equals: "detailRetry").accessibilityFocused($accessibilityFocused, equals: "detailRetry")
+                } label: { Text(state.reading || state.fresh ? "Retrying…" : "Retry") }
+                .catalogActionStyle(prominent: true).focused($focused, equals: "detailRetry").accessibilityFocused($accessibilityFocused, equals: "detailRetry")
                 .id("detailRetry").accessibilityIdentifier("detailRetry")
                 .accessibilityValue(state.reading || state.fresh ? "Loading item. Please wait." : "Retry. Loading failed. \(state.readFailure?.message ?? state.readError ?? "")")
                 #if os(tvOS)
@@ -597,7 +865,7 @@ struct DetailView: View {
                 #else
                 Text("Change failed. \(failure.message)").foregroundStyle(.orange).selectableReading().accessibilityIdentifier("detailWriteError")
                 #endif
-                Button { state.retryWrite(model: model) } label: { Text("Retry change").minimumTouchTarget() }.secondaryActionStyle().accessibilityIdentifier("detailWriteRetry")
+                Button { state.retryWrite(model: model) } label: { Text("Retry change") }.catalogActionStyle().accessibilityIdentifier("detailWriteRetry")
             }.modifier(DetailRecoverySurface()).accessibilityHidden(!visible || scenePhase != .active)
         }
     }
@@ -646,3 +914,43 @@ struct PersonFilmography: View {
         }.task(id: id) { await page.load(model: model, parent: id, person: true, reset: true) }
     }
 }
+
+private struct DetailActionWidth: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        content.frame(maxWidth: .infinity, alignment: .center)
+        #else
+        content
+        #endif
+    }
+}
+private struct DetailSecondaryLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing: 8) {
+            configuration.icon.font(.title3)
+            configuration.title.multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: .infinity, minHeight: 64, alignment: .top)
+    }
+}
+private struct SeasonChoiceStyle: ViewModifier {
+    let selected: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        content.buttonStyle(.plain).foregroundStyle(selected ? Theme.background : .primary)
+            .background(selected ? Theme.accent : Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+        #else
+        content.modifier(TelevisionChoiceStyle(selected: selected))
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct DetailTitleContentBottom: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
+}
+private struct DetailTitleViewportBottom: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
+}
+#endif

@@ -81,6 +81,51 @@ final class AppleSliceUITests: XCTestCase {
         try playAndResume(id: XCTUnwrap(config["resumeID"]), expected: "Server HLS", key: "resume")
         #endif
     }
+    /// Live smoke for the native presentation adapter using only the configured
+    /// private demo viewer. The synthetic flow supplies exact reason/countdown cases.
+    func testNativePresentationPanelsOnDemo() throws {
+        ensureSignedIn()
+        let id = try XCTUnwrap(config["hlsID"])
+        app.terminate()
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = id
+        app.launch()
+        let play = app.buttons["play"]
+        activate(play)
+        #if os(tvOS)
+        let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(native.waitForExistence(timeout: 30))
+        XCUIRemote.shared.press(.up)
+        let clock = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(clock.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForPlaybackClock(clock, minimum: 2, timeout: 35, metric: "native_panels", nativeAVKitClock: true))
+        XCUIRemote.shared.press(.playPause)
+        // Exact TV panel/focus interactions are exercised by PlayerPresentationUITests.
+        capture("132 live demo Apple TV playback")
+        leaveNativeTVPlayer(returningTo: play)
+        #else
+        let method = app.staticTexts["playbackMethod"]
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForSettledMethod(method, expected: "Server HLS", timeout: 45))
+        let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: "native_panels", nativeAVKitClock: false))
+        let pause = app.buttons["playerPlayPause"]
+        if !pause.exists { app.buttons["playerSurface"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        if pause.label == "Pause" { activate(pause) }
+        activate(app.buttons["playerSpeed"])
+        XCTAssertTrue(app.buttons["speed-1×"].waitForExistence(timeout: 10))
+        activate(app.buttons["speed-1.25×"])
+        XCTAssertTrue(app.buttons["playerSpeed"].label.contains("1.25×"))
+        activate(app.buttons["playerInfo"])
+        let source = app.descendants(matching: .any).matching(identifier: "playbackInfo-Server-reported source-Video codec").firstMatch
+        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        capture("132 live demo server playback information")
+        activate(app.buttons["playerOptionsDone"])
+        activate(app.buttons["closePlayer"])
+        #endif
+        XCTAssertTrue(play.waitForExistence(timeout: 15))
+    }
+
     /// Covers the non-player navigation surfaces added by the native follow-up without relying
     /// on screenshots as semantic evidence. The private config names a visible demo-library item.
     func testAccountSearchSettingsAboutAndLicenses() throws {
@@ -147,7 +192,12 @@ final class AppleSliceUITests: XCTestCase {
 
         let diagnostics = app.buttons["openDiagnostics"]
         reveal(diagnostics); activate(diagnostics)
-        XCTAssertTrue(app.staticTexts["This device"].waitForExistence(timeout: 10))
+        #if os(tvOS)
+        XCTAssertTrue(app.staticTexts["This TV"].waitForExistence(timeout: 10))
+        #else
+        let noun = UIDevice.current.userInterfaceIdiom == .pad ? "This tablet" : "This phone"
+        XCTAssertTrue(app.staticTexts[noun].waitForExistence(timeout: 10))
+        #endif
         capture("This device diagnostics")
         back()
 
@@ -1476,10 +1526,9 @@ final class AppleSliceUITests: XCTestCase {
         capture("F5 real demo phone remains paused after Home return")
         let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(native.exists)
-        // On this AVKit version tapping the paused player surface itself resumes
-        // playback. Requiring a separate transient Play button would reject the
-        // successful native gesture after it has already changed the transport.
-        native.tap()
+        // Touch transport owns the explicit Play intent; the video surface
+        // now only reveals/hides those controls.
+        activate(app.buttons["playerPlayPause"])
         XCTAssertTrue(waitForPlaybackClock(position, minimum: later + 2, timeout: 30, metric: "f5_foreground_deliberate_play"))
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 20))
@@ -2297,7 +2346,10 @@ final class AppleSliceUITests: XCTestCase {
         return false
     }
     private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
-        app.buttons["openSearch"].waitForExistence(timeout: timeout)
+        #if os(iOS)
+        if app.navigationBars["Pictureshow"].waitForExistence(timeout: timeout), app.buttons["Settings"].exists { return true }
+        #endif
+        return app.buttons["openSearch"].waitForExistence(timeout: timeout)
             || app.buttons["openSettings"].waitForExistence(timeout: timeout)
     }
     private func hasAuthenticatedNavigationState() -> Bool {
@@ -3524,3 +3576,51 @@ func testF5DemoFailedCompletionWithdrawsProjectionWhileFreshReadIsHeld() async t
     private func capture(_ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
     private func captureFullScreen(_ name: String) { let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
 }
+
+#if os(iOS)
+/// Exercise the mounted touch host through real application lifecycle events.
+final class TouchLifecycleUITests: XCTestCase {
+    @MainActor func testBackgroundReturnKeepsViewingPausedUntilExplicitPlay() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120, compactTracks: true)
+        fixture.releaseAllMenuWorkers()
+        try fixture.start()
+        defer { fixture.stop(); app.terminate() }
+        try fixture.launchSignedInDetail(app, activate: { $0.tap() })
+        app.buttons["play"].tap()
+        let transport = app.buttons["playerPlayPause"]
+        XCTAssertTrue(transport.waitForExistence(timeout: 20))
+        let position = app.staticTexts["playbackPosition"]
+        func seconds() -> Int { position.label.split(separator: ":").reduce(0) { $0 * 60 + (Int($1) ?? 0) } }
+        func wait(_ predicate: @escaping () -> Bool) -> Bool {
+            let expected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in predicate() }, object: nil)
+            return XCTWaiter.wait(for: [expected], timeout: 15) == .completed
+        }
+        XCTAssertTrue(wait { position.exists && seconds() >= 2 }, "The real media clock must advance before Home")
+        app.buttons["playerSpeed"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "speed-1.25×", "1.25×")).firstMatch.tap()
+        XCTAssertTrue(wait { transport.exists && transport.label == "Pause" })
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 2)
+        app.activate()
+        XCTAssertTrue(wait { transport.exists && transport.label == "Play" }, "Foreground must reveal paused transport")
+        let returned = seconds()
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(seconds(), returned, "Returning cannot resume the media clock")
+        XCTAssertTrue(app.buttons["playerSpeed"].label.contains("1.25×"), "Foreground preserves speed within the viewing")
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 0)
+        let text = XCTAttachment(string: app.debugDescription)
+        text.name = "132 touch paused after Home return accessibility"; text.lifetime = .keepAlways; add(text)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "132 touch paused after Home return"; shot.lifetime = .keepAlways; add(shot)
+        transport.tap()
+        XCTAssertTrue(wait { seconds() >= returned + 1 && transport.label == "Pause" }, "One deliberate Play resumes this viewing")
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        app.buttons["closePlayer"].tap()
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 15))
+        print("LEG132_TOUCH_LIFECYCLE realHomeReturn=true pausedClockStable=true speedRetained=true explicitPlayResumes=true viewingStarts=1")
+    }
+}
+#endif

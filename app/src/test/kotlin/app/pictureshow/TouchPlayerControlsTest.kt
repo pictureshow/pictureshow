@@ -499,7 +499,7 @@ class TouchPlayerControlsTest {
             settled()
             compose.onNodeWithTag("touch:panel").assertDoesNotExist()
         }
-        compose.onNodeWithText("an 8-bit 1080p H.264 copy on the server plays directly", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("An 8-bit 1080p H.264 copy on the server would play without conversion", substring = true).assertIsDisplayed()
         val notice = bounds("touch:conversion-notice")
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(notice.left >= root.left && notice.right <= root.right && notice.bottom <= root.bottom, "inside: $notice in $root")

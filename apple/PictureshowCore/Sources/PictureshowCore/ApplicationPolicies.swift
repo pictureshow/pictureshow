@@ -42,25 +42,26 @@ public struct PlaybackPreferences: Codable, Equatable, Sendable {
     public static let bitrates: [Int?] = [nil, 120, 80, 40, 20, 10, 4]
     public var bitrateMbps: Int?
     public var passthrough: Bool
+    public var showConversionNotice: Bool
     public var subtitleSize: SubtitleSize
     public var subtitleBackground: SubtitleBackground
     public var segmentModes: [SegmentType:SegmentMode]
     public var maxStreamingBitrate: Int { bitrateMbps.map { $0 * 1_000_000 } ?? 200_000_000 }
     public static func validateBitrate(_ value: Int?) throws { guard bitrates.contains(value) else { throw ClientError.invalidResponse } }
-    public init(bitrateMbps: Int? = nil, passthrough: Bool = true, subtitleSize: SubtitleSize = .system, subtitleBackground: SubtitleBackground = .system, segmentModes: [SegmentType:SegmentMode] = [:]) {
+    public init(bitrateMbps: Int? = nil, passthrough: Bool = true, showConversionNotice: Bool = true, subtitleSize: SubtitleSize = .system, subtitleBackground: SubtitleBackground = .system, segmentModes: [SegmentType:SegmentMode] = [:]) {
         self.bitrateMbps = Self.bitrates.contains(bitrateMbps) ? bitrateMbps : nil
-        self.passthrough = passthrough; self.subtitleSize = subtitleSize; self.subtitleBackground = subtitleBackground
+        self.passthrough = passthrough; self.showConversionNotice = showConversionNotice; self.subtitleSize = subtitleSize; self.subtitleBackground = subtitleBackground
         self.segmentModes = Dictionary(uniqueKeysWithValues: SegmentType.allCases.filter { $0 != .unknown }.map { ($0, segmentModes[$0] ?? .ask) })
     }
-    enum CodingKeys: String, CodingKey { case bitrateMbps, passthrough, subtitleSize, subtitleBackground, segmentModes }
+    enum CodingKeys: String, CodingKey { case bitrateMbps, passthrough, showConversionNotice, subtitleSize, subtitleBackground, segmentModes }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let rawModes = (try? c.decode([String:String].self, forKey: .segmentModes)) ?? [:]
-        self.init(bitrateMbps: try? c.decodeIfPresent(Int.self, forKey: .bitrateMbps), passthrough: (try? c.decode(Bool.self, forKey: .passthrough)) ?? true, subtitleSize: SubtitleSize(rawValue: (try? c.decode(String.self, forKey: .subtitleSize)) ?? "") ?? .system, subtitleBackground: SubtitleBackground(rawValue: (try? c.decode(String.self, forKey: .subtitleBackground)) ?? "") ?? .system, segmentModes: Dictionary(uniqueKeysWithValues: rawModes.compactMap { k,v in guard let type = SegmentType(rawValue: k), type != .unknown else { return nil }; return (type, SegmentMode(rawValue:v) ?? .ask) }))
+        self.init(bitrateMbps: try? c.decodeIfPresent(Int.self, forKey: .bitrateMbps), passthrough: (try? c.decode(Bool.self, forKey: .passthrough)) ?? true, showConversionNotice: (try? c.decode(Bool.self, forKey: .showConversionNotice)) ?? true, subtitleSize: SubtitleSize(rawValue: (try? c.decode(String.self, forKey: .subtitleSize)) ?? "") ?? .system, subtitleBackground: SubtitleBackground(rawValue: (try? c.decode(String.self, forKey: .subtitleBackground)) ?? "") ?? .system, segmentModes: Dictionary(uniqueKeysWithValues: rawModes.compactMap { k,v in guard let type = SegmentType(rawValue: k), type != .unknown else { return nil }; return (type, SegmentMode(rawValue:v) ?? .ask) }))
     }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encodeIfPresent(bitrateMbps, forKey: .bitrateMbps); try c.encode(passthrough, forKey: .passthrough); try c.encode(subtitleSize.rawValue, forKey: .subtitleSize); try c.encode(subtitleBackground.rawValue, forKey: .subtitleBackground); try c.encode(Dictionary(uniqueKeysWithValues: segmentModes.map { ($0.key.rawValue, $0.value.rawValue) }), forKey: .segmentModes)
+        try c.encodeIfPresent(bitrateMbps, forKey: .bitrateMbps); try c.encode(passthrough, forKey: .passthrough); try c.encode(showConversionNotice, forKey: .showConversionNotice); try c.encode(subtitleSize.rawValue, forKey: .subtitleSize); try c.encode(subtitleBackground.rawValue, forKey: .subtitleBackground); try c.encode(Dictionary(uniqueKeysWithValues: segmentModes.map { ($0.key.rawValue, $0.value.rawValue) }), forKey: .segmentModes)
     }
 }
 public enum Captions {

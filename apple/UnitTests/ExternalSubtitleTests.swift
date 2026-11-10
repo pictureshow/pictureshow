@@ -760,8 +760,16 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
                       "Info must identify the actual app-rendered external text path, even when delivery was proposed as Encode")
         XCTAssertFalse(explanation.contains("avkit uses the system caption renderer"),
                        "Selected external text is not being rendered by AVKit")
-        XCTAssertTrue(explanation.contains("timing") && explanation.contains("not available"))
-        XCTAssertFalse(session.subtitleTimingAvailable)
+        XCTAssertTrue(explanation.contains("timing") && explanation.contains("earlier"))
+        XCTAssertTrue(session.subtitleTimingAvailable)
+        session.adjustSubtitleDelay(by: 100)
+        XCTAssertEqual(session.subtitleDelayMs, 100)
+        session.adjustSubtitleDelay(by: 50_000)
+        XCTAssertEqual(session.subtitleDelayMs, 10_000)
+        session.adjustSubtitleDelay(by: -50_000)
+        XCTAssertEqual(session.subtitleDelayMs, -10_000)
+        session.adjustSubtitleDelay(by: nil)
+        XCTAssertEqual(session.subtitleDelayMs, 0)
 
         await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
         XCTAssertEqual(session.decision?.subtitleIndex, -1)

@@ -34,6 +34,9 @@ private struct SettingsForm: View {
     @State private var configuration: UserConfiguration?
     @State private var serverError: String?
     @State private var serverBusy = false
+    @State private var windowSize: CGSize = .zero
+    @FocusState private var focused: String?
+    @State private var opener = "bitrate"
     private let languages = ["", "eng", "spa", "fra", "deu", "jpn", "zho", "kor", "por", "ita", "rus", "ara", "hin"]
     private let languageNames = ["": "No preference", "eng": "English", "spa": "Spanish", "fra": "French", "deu": "German", "jpn": "Japanese", "zho": "Chinese", "kor": "Korean", "por": "Portuguese", "ita": "Italian", "rus": "Russian", "ara": "Arabic", "hin": "Hindi"]
     var body: some View {
@@ -56,15 +59,21 @@ private struct SettingsForm: View {
     }
     private var settingsForm: some View {
         Form {
-            Section("Playback") {
-                Picker("Max streaming bitrate", selection: preference(\.bitrateMbps)) { ForEach(PlaybackPreferences.bitrates, id: \.self) { value in Text(value.map { "\($0) Mbps" } ?? "Auto (200 Mbps)").tag(value) } }.accessibilityIdentifier("maxBitrate")
-                Text("Audio output: managed by AVKit").accessibilityIdentifier("passthrough")
-                Text("Encoded passthrough formats are unreported by this app. AVKit manages the current output route; no DTS or TrueHD passthrough is claimed.").font(.caption).foregroundStyle(Theme.muted)
-            }
-            Section("Captions") {
+            Section {
+                Picker("Max streaming bitrate", selection: preference(\.bitrateMbps)) { ForEach(PlaybackPreferences.bitrates, id: \.self) { value in Text(value.map { "\($0) Mbps" } ?? "Auto (200 Mbps)").tag(value) } }.accessibilityIdentifier("maxBitrate").focused($focused, equals: "bitrate")
+                Toggle(isOn: preference(\.showConversionNotice)) {
+                    conversionNoticeLabel
+                    #if os(iOS)
+                    .onTapGesture { preferences.update { $0.showConversionNotice.toggle() } }
+                    #endif
+                }.focused($focused, equals: "conversionNotice")
+                    .accessibilityLabel("Conversion notice").accessibilityIdentifier("conversionNoticeToggle")
+            } header: { Text("Playback") }
+              footer: { Text(audioOutputFooter).accessibilityIdentifier("audioOutputExplanation") }
+            Section("Subtitles") {
                 Picker("Subtitle size", selection: preference(\.subtitleSize)) { ForEach(SubtitleSize.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }
                 Picker("Subtitle background", selection: preference(\.subtitleBackground)) { ForEach(SubtitleBackground.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }
-                Text("Native captions also follow Apple accessibility settings. App size/background overrides apply where AVKit permits WebVTT styling. Burned-in subtitles cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted)
+                Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted)
             }
             Section("Skip segments") {
                 ForEach(SegmentType.allCases.filter { $0 != .unknown }, id: \.rawValue) { type in
@@ -76,19 +85,54 @@ private struct SettingsForm: View {
                     serverPicker("Audio language", key: "AudioLanguagePreference", value: configuration.audioLanguage).accessibilityIdentifier("audioLanguage")
                     serverPicker("Subtitle language", key: "SubtitleLanguagePreference", value: configuration.subtitleLanguage).accessibilityIdentifier("subtitleLanguage")
                     Picker("Subtitle mode", selection: Binding(get: { self.configuration?.subtitleMode ?? "Default" }, set: { save("SubtitleMode", $0) })) { ForEach(["Default", "Always", "OnlyForced", "None", "Smart"], id: \.self) { Text($0).tag($0) } }.disabled(serverBusy).accessibilityIdentifier("subtitleMode")
-                    Text("Jellyfin chooses default tracks using these preferences. Unknown server configuration fields are preserved.").font(.caption).foregroundStyle(Theme.muted)
+                    Text("Jellyfin uses these preferences to choose the starting audio and subtitle tracks.").font(.caption).foregroundStyle(Theme.muted)
                 } else { Text(serverBusy ? "Loading server preferences…" : "Server preferences unavailable").foregroundStyle(Theme.muted) }
                 if serverBusy { ProgressView("Saving or loading…") }
                 if let error = serverError { Text(error).foregroundStyle(.orange); Button("Retry server preferences") { Task { await load() } }.disabled(serverBusy) }
             }
             if let error = preferences.error { Section { Text(error).foregroundStyle(.orange) } }
             Section {
-                NavigationLink("Accounts", value: AppRoute.accounts).accessibilityIdentifier("openAccounts")
-                NavigationLink("Support Pictureshow", value: AppRoute.information("supporter")).accessibilityIdentifier("openSupporter")
-                NavigationLink("About Pictureshow", value: AppRoute.information("about")).accessibilityIdentifier("openAbout")
-                NavigationLink("Troubleshooting", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics")
+                NavigationLink("Accounts", value: AppRoute.accounts).accessibilityIdentifier("openAccounts").focused($focused, equals: "accounts")
+                NavigationLink("Support Pictureshow", value: AppRoute.information("supporter")).accessibilityIdentifier("openSupporter").focused($focused, equals: "supporter")
+                NavigationLink("About Pictureshow", value: AppRoute.information("about")).accessibilityIdentifier("openAbout").focused($focused, equals: "about")
+                NavigationLink("Troubleshooting · This \(deviceNoun)", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics").focused($focused, equals: "diagnostics")
             }
         }
+        .minimumTouchListRows()
+        .background { GeometryReader { geometry in Color.clear.onAppear { windowSize = geometry.size }.onChange(of: geometry.size) { _, size in windowSize = size } } }
+        .onAppear { focused = opener }
+        .onChange(of: focused) { _, key in if let key { opener = key } }
+        #if os(tvOS)
+        .defaultFocus($focused, opener)
+        #endif
+    }
+    private var conversionNoticeLabel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            #if os(tvOS)
+            Text("Conversion notice").foregroundStyle(focused == "conversionNotice" ? Theme.background : Color.white)
+            Text("Shows a short note when the server has to convert a video for this \(deviceNoun).")
+                .font(.caption).foregroundStyle(focused == "conversionNotice" ? Theme.background.opacity(0.8) : Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            #else
+            Text("Conversion notice")
+            Text("Shows a short note when the server has to convert a video for this \(deviceNoun).")
+                .font(.caption).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+            #endif
+        }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+    }
+    private var audioOutputFooter: String {
+        #if os(tvOS)
+        "Apple TV chooses the audio output. Pictureshow doesn't send DTS or Dolby TrueHD directly to receivers."
+        #else
+        "\(UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS") chooses the audio output. Pictureshow doesn't send DTS or Dolby TrueHD directly to receivers."
+        #endif
+    }
+    private var deviceNoun: String {
+        #if os(tvOS)
+        "TV"
+        #else
+        min(windowSize.width, windowSize.height) >= 600 ? "tablet" : "phone"
+        #endif
     }
     private func preference<T>(_ key: WritableKeyPath<PlaybackPreferences,T>) -> Binding<T> { Binding(get: { preferences.value[keyPath: key] }, set: { choice in preferences.update { $0[keyPath: key] = choice } }) }
     private func serverPicker(_ title: String, key: String, value: String) -> some View {

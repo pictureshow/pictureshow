@@ -79,6 +79,24 @@ public enum PlaybackInformation {
     }
 
     public static func codec(_ value: String?) -> String {
+        let identifier = container(value)
+        switch identifier {
+        case "H264", "H.264", "AVC", "AVC1", "AVC3": return "H.264"
+        case "HEVC", "H265", "H.265", "HVC1", "HEV1": return "HEVC"
+        case "AV1", "AV01": return "AV1"
+        case "VP8", "VP08": return "VP8"
+        case "VP9", "VP09": return "VP9"
+        case "MPEG2", "MPEG2VIDEO": return "MPEG-2"
+        case "MPEG4": return "MPEG-4"
+        case "VC1", "WVC1": return "VC-1"
+        case "AC3", "AC-3": return "AC-3"
+        case "EAC3", "E-AC-3", "EC-3": return "E-AC-3"
+        default: return identifier
+        }
+    }
+
+    /// Container identifiers use the same safety check without codec alias interpretation.
+    public static func container(_ value: String?) -> String {
         guard let value, !value.isEmpty, value.utf8.count <= 32,
               value.utf8.allSatisfy({
                   (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46, 95].contains(Int($0))

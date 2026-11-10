@@ -11,7 +11,7 @@ const jsonHeaders = {
 };
 const TITLE = "Converting this video for this browser";
 const REASON =
-    "Its video format won't play on this browser. It still plays, and a 1080p H.264 copy on the server plays directly.";
+    "This video format cannot play directly on this browser, so the server is converting the video. A 1080p H.264 copy on the server would play without conversion.";
 const ACTION = {
     mouse: "Click this note for details and fixes.",
     touch: "Tap this note for details and fixes.",

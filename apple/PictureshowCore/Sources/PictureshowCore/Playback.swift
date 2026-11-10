@@ -9,6 +9,8 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
     public var language: String?
     public var displayTitle: String?
     public var title: String?
+    public var width: Int?
+    public var height: Int?
     public var channels: Int?
     public var isExternal: Bool
     public var isDefault: Bool
@@ -22,7 +24,7 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
     public var isTextSubtitleStream: Bool
     public var id: Int { index }
     public var label: String { displayTitle ?? title ?? [language, codec].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "Track \(index)" }
-    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced", isHearingImpaired = "IsHearingImpaired", deliveryMethod = "DeliveryMethod", realFrameRate = "RealFrameRate", averageFrameRate = "AverageFrameRate", deliveryURL = "DeliveryUrl", isExternalURL = "IsExternalUrl", isTextSubtitleStream = "IsTextSubtitleStream" }
+    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", width = "Width", height = "Height", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced", isHearingImpaired = "IsHearingImpaired", deliveryMethod = "DeliveryMethod", realFrameRate = "RealFrameRate", averageFrameRate = "AverageFrameRate", deliveryURL = "DeliveryUrl", isExternalURL = "IsExternalUrl", isTextSubtitleStream = "IsTextSubtitleStream" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
@@ -31,6 +33,8 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
         language = try c.decodeIfPresent(String.self, forKey: .language)
         displayTitle = try c.decodeIfPresent(String.self, forKey: .displayTitle)
         title = try c.decodeIfPresent(String.self, forKey: .title)
+        width = try c.decodeIfPresent(Int.self, forKey: .width)
+        height = try c.decodeIfPresent(Int.self, forKey: .height)
         channels = try c.decodeIfPresent(Int.self, forKey: .channels)
         isExternal = try c.decodeIfPresent(Bool.self, forKey: .isExternal) ?? false
         isDefault = try c.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
@@ -47,6 +51,7 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
 
 public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
     public var id: String?
+    public var bitrate: Int64?
     public var container: String?
     public var name: String?
     public var eTag: String?
@@ -68,10 +73,11 @@ public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible
         self.supportsDirectStream = supportsDirectStream; self.transcodingUrl = transcodingUrl
         supportsTranscoding = false; mediaStreams = []; requiredHttpHeaders = [:]
     }
-    enum CodingKeys: String, CodingKey { case id = "Id", container = "Container", name = "Name", eTag = "ETag", runTimeTicks = "RunTimeTicks", liveStreamId = "LiveStreamId", isInfiniteStream = "IsInfiniteStream", transcodingSubProtocol = "TranscodingSubProtocol", transcodingContainer = "TranscodingContainer", supportsDirectPlay = "SupportsDirectPlay", supportsDirectStream = "SupportsDirectStream", supportsTranscoding = "SupportsTranscoding", transcodingUrl = "TranscodingUrl", mediaStreams = "MediaStreams", requiredHttpHeaders = "RequiredHttpHeaders", defaultAudioStreamIndex = "DefaultAudioStreamIndex", defaultSubtitleStreamIndex = "DefaultSubtitleStreamIndex" }
+    enum CodingKeys: String, CodingKey { case id = "Id", bitrate = "Bitrate", container = "Container", name = "Name", eTag = "ETag", runTimeTicks = "RunTimeTicks", liveStreamId = "LiveStreamId", isInfiniteStream = "IsInfiniteStream", transcodingSubProtocol = "TranscodingSubProtocol", transcodingContainer = "TranscodingContainer", supportsDirectPlay = "SupportsDirectPlay", supportsDirectStream = "SupportsDirectStream", supportsTranscoding = "SupportsTranscoding", transcodingUrl = "TranscodingUrl", mediaStreams = "MediaStreams", requiredHttpHeaders = "RequiredHttpHeaders", defaultAudioStreamIndex = "DefaultAudioStreamIndex", defaultSubtitleStreamIndex = "DefaultSubtitleStreamIndex" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(String.self, forKey: .id)
+        bitrate = try c.decodeIfPresent(Int64.self, forKey: .bitrate)
         container = try c.decodeIfPresent(String.self, forKey: .container)
         name = try c.decodeIfPresent(String.self, forKey: .name)
         eTag = try c.decodeIfPresent(String.self, forKey: .eTag)

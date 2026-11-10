@@ -151,7 +151,7 @@ export const BROWSER_NOTICE_ACTIONS = {
 export type NoticeInput = keyof typeof BROWSER_NOTICE_ACTIONS;
 
 const copyFix = (copy: string) =>
-    `It still plays, and ${copy} on the server plays directly.`;
+    `${copy.charAt(0).toUpperCase()}${copy.slice(1)} on the server would play without conversion.`;
 
 /**
  * Ordered by how useful fixing it is: the first category lets the video play directly.
@@ -161,12 +161,12 @@ const copyFix = (copy: string) =>
 const noticeCategories: Array<[string[], string, string]> = [
     [
         ["videocodecnotsupported"],
-        "Its video format won't play on %s.",
+        "This video format cannot play directly on %s, so the server is converting the video.",
         copyFix("a 1080p H.264 copy"),
     ],
     [
         ["videorangetypenotsupported"],
-        "Its HDR format won't play on %s.",
+        "This HDR format cannot play directly on %s, so the server is converting the video.",
         copyFix("an SDR copy"),
     ],
     [
@@ -176,32 +176,32 @@ const noticeCategories: Array<[string[], string, string]> = [
             "videobitdepthnotsupported",
             "refframesnotsupported",
         ],
-        "Its video encoding is too demanding for %s.",
+        "The video encoding is too demanding for %s, so the server is converting the video.",
         copyFix("an 8-bit 1080p H.264 copy"),
     ],
     [
         ["videoresolutionnotsupported"],
-        "Its resolution is too high for %s.",
+        "The resolution is too high for %s, so the server is converting the video.",
         copyFix("a 1080p copy"),
     ],
     [
         ["videoframeratenotsupported"],
-        "Its frame rate is too high for %s.",
+        "The frame rate is too high for %s, so the server is converting the video.",
         copyFix("a 30 fps copy"),
     ],
     [
         ["interlacedvideonotsupported"],
-        "Its interlaced video won't play on %s.",
+        "Interlaced video cannot play directly on %s, so the server is converting the video.",
         copyFix("a deinterlaced copy"),
     ],
     [
         ["anamorphicvideonotsupported"],
-        "Its non-square pixels won't display on %s.",
+        "The non-square pixels cannot display correctly on %s, so the server is converting the video.",
         copyFix("a square-pixel copy"),
     ],
     [
         ["videorotationnotsupported"],
-        "Its rotation won't display on %s.",
+        "The rotation cannot display correctly on %s, so the server is converting the video.",
         copyFix("an upright copy"),
     ],
 ];

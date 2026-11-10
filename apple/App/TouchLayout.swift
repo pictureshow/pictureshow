@@ -31,9 +31,9 @@ struct ProminentActionStyle: PrimitiveButtonStyle {
 }
 
 extension View {
-    @ViewBuilder func touchSecondaryInk() -> some View {
+    @ViewBuilder func touchSecondaryInk(destructive: Bool = false) -> some View {
         #if os(iOS)
-        foregroundStyle(.primary)
+        foregroundStyle(destructive ? Color.red : Color.primary)
         #else
         self
         #endif
