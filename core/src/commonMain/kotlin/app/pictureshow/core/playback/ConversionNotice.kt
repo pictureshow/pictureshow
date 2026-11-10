@@ -25,18 +25,46 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
          * platform this app runs on decodes 8-bit SDR H.264 at 1080p.
          */
         private val categories: List<Triple<Set<String>, String, String>> = listOf(
-            Triple(setOf("videocodecnotsupported"), "This video format cannot play directly on %s, so the server is converting the video.", copy("a 1080p H.264 copy")),
-            Triple(setOf("videorangetypenotsupported"), "This HDR format cannot play directly on %s, so the server is converting the video.", copy("an SDR copy")),
+            Triple(
+                setOf("videocodecnotsupported"),
+                "This video format cannot play on %s.",
+                copy("a 1080p H.264 copy")
+            ),
+            Triple(
+                setOf("videorangetypenotsupported"),
+                "This HDR format cannot play on %s.",
+                copy("an SDR copy")
+            ),
             Triple(
                 setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"),
-                "The video encoding is too demanding for %s, so the server is converting the video.",
+                "The video encoding is too demanding for %s.",
                 copy("an 8-bit 1080p H.264 copy")
             ),
-            Triple(setOf("videoresolutionnotsupported"), "The resolution is too high for %s, so the server is converting the video.", copy("a 1080p copy")),
-            Triple(setOf("videoframeratenotsupported"), "The frame rate is too high for %s, so the server is converting the video.", copy("a 30 fps copy")),
-            Triple(setOf("interlacedvideonotsupported"), "Interlaced video cannot play directly on %s, so the server is converting the video.", copy("a deinterlaced copy")),
-            Triple(setOf("anamorphicvideonotsupported"), "The non-square pixels cannot display correctly on %s, so the server is converting the video.", copy("a square-pixel copy")),
-            Triple(setOf("videorotationnotsupported"), "The rotation cannot display correctly on %s, so the server is converting the video.", copy("an upright copy"))
+            Triple(
+                setOf("videoresolutionnotsupported"),
+                "The resolution is too high for %s.",
+                copy("a 1080p copy")
+            ),
+            Triple(
+                setOf("videoframeratenotsupported"),
+                "The frame rate is too high for %s.",
+                copy("a 30 fps copy")
+            ),
+            Triple(
+                setOf("interlacedvideonotsupported"),
+                "Interlaced video cannot play on %s.",
+                copy("a deinterlaced copy")
+            ),
+            Triple(
+                setOf("anamorphicvideonotsupported"),
+                "The non-square pixels cannot display correctly on %s.",
+                copy("a square-pixel copy")
+            ),
+            Triple(
+                setOf("videorotationnotsupported"),
+                "The rotation cannot display correctly on %s.",
+                copy("an upright copy")
+            )
         )
         private const val SUBTITLE = "The selected subtitles must be burned in for %s."
 

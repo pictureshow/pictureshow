@@ -505,8 +505,12 @@ struct LibraryView: View {
                         Text(person ? name : "\(name) · \(GridNavigation.stripDetail(sortBy: sort, descending: descending))")
                             .font(.caption).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, Theme.gutter).padding(.vertical, 12)
-                            .background(Theme.background).accessibilityHidden(true).allowsHitTesting(false)
+                            .background(Theme.background).allowsHitTesting(false)
                             .accessibilityIdentifier("librarySortStrip")
+                            // Replace the inherited Text elements with none;
+                            // this context repeats already readable controls.
+                            .accessibilityRepresentation { EmptyView() }
+                            .accessibilityHidden(true)
                     }
                 }
                 #else
@@ -516,8 +520,10 @@ struct LibraryView: View {
                         Text(person ? name : "\(name) · \(GridNavigation.stripDetail(sortBy: sort, descending: descending))")
                             .font(.caption).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, Theme.gutter).padding(.vertical, 10)
-                            .background(Theme.background).accessibilityHidden(true).allowsHitTesting(false)
+                            .background(Theme.background).allowsHitTesting(false)
                             .accessibilityIdentifier("librarySortStrip")
+                            .accessibilityRepresentation { EmptyView() }
+                            .accessibilityHidden(true)
                     }
                 }
                 .toolbarBackground(Theme.background, for: .navigationBar)
@@ -568,6 +574,19 @@ struct LibraryView: View {
                 }
                 .onDisappear { navigation.cancel(); landingTask?.cancel() }
             }
+            #if DEBUG && os(tvOS)
+            .overlay {
+                if ProcessInfo.processInfo.environment["PICTURESHOW_CATALOG_GEOMETRY_PROBE"] == "1" {
+                    // An inert AX test rectangle for the actual layout viewport;
+                    // native ScrollView AX frames can include system safe areas.
+                    Color.clear.frame(width: geometry.size.width, height: geometry.size.height)
+                        .allowsHitTesting(false).focusable(false)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Catalog viewport test probe")
+                        .accessibilityIdentifier("catalogViewport")
+                }
+            }
+            #endif
         }
     }
     private var selection: String? { reader ? readerFocused : focused }

@@ -7,6 +7,242 @@ import UIKit
 /// Run this finite native flow on an owned fresh clone. All catalog data is
 /// synthetic and served over ordinary Jellyfin HTTP requests on loopback.
 final class CatalogPresentationUITests: XCTestCase {
+    /// Uses the real OS service, not an accessibility environment projection.
+    /// Native setup/activation is performed with VoiceOver disabled; this test
+    /// claims only the speech and forward/back traversal the service observes.
+    @MainActor func testNativeVoiceOverSpeechTraversal() throws {
+        guard #available(iOS 27.0, tvOS 27.0, *) else {
+            throw XCTSkip("XCUIVoiceOverService requires iOS/tvOS 27; 26.5 cannot run this speech test")
+        }
+        continueAfterFailure = false
+        // XCTest runs registered teardown even when its fatal assertion stops
+        // this test before Swift defer can run. Do not leak the real reader
+        // into another test sharing the owned simulator.
+        addTeardownBlock {
+            try await MainActor.run {
+                let reader = XCUIDevice.shared.voiceOverService
+                if reader.isEnabled { try reader.disable() }
+                XCTAssertFalse(reader.isEnabled, "Teardown must leave real VoiceOver disabled")
+            }
+        }
+        let service = XCUIDevice.shared.voiceOverService
+        if service.isEnabled { try service.disable() }
+        XCTAssertFalse(service.isEnabled)
+        #if os(iOS)
+        XCUIDevice.shared.orientation = .portrait
+        #endif
+        let fixture = try CatalogPresentationHTTPFixture()
+        defer { fixture.stop() }
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = fixture.address
+        app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Catalog speech fixture viewer"
+        app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = "synthetic-catalog-speech-password"
+        app.launch()
+        defer { app.terminate() }
+        var transcript: [String] = []
+        func attachSpeech(_ name: String) {
+            let text = XCTAttachment(string: transcript.joined(separator: "\n") + "\nService: " + service.debugDescription)
+            text.name = name + " actual VoiceOver utterances"; text.lifetime = .keepAlways; add(text)
+            capture(name, app: app)
+        }
+        func disableReader() {
+            do {
+                if service.isEnabled { try service.disable() }
+                XCTAssertFalse(service.isEnabled, "The owned simulator must leave the real VoiceOver service disabled")
+            } catch { XCTFail("Could not disable real VoiceOver service: \(error)") }
+        }
+        defer { disableReader() }
+        func record(_ operation: String, _ output: XCUIVoiceOverService.Output) -> String {
+            let utterance = output.utterance.trimmingCharacters(in: .whitespacesAndNewlines)
+            let entry = "\(operation): \(utterance)"
+            if transcript.last != entry { transcript.append(entry) }
+            if utterance.isEmpty { attachSpeech("132 VoiceOver missing speech before failure"); disableReader() }
+            XCTAssertFalse(utterance.isEmpty, "A real VoiceOver navigation operation must produce speech")
+            // This combined phrase is the visual-only pinned context, not an
+            // ordinary heading, card or independently read sort control.
+            let tokens = words(utterance)
+            let spokeQuietContext = Set(["fixture", "library", "name", "ascending"]).isSubset(of: tokens)
+            if spokeQuietContext { attachSpeech("132 VoiceOver exposed quiet context before failure"); disableReader() }
+            XCTAssertFalse(spokeQuietContext, "The quiet pinned library/sort context must not be spoken")
+            return utterance
+        }
+        func words(_ utterance: String) -> Set<String> {
+            Set(utterance.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
+        }
+        func readSpeech(_ operation: String, _ action: () throws -> XCUIVoiceOverService.Output) throws -> XCUIVoiceOverService.Output? {
+            do { return try action() }
+            catch {
+                let value = error as NSError
+                let entry = "\(operation) error: \(value.domain) \(value.code) \(value.localizedDescription)"
+                if transcript.last != entry { transcript.append(entry) }
+                // Only this documented readiness error is transient. Other
+                // service failures retain their actual error and fail the test.
+                if value.domain == XCUIVoiceOverServiceErrorDomain,
+                   value.code == XCUIVoiceOverService.Error.Code.noSpeech.rawValue { return nil }
+                attachSpeech(operation + " API error before throw")
+                throw error
+            }
+        }
+        func settledSpeech(_ operation: String, after previous: String? = nil,
+                           first: XCUIVoiceOverService.Output? = nil,
+                           accepts: (String) -> Bool = { _ in true }) throws -> String {
+            var candidate = first
+            var spoken = ""
+            var unexpected: (any Error)?
+            let ready = waitUntil {
+                do {
+                    let output: XCUIVoiceOverService.Output?
+                    if let initial = candidate { output = initial; candidate = nil }
+                    else { output = try readSpeech(operation + " current", { try service.currentSpeech() }) }
+                    guard let output, !output.utterance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+                    spoken = record(operation + " observed", output)
+                    return spoken != previous && accepts(spoken)
+                } catch { unexpected = error; return true }
+            }
+            if let unexpected { throw unexpected }
+            if !ready { attachSpeech(operation + " before speech readiness failure"); disableReader() }
+            XCTAssertTrue(ready, "One real reader operation must produce nonempty changed speech within the existing readiness bound; do not issue another move while output is stale")
+            return spoken
+        }
+        func movedSpeech(_ operation: String, after previous: String,
+                         _ action: () throws -> XCUIVoiceOverService.Output) throws -> String {
+            let output = try readSpeech(operation + " move", action)
+            return try settledSpeech(operation, after: previous, first: output)
+        }
+        func enableReader() throws {
+            do { try service.enable() }
+            catch {
+                transcript.append("enable API error: \(error)")
+                attachSpeech("132 VoiceOver enable API error before throw")
+                throw error
+            }
+            XCTAssertTrue(service.isEnabled)
+            // Capture before querying speech: a newly enabled reader may not
+            // yet have a focused element and currentSpeech can throw noSpeech.
+            attachSpeech("132 VoiceOver enabled actual system state before first speech")
+            var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
+            if output == nil {
+                // One real next-element operation establishes initial reader
+                // focus. Subsequent readiness uses the existing bounded poll.
+                output = try readSpeech("reader initial focus forward", { try service.moveForward() })
+            }
+            let initial = try settledSpeech("reader enabled", first: output)
+            attachSpeech("132 VoiceOver enabled actual first speech")
+            #if os(tvOS)
+            // A fresh tvOS27 sandbox presents this native introduction. The
+            // recorded system alert has one focused OK button. Dismiss only
+            // that observed introduction with one real remote Select.
+            let introduction = "VoiceOver Navigation Updates"
+            if initial.hasPrefix(introduction) {
+                XCUIRemote.shared.press(.select)
+                _ = try settledSpeech("after system introduction OK", after: initial,
+                                      accepts: { !$0.hasPrefix(introduction) })
+                attachSpeech("132 VoiceOver system introduction after native Select")
+            }
+            #endif
+        }
+        func roundTrip(_ name: String, matches: (String) -> Bool) throws {
+            defer { attachSpeech(name) }
+            var spoken = try settledSpeech(name + " current")
+            for move in 0..<32 {
+                if matches(spoken) { break }
+                spoken = try movedSpeech(name + " forward \(move + 1)", after: spoken, { try service.moveForward() })
+            }
+            if !matches(spoken) { attachSpeech(name + " before unreachable target failure"); disableReader() }
+            XCTAssertTrue(matches(spoken), "Actual VoiceOver must reach the expected app control/state within 32 changed forward moves. Transcript: \(transcript)")
+            let previous = try movedSpeech(name + " backward", after: spoken, { try service.moveBackward() })
+            XCTAssertNotEqual(previous, spoken, "Backward must actually leave the observed app control")
+            let returned = try movedSpeech(name + " forward return", after: previous, { try service.moveForward() })
+            if !matches(returned) { attachSpeech(name + " before return failure"); disableReader() }
+            XCTAssertTrue(matches(returned), "Forward must return to the same meaningful app control/state")
+        }
+
+        XCTAssertTrue(app.buttons["connect"].waitForExistence(timeout: 15), "Run this speech test on a fresh owned simulator sandbox")
+        activate(app.buttons["connect"], app: app)
+        let signIn = app.buttons["signIn"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 15))
+        #if os(tvOS)
+        if app.keyboards.firstMatch.exists { XCUIRemote.shared.press(.menu) }
+        #else
+        let done = app.buttons["dismissSignInKeyboard"]
+        if done.exists && done.isHittable { done.tap() }
+        #endif
+        activate(signIn, app: app)
+        let library = app.buttons["item-catalog-library"]
+        XCTAssertTrue(library.waitForExistence(timeout: 20))
+        fixture.failNextPages(1)
+        activate(library, app: app)
+        let series = app.buttons["item-catalog-series"]
+        XCTAssertTrue(series.waitForExistence(timeout: 15))
+        #if os(tvOS)
+        focus(series, app: app)
+        #else
+        reveal(series, app: app)
+        #endif
+        let fullSeriesTitle = "The fixture series with a long readable catalog title"
+        XCTAssertEqual(series.elementType, .button)
+        XCTAssertEqual(series.label, fullSeriesTitle + ", 2026", "The entire native card identity and role must be available independently of the speech fragment")
+        try enableReader()
+        try roundTrip("132 VoiceOver catalog title identity") {
+            // CI7 returned the full unique title but ended mid-role at Butt.
+            // This is observed output, not a documented API length limit.
+            $0.localizedCaseInsensitiveContains(fullSeriesTitle)
+        }
+        // Reader navigation reaches a failed page's real footer control while
+        // the scrolling header is gone and the quiet visual strip is present.
+        try roundTrip("132 VoiceOver catalog Retry with quiet pinned context") {
+            words($0).contains("retry") && words($0).contains("button")
+        }
+        disableReader()
+
+        activate(series, app: app)
+        let seasonTwo = app.buttons["season-catalog-season-2"]
+        XCTAssertTrue(seasonTwo.waitForExistence(timeout: 15)); activate(seasonTwo, app: app)
+        XCTAssertTrue(app.buttons["item-catalog-episode-2"].waitForExistence(timeout: 15))
+        #if os(tvOS)
+        focus(app.buttons["play"], app: app)
+        #else
+        reveal(app.buttons["play"], app: app)
+        #endif
+        let watched = app.buttons["watched"]
+        XCTAssertTrue(waitUntil { !(watched.value as? String ?? "").isEmpty }, "A fresh watched action must publish its actual current value")
+        let watchedAction = watched.label
+        let watchedState = try XCTUnwrap(watched.value as? String)
+        XCTAssertFalse(watchedAction.isEmpty); XCTAssertFalse(watchedState.isEmpty)
+        try enableReader()
+        try roundTrip("132 VoiceOver detail watched action and current state") {
+            $0.localizedCaseInsensitiveContains(watchedAction) && words(watchedState).isSubset(of: words($0))
+        }
+        try roundTrip("132 VoiceOver selected season") {
+            $0.localizedCaseInsensitiveContains("Season 2") && words($0).contains("selected")
+        }
+        // Preserve any real boundary speech in the transcript, without claiming
+        // that a service next-element operation emulates a remote/reader gesture.
+        let selectedSeasonSpeech = try settledSpeech("detail selected season before boundary observation")
+        let afterSeasonSpeech = try movedSpeech("detail after selected season", after: selectedSeasonSpeech, { try service.moveForward() })
+        _ = try movedSpeech("detail back to selected season", after: afterSeasonSpeech, { try service.moveBackward() })
+        attachSpeech("132 VoiceOver detail traversal after selected season")
+        disableReader()
+        back(app); back(app)
+        #if os(tvOS)
+        activate(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch, app: app)
+        #else
+        activateSettingsChrome(app)
+        #endif
+        let conversion = app.descendants(matching: .any).matching(identifier: "conversionNoticeToggle").firstMatch
+        XCTAssertTrue(conversion.waitForExistence(timeout: 15))
+        #if os(tvOS)
+        focus(conversion, app: app)
+        #else
+        reveal(conversion, app: app)
+        #endif
+        try enableReader()
+        try roundTrip("132 VoiceOver native conversion switch state") {
+            $0.localizedCaseInsensitiveContains("Conversion notice") && words($0).contains("on")
+        }
+    }
+
     func testNativeCatalogSortPagingSeasonRetentionAndConversionPreference() throws {
         continueAfterFailure = false
         #if os(iOS)
@@ -15,10 +251,15 @@ final class CatalogPresentationUITests: XCTestCase {
         let fixture = try CatalogPresentationHTTPFixture()
         defer { fixture.stop() }
         let app = XCUIApplication()
+        #if os(tvOS)
+        app.launchEnvironment["PICTURESHOW_CATALOG_GEOMETRY_PROBE"] = "1"
+        #endif
         let projectedLargeType = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DYNAMIC_TYPE"] == "accessibility3"
         if projectedLargeType { app.launchEnvironment["PICTURESHOW_TEST_DYNAMIC_TYPE"] = "accessibility3" }
 
+        #if os(iOS)
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", UIContentSizeCategory.extraExtraExtraLarge.rawValue]
+        #endif
         app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = fixture.address
         app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Catalog fixture viewer"
         app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = "synthetic-catalog-password"
@@ -44,12 +285,25 @@ final class CatalogPresentationUITests: XCTestCase {
         let seriesCard = app.buttons["item-catalog-series"]
         XCTAssertTrue(seriesCard.waitForExistence(timeout: 15))
         #if os(iOS)
+        capture("132 catalog actual content pane before geometry", app: app)
+        // The persistent iPad sidebar is outside this catalog's GeometryReader.
+        // Use the real visible scroll pane containing this exact card, not the
+        // whole app window or an unrelated last scroll view.
+        let catalogPanes = app.scrollViews.containing(.button, identifier: "item-catalog-series")
+            .allElementsBoundByIndex.filter { $0.isHittable }
+        XCTAssertEqual(catalogPanes.count, 1, "Exactly one visible catalog scroll pane must contain the series button")
+        let catalogPane = try XCTUnwrap(catalogPanes.first)
+        XCTAssertTrue(catalogPane.exists)
+        let viewport = catalogPane.frame
+        XCTAssertFalse(viewport.isEmpty)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(viewport), "The measured catalog pane must be inside the actual app window")
+        XCTAssertTrue(catalogPane.buttons["item-catalog-series"].exists)
         let firstCards = [seriesCard] + (1...5).map { app.buttons["item-catalog-\($0)"] }
         let firstRow = firstCards.filter { $0.exists && abs($0.frame.minY - seriesCard.frame.minY) < 8 }.sorted { $0.frame.minX < $1.frame.minX }
         let lastInRow = try XCTUnwrap(firstRow.last)
-        XCTAssertEqual(lastInRow.frame.maxX, app.frame.maxX - 20, accuracy: 2, "Flexible columns must fill the grid through the trailing page gutter")
+        XCTAssertEqual(lastInRow.frame.maxX, viewport.maxX - 20, accuracy: 2, "Flexible columns must fill the catalog pane through its trailing page gutter")
         XCTAssertEqual(seriesCard.frame.width, lastInRow.frame.width, accuracy: 2)
-        XCTAssertEqual(seriesCard.frame.minX, app.frame.minX + 20, accuracy: 2)
+        XCTAssertEqual(seriesCard.frame.minX, viewport.minX + 20, accuracy: 2)
         let sortField = app.buttons["librarySort"]
         let direction = app.buttons["sortDirection"]
         XCTAssertTrue(sortField.exists)
@@ -80,7 +334,7 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertTrue(second.hasFocus)
         let firstCards = [seriesCard] + (1...5).map { app.buttons["item-catalog-\($0)"] }
         let secondFrame = second.frame
-        let columns = firstCards.filter {
+        let columns = firstCards.filter { $0.exists }.filter {
             let frame = $0.frame
             return abs(frame.minY - secondFrame.minY) < max(8, max(frame.height, secondFrame.height) * 0.025)
         }.count
@@ -134,8 +388,14 @@ final class CatalogPresentationUITests: XCTestCase {
         reveal(retry, app: app)
         assertSingleLineTouchHeight(retry)
         XCTAssertLessThan(app.staticTexts["libraryHeading"].frame.maxY, app.navigationBars.firstMatch.frame.maxY, "The pinned-context capture must actually be past the scrolling header")
-        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "librarySortStrip").firstMatch.exists, "The visual context strip must stay silent to VoiceOver")
+        // Capture before the assertion so a regression includes the actual
+        // scrolled strip node rather than only the earlier top-of-grid snapshot.
         capture("132 catalog pinned library sort context", app: app)
+        // An automation-only wrapper is not spoken text. The observed
+        // regression was this exact StaticText, which the old source exposes.
+        let strip = app.staticTexts.matching(identifier: "librarySortStrip").firstMatch
+        if strip.exists { print("LEG132_QUIET_STRIP_NODE \(strip.debugDescription)") }
+        XCTAssertFalse(strip.exists, "The visual context strip must stay silent to VoiceOver")
         #endif
         #if os(tvOS)
         XCTAssertLessThan(app.staticTexts["libraryHeading"].frame.maxY, 0, "The TV context strip capture must be past the full scrolling header")
@@ -230,10 +490,9 @@ final class CatalogPresentationUITests: XCTestCase {
         back(app)
         back(app)
         #if os(tvOS)
-        activate(app.buttons["openSettings"], app: app)
+        activate(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch, app: app)
         #else
-        let settings = UIDevice.current.userInterfaceIdiom == .pad ? app.buttons["Settings"] : app.tabBars.buttons["Settings"]
-        activate(settings, app: app)
+        activateSettingsChrome(app)
         #endif
         let toggle = app.switches["conversionNoticeToggle"]
         #if os(tvOS)
@@ -290,11 +549,13 @@ final class CatalogPresentationUITests: XCTestCase {
     }
     #if os(tvOS)
     private func assertTVLandingVisible(_ card: XCUIElement, app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        let viewport = app.scrollViews.firstMatch.frame.intersection(app.frame)
+        let measuredViewport = app.descendants(matching: .any).matching(identifier: "catalogViewport").firstMatch
+        XCTAssertTrue(measuredViewport.exists, "The fixture-only probe must expose the actual catalog GeometryReader viewport", file: file, line: line)
+        let viewport = measuredViewport.frame.intersection(app.frame)
         let frame = card.frame
         XCTAssertGreaterThan(viewport.height, 0, file: file, line: line)
         if frame.height <= viewport.height {
-            XCTAssertTrue(app.frame.contains(frame), "A fitting focused card must be completely on screen", file: file, line: line)
+            XCTAssertTrue(viewport.contains(frame), "A fitting focused card must be completely inside the actual catalog viewport", file: file, line: line)
         } else {
             // Native focus grows the poster around its centre. Accept that
             // small visual outset while requiring the tall card's top to land
@@ -302,13 +563,19 @@ final class CatalogPresentationUITests: XCTestCase {
             let focusOutset = max(12, frame.height * 0.025)
             XCTAssertEqual(frame.minY, viewport.minY, accuracy: focusOutset, "A card taller than the viewport must display from its top", file: file, line: line)
             XCTAssertGreaterThan(frame.intersection(viewport).height, viewport.height * 0.8, file: file, line: line)
-            XCTAssertGreaterThanOrEqual(frame.minX, app.frame.minX, file: file, line: line)
-            XCTAssertLessThanOrEqual(frame.maxX, app.frame.maxX, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(frame.minX, viewport.minX, file: file, line: line)
+            XCTAssertLessThanOrEqual(frame.maxX, viewport.maxX, file: file, line: line)
             print("LEG132_OVERSIZED_CARD_TOP frame=\(frame) viewport=\(viewport) nativeFocusOutset=\(focusOutset)")
         }
     }
 
     private func focus(_ element: XCUIElement, app: XCUIApplication) {
+        // A native large-text grid may have fewer than one precomposed row
+        // below the viewport. Actual Down inputs compose those lazy cards.
+        for _ in 0..<12 {
+            if element.exists { break }
+            XCUIRemote.shared.press(.down)
+        }
         var previousFrame: CGRect?
         var previousDirection: XCUIRemote.Button?
         func focused(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? {
@@ -344,9 +611,28 @@ final class CatalogPresentationUITests: XCTestCase {
         #endif
     }
     #if os(iOS)
+    private func activateSettingsChrome(_ app: XCUIApplication) {
+        // Sidebar/tab navigation is fixed chrome, outside the content scroll
+        // viewport that reveal() intentionally requires for catalog controls.
+        let settings = UIDevice.current.userInterfaceIdiom == .pad ? app.buttons["Settings"] : app.tabBars.buttons["Settings"]
+        let exists = settings.waitForExistence(timeout: 15)
+        if !exists { capture("132 Settings navigation chrome missing", app: app) }
+        XCTAssertTrue(exists, "The native Settings navigation button must exist")
+        let window = app.windows.firstMatch.frame
+        let frame = settings.frame
+        let visible = settings.isHittable && !frame.isEmpty && window.contains(frame)
+        if settings.label != "Settings" || settings.elementType != .button || !visible {
+            capture("132 Settings navigation chrome unavailable", app: app)
+        }
+        XCTAssertEqual(settings.label, "Settings")
+        XCTAssertEqual(settings.elementType, .button)
+        XCTAssertTrue(visible, "The actual Settings navigation button must be hittable and fully inside the app window")
+        settings.tap()
+    }
     private func assertSingleLineTouchHeight(_ element: XCUIElement) {
-        XCTAssertGreaterThanOrEqual(element.frame.height, 48, "\(element.identifier) must keep its true 48 pt touch target")
-        XCTAssertLessThanOrEqual(element.frame.height, 52, "\(element.identifier) must not add native border padding around a 48 pt label")
+        // AX geometry uses floating-point coordinates; this tolerance is far below a physical pixel.
+        XCTAssertGreaterThanOrEqual(element.frame.height + 0.000_001, 48, "\(element.identifier) must keep its true 48 pt touch target")
+        XCTAssertLessThanOrEqual(element.frame.height - 0.000_001, 52, "\(element.identifier) must not add native border padding around a 48 pt label")
     }
     /// A target may exist in an offscreen lazy row. Captures need the complete
     /// rendered action below navigation chrome, not just an existing AX node.

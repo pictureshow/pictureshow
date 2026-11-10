@@ -31,7 +31,7 @@ final class CatchupPolicyTests: XCTestCase {
         XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=copy", source: source, reasons: ["VideoCodecNotSupported"]))
         let notice = ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=h264", source: source, reasons: ["VideoCodecNotSupported"], device: "this TV")
         XCTAssertEqual(notice?.fix, "A 1080p H.264 copy on the server would play without conversion.")
-        XCTAssertEqual(notice?.reason, "This video format cannot play directly on this TV, so the server is converting the video.")
+        XCTAssertEqual(notice?.reason, "This video format cannot play on this TV.")
         XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video", source: source, reasons: ["ContainerBitrateExceedsLimit"]))
     }
     func testEveryVideoNoticeExplainsOngoingConversionAndRetainsItsSpecificRemedy() throws {
@@ -47,8 +47,10 @@ final class CatchupPolicyTests: XCTestCase {
         ]
         for (code, copy) in cases {
             let notice = try XCTUnwrap(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=h264", source: MediaSource(id: "source"), reasons: [code], device: "this phone"))
-            XCTAssertTrue(notice.reason.contains("the server is converting the video"), code)
-            XCTAssertLessThanOrEqual(notice.reason.split(separator: " ").count, 30, code)
+            XCTAssertEqual(notice.title, "Converting this video for this phone", code)
+            XCTAssertTrue(notice.reason.contains("this phone"), code)
+            let visibleBody = "\(notice.reason) \(notice.fix) Don’t show again this viewing"
+            XCTAssertLessThanOrEqual(visibleBody.split(separator: " ").count, 30, code)
             XCTAssertEqual(notice.fix, "\(copy) on the server would play without conversion.")
             XCTAssertFalse(notice.reason.contains("won't play"), code)
         }

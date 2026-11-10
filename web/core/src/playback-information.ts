@@ -161,12 +161,12 @@ const copyFix = (copy: string) =>
 const noticeCategories: Array<[string[], string, string]> = [
     [
         ["videocodecnotsupported"],
-        "This video format cannot play directly on %s, so the server is converting the video.",
+        "This video format cannot play on %s.",
         copyFix("a 1080p H.264 copy"),
     ],
     [
         ["videorangetypenotsupported"],
-        "This HDR format cannot play directly on %s, so the server is converting the video.",
+        "This HDR format cannot play on %s.",
         copyFix("an SDR copy"),
     ],
     [
@@ -176,32 +176,32 @@ const noticeCategories: Array<[string[], string, string]> = [
             "videobitdepthnotsupported",
             "refframesnotsupported",
         ],
-        "The video encoding is too demanding for %s, so the server is converting the video.",
+        "The video encoding is too demanding for %s.",
         copyFix("an 8-bit 1080p H.264 copy"),
     ],
     [
         ["videoresolutionnotsupported"],
-        "The resolution is too high for %s, so the server is converting the video.",
+        "The resolution is too high for %s.",
         copyFix("a 1080p copy"),
     ],
     [
         ["videoframeratenotsupported"],
-        "The frame rate is too high for %s, so the server is converting the video.",
+        "The frame rate is too high for %s.",
         copyFix("a 30 fps copy"),
     ],
     [
         ["interlacedvideonotsupported"],
-        "Interlaced video cannot play directly on %s, so the server is converting the video.",
+        "Interlaced video cannot play on %s.",
         copyFix("a deinterlaced copy"),
     ],
     [
         ["anamorphicvideonotsupported"],
-        "The non-square pixels cannot display correctly on %s, so the server is converting the video.",
+        "The non-square pixels cannot display correctly on %s.",
         copyFix("a square-pixel copy"),
     ],
     [
         ["videorotationnotsupported"],
-        "The rotation cannot display correctly on %s, so the server is converting the video.",
+        "The rotation cannot display correctly on %s.",
         copyFix("an upright copy"),
     ],
 ];

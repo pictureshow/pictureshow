@@ -2,6 +2,7 @@
 // Copyright (c) Legitimate LLC.
 import XCTest
 import Foundation
+import CoreFoundation
 import AVFoundation
 import UIKit
 import SwiftUI
@@ -16,7 +17,7 @@ import PictureshowCore
 /// Real URLSession transport, isolated to an in-process fixture. Held responses are
 /// cancelled by URLSession; no public host or actual network connection is used.
 private final class ExternalSubtitleHTTP: URLProtocol {
-    enum Delivery { case valid, http500, malformed, held, declaredOversize, streamedOversize }
+    enum Delivery { case valid, http500, malformed, held, declaredOversize, streamedOversize, streamedAtLimit }
     struct Recorded { let url: URL; let body: [String: Any]; var path: String { url.path } }
     private static let lock = NSLock()
     private static var delivery: Delivery = .valid
@@ -24,6 +25,17 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     private static var requestObserver: ((Recorded) -> Void)?
     private static var cancelled: [String] = []
     private static var held: [ObjectIdentifier: ExternalSubtitleHTTP] = [:]
+    struct DeliveryReceipt {
+        let phase: String
+        let uptimeNs: UInt64
+        let onStartThread: Bool
+        let onMainThread: Bool
+    }
+    private static var deliveryReceipts: [DeliveryReceipt] = []
+    private var clientThread: Thread?
+    private var clientRunLoop: CFRunLoop?
+    private var clientMode: CFRunLoopMode?
+    private var stopped = false
     private static var captionReference: String? = "/captions/selected.vtt"
     private static var encodedExternalSubrip = false
     private static var embeddedSelectedTrack = false
@@ -59,7 +71,7 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false, expandedTracks: Bool = false) {
         lock.lock(); defer { lock.unlock() }
         delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack; self.expandedTracks = expandedTracks
-        recorded = []; cancelled = []; held = [:]; requestObserver = nil
+        recorded = []; cancelled = []; held = [:]; deliveryReceipts = []; requestObserver = nil
     }
     // Shared resolve-24/25 append even slash-prefixed references to the configured
     // server base. Absolute DeliveryUrl values retain their own same-origin path.
@@ -67,9 +79,33 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         path.hasPrefix("/captions/") || path.hasPrefix("/jellyfin/captions/")
             || (path.hasPrefix("/jellyfin/Videos/movie/source/Subtitles/") && path.hasSuffix("/Stream.vtt"))
     }
-    static func completeHeldCaptions() {
+    @discardableResult static func completeHeldCaptions() -> Int {
         lock.lock(); let responses = Array(held.values); held = [:]; lock.unlock()
-        responses.forEach { $0.respond(status: 200, data: caption) }
+        for response in responses { response.completeHeldCaption() }
+        return responses.count
+    }
+    static var heldCaptionCount: Int { lock.lock(); defer { lock.unlock() }; return held.count }
+    static var captionDeliveryReceipts: [DeliveryReceipt] { lock.lock(); defer { lock.unlock() }; return deliveryReceipts }
+    private func recordDelivery(_ phase: String) {
+        let receipt = DeliveryReceipt(phase: phase, uptimeNs: DispatchTime.now().uptimeNanoseconds,
+                                      onStartThread: Thread.current === clientThread, onMainThread: Thread.isMainThread)
+        Self.lock.lock(); Self.deliveryReceipts.append(receipt); Self.lock.unlock()
+    }
+    private func completeHeldCaption() {
+        // URLProtocolClient callbacks belong to the thread/run loop that entered
+        // startLoading, including a response released later by a MainActor test.
+        // Apple CustomHTTPProtocol's Threading Notes document this contract.
+        guard let clientRunLoop, let clientMode else { XCTFail("Held fixture has no client run loop"); return }
+        recordDelivery("scheduled")
+        CFRunLoopPerformBlock(clientRunLoop, clientMode.rawValue) { [self] in
+            Self.lock.lock(); let cancelled = stopped; Self.lock.unlock()
+            guard !cancelled else { recordDelivery("cancelled-before-delivery"); return }
+            recordDelivery("begin")
+            XCTAssertTrue(Thread.current === clientThread, "Held URLProtocol callbacks must stay on the startLoading client thread")
+            respond(status: 200, data: Self.caption)
+            recordDelivery("finish")
+        }
+        CFRunLoopWakeUp(clientRunLoop)
     }
     static func observeRequests(_ observer: ((Recorded) -> Void)?) {
         lock.lock(); requestObserver = observer; lock.unlock()
@@ -96,6 +132,9 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
     override func startLoading() {
+        clientThread = Thread.current
+        clientRunLoop = CFRunLoopGetCurrent()
+        clientMode = CFRunLoopCopyCurrentMode(clientRunLoop) ?? .defaultMode
         let path = request.url!.path
         let body = Self.body(request)
         Self.lock.lock()
@@ -114,6 +153,7 @@ private final class ExternalSubtitleHTTP: URLProtocol {
             case .malformed: respond(status: 200, data: Data("WEBVTT\n\n00:broken --> invalid\nMalformed".utf8))
             case .declaredOversize: respond(status: 200, data: Data(), headers: ["Content-Length": String(TextSubtitles.maximumBytes + 1)])
             case .streamedOversize: respond(status: 200, data: Data(repeating: 32, count: TextSubtitles.maximumBytes + 1))
+            case .streamedAtLimit: respond(status: 200, data: Data(repeating: 32, count: TextSubtitles.maximumBytes))
             case .valid: respond(status: 200, data: Self.caption)
             case .held: break
             }
@@ -133,9 +173,23 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     }
     override func stopLoading() {
         Self.lock.lock(); defer { Self.lock.unlock() }
+        stopped = true
         Self.cancelled.append(request.url!.path)
         Self.held.removeValue(forKey: ObjectIdentifier(self))
     }
+}
+
+/// A bounded cold-load trace records phases, never caption contents or request URLs.
+private final class SubtitlePhaseTrace {
+    private let lock = NSLock()
+    private let origin = DispatchTime.now().uptimeNanoseconds
+    private var events: [String] = []
+    func record(_ phase: String) {
+        let milliseconds = (DispatchTime.now().uptimeNanoseconds - origin) / 1_000_000
+        lock.lock(); events.append("\(phase)=\(milliseconds)ms"); lock.unlock()
+    }
+    func elapsedMilliseconds(at uptimeNs: UInt64) -> UInt64 { (uptimeNs - origin) / 1_000_000 }
+    var description: String { lock.lock(); defer { lock.unlock() }; return events.joined(separator: ",") }
 }
 
 /// The test chooses when optional retry time advances. At the limit, the retry
@@ -166,6 +220,18 @@ private final class ExternalSubtitleHTTP: URLProtocol {
 }
 
 private final class SubtitleInertPlayer: AVPlayer {
+    enum TransportReceipt: Equatable { case play, immediate(Float), pause, rate(Float) }
+    private(set) var transportReceipts: [TransportReceipt] = []
+    private var simulatedRate: Float = 0
+    override var rate: Float {
+        get { simulatedRate }
+        set { simulatedRate = newValue; transportReceipts.append(.rate(newValue)) }
+    }
+    // This fixture owns no decoder. Calling AVPlayer's real transport would add
+    // audio/IPC scheduling to tests of app ordering and optional text delivery.
+    override func play() { transportReceipts.append(.play); rate = defaultRate }
+    override func playImmediately(atRate rate: Float) { transportReceipts.append(.immediate(rate)); self.rate = rate }
+    override func pause() { transportReceipts.append(.pause); rate = 0 }
     private(set) var replacements = 0
     private(set) var attachedItems: [AVPlayerItem] = []
     private(set) var automaticCriteriaAtAttachment: [Bool] = []
@@ -197,6 +263,20 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
 #endif
 
 @MainActor final class ExternalSubtitleTests: XCTestCase {
+    func testInertTransportRecordsEveryPlaybackEntryPointWithoutStartingAVFoundation() {
+        let player = SubtitleInertPlayer()
+        player.defaultRate = 1.5
+        player.play()
+        XCTAssertEqual(player.rate, 1.5)
+        player.pause()
+        XCTAssertEqual(player.rate, 0)
+        player.playImmediately(atRate: 0.75)
+        XCTAssertEqual(player.rate, 0.75)
+        player.rate = 0
+        XCTAssertEqual(player.transportReceipts, [.play, .rate(1.5), .pause, .rate(0), .immediate(0.75), .rate(0.75), .rate(0)])
+        XCTAssertNil(player.currentItem)
+        XCTAssertEqual(player.replacements, 0)
+    }
     #if os(tvOS)
     func testExternalSubtitleLayoutClearsNativeTVHUDAndKeepsHiddenControlsPlacement() throws {
         let controller = PictureshowPlayerViewController()
@@ -796,8 +876,16 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
 
     func testColdSelectedCuesPublishWhilePausedWithoutClockMovementOrResume() async throws {
         ExternalSubtitleHTTP.reset(.held)
-        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        let trace = SubtitlePhaseTrace(), clock = SubtitleRetryClock()
+        let loader = ExternalTextSubtitles(fetch: { url in
+            trace.record("fetch-enter")
+            let data = try await ExternalTextSubtitles.fetchBounded(url, configuration: ExternalSubtitleHTTP.configuration())
+            trace.record("fetch-return-to-loader-actor")
+            return data
+        }, sleep: { try await clock.sleep($0) })
         defer { loader.release(); clock.finish() }
+        let cuePublication = loader.$cues.dropFirst().filter { !$0.isEmpty }.prefix(1).sink { _ in trace.record("parsed-cues-publication") }
+        defer { cuePublication.cancel() }
         let (session, player) = try await readySession(loader: loader, expectedCaptionPath: nil, subtitleIndex: -1)
         XCTAssertTrue(captionRequests.isEmpty)
         session.togglePlayback()
@@ -805,17 +893,30 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         session.seek(toTicks: 121_000 * 10_000)
         try await eventually("Paused seek did not publish its intended position") { session.positionTicks == 121_000 * 10_000 }
         await session.changeTracks(audio: session.decision?.audioIndex, subtitle: 4)
-        try await eventually("Cold selected caption request was not held") { self.captionRequests.count == 1 }
+        try await eventually("Cold selected caption request was not held") { ExternalSubtitleHTTP.heldCaptionCount == 1 }
+        XCTAssertEqual(captionRequests.count, 1)
+        trace.record("held-response-registered")
         XCTAssertNil(session.subtitleCue); XCTAssertTrue(loader.cues.isEmpty)
         let seeksAtLoad = player.seekTargets.count
         let (visible, didPublish) = receipt("Cold cues must reach the session overlay while paused, without a resume or moving A/V clock")
-        let publication = session.$subtitleCue.filter { $0 == "Selected caption" }.prefix(1).sink { _ in didPublish() }
+        let publication = session.$subtitleCue.filter { $0 == "Selected caption" }.prefix(1).sink { _ in
+            trace.record("session-overlay-publication"); didPublish()
+        }
         let selectedTask = loader.task
         let join = Task(priority: .userInitiated) { await selectedTask?.value }
         defer { publication.cancel(); join.cancel() }
-        ExternalSubtitleHTTP.completeHeldCaptions()
+        trace.record("release-held-response")
+        XCTAssertEqual(ExternalSubtitleHTTP.completeHeldCaptions(), 1, "Exactly one registered held response must be released")
         let visibleResult = await XCTWaiter.fulfillment(of: [visible], timeout: 2)
-        XCTAssertEqual(visibleResult, .completed, "Cold cues must reach the session overlay while paused, without a resume or moving A/V clock")
+        trace.record("wait-returned")
+        let deliveries = ExternalSubtitleHTTP.captionDeliveryReceipts
+        let deliveryTrace = deliveries.map { "\($0.phase):startThread=\($0.onStartThread):main=\($0.onMainThread):elapsedMs=\(trace.elapsedMilliseconds(at: $0.uptimeNs))" }.joined(separator: ",")
+        let diagnostic = "phases=[\(trace.description)] held=\(ExternalSubtitleHTTP.heldCaptionCount) callbacks=[\(deliveryTrace)] loading=\(loader.loading) unavailable=\(loader.unavailable) cues=\(loader.cues.count) attempts=\(loader.attemptCount)"
+        print("COLD_CAPTION \(diagnostic)")
+        XCTAssertEqual(deliveries.filter { $0.phase == "begin" }.count, 1, diagnostic)
+        XCTAssertEqual(deliveries.filter { $0.phase == "finish" }.count, 1, diagnostic)
+        XCTAssertTrue(deliveries.filter { $0.phase == "begin" || $0.phase == "finish" }.allSatisfy(\.onStartThread), diagnostic)
+        XCTAssertEqual(visibleResult, .completed, "Cold cues must reach the session overlay while paused, without a resume or moving A/V clock; \(diagnostic)")
         XCTAssertEqual(session.subtitleCue, "Selected caption")
         XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
         XCTAssertTrue(session.isPaused)
@@ -932,7 +1033,19 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         do {
             _ = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
             XCTFail("An advertised optional caption larger than 16 MiB must fail")
-        } catch { XCTAssertEqual(captionRequests.count, 1) }
+        } catch {
+            XCTAssertEqual(error as? TextSubtitleError, .tooLarge, "Delivery failures and cancellation cannot stand in for the size bound")
+            XCTAssertFalse(Task.isCancelled)
+            XCTAssertEqual(captionRequests.count, 1)
+        }
+    }
+
+    func testUnannouncedStreamOfExactly16MiBIsAcceptedWithoutLiftingTheBound() async throws {
+        ExternalSubtitleHTTP.reset(.streamedAtLimit)
+        let data = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
+        XCTAssertEqual(data.count, TextSubtitles.maximumBytes)
+        XCTAssertEqual(data.first, 32); XCTAssertEqual(data.last, 32)
+        XCTAssertEqual(captionRequests.count, 1)
     }
 
     func testUnannounced16MiBStreamOverflowIsIsolatedToOptionalText() async throws {
@@ -942,7 +1055,10 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
             do {
                 _ = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
                 XCTFail("A streamed optional caption larger than 16 MiB must fail")
-            } catch { }
+            } catch {
+                XCTAssertEqual(error as? TextSubtitleError, .tooLarge, "Only the byte bound proves overflow rejection; cancellation must fail this test")
+                XCTAssertFalse(Task.isCancelled, "A timeout-driven cancellation is not overflow rejection")
+            }
             completed.fulfill()
         }
         await fulfillment(of: [completed], timeout: 2)

@@ -156,14 +156,28 @@ import PictureshowCore
         let redirects = SubtitleOrigin(origin: url)
         let (bytes, response) = try await session.bytes(for: URLRequest(url: url), delegate: redirects)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
-              let finalURL = response.url, ServerURLs.isSameOrigin(url, finalURL),
-              response.expectedContentLength <= Int64(TextSubtitles.maximumBytes) else { throw SubtitleFailure.delivery }
+              let finalURL = response.url, ServerURLs.isSameOrigin(url, finalURL) else { throw SubtitleFailure.delivery }
+        guard response.expectedContentLength <= Int64(TextSubtitles.maximumBytes) else { throw TextSubtitleError.tooLarge }
         var data = Data()
+        // AsyncBytes still accounts for every byte, but buffer appends and explicit
+        // cancellation checks have bounded chunk granularity instead of per-byte cost.
+        let chunkSize = 16 * 1024
+        var chunk: [UInt8] = []
+        chunk.reserveCapacity(chunkSize)
+        var received = 0
+        try Task.checkCancellation()
         for try await byte in bytes {
-            try Task.checkCancellation()
-            guard data.count < TextSubtitles.maximumBytes else { throw SubtitleFailure.delivery }
-            data.append(byte)
+            guard received < TextSubtitles.maximumBytes else { throw TextSubtitleError.tooLarge }
+            received += 1
+            chunk.append(byte)
+            if chunk.count == chunkSize {
+                try Task.checkCancellation()
+                data.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+            }
         }
+        try Task.checkCancellation()
+        data.append(contentsOf: chunk)
         return data
     }
 }

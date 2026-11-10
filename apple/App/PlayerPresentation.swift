@@ -260,6 +260,7 @@ struct TouchPlayer: View {
     @State private var orientationSettled = false
     @State private var controlsHeight: CGFloat = 0
     @State private var captionObstacleFrames: [String: CGRect] = [:]
+    @State private var portraitNoticeMeasuredHeight: CGFloat = 0
     @State private var anchoredBelowNotice = false
     @State private var reservedNoticeHeight: CGFloat = 0
     @State private var orientationMessage: String?
@@ -278,6 +279,7 @@ struct TouchPlayer: View {
             let nativeVideoWidth = min(geometry.size.width + geometry.safeAreaInsets.leading + geometry.safeAreaInsets.trailing,
                                        (geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom) * ratio)
             let subtitleWidth = (portrait ? geometry.size.width : nativeVideoWidth) * 0.9
+            let portraitVideoWidth = min(geometry.size.width, videoHeight * ratio)
             ZStack(alignment: .top) {
                 // An overlay lets the video expand behind system insets without
                 // widening or vertically centering the sibling control layout.
@@ -287,7 +289,7 @@ struct TouchPlayer: View {
                     updateOrientation(tablet: tablet)
                     if tablet || !portrait { orientationSettled = true }
                 }, touchControlsHeight: portrait ? 0 : session.controlsVisible ? controlsHeight + 24 : 0,
-                    touchCaptionExclusionFrames: portrait ? [] : Array(captionObstacleFrames.values))
+                    touchCaptionExclusionFrames: portrait ? captionObstacleFrames["notice"].map { [$0] } ?? [] : Array(captionObstacleFrames.values))
                     // Let the video extend behind cutouts/home indicator while
                     // the sibling controls retain the geometry's safe insets.
                     .frame(width: portrait ? geometry.size.width : geometry.size.width + geometry.safeAreaInsets.leading + geometry.safeAreaInsets.trailing,
@@ -306,7 +308,7 @@ struct TouchPlayer: View {
                         Spacer().frame(height: videoHeight)
                         ScrollView {
                             VStack(spacing: 12) {
-                                topCards(width: geometry.size.width - 32, height: geometry.size.height - videoHeight, fillColumn: true, subtitleWidth: subtitleWidth)
+                                topCards(width: geometry.size.width - 32, height: geometry.size.height - videoHeight, fillColumn: true, subtitleWidth: subtitleWidth, includeNotice: false)
                                     .padding(.horizontal, 16)
                                 if session.controlsVisible {
                                     controls(width: geometry.size.width, tablet: tablet, compact: false)
@@ -315,6 +317,9 @@ struct TouchPlayer: View {
                             }.padding(.horizontal, 20).padding(.vertical, 12)
                         }.frame(maxHeight: .infinity).accessibilityIdentifier("touchPlayerControls")
                     }
+                    portraitNotice(videoWidth: portraitVideoWidth, videoHeight: videoHeight)
+                        .frame(width: portraitVideoWidth, height: videoHeight, alignment: .topLeading)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 } else {
                     VStack {
                         Spacer(minLength: 0)
@@ -332,7 +337,16 @@ struct TouchPlayer: View {
                 session.controlsVisible = true
             }
             .onChange(of: geometry.size) { _, size in
+                portraitNoticeMeasuredHeight = 0
                 if min(size.width, size.height) >= 600 || size.width > size.height { orientationSettled = true }
+            }
+            .onPreferenceChange(CaptionObstacleFrames.self) { frames in
+                captionObstacleFrames = frames
+                if portrait, let notice = frames["notice"], notice.height.isFinite, notice.height > 0 {
+                    // Retain the measured size when suppressed, so a too-tall
+                    // card cannot oscillate between estimated fit and no fit.
+                    portraitNoticeMeasuredHeight = max(portraitNoticeMeasuredHeight, notice.height)
+                }
             }
             .onChange(of: min(geometry.size.width, geometry.size.height) >= 600) { _, tablet in updateOrientation(tablet: tablet) }
         }
@@ -344,7 +358,7 @@ struct TouchPlayer: View {
             } else { finish() }
         }
         .onPreferenceChange(PlayerControlsHeight.self) { controlsHeight = $0 }
-        .onPreferenceChange(CaptionObstacleFrames.self) { captionObstacleFrames = $0 }
+        .onChange(of: typeSize) { _, _ in portraitNoticeMeasuredHeight = 0 }
         .onDisappear { restoreOrientation() }
         .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in voiceOver = UIAccessibility.isVoiceOverRunning; if voiceOver { showControls() } }
         .onChange(of: panel) { old, new in
@@ -359,7 +373,21 @@ struct TouchPlayer: View {
             session.controlsVisible = false
         }
     }
-    @ViewBuilder private func topCards(width: CGFloat, height: CGFloat, fillColumn: Bool = false, subtitleWidth: CGFloat) -> some View {
+    private func portraitNotice(videoWidth: CGFloat, videoHeight: CGFloat) -> some View {
+        let cardWidth = max(1, min(480, videoWidth - 40))
+        let cardHeight = max(noticeHeight(width: cardWidth), portraitNoticeMeasuredHeight)
+        let captionHeight = PictureshowPlayerViewController.touchCaptionHeight(text: session.subtitleCue, preferences: session.preferences, width: max(1, videoWidth * 0.9))
+        // Match the native caption's preferred bottom band. Reserve its full
+        // font size before deciding whether the transient notice can appear.
+        let captionInset = session.controlsVisible ? min(240, videoHeight * 0.35) : min(48, videoHeight * 0.08)
+        let availableBottom = captionHeight > 0 ? videoHeight - captionInset - captionHeight - 12 : videoHeight - 12
+        let fits = orientationSettled && videoWidth > 40 && 12 + cardHeight <= availableBottom
+        return ConversionNoticeBanner(session: session, presentation: noticePresentation, fits: fits,
+            obscured: panel != nil || session.panelOpen || scrubbing || session.error != nil,
+            openInfo: { panel = "info" })
+            .frame(width: cardWidth).padding(.leading, 20).padding(.top, 12)
+    }
+    @ViewBuilder private func topCards(width: CGFloat, height: CGFloat, fillColumn: Bool = false, subtitleWidth: CGFloat, includeNotice: Bool = true) -> some View {
         let room = width - 360
         let beside = room >= 400
         let below = !beside || anchoredBelowNotice
@@ -368,12 +396,14 @@ struct TouchPlayer: View {
         let fits = orientationSettled && (voiceOver || !session.controlsVisible || (controlsHeight > 0 && height - controlsHeight - 36 > noticeHeight(width: cardWidth) + (subtitleReserve > 0 ? subtitleReserve + 24 : 0)))
         HStack(alignment: .top, spacing: 12) {
             if !below {
-                ConversionNoticeBanner(session: session, presentation: noticePresentation, fits: fits, obscured: panel != nil || scrubbing || session.error != nil, openInfo: { panel = "info" })
-                    .frame(width: cardWidth)
+                if includeNotice {
+                    ConversionNoticeBanner(session: session, presentation: noticePresentation, fits: fits, obscured: panel != nil || scrubbing || session.error != nil, openInfo: { panel = "info" })
+                        .frame(width: cardWidth)
+                }
                 Spacer(minLength: 0)
             }
             VStack(alignment: .trailing, spacing: 12) {
-                if below {
+                if includeNotice, below {
                     ConversionNoticeBanner(session: session, presentation: noticePresentation, fits: fits, obscured: panel != nil || scrubbing || session.error != nil, openInfo: { panel = "info" })
                     if anchoredBelowNotice, !(noticePresentation.active && fits && panel == nil && !scrubbing && session.error == nil) {
                         Color.clear.frame(height: reservedNoticeHeight).accessibilityHidden(true).allowsHitTesting(false)
@@ -383,7 +413,14 @@ struct TouchPlayer: View {
                     ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Up next: \(next.name)").font(.headline).fixedSize(horizontal: false, vertical: true)
-                        if let seconds = session.nextCountdown { Text("Playing in \(seconds) seconds").monospacedDigit().accessibilityIdentifier("nextCountdown") }
+                        // Keep the action row at one origin when pause/panels suppress
+                        // the number. The reserved line is never a reader cue.
+                        ZStack(alignment: .leading) {
+                            Text("Playing in 10 seconds").hidden().accessibilityHidden(true)
+                            if let seconds = session.nextCountdown {
+                                Text("Playing in \(seconds) seconds").accessibilityIdentifier("nextCountdown")
+                            }
+                        }.monospacedDigit()
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 8) { nextActions; skipButton }
                             VStack(alignment: .leading, spacing: 10) {
@@ -403,6 +440,7 @@ struct TouchPlayer: View {
             }.frame(maxWidth: below ? .infinity : 320, alignment: .trailing)
         }.buttonStyle(.bordered).tint(Theme.accent).foregroundStyle(.white)
             .onChange(of: "\(beside)|\(noticePresentation.active)|\(session.nextCardVisible)|\(session.skipSegment?.id ?? "")", initial: true) { _, _ in
+                guard includeNotice else { return }
                 let hasCard = session.nextCardVisible || session.skipSegment != nil
                 if !hasCard { anchoredBelowNotice = false; reservedNoticeHeight = 0 }
                 else if !beside, noticePresentation.active, fits, !anchoredBelowNotice {
@@ -450,8 +488,13 @@ struct TouchPlayer: View {
             if compact {
                 HStack(spacing: 8) {
                     transportButtons
-                    Menu { options(tablet: tablet) } label: { Label("More", systemImage: "ellipsis.circle").minimumTouchTarget() }
-                        .accessibilityIdentifier("playerMore").accessibilityFocused($readerFocus, equals: "playerMore")
+                    Menu { options(tablet: tablet) } label: {
+                        HStack(alignment: .center, spacing: 6) {
+                            Image(systemName: "ellipsis.circle").font(.system(size: 22, weight: .semibold)).accessibilityHidden(true)
+                            Text("More").font(.subheadline.weight(.semibold))
+                        }.padding(.horizontal, 13).minimumTouchTarget()
+                    }.buttonStyle(PlayerTouchActionStyle())
+                        .accessibilityLabel("More").accessibilityIdentifier("playerMore").accessibilityFocused($readerFocus, equals: "playerMore")
                     Spacer(minLength: 0)
                     endingButtons
                 }

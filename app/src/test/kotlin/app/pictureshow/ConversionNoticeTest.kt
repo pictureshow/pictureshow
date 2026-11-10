@@ -127,7 +127,8 @@ class ConversionNoticeTest {
         assertNull(node.config.getOrNull(SemanticsProperties.Focused), "the notice must not be an input-focus target")
         compose.onNodeWithText("Converting this video for this TV").assertExists()
         compose.onNodeWithText(
-            "This video format cannot play directly on this TV, so the server is converting the video. A 1080p H.264 copy on the server would play without conversion. " +
+            "This video format cannot play on this TV. " +
+                "A 1080p H.264 copy on the server would play without conversion. " +
                 "Press Down, then choose Playback info."
         ).assertExists()
         // The remote still drives the focused control.

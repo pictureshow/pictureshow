@@ -173,7 +173,8 @@ final class NativeTrackHTTPFixture {
         #endif
         activate(signIn)
         #if os(tvOS)
-        guard app.buttons["openSettings"].waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated navigation") }
+        let authenticatedSettings = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch
+        guard authenticatedSettings.waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated navigation") }
         #else
         guard app.buttons.matching(identifier: "Settings").firstMatch.waitForExistence(timeout: 15)
             || app.tabBars.buttons["Settings"].waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated adaptive shell") }

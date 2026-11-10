@@ -62,6 +62,7 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import re
           import subprocess
 
           devices = json.loads(subprocess.check_output(
@@ -75,10 +76,16 @@ jobs:
                       continue
                   if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS") and name.startswith("iPhone"):
                       found.setdefault("ios_udid", device["udid"])
+                      version = re.search(r"iOS-(\d+)(?:-|$)", runtime)
+                      if version and int(version[1]) >= 27:
+                          found.setdefault("voiceover_ios_udid", device["udid"])
                   if runtime.startswith("com.apple.CoreSimulator.SimRuntime.tvOS") and name.startswith("Apple TV"):
                       found.setdefault("tvos_udid", device["udid"])
-          if set(found) != {"ios_udid", "tvos_udid"}:
-              raise SystemExit(f"No available iOS and tvOS simulator pair found: {found}")
+                      version = re.search(r"tvOS-(\d+)(?:-|$)", runtime)
+                      if version and int(version[1]) >= 27:
+                          found.setdefault("voiceover_tvos_udid", device["udid"])
+          if set(found) != {"ios_udid", "tvos_udid", "voiceover_ios_udid", "voiceover_tvos_udid"}:
+              raise SystemExit(f"Native unit tests and actual VoiceOver require available iOS and tvOS simulators, including a 27+ pair: {found}")
           for key, value in found.items():
               print(f"{key}={value}")
           PY
@@ -102,6 +109,7 @@ jobs:
             -parallel-testing-enabled NO \
             build-for-testing CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee apple-test-results/ios-build.log
+          echo "built=true" >> "$GITHUB_OUTPUT"
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-iOS \
@@ -132,6 +140,7 @@ jobs:
             -parallel-testing-enabled NO \
             build-for-testing CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee apple-test-results/tvos-build.log
+          echo "built=true" >> "$GITHUB_OUTPUT"
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-tvOS \
@@ -142,6 +151,142 @@ jobs:
             -resultBundlePath apple-test-results/tvos-unit-tests.xcresult \
             test-without-building CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee apple-test-results/tvos-unit-tests.log
+
+      - name: Repeat cold paused subtitle delivery for native UI review
+        id: cold-subtitle-repeat
+        if: startsWith(github.ref, 'refs/heads/ci/132') && steps.ios-tests.outputs.built == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          PICTURESHOW_SPEC_DIR: ${{ github.workspace }}/spec
+          IOS_SIMULATOR_ID: ${{ steps.simulators.outputs.ios_udid }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-iOS \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -only-testing:Pictureshow-iOS-UnitTests/ExternalSubtitleTests/testColdSelectedCuesPublishWhilePausedWithoutClockMovementOrResume \
+            -test-iterations 10 -run-tests-until-failure \
+            -test-repetition-relaunch-enabled YES \
+            -resultBundlePath apple-test-results/ios-cold-subtitle-repeat.xcresult \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/ios-cold-subtitle-repeat.log
+
+      # Simulator products are temporary review evidence for this native UI leg.
+      # Package only fresh CI output; local pilot configuration never enters CI.
+      - name: Package simulator products for native UI review
+        id: simulator-products
+        if: always() && startsWith(github.ref, 'refs/heads/ci/132') && steps.apple-source.outputs.available == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PYPRODUCTS'
+          import hashlib
+          import json
+          import os
+          import platform
+          import subprocess
+          from pathlib import Path
+          products = Path(os.environ["RUNNER_TEMP"]) / "PictureshowDerivedData/Build/Products"
+          if not products.is_dir():
+              print("No simulator products were built.")
+              raise SystemExit(0)
+          destination = Path(os.environ["RUNNER_TEMP"]) / "apple-simulator-products"
+          destination.mkdir()
+          archive = destination / "simulator-products.zip"
+          subprocess.run(["ditto", "-c", "-k", "--keepParent", str(products), str(archive)], check=True)
+          def digest(path):
+              result = hashlib.sha256()
+              with path.open("rb") as source:
+                  for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                      result.update(chunk)
+              return result.hexdigest()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          sources = sorted(set(workspace.glob("apple/**/*.swift")) | set(workspace.glob("apple/**/*.pbxproj")) | set(workspace.glob("spec/**/*.json")))
+          manifest = {
+              "head_sha": os.environ["GITHUB_SHA"],
+              "architecture": platform.machine(),
+              "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
+              "archive_sha256": digest(archive),
+              "source_sha256": {str(path.relative_to(workspace)): digest(path) for path in sources if path.is_file()},
+              "product_sha256": {str(path.relative_to(products)): digest(path) for path in sorted(products.rglob("*")) if path.is_file() and not path.is_symlink()},
+          }
+          (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("available=true\n")
+          PYPRODUCTS
+
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.simulator-products.outputs.available == 'true'
+        with:
+          name: apple-simulator-products
+          path: ${{ runner.temp }}/apple-simulator-products
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Verify actual VoiceOver speech and navigation on iOS
+        id: ios-voiceover
+        if: steps.apple-source.outputs.available == 'true' && steps.ios-tests.outputs.built == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_ios_udid }}
+        run: |
+          set -o pipefail
+          xcrun simctl terminate "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-iOS \
+            -destination "platform=iOS Simulator,id=$VOICEOVER_SIMULATOR_ID" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:Pictureshow-iOS-UITests/CatalogPresentationUITests/testNativeVoiceOverSpeechTraversal \
+            -resultBundlePath apple-test-results/ios-voiceover-tests.xcresult \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/ios-voiceover-tests.log
+          xcrun xcresulttool get test-results summary --path apple-test-results/ios-voiceover-tests.xcresult --compact > apple-test-results/ios-voiceover-tests-summary.json
+          python3 - <<'PYVOICEOVER'
+          import json
+          from pathlib import Path
+          result = json.loads(Path("apple-test-results/ios-voiceover-tests-summary.json").read_text())
+          if result.get("result") != "Passed" or result.get("totalTestCount") != 1 or result.get("passedTests") != 1 or result.get("failedTests") != 0 or result.get("skippedTests") != 0:
+              raise SystemExit("Actual VoiceOver acceptance requires exactly one passed test and zero failures/skips: " + json.dumps(result))
+          PYVOICEOVER
+
+      - name: Verify actual VoiceOver speech and navigation on tvOS
+        id: tvos-voiceover
+        if: steps.apple-source.outputs.available == 'true' && steps.tvos-tests.outputs.built == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_tvos_udid }}
+        run: |
+          set -o pipefail
+          xcrun simctl terminate "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-tvOS \
+            -destination "platform=tvOS Simulator,id=$VOICEOVER_SIMULATOR_ID" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:Pictureshow-tvOS-UITests/CatalogPresentationUITests/testNativeVoiceOverSpeechTraversal \
+            -resultBundlePath apple-test-results/tvos-voiceover-tests.xcresult \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/tvos-voiceover-tests.log
+          xcrun xcresulttool get test-results summary --path apple-test-results/tvos-voiceover-tests.xcresult --compact > apple-test-results/tvos-voiceover-tests-summary.json
+          python3 - <<'PYVOICEOVER'
+          import json
+          from pathlib import Path
+          result = json.loads(Path("apple-test-results/tvos-voiceover-tests-summary.json").read_text())
+          if result.get("result") != "Passed" or result.get("totalTestCount") != 1 or result.get("passedTests") != 1 or result.get("failedTests") != 0 or result.get("skippedTests") != 0:
+              raise SystemExit("Actual VoiceOver acceptance requires exactly one passed test and zero failures/skips: " + json.dumps(result))
+          PYVOICEOVER
 
       - name: Run Swift core tests and shared vectors
         id: core-package
@@ -218,10 +363,18 @@ jobs:
           SIMULATORS_OUTCOME: ${{ steps.simulators.outcome }}
           IOS_OUTCOME: ${{ steps.ios-tests.outcome }}
           TVOS_OUTCOME: ${{ steps.tvos-tests.outcome }}
+          IOS_VOICEOVER_OUTCOME: ${{ steps.ios-voiceover.outcome }}
+          TVOS_VOICEOVER_OUTCOME: ${{ steps.tvos-voiceover.outcome }}
           CORE_PACKAGE_OUTCOME: ${{ steps.core-package.outcome }}
           TRANSPORT_PACKAGE_OUTCOME: ${{ steps.transport-package.outcome }}
+          COLD_REPEAT_REQUIRED: ${{ startsWith(github.ref, 'refs/heads/ci/132') }}
+          COLD_REPEAT_OUTCOME: ${{ steps.cold-subtitle-repeat.outcome }}
         run: |
-          for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do
+          if [[ "$COLD_REPEAT_REQUIRED" == true && "$COLD_REPEAT_OUTCOME" != success ]]; then
+            echo "Cold subtitle repetition did not succeed: $COLD_REPEAT_OUTCOME"
+            exit 1
+          fi
+          for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$IOS_VOICEOVER_OUTCOME" "$TVOS_VOICEOVER_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do
             if [[ "$outcome" != success ]]; then
               echo "Apple CI step did not succeed: $outcome"
               exit 1

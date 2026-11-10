@@ -500,15 +500,15 @@ struct PlayerOptions: View {
     }
     @ViewBuilder private func timingLabel(_ title: String) -> some View {
         #if os(iOS)
-        Text(title).fixedSize().frame(maxWidth: .infinity).minimumTouchTarget()
+        Text(title).fixedSize().frame(maxWidth: .infinity)
         #else
         Text(title).fixedSize().minimumTouchTarget()
         #endif
     }
     @ViewBuilder private var subtitleDelayButtons: some View {
-        Button { session.adjustSubtitleDelay(by: -100) } label: { timingLabel("Earlier") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs <= -10_000).accessibilityIdentifier("subtitleEarlier")
-        Button { session.adjustSubtitleDelay(by: nil) } label: { timingLabel("Reset") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs == 0).accessibilityIdentifier("subtitleReset")
-        Button { session.adjustSubtitleDelay(by: 100) } label: { timingLabel("Later") }.disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs >= 10_000).accessibilityIdentifier("subtitleLater")
+        Button { session.adjustSubtitleDelay(by: -100) } label: { timingLabel("Earlier") }.minimumTouchTarget().disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs <= -10_000).accessibilityIdentifier("subtitleEarlier")
+        Button { session.adjustSubtitleDelay(by: nil) } label: { timingLabel("Reset") }.minimumTouchTarget().disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs == 0).accessibilityIdentifier("subtitleReset")
+        Button { session.adjustSubtitleDelay(by: 100) } label: { timingLabel("Later") }.minimumTouchTarget().disabled(!session.subtitleTimingAvailable || session.subtitleDelayMs >= 10_000).accessibilityIdentifier("subtitleLater")
     }
     private func currentChapter(_ index: Int) -> Bool {
         session.chapters[index].startTicks <= session.positionTicks && (index + 1 == session.chapters.count || session.chapters[index + 1].startTicks > session.positionTicks)
@@ -574,7 +574,11 @@ struct NativePlayer: UIViewControllerRepresentable {
         // complete native menu after Back/selection dismisses that sheet.
         let preparedSignature = session.trackLabels.openMenu == nil ? session.trackLabels.prepared?.generation ?? -1 : -1
         let signature = "\(session.trackLabels.cacheRevision)|\(preparedSignature)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
-        context.coordinator.speedAction?.title = "Speed: \(PlaybackSpeeds.label(session.playbackRate))"
+        let speedTitle = "Speed: \(PlaybackSpeeds.label(session.playbackRate))"
+        if let speed = context.coordinator.speedAction, speed.title != speedTitle {
+            speed.title = speedTitle
+            controller.requestTransportTitleRefresh()
+        }
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
@@ -621,9 +625,10 @@ struct NativePlayer: UIViewControllerRepresentable {
             // Contextual actions are hidden while AVKit's transport is visible. Keep
             // the same continuation reachable in the native bar during that state.
             let continuationMenus: [UIMenuElement] = context.coordinator.continuationTransportActions
-            controller.transportBarCustomMenuItems = continuationMenus
-                + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [speed, information, stop]
+            controller.setViewingTransportItems(continuationMenus
+                + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [speed, information, stop])
         }
+        controller.publishTransportTitleRefreshIfReady()
         var contextActions: [UIAction] = []
         if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
             contextActions.append(UIAction(title: "Skip \(segment.type.rawValue)", identifier: .init("skipSegment")) { _ in session.skip() })
@@ -769,6 +774,22 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
             }
         }
     }
+    private var viewingTransportItems: [UIMenuElement] = []
+    private var transportTitleRefreshPending = false
+    func setViewingTransportItems(_ items: [UIMenuElement]) {
+        viewingTransportItems = items
+        transportTitleRefreshPending = false
+        transportBarCustomMenuItems = items
+    }
+    func requestTransportTitleRefresh() { transportTitleRefreshPending = true }
+    func publishTransportTitleRefreshIfReady() {
+        guard transportTitleRefreshPending, optionsHost == nil,
+              presentedViewController == nil else { return }
+        transportTitleRefreshPending = false
+        // AVKit caches its presented titles. Reassign the retained actions after
+        // UIKit returns from the modal, preserving their native focus identity.
+        transportBarCustomMenuItems = viewingTransportItems
+    }
     func updateOptionsPresentation(kind: String?, session: PlaybackSession, close: @escaping () -> Void) {
         if let kind {
             guard optionsHost == nil, presentedViewController == nil else { return }
@@ -783,7 +804,11 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
             present(host, animated: true)
         } else if let host = optionsHost {
             optionsHost = nil
-            if !host.isBeingDismissed { host.dismiss(animated: true) }
+            if !host.isBeingDismissed {
+                host.dismiss(animated: true) { [weak self] in
+                    self?.publishTransportTitleRefreshIfReady()
+                }
+            }
         }
     }
     private weak var trackMenus: TrackLabelCache?

@@ -161,7 +161,7 @@ private final class PresentationInertPlayer: AVPlayer {
     func testConversionNoticeUsesCoreFixAndPersistedPreference() async throws {
         let session = try await session()
         let notice = try XCTUnwrap(session.conversionNotice)
-        XCTAssertTrue(notice.reason.contains("video format cannot play directly"))
+        XCTAssertTrue(notice.reason.contains("video format cannot play on"))
         XCTAssertEqual(notice.fix, "A 1080p H.264 copy on the server would play without conversion.")
         let suppressed = try await self.session(notice: false)
         XCTAssertNil(suppressed.conversionNotice)

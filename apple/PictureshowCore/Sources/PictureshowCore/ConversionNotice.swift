@@ -16,14 +16,14 @@ public struct ConversionNotice: Equatable, Sendable {
         let videos = query.filter { $0.name.caseInsensitiveCompare("VideoCodec") == .orderedSame }
         let copied = PlaybackInformation.method(method, url: url) != "Transcode" || (videos.count == 1 && videos[0].value?.lowercased() == "copy")
         let categories: [(Set<String>, String, String)] = [
-            (["videocodecnotsupported"], "This video format cannot play directly on %@, so the server is converting the video.", "a 1080p H.264 copy"),
-            (["videorangetypenotsupported"], "This HDR format cannot play directly on %@, so the server is converting the video.", "an SDR copy"),
-            (["videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"], "The video encoding is too demanding for %@, so the server is converting the video.", "an 8-bit 1080p H.264 copy"),
-            (["videoresolutionnotsupported"], "The resolution is too high for %@, so the server is converting the video.", "a 1080p copy"),
-            (["videoframeratenotsupported"], "The frame rate is too high for %@, so the server is converting the video.", "a 30 fps copy"),
-            (["interlacedvideonotsupported"], "Interlaced video cannot play directly on %@, so the server is converting the video.", "a deinterlaced copy"),
-            (["anamorphicvideonotsupported"], "The non-square pixels cannot display correctly on %@, so the server is converting the video.", "a square-pixel copy"),
-            (["videorotationnotsupported"], "The rotation cannot display correctly on %@, so the server is converting the video.", "an upright copy")
+            (["videocodecnotsupported"], "This video format cannot play on %@.", "a 1080p H.264 copy"),
+            (["videorangetypenotsupported"], "This HDR format cannot play on %@.", "an SDR copy"),
+            (["videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"], "The video encoding is too demanding for %@.", "an 8-bit 1080p H.264 copy"),
+            (["videoresolutionnotsupported"], "The resolution is too high for %@.", "a 1080p copy"),
+            (["videoframeratenotsupported"], "The frame rate is too high for %@.", "a 30 fps copy"),
+            (["interlacedvideonotsupported"], "Interlaced video cannot play on %@.", "a deinterlaced copy"),
+            (["anamorphicvideonotsupported"], "The non-square pixels cannot display correctly on %@.", "a square-pixel copy"),
+            (["videorotationnotsupported"], "The rotation cannot display correctly on %@.", "an upright copy")
         ]
         let title = "Converting this video for \(device)"
         if !copied, let category = categories.first(where: { !$0.0.isDisjoint(with: codes) }) {

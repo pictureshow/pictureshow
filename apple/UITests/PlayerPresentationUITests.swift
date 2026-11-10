@@ -121,9 +121,23 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(player.waitForExistence(timeout: 20))
         let notice = app.descendants(matching: .any).matching(identifier: "conversionNotice").firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: 18), "Negotiated device video conversion must show a notice")
+        let noticeFirstObserved = Date()
         let noticeLabel = notice.label
         XCTAssertTrue(noticeLabel.contains("1080p H.264 copy"), "The visible notice must include the core fix sentence")
         #if os(iOS)
+        let isTablet = UIDevice.current.userInterfaceIdiom == .pad
+        // The iPad fixture has enough video height for both the real notice
+        // and its full-size caption. A short phone portrait band may defer it.
+        let verifyPortraitExpiry = isTablet
+        var transportBeforeNoticeExpiry: [String: CGRect] = [:]
+        if verifyPortraitExpiry {
+            let pause = app.buttons["playerPlayPause"]
+            XCTAssertEqual(pause.label, "Pause")
+            activate(pause)
+            XCTAssertEqual(pause.label, "Play", "Pause before taking the notice stability baseline")
+            XCTAssertTrue(notice.exists, "The paused stability baseline must observe the real notice before expiry")
+            transportBeforeNoticeExpiry = try portraitTransportFrames()
+        }
         let visibleCaption = app.staticTexts["playerSubtitle"]
         if visibleCaption.exists {
             let noticeFrame = notice.frame, captionFrame = visibleCaption.frame
@@ -150,7 +164,21 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(playPause.waitForExistence(timeout: 10))
         if playPause.label == "Pause" { activate(playPause) }
         XCTAssertEqual(playPause.label, "Play", "The test must pin the same viewing paused before inspecting sheets")
-        let isTablet = UIDevice.current.userInterfaceIdiom == .pad
+        if verifyPortraitExpiry {
+            XCTAssertTrue(notice.exists, "The real notice must still be visible while paused before observing its expiry")
+            print("LEG132_NOTICE_EXPIRY pausedNoticePresent=true observedElapsed=\(Date().timeIntervalSince(noticeFirstObserved))")
+            XCTAssertTrue(waitForRemoteUI(timeout: 10) { !notice.exists }, "The original notice must actually expire, including while paused")
+            let after = try portraitTransportFrames()
+            record("132 portrait notice expired transport stays anchored")
+            for (identifier, before) in transportBeforeNoticeExpiry {
+                let frame = try XCTUnwrap(after[identifier])
+                print("LEG132_NOTICE_EXPIRY_CONTROL id=\(identifier) before=\(before) after=\(frame)")
+                XCTAssertEqual(frame.minX, before.minX, accuracy: 1, "Notice expiry must not move \(identifier)")
+                XCTAssertEqual(frame.minY, before.minY, accuracy: 1, "Notice expiry must not move \(identifier)")
+                XCTAssertEqual(frame.width, before.width, accuracy: 1)
+                XCTAssertEqual(frame.height, before.height, accuracy: 1)
+            }
+        }
         XCTAssertEqual(app.buttons["rotatePlayer"].exists, !isTablet, "Full-size iPad follows device rotation and has no phone toggle")
         let routePicker = app.descendants(matching: .any).matching(identifier: "playerRoutePicker").firstMatch
         XCTAssertTrue(routePicker.exists, "The touch transport exposes its native Play on route control without opening household routes")
@@ -182,7 +210,11 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(current.waitForNonExistence(timeout: 10), "Applying a rate closes the sheet once")
         #if os(tvOS)
         let changedSpeed = nativeAction(id: "playerSpeed", prefix: "Speed:")
-        XCTAssertTrue(changedSpeed.label.contains("1.5×"), "The live transport must publish the selected viewing rate")
+        let publishedRate = waitForRemoteUI(timeout: 5) { changedSpeed.label.contains("1.5×") }
+        print("LEG132_TV_SPEED_AFTER_SELECT transportLabel=\(changedSpeed.label) publishedSelectedRate=\(publishedRate)")
+        record("132 TV selected rate transport before reopen")
+        // Reopen before asserting the transport label, so a native cached title
+        // can be distinguished from a rejected rate in the viewing itself.
         activate(changedSpeed)
         #else
         let updated = waitForRemoteUI(timeout: 5) { self.app.buttons["playerSpeed"].label.contains("1.5×") }
@@ -195,6 +227,9 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(selected.waitForExistence(timeout: 10))
         assertSelectedRate(selected)
         record("132 speed retained 1.5x")
+        #if os(tvOS)
+        XCTAssertTrue(publishedRate, "The live transport must publish the selected viewing rate; reopening above independently verifies the retained viewing rate")
+        #endif
         activate(app.buttons["playerOptionsDone"])
         #if os(tvOS)
         activate(nativeAction(id: "playerInfo", prefix: "Playback info"))
@@ -319,6 +354,13 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(later.waitForExistence(timeout: 10)); XCTAssertTrue(later.isEnabled)
         let value = app.staticTexts["subtitleDelayValue"]
         XCTAssertEqual(value.label, "Subtitle delay: +0.0 s")
+        for id in ["subtitleEarlier", "subtitleReset", "subtitleLater"] {
+            let frame = app.buttons[id].frame
+            XCTAssertGreaterThanOrEqual(frame.height + 0.000_001, 48)
+            XCTAssertLessThanOrEqual(frame.height, 56, "Native timing buttons must not add border padding around a 48pt label")
+            XCTAssertGreaterThanOrEqual(frame.width, 48)
+            XCTAssertEqual(frame.width, later.frame.width, accuracy: 1)
+        }
         XCTAssertFalse(app.buttons["subtitleReset"].isEnabled)
         activate(later)
         XCTAssertEqual(value.label, "Subtitle delay: +0.1 s", "A Later tap commits one 100 ms step")
@@ -509,6 +551,9 @@ final class PlayerPresentationUITests: XCTestCase {
         #endif
         // At 115 seconds in a 120-second file, 0.5× leaves up to ten real
         // seconds. This snapshot is separate from the exact hosted clock test.
+        #if os(iOS)
+        let runningCancelOrigin = app.buttons["cancelNext"].frame.origin
+        #endif
         record("132 next episode running at half speed")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
@@ -520,6 +565,9 @@ final class PlayerPresentationUITests: XCTestCase {
         #else
         activate(app.buttons["playerPlayPause"])
         XCTAssertTrue(app.staticTexts["nextCountdown"].waitForNonExistence(timeout: 5), "Touch pause removes the number immediately")
+        let pausedCancelOrigin = app.buttons["cancelNext"].frame.origin
+        XCTAssertEqual(pausedCancelOrigin.x, runningCancelOrigin.x, accuracy: 1, "Cancel keeps its horizontal origin across pause")
+        XCTAssertEqual(pausedCancelOrigin.y, runningCancelOrigin.y, accuracy: 1, "Suppressing the number cannot move Cancel")
         record("132 next episode paused after running countdown")
         activate(app.buttons["cancelNext"])
         #endif
@@ -538,6 +586,29 @@ final class PlayerPresentationUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
     #if os(iOS)
+    @MainActor private func portraitTransportFrames() throws -> [String: CGRect] {
+        // One actual AX snapshot keeps the three-frame baseline inside the
+        // original ten-second notice lifetime, without freezing its clock.
+        let snapshot = try app.snapshot()
+        let window = snapshot.frame
+        XCTAssertGreaterThan(window.height, window.width, "Notice stability is measured in the actual portrait window")
+        var nodes: [XCUIElementSnapshot] = []
+        func collect(_ node: XCUIElementSnapshot) { nodes.append(node); node.children.forEach(collect) }
+        collect(snapshot)
+        let controls: [(String, XCUIElement.ElementType)] = [
+            ("playerPlayPause", .button), ("playerScrubber", .slider), ("playerSpeed", .button)
+        ]
+        var result: [String: CGRect] = [:]
+        for (identifier, role) in controls {
+            let matches = nodes.filter { $0.identifier == identifier && $0.elementType == role }
+            XCTAssertEqual(matches.count, 1, "The actual \(identifier) must have one native control")
+            let frame = try XCTUnwrap(matches.first).frame
+            XCTAssertFalse(frame.isEmpty)
+            XCTAssertTrue(window.contains(frame), "The full \(identifier) target must remain in the portrait window")
+            result[identifier] = frame
+        }
+        return result
+    }
     @MainActor private func assertNextCardGeometry(landmark: String) throws {
         let window = app.windows.firstMatch.frame
         var nodes: [XCUIElementSnapshot] = []
@@ -692,9 +763,9 @@ final class PlayerPresentationUITests: XCTestCase {
             }
             if element.hasFocus { if select { XCUIRemote.shared.press(.select) }; return }
             let target = element.frame
-            if element.identifier == "playerOptionsDone", target.isEmpty {
-                // Done is the final native List row on TV. A virtualized row
-                // has no geometry until focus scrolls toward the list's end.
+            if ["playerOptionsDone", "remote-play-refresh", "remote-play-done"].contains(element.identifier), target.isEmpty {
+                // These final native List actions have no geometry until
+                // focus scrolls toward the list's end on TV.
                 XCUIRemote.shared.press(.down)
                 continue
             }
