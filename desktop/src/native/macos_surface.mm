@@ -15,6 +15,7 @@
 #include <string>
 #include <chrono>
 #include <algorithm>
+#include <pthread/qos.h>
 #include <cstdlib>
 
 @interface PSMainCall : NSObject
@@ -39,6 +40,7 @@ struct Surface {
     id<MTLDevice> device;
     id<MTLCommandQueue> queue;
     id<MTLTexture> shared;
+    id<MTLCommandBuffer> inflight;
     IOSurfaceRef io = nullptr;
     CGLContextObj gl = nullptr;
     GLuint texture=0, fbo=0;
@@ -46,7 +48,10 @@ struct Surface {
     int w=0,h=0;
     std::atomic<unsigned long> frames{0};
     std::string receipt;
-    Timing renderTime, glWait, drawableWait, metalWait, frameTime;
+    Timing renderTime, glWait, drawableWait, metalWait, frameTime, pollGap;
+    Clock::time_point previousPollEnd=Clock::now();
+    std::atomic<unsigned long> polls{0};
+    int qosResult=-1;
     // Diagnostic ablation uses the same rendering path and retains all GPU ownership waits.
     bool paced = std::getenv("SPIKE_LEGACY_PACING")==nullptr;
     std::string glRenderer;
@@ -55,6 +60,7 @@ static void *getProc(void *, const char *name) { return dlsym(RTLD_DEFAULT,name)
 extern "C" void ps_destroy(void *ptr);
 extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     Surface *s = new Surface();
+    s->qosResult=pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE,0);
     mainCall(^{
         s->overlay = (__bridge NSWindow*)viewPtr;
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -90,11 +96,22 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
 extern "C" int ps_frame(void *ptr, int w, int h) {
     @autoreleasepool {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
+    if(s->inflight && s->inflight.status==MTLCommandBufferStatusError) return -6;
     auto frameStarted=Clock::now();
+    if(s->polls.fetch_add(1)>0) s->pollGap.add(ms(s->previousPollEnd));
+    struct PollEnd { Surface *s; ~PollEnd() { s->previousPollEnd=Clock::now(); } } pollEnd{s};
     bool resized=s->w!=w || s->h!=h;
     uint64_t update=mpv_render_context_update(s->render);
     if(s->paced && !(update & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
     if(w<1||h<1) return -1;
+    // Defer the ownership wait until reuse so the blit can finish between frames.
+    auto reused=Clock::now();
+    if(s->inflight) {
+        [s->inflight waitUntilCompleted];
+        if(s->inflight.status==MTLCommandBufferStatusError) return -6;
+        s->inflight=nil;
+    }
+    s->metalWait.add(ms(reused));
     if(s->w!=w || s->h!=h) {
         if(s->texture) glDeleteTextures(1,&s->texture);
         if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
@@ -124,8 +141,7 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
     id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
     [blit copyFromTexture:s->shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
-    [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; t=Clock::now(); [cmd waitUntilCompleted]; s->metalWait.add(ms(t));
-    if(cmd.status==MTLCommandBufferStatusError) return -6;
+    [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; s->inflight=cmd;
     mpv_render_context_report_swap(s->render); s->frames++; s->frameTime.add(ms(frameStarted)); return 0;
     }
 }
@@ -133,7 +149,7 @@ extern "C" const char *ps_receipt(void *ptr) {
     Surface *s=(Surface*)ptr;
     mainCall(^{
         NSScreen *screen=s->overlay.screen; NSRect a=s->overlay.frame,b=screen.frame,c=s->video.frame;
-        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
+        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
         NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
         s->receipt.assign((const char*)data.bytes,data.length);
     });
@@ -148,8 +164,17 @@ extern "C" void ps_fullscreen(void *ptr, int enabled) {
     CFRunLoopPerformBlock(CFRunLoopGetMain(),kCFRunLoopCommonModes, ^{NSApp.presentationOptions=enabled ? NSApplicationPresentationAutoHideDock|NSApplicationPresentationAutoHideMenuBar : NSApplicationPresentationDefault;});
     CFRunLoopWakeUp(CFRunLoopGetMain());
 }
+// Drain deferred work before the caller declares teardown successful.
+extern "C" int ps_finish(void *ptr) {
+    Surface *s=(Surface*)ptr;
+    if(!s || !s->inflight) return 0;
+    [s->inflight waitUntilCompleted];
+    bool failed=s->inflight.status==MTLCommandBufferStatusError;
+    s->inflight=nil; return failed?-6:0;
+}
 extern "C" void ps_destroy(void *ptr) {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
+    if(s->inflight) { [s->inflight waitUntilCompleted]; s->inflight=nil; }
     if(s->render) mpv_render_context_free(s->render);
     if(s->texture) glDeleteTextures(1,&s->texture); if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
     s->shared=nil; if(s->io) CFRelease(s->io); CGLSetCurrentContext(nullptr); if(s->gl) CGLDestroyContext(s->gl);

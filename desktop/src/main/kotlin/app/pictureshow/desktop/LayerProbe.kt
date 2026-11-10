@@ -33,6 +33,7 @@ interface NativeLayer : Library {
     fun ps_sync(surface: Pointer)
     fun ps_fullscreen(surface: Pointer, enabled: Int)
     fun ps_click(surface: Pointer, x: Int, y: Int)
+    fun ps_finish(surface: Pointer): Int
     fun ps_destroy(surface: Pointer)
 }
 
@@ -70,8 +71,12 @@ fun layerMain(args: Array<String>) {
                 try {
                     worker.get()?.let { if(!workerInitiated) it.interrupt(); it.join(35000); check(!it.isAlive) { "Probe worker failed to stop" } }
                     tick?.cancel(false)
-                    executor.submit { surface?.let(bridge::ps_destroy); surface=null }.get(30,TimeUnit.SECONDS)
+                    val finishResult=executor.submit<Int> {
+                        val target=surface ?: return@submit 0
+                        try { bridge.ps_finish(target) } finally { bridge.ps_destroy(target); surface=null }
+                    }.get(30,TimeUnit.SECONDS)
                     executor.shutdown(); mpv.close()
+                    check(finishResult>=0) {"Native final GPU operation failed: $finishResult"}
                     failure.get()?.let { throw it }
                     File(out,"teardown.txt").writeText("native render freed before mpv destroy; executor stopped\n")
                     if(rc==0) File(out,"sequence.txt").writeText("overlayClicks=$clicks\n")
@@ -204,15 +209,28 @@ fun layerMain(args: Array<String>) {
                             check(mpv.get("track-list/$track/selected")=="yes") {"Subtitle did not select"}
                         }
                         if(sustain>0) {
+                            check(sustain>=125) {"Sustained gate requires at least 125 seconds"}
+                            check(mpv.get("video-params/w")=="1920" && mpv.get("video-params/h")=="1080") {"Sustained fixture must be native 1080p"}
+                            check(kotlin.math.abs(mpv.get("container-fps")!!.toDouble()-60)<0.01) {"Sustained fixture must be 60 fps"}
                             mpv.set("loop-file","no"); mpv.command("loadfile",media); Thread.sleep(1000)
                             mpv.command("seek","0","absolute+exact"); mpv.set("pause","no"); stage("07-sustain-start")
+                            File(out,"soak-start-native.json").writeText(bridge.ps_receipt(surface!!))
                             val startPos=mpv.get("time-pos")!!.toDouble()
+                            val startVo=mpv.get("frame-drop-count")!!.toLong()
+                            val startDecoder=mpv.get("decoder-frame-drop-count")!!.toLong()
                             val progress=File(out,"sustain-progress.tsv").apply {writeText("elapsed\ttime-pos\tframe-drops\tdecoder-drops\n")}
                             val started=System.nanoTime()
+                            progress.appendText("0\t$startPos\t$startVo\t$startDecoder\n")
                             while((System.nanoTime()-started)/1e9 < sustain) { Thread.sleep(1000); failure.get()?.let{throw it}
                                 progress.appendText("${(System.nanoTime()-started)/1e9}\t${mpv.get("time-pos")}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n")
                             }
-                            check(mpv.get("time-pos")!!.toDouble()-startPos>sustain-4) {"Playback did not advance in real time"}
+                            val elapsed=(System.nanoTime()-started)/1e9
+                            val endPos=mpv.get("time-pos")!!.toDouble()
+                            val endVo=mpv.get("frame-drop-count")!!.toLong()
+                            val endDecoder=mpv.get("decoder-frame-drop-count")!!.toLong()
+                            File(out,"soak-metrics.json").writeText("""{"elapsedSeconds":$elapsed,"mediaAdvance":${endPos-startPos},"voDrops":${endVo-startVo},"decoderDrops":${endDecoder-startDecoder},"nominalFps":${mpv.get("container-fps")},"width":${mpv.get("video-params/w")},"height":${mpv.get("video-params/h")}}""")
+                            File(out,"soak-end-native.json").writeText(bridge.ps_receipt(surface!!))
+                            check(endPos-startPos>sustain-4) {"Playback did not advance in real time"}
                             check(mpv.get("eof-reached")!="yes") {"Fixture ended during sustained playback"}
                             File(out,"sustained-seconds.txt").writeText(((System.nanoTime()-started)/1e9).toString())
                             stage("08-sustain-end")
