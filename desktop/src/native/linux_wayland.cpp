@@ -86,7 +86,7 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  auto*r=wl_display_get_registry(s->d);static const wl_registry_listener l={global,[](void*,wl_registry*,uint32_t){}};wl_registry_add_listener(r,&l,s);check(wl_display_roundtrip(s->d)>=0,"registry");check(wl_display_roundtrip(s->d)>=0,"capabilities");
  check(s->c&&s->sc&&s->wm&&s->shm,"required Wayland globals");
  s->video=wl_compositor_create_surface(s->c);s->xdg=xdg_wm_base_get_xdg_surface(s->wm,s->video);
- static const xdg_surface_listener xl={[](void*d,xdg_surface*x,uint32_t serial){auto*s=(Surface*)d;xdg_surface_ack_configure(x,serial);s->configured=true;s->update=true;}};xdg_surface_add_listener(s->xdg,&xl,s);
+ static const xdg_surface_listener xl={[](void*d,xdg_surface*x,uint32_t serial){auto*s=(Surface*)d;xdg_surface_set_window_geometry(x,0,0,s->width,s->height);xdg_surface_ack_configure(x,serial);s->configured=true;s->update=true;}};xdg_surface_add_listener(s->xdg,&xl,s);
  s->top=xdg_surface_get_toplevel(s->xdg);xdg_toplevel_set_title(s->top,"Pictureshow Compose Wayland HDR probe");xdg_toplevel_set_app_id(s->top,"app.pictureshow.desktop");
  static const xdg_toplevel_listener tl={[](void*d,xdg_toplevel*,int32_t w,int32_t h,wl_array*states){auto*s=(Surface*)d;s->fullscreen=false;for(auto*p=(uint32_t*)states->data;(char*)p<(char*)states->data+states->size;p++)if(*p==XDG_TOPLEVEL_STATE_FULLSCREEN)s->fullscreen=true;if(w>0&&h>0){s->width=w;s->height=h;}},[](void*d,xdg_toplevel*){((Surface*)d)->closed=true;}};xdg_toplevel_add_listener(s->top,&tl,s);
  if(hdr){check(s->cm&&s->pq&&s->bt2020&&s->parametric,"compositor must advertise PQ/BT2020 parametric color management");
