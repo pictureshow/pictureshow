@@ -164,7 +164,7 @@ class SyncTransportPlayerTest {
             true
         }
         player.seekBack()
-        assertEquals(listOf(0L), requests)
+        assertEquals(listOf<Long?>(0L), requests)
         assertFalse(output.mutations.isNotEmpty())
     }
 }
