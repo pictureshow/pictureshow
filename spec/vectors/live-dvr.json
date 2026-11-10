@@ -513,6 +513,75 @@
       "expected": {
         "error": true
       }
+    },
+    {
+      "id": "live-dvr.content-file-delete-without-dvr-management",
+      "operation": "delete-trace",
+      "input": {
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": false,
+          "EnableContentDeletion": true
+        },
+        "retainFile": false,
+        "canDelete": true
+      },
+      "expected": {
+        "outcome": "ok",
+        "fileDeleted": true,
+        "requests": [
+          "GET /Users/viewer",
+          "GET /LiveTv/Recordings/recording",
+          "DELETE /Items/recording",
+          "GET /LiveTv/Recordings/recording",
+          "GET /Items/recording"
+        ]
+      }
+    },
+    {
+      "id": "live-dvr.unlisted-but-retained-file-is-not-deleted",
+      "operation": "delete-trace",
+      "input": {
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": false,
+          "EnableContentDeletion": true
+        },
+        "retainFile": true,
+        "canDelete": true
+      },
+      "expected": {
+        "outcome": "unknown",
+        "fileDeleted": false,
+        "requests": [
+          "GET /Users/viewer",
+          "GET /LiveTv/Recordings/recording",
+          "DELETE /Items/recording",
+          "GET /LiveTv/Recordings/recording",
+          "GET /Items/recording"
+        ]
+      }
+    },
+    {
+      "id": "live-dvr.explicit-file-delete-denial",
+      "operation": "delete-trace",
+      "input": {
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": false,
+          "EnableContentDeletion": true
+        },
+        "retainFile": false,
+        "canDelete": false
+      },
+      "expected": {
+        "outcome": "denied",
+        "fileDeleted": false,
+        "requests": [
+          "GET /Users/viewer",
+          "GET /LiveTv/Recordings/recording"
+        ]
+      }
     }
   ]
 }

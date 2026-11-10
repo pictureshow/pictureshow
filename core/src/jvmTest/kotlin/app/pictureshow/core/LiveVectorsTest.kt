@@ -77,6 +77,7 @@ class LiveVectorsTest {
                 input.text("end")
             ).map { JsonPrimitive(it.id) }
         )
+        "delete-trace" -> deleteTrace(input)
         "guide-metadata" -> JsonArray(
             guidePrograms(
                 json.decodeFromJsonElement(input.getValue("programs")),
@@ -193,6 +194,59 @@ class LiveVectorsTest {
             put("second", second.outcome)
             put("postCount", posts)
             put("posts", JsonArray(methods.filter { it.startsWith("POST") }.map(::JsonPrimitive)))
+        }
+    }
+
+    private suspend fun TestScope.deleteTrace(input: JsonObject): JsonElement {
+        val methods = mutableListOf<String>()
+        var unlisted = false
+        var fileDeleted = false
+        val client = LiveTvClient(
+            HttpClient(
+                MockEngine(
+                    MockEngineConfig().apply {
+                        dispatcher = StandardTestDispatcher(testScheduler)
+                        addHandler { request ->
+                            val route = request.url.encodedPath
+                            val method = request.method.value
+                            methods += "$method $route"
+                            var status = HttpStatusCode.OK
+                            val body = when {
+                                route == "/Users/viewer" -> JsonObject(mapOf("Policy" to input.getValue("policy"))).toString()
+                                method == "DELETE" -> {
+                                    unlisted = true
+                                    if (route == "/Items/recording" &&
+                                        !input.getValue("retainFile").jsonPrimitive.boolean
+                                    ) {
+                                        fileDeleted = true
+                                    }
+                                    status = HttpStatusCode.NoContent
+                                    ""
+                                }
+                                route == "/LiveTv/Recordings/recording" || route == "/Items/recording" -> {
+                                    if ((route.startsWith("/LiveTv/") && unlisted) || (route.startsWith("/Items/") && fileDeleted)) {
+                                        status = HttpStatusCode.NotFound
+                                    }
+                                    buildJsonObject {
+                                        put("Id", "recording")
+                                        put("CanDelete", input.getValue("canDelete"))
+                                    }.toString()
+                                }
+                                else -> error("Unexpected delete fixture $method $route")
+                            }
+                            respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
+                        }
+                    }
+                )
+            ),
+            ClientIdentity("Fixture", "fixture-device")
+        )
+        val account = Account(Server("fixture", "Fixture", "https://media.example.test", "12.0.0"), User("viewer", "Viewer"), "fixture")
+        val result = client.deleteRecording(account, "recording")
+        return buildJsonObject {
+            put("outcome", result.outcome)
+            put("fileDeleted", fileDeleted)
+            put("requests", JsonArray(methods.map(::JsonPrimitive)))
         }
     }
 

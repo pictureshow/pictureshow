@@ -459,11 +459,21 @@ class LiveTvClient(
         if (canDelete == false || (canDelete != true && !rights.value.deleteContent)) {
             return@withLock LiveWrite("denied", message = "This account cannot delete this recorded file.")
         }
-        val answer = write(account, path, method = HttpMethod.Delete)
+        // The Live TV DELETE endpoint only unlists metadata on supported servers.
+        // Recorded-file deletion is the normal permission-checked content operation.
+        val itemPath = "Items/${id.encodeURLPathPart()}"
+        val answer = write(account, itemPath, method = HttpMethod.Delete)
         if (answer.outcome != "ok") return@withLock answer
         when (val after = read(account, path) { json.decodeFromString<MediaItem>(it) }) {
             is ClientResult.Failure -> if (after.error.status == 404) {
-                LiveWrite("ok")
+                when (val item = read(account, itemPath) { json.decodeFromString<MediaItem>(it) }) {
+                    is ClientResult.Failure -> if (item.error.status == 404) {
+                        LiveWrite("ok")
+                    } else {
+                        LiveWrite("unknown", message = "Content deletion could not be confirmed. Refresh recordings.")
+                    }
+                    is ClientResult.Success -> LiveWrite("unknown", message = "The recorded item is still available. Refresh recordings.")
+                }
             } else {
                 LiveWrite(
                     "unknown",

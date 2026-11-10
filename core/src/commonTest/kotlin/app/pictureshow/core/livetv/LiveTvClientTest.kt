@@ -49,6 +49,8 @@ class LiveTvClientTest {
     private var deniedChannel = false
     private var itemCanDelete = true
     private var deletedRecording = false
+    private var deletedFile = false
+    private var ignoreFileDelete = false
     private var stored: JsonObject? = null
     private var recordedFields: JsonObject? = null
     private val requests = mutableListOf<String>()
@@ -94,7 +96,12 @@ class LiveTvClientTest {
                                 ""
                             }
                             method == "DELETE" -> {
+                                // Jellyfin's Live TV delete can remove metadata without touching the file.
                                 if (path.startsWith("/LiveTv/Recordings/")) deletedRecording = true
+                                if (path == "/Items/recording") {
+                                    deletedRecording = true
+                                    if (!ignoreFileDelete) deletedFile = true
+                                }
                                 code = writeStatus
                                 if (writeStatus.value in 200..299) stored = null
                                 ""
@@ -113,6 +120,10 @@ class LiveTvClientTest {
                             }
                             path == "/LiveTv/Recordings/recording" -> {
                                 if (deletedRecording) code = HttpStatusCode.NotFound
+                                """{"Id":"recording","CanDelete":$itemCanDelete}"""
+                            }
+                            path == "/Items/recording" -> {
+                                if (deletedFile) code = HttpStatusCode.NotFound
                                 """{"Id":"recording","CanDelete":$itemCanDelete}"""
                             }
                             path == "/LiveTv/Channels" ->
@@ -288,7 +299,7 @@ class LiveTvClientTest {
         deletion = false
         itemCanDelete = true
         assertEquals("ok", client().deleteRecording(account, "recording").outcome)
-        assertTrue(requests.contains("DELETE /LiveTv/Recordings/recording"))
+        assertTrue(requests.contains("DELETE /Items/recording"))
     }
 
     @Test fun aPerItemDeleteRefusalOverridesGlobalDeletionRights() = runTest {
@@ -300,7 +311,22 @@ class LiveTvClientTest {
 
     @Test fun deletingARecordingCannotAccidentallyCancelATimer() = runTest {
         assertEquals("ok", client().deleteRecording(account, "recording").outcome)
-        assertTrue(requests.contains("DELETE /LiveTv/Recordings/recording"))
+        assertTrue(requests.contains("DELETE /Items/recording"))
         assertFalse(requests.any { it.contains("/Timers") })
+    }
+
+    @Test fun recordingDeletionMustRemoveTheContentFileInsteadOfOnlyUnlistingTheRecording() = runTest {
+        management = false // Content deletion permission is separate from DVR management.
+        assertEquals("ok", client().deleteRecording(account, "recording").outcome)
+        assertTrue(deletedFile, "Live TV metadata deletion is not recorded-file deletion")
+        assertTrue(requests.contains("DELETE /Items/recording"))
+        assertTrue(requests.contains("GET /Items/recording"))
+        assertFalse(requests.contains("DELETE /LiveTv/Recordings/recording"))
+    }
+
+    @Test fun acceptedContentDeleteThatLeavesTheItemCannotBeCalledDeleted() = runTest {
+        ignoreFileDelete = true
+        assertEquals("unknown", client().deleteRecording(account, "recording").outcome)
+        assertFalse(deletedFile)
     }
 }
