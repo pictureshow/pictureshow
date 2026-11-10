@@ -5,7 +5,7 @@ package app.pictureshow.core.playback
 
 /** Viewer wording describes the requested ceiling, never a measured speed or guaranteed output bitrate. */
 object PlaybackQualityPresentation {
-    val choices: List<Int?> = listOf(null, 4, 10, 20, 40, 120)
+    val choices: List<Int?> = PlaybackPreferences.BITRATES
 
     fun choiceLabel(mbps: Int?): String = mbps?.let { "$it Mbps" } ?: "Auto"
 
