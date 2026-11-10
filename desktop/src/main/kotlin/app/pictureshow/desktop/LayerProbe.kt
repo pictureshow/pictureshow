@@ -113,6 +113,7 @@ fun layerMain(args: Array<String>) {
                         Thread.sleep(1800)
                         SwingUtilities.invokeAndWait { if (Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); window.toFront(); window.requestFocus() }
                         mpv.option("vo","libmpv")
+                        if(System.getenv("SPIKE_LEGACY_PACING")==null) mpv.option("video-timing-offset","0")
                         // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
                         mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")

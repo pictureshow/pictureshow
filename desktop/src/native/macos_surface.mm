@@ -13,6 +13,9 @@
 #include <mpv/render_gl.h>
 #include <atomic>
 #include <string>
+#include <chrono>
+#include <algorithm>
+#include <cstdlib>
 
 @interface PSMainCall : NSObject
 @property(copy) void (^block)(void);
@@ -27,6 +30,9 @@ static void mainCall(void (^block)(void)) {
     [call performSelectorOnMainThread:@selector(run) withObject:nil waitUntilDone:YES
         modes:@[NSRunLoopCommonModes, @"AWTRunLoopMode", NSDefaultRunLoopMode]];
 }
+using Clock = std::chrono::steady_clock;
+static double ms(Clock::time_point a) { return std::chrono::duration<double,std::milli>(Clock::now()-a).count(); }
+struct Timing { std::atomic<double> total{0}, maximum{0}; void add(double v) { total.store(total.load()+v); maximum.store(std::max(maximum.load(),v)); } };
 struct Surface {
     NSWindow *overlay, *video;
     CAMetalLayer *layer;
@@ -40,6 +46,10 @@ struct Surface {
     int w=0,h=0;
     std::atomic<unsigned long> frames{0};
     std::string receipt;
+    Timing renderTime, glWait, drawableWait, metalWait, frameTime;
+    // Diagnostic ablation uses the same rendering path and retains all GPU ownership waits.
+    bool paced = std::getenv("SPIKE_LEGACY_PACING")==nullptr;
+    std::string glRenderer;
 };
 static void *getProc(void *, const char *name) { return dlsym(RTLD_DEFAULT,name); }
 extern "C" void ps_destroy(void *ptr);
@@ -71,6 +81,7 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     auto err=CGLCreateContext(pf,nullptr,&s->gl); CGLDestroyPixelFormat(pf);
     if(err!=kCGLNoError) { ps_destroy(s); return nullptr; }
     CGLSetCurrentContext(s->gl);
+    s->glRenderer=(const char*)glGetString(GL_RENDERER);
     mpv_opengl_init_params init={getProc,nullptr};
     mpv_render_param params[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_OPENGL},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_INVALID,nullptr}};
     if(mpv_render_context_create(&s->render,(mpv_handle*)mpvPtr,params)<0) { ps_destroy(s); return nullptr; }
@@ -79,6 +90,10 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
 extern "C" int ps_frame(void *ptr, int w, int h) {
     @autoreleasepool {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
+    auto frameStarted=Clock::now();
+    bool resized=s->w!=w || s->h!=h;
+    uint64_t update=mpv_render_context_update(s->render);
+    if(s->paced && !(update & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
     if(w<1||h<1) return -1;
     if(s->w!=w || s->h!=h) {
         if(s->texture) glDeleteTextures(1,&s->texture);
@@ -99,25 +114,26 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
         s->w=w; s->h=h;
         mainCall(^{ s->layer.drawableSize=CGSizeMake(w,h); });
     }
-    mpv_opengl_fbo fbo={(int)s->fbo,w,h,GL_RGBA16F}; int flip=0; // IOSurface rows are consumed by Metal in top-left order.
-    mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
-    int rc=mpv_render_context_render(s->render,params); if(rc<0) return rc;
+    mpv_opengl_fbo fbo={(int)s->fbo,w,h,GL_RGBA16F}; int flip=0; int block=s->paced?0:1; // IOSurface rows are consumed by Metal in top-left order.
+    mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
+    auto t=Clock::now();
+    int rc=mpv_render_context_render(s->render,params); s->renderTime.add(ms(t)); if(rc<0) return rc;
     // Synchronize cross-API ownership; this waits for the GPU, never reads frame pixels.
-    glFinish();
-    id<CAMetalDrawable> drawable=[s->layer nextDrawable]; if(!drawable) return -5;
+    t=Clock::now(); glFinish(); s->glWait.add(ms(t));
+    t=Clock::now(); id<CAMetalDrawable> drawable=[s->layer nextDrawable]; s->drawableWait.add(ms(t)); if(!drawable) return -5;
     id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
     [blit copyFromTexture:s->shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
-    [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; [cmd waitUntilCompleted];
+    [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; t=Clock::now(); [cmd waitUntilCompleted]; s->metalWait.add(ms(t));
     if(cmd.status==MTLCommandBufferStatusError) return -6;
-    mpv_render_context_report_swap(s->render); s->frames++; return 0;
+    mpv_render_context_report_swap(s->render); s->frames++; s->frameTime.add(ms(frameStarted)); return 0;
     }
 }
 extern "C" const char *ps_receipt(void *ptr) {
     Surface *s=(Surface*)ptr;
     mainCall(^{
         NSScreen *screen=s->overlay.screen; NSRect a=s->overlay.frame,b=screen.frame,c=s->video.frame;
-        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0};
+        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
         NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
         s->receipt.assign((const char*)data.bytes,data.length);
     });
