@@ -34,20 +34,21 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 private const val OFFLINE_CHANNEL = "downloads"
-private const val OFFLINE_NOTIFICATION = 4801
-private const val OFFLINE_JOB = 4802
+internal const val OFFLINE_NOTIFICATION = 4801
+internal const val OFFLINE_JOB = 4802
 private const val OFFLINE_CHANNEL_NAME = "Downloads"
 
 internal const val OFFLINE_EXTRA_TITLES = "titles"
 internal const val OFFLINE_FOREGROUND_SETTLE_MS = 400L
 internal const val OFFLINE_JOB_TRANSFER_MS = 2 * 60_000L
 internal const val OFFLINE_JOB_WAITING_MS = 15 * 60_000L
+internal const val OFFLINE_RECOVERY_RETRY_MS = 60_000L
 private const val OFFLINE_JOB_HOLD_LOOK_MS = 2_000L
 
 /** Another viewer's download counts but has no name here: see [offlineForegroundTitles]. */
 internal fun offlineNotificationTitle(titles: List<String>): String = titles.firstOrNull { it.isNotEmpty() } ?: OFFLINE_CHANNEL_NAME
 
-private fun offlineNotification(context: Context, titles: List<String>): Notification {
+internal fun offlineNotification(context: Context, titles: List<String>): Notification {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         manager?.createNotificationChannel(NotificationChannel(OFFLINE_CHANNEL, OFFLINE_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW))
@@ -312,8 +313,13 @@ internal class OfflineForegroundGate(private val start: (List<String>) -> Boolea
     }
 }
 
-internal class AndroidOfflineForeground(private val context: Context) : OfflineForeground {
+internal class AndroidOfflineForeground(
+    private val context: Context,
+    private val bookRecovery: (Int?) -> Boolean = { owner -> offlineBookRecovery(context, owner = owner) }
+) : OfflineForeground {
+    val recovery = OfflineRecoveryGate()
     private val main = Handler(Looper.getMainLooper())
+    private val recoveryRetry = Runnable { maintainRecovery() }
     private var latest = emptyList<String>()
     private var posted = false
     private var userInitiatedRunning = false
@@ -351,18 +357,23 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
         main.post {
             hasUnfinished = any
             restart.unfinished(any)
+            maintainRecovery()
         }
     }
 
     fun jobStarted(userInitiated: Boolean = false) {
+        recovery.primaryRunning = true
         userInitiatedRunning = userInitiated
         restart.started()
         if (userInitiated) gate.want(emptyList())
+        if (hasUnfinished) maintainRecovery()
     }
 
     fun jobEnded(systemRetry: Boolean = false) {
+        recovery.primaryRunning = false
         userInitiatedRunning = false
         restart.ended(systemRetry)
+        if (hasUnfinished) maintainRecovery()
     }
 
     fun titles(): List<String> = synchronized(this) { latest }
@@ -371,8 +382,20 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
 
     fun transferringUnderJobOnly() = transferring() && !gate.serviceUp
 
+    fun serviceUp() = gate.serviceUp
+
     private fun userInitiatedBooked(): Boolean = Build.VERSION.SDK_INT >= 34 &&
         context.getSystemService(JobScheduler::class.java)?.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true
+
+    private fun maintainRecovery() {
+        main.removeCallbacks(recoveryRetry)
+        if (!hasUnfinished || !userInitiatedBooked()) {
+            offlineCancelRecovery(context)
+        } else if (!bookRecovery(recovery.owner)) {
+            // A rejected booking remains owed. Retry once later, without spinning or moving an accepted deadline.
+            main.postDelayed(recoveryRetry, OFFLINE_RECOVERY_RETRY_MS)
+        }
+    }
 
     fun serviceStarted() = gate.started()
 

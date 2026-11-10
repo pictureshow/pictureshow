@@ -64,7 +64,9 @@ class OfflineLifetimeTest {
         foreground.unfinished(true)
         foreground.update(listOf("Example"))
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
-        assertTrue(app.getSystemService(JobScheduler::class.java).allPendingJobs.single().isUserInitiated)
+        val jobs = app.getSystemService(JobScheduler::class.java).allPendingJobs
+        assertTrue(jobs.single { it.id == 4802 }.isUserInitiated)
+        assertTrue(jobs.any { it.id == OFFLINE_RECOVERY_A })
         assertEquals(null, shadowOf(app).nextStartedService)
     }
 

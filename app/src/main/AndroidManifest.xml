@@ -78,6 +78,10 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
         <service
+            android:name=".OfflineRecoveryJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
             android:name=".MusicPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
