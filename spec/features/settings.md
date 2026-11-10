@@ -127,3 +127,7 @@ states conversion to SDR. Always on explains that hardware support is still requ
 styled-subtitle switch says Use my style for styled subtitles and explains ASS/SSA fonts and colors. These labels and
 capability consequences have portable cases in `settings-presentation.json`; player quality states have
 `player-quality.json`. Native focus/geometry tests complement those cases; portable vectors do not prove UI layout.
+
+When a feature reuses the native settings components, qualification includes platform lint on the integrated callers
+as well as the feature-specific focus and geometry tests. A focused test pass alone does not qualify the shared panel
+integration.
