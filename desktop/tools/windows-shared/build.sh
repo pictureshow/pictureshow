@@ -17,7 +17,7 @@ tar xf native/mpv.tar.gz -C native/source
 meson setup native/mpv-build native/source/mpv-0.42.0 --prefix="$PWD/native/install" \
   --buildtype=release --default-library=shared -Dprefer_static=false --auto-features=disabled \
   -Dshaderc=enabled -Dspirv-cross=enabled -Dgpl=false -Dlibmpv=true -Dcplayer=true -Dlua=disabled -Dd3d11=enabled -Dwasapi=enabled \
-  -Dwin32-threads=enabled -Dwin32-subsystem=console -Dmanpage-build=disabled
+  -Dgl=disabled -Dwin32-threads=enabled -Dwin32-subsystem=console -Dmanpage-build=disabled
 meson compile -C native/mpv-build -j 4
 meson install -C native/mpv-build
 cp native/mpv-build/meson-logs/meson-log.txt desktop-evidence/licensing/
