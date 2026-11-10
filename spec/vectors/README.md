@@ -426,3 +426,5 @@ apart from what the OS did. `music-reports` gives one viewing per time a track i
 ceilings, the audio profile and the lossless claim. `music-playlists` refuses to send an edit again after an ambiguous
 answer until the list has been read back, and pins the create body: `IsPublic` is always sent and false unless the viewer chose
 otherwise, since the server's own default is public.
+
+SyncPlay SYN-06 evidence records buffer waits and drift-correction seeks separately from scheduled timeline commands. Passing the portable vectors does not qualify rendered-output timing; record the source frame cadence, capture coverage, drift distribution and full measurement uncertainty for each native renderer pair.
