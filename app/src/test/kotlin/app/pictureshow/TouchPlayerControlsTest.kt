@@ -690,8 +690,9 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun creditsCard(position: Long = 50_000) {
+    private fun creditsCard(position: Long = 50_000, earlyNext: Boolean = true) {
         compose.runOnIdle {
+            if (earlyNext) host.enableCreditsCountdown()
             host.position = position
             host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
@@ -700,6 +701,13 @@ class TouchPlayerControlsTest {
     }
 
     private fun bounds(tag: String) = compose.onNodeWithTag(tag).getBoundsInRoot()
+
+    @Test fun keepScenesCardOffersManualPlayWithoutEarlyCountdown() {
+        launch()
+        creditsCard(earlyNext = false)
+        compose.onNodeWithText("s left", substring = true).assertDoesNotExist()
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+    }
 
     // TOUCH-13: a number shows only while it is really counting.
     @Test fun nextCardCountsOnlyWhileTheCountdownRuns() {
@@ -732,6 +740,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:speed:200").performScrollTo().performClick()
         settled()
         compose.runOnIdle {
+            host.enableCreditsCountdown()
             host.position = 52_000
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
         }
@@ -1423,7 +1432,14 @@ class TouchPlayerControlsTest {
         return hosts
     }
 
+    private fun PlaybackHostState.enableCreditsCountdown() {
+        localPreferences = localPreferences.copy(
+            tuning = localPreferences.tuning.copy(postCredits = app.pictureshow.core.playback.PostCredits.NextEpisode)
+        )
+    }
+
     private fun PlaybackHostState.reachCredits() {
+        enableCreditsCountdown()
         position = 50_000
         segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
         nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("0123456789abcdef0123456789abcde2", "Next episode")))
