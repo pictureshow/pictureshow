@@ -116,8 +116,8 @@ internal fun HomeCustomization(
     ) +
         state.libraries.filter { it.collectionType in listOf("movies", "tvshows") }.map { "latest:${it.id}" to "Latest in ${it.name}" }
     val known = (
-        defaults + state.availableRows.map { it.key to it.title } +
-            preferences.pins.map { it.key to "Pinned ${it.kind.name.lowercase()}" }
+        defaults + state.availableRows.filterNot { it.key.startsWith("pin:") }.map { it.key to it.title } +
+            preferences.pins.map { it.key to app.pictureshow.core.homeEditorPinLabel(it, state.availableRows) }
         )
         .distinctBy { it.first }
     val rows = known.sortedBy { (key, _) -> preferences.order.indexOf(key).takeIf { it >= 0 } ?: Int.MAX_VALUE }

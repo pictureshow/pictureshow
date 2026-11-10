@@ -45,7 +45,9 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
     nav.navigate(destination) {
         popUpTo("home") { saveState = true }
         launchSingleTop = true
-        restoreState = true
+        // Home is the root. Restoring its saved stack can restore the startup Libraries
+        // destination above it, so an explicit Home selection must reveal the root itself.
+        restoreState = tab != "home"
     }
 }
 

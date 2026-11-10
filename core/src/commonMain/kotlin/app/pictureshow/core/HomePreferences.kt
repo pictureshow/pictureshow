@@ -55,6 +55,10 @@ fun homeLanding(ready: Boolean, applied: Boolean, selection: String, libraryIds:
     }
 }
 
+/** Empty or unavailable saved pins remain removable without redisplaying their saved metadata. */
+fun homeEditorPinLabel(pin: HomePin, rows: List<HomeRow>): String =
+    rows.firstOrNull { it.key == pin.key && it.items.isNotEmpty() }?.title ?: "Pinned ${pin.kind.name.lowercase()}"
+
 /** Unknown fields and other clients' custom values survive every save. */
 fun homePreferencesDocument(before: JsonObject, preferences: HomePreferences): JsonObject {
     val custom = (before["CustomPrefs"] as? JsonObject).orEmpty()

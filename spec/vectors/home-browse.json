@@ -785,6 +785,58 @@
         ]
       },
       "expected": "home"
+    },
+    {
+      "id": "home-editor-pin-label-fresh",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": [
+          {
+            "key": "pin:STUDIO:Unavailable studio",
+            "title": "Current permitted studio",
+            "items": [
+              {
+                "id": "visible"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": "Current permitted studio"
+    },
+    {
+      "id": "home-editor-pin-label-empty",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": [
+          {
+            "key": "pin:STUDIO:Unavailable studio",
+            "title": "Unavailable studio",
+            "items": []
+          }
+        ]
+      },
+      "expected": "Pinned studio"
+    },
+    {
+      "id": "home-editor-pin-label-unavailable",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": []
+      },
+      "expected": "Pinned studio"
     }
   ]
 }

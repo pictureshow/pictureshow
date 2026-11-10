@@ -87,6 +87,28 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertTrue(closed) }
     }
 
+    @Test fun emptySavedPinUsesGenericEditorLabelAndRemainsRemovable() {
+        val pin = app.pictureshow.core.HomePin(app.pictureshow.core.HomePinKind.STUDIO, "Unavailable studio")
+        var preferences by mutableStateOf(HomePreferences(pins = listOf(pin)))
+        compose.setContent {
+            MaterialTheme {
+                HomeCustomization(
+                    CatalogHomeState(
+                        preferences = preferences,
+                        availableRows = listOf(app.pictureshow.core.HomeRow(pin.key, "Unavailable studio", emptyList()))
+                    ),
+                    account,
+                    service,
+                    { transform -> preferences = transform(preferences) },
+                    {}
+                )
+            }
+        }
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("Unpin Pinned studio"))
+        compose.onNodeWithText("Unpin Pinned studio").performClick()
+        compose.runOnIdle { assertTrue(preferences.pins.isEmpty()) }
+    }
+
     @Test fun filtersApplyDesiredCombinationAndClearRestoresUnfilteredQuery() {
         var applied: LibraryFilters? = null
         compose.setContent {

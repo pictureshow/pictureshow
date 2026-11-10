@@ -62,6 +62,14 @@ class HomeBrowseVectorsTest {
                             }
                     )
                 }
+                "home-editor-pin-label" -> Json.encodeToJsonElement(
+                    homeEditorPinLabel(
+                        Json.decodeFromJsonElement<HomePin>(input.getValue("pin")),
+                        Json.decodeFromJsonElement<List<Row>>(input.getValue("rows")).map { row ->
+                            HomeRow(row.key, row.title, row.items.map { MediaItem(it.id) })
+                        }
+                    )
+                )
                 "home-landing" -> Json.encodeToJsonElement(
                     homeLanding(
                         input.getValue("ready").jsonPrimitive.content == "true",
