@@ -97,6 +97,18 @@ fun waylandMain(args:Array<String>) {
  try {
   updateUi();mpv.command("loadfile",media)
   waitFor(20000){mpv.get("vo-configured")=="yes"&&mpv.get("time-pos")!=null};check(mpv.get("vo-configured")=="yes")
+  if(args.contains("--hdr-numeric")){
+   // Dedicated generated fixture gate: no seeking, subtitle assumptions or UI injection.
+   // Keep the decoded static frame available after the two-frame file reaches EOF.
+   mpv.set("pause","yes")
+   native.ps_wayland_fullscreen_set(context,1)
+   waitFor(5000){native.ps_wayland_fullscreen(context)==1}
+   check(native.ps_wayland_fullscreen(context)==1)
+   stage("numeric")
+   check(mpv.get("video-params/primaries") == if(media.endsWith("pq.mkv")) "bt.2020" else "bt.709")
+   File(out,"sequence.txt").writeText("numeric=true\nactualCompositorFramebuffer=true\n")
+   return
+  }
   stage("01-window")
   mpv.set("pause","yes");native.ps_wayland_resize(context,740,500);stage("03-resize");check(mpv.get("pause")=="yes");mpv.set("pause","no")
   native.ps_wayland_fullscreen_set(context,1);waitFor(5000){native.ps_wayland_fullscreen(context)==1};stage("04-fullscreen")

@@ -102,8 +102,9 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  EGLint context[]={EGL_CONTEXT_MAJOR_VERSION,3,EGL_CONTEXT_MINOR_VERSION,3,EGL_NONE};s->ec=eglCreateContext(s->ed,config,EGL_NO_CONTEXT,context);check(s->ec!=EGL_NO_CONTEXT,"eglCreateContext");
  s->ew=wl_egl_window_create(s->video,s->width,s->height);s->es=eglCreateWindowSurface(s->ed,config,(EGLNativeWindowType)s->ew,nullptr);check(s->es!=EGL_NO_SURFACE,"eglCreateWindowSurface");check(eglMakeCurrent(s->ed,s->es,s->es,s->ec),"eglMakeCurrent");eglSwapInterval(s->ed,1);
  fprintf(s->log,"GL_VENDOR=%s\nGL_RENDERER=%s\nGL_VERSION=%s\nEGL_RGB_BITS=%d,%d,%d\nvideoReadbacks=0\nUI=Compose ImageComposeScene -> SDR wl_shm subsurface\n",glGetString(GL_VENDOR),glGetString(GL_RENDERER),glGetString(GL_VERSION),s->redBits,s->greenBits,s->blueBits);fflush(s->log);
- mpv_opengl_drm_params_v2 drm={};drm.fd=-1;s->renderFd=drm.render_fd=open("/dev/dri/renderD128",O_RDWR);check(s->renderFd>=0,"Intel render node");
- mpv_opengl_init_params init={getproc,nullptr};const char*api=MPV_RENDER_API_TYPE_OPENGL;mpv_render_param params[]={{MPV_RENDER_PARAM_API_TYPE,(void*)api},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_WL_DISPLAY,s->d},{MPV_RENDER_PARAM_DRM_DISPLAY_V2,&drm},{MPV_RENDER_PARAM_INVALID,nullptr}};
+ mpv_opengl_drm_params_v2 drm={};drm.fd=-1;s->renderFd=drm.render_fd=open("/dev/dri/renderD128",O_RDWR);check(s->renderFd>=0 || getenv("SPIKE_SOFTWARE_GPU"),"render node required unless explicit software diagnostic");
+ mpv_opengl_init_params init={getproc,nullptr};const char*api=MPV_RENDER_API_TYPE_OPENGL;mpv_render_param params[]={{MPV_RENDER_PARAM_API_TYPE,(void*)api},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_WL_DISPLAY,s->d},{MPV_RENDER_PARAM_DRM_DISPLAY_V2,s->renderFd>=0?&drm:nullptr},{MPV_RENDER_PARAM_INVALID,nullptr}};
+ if(s->renderFd<0) params[3]={MPV_RENDER_PARAM_INVALID,nullptr};
  check(mpv_render_context_create(&s->render,mpv,params)>=0,"mpv_render_context_create");mpv_render_context_set_update_callback(s->render,[](void*d){((Surface*)d)->update=true;},s);
  eglMakeCurrent(s->ed,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
  s->renderThread=std::thread([s]{
@@ -156,7 +157,12 @@ int ps_wayland_capture(void*p,const char*path){auto*s=(Surface*)p;if(!s->capture
  uint32_t f=s->capformat==0x34325258?WL_SHM_FORMAT_XRGB8888:s->capformat==0x34325241?WL_SHM_FORMAT_ARGB8888:s->capformat;
  auto*b=buffer(s,s->capw,s->caph,f);b->busy=true;weston_capture_source_v1_capture(s->shot,b->b);wl_display_flush(s->d);
  double deadline=seconds()+5;while(!s->capdone&&seconds()<deadline){pollfd fd{wl_display_get_fd(s->d),POLLIN,0};if(poll(&fd,1,100)>0)wl_display_dispatch(s->d);}
- if(s->capdone==1){FILE*out=fopen(path,"wb");fprintf(out,"P6\n%d %d\n255\n",s->capw,s->caph);auto*bytes=(unsigned char*)b->data;for(int n=0;n<s->capw*s->caph;n++){unsigned char rgb[3]={bytes[n*4+2],bytes[n*4+1],bytes[n*4]};fwrite(rgb,1,3,out);}fclose(out);}
+ if(s->capdone==1){
+  fprintf(s->log,"captureSource=Weston composited FRAMEBUFFER; captureFourCC=0x%08x; width=%d; height=%d; bitsPerChannel=8\n",s->capformat,s->capw,s->caph);fflush(s->log);
+  // Reject an unsupported layout rather than interpreting packed 10-bit/float as bytes.
+  if(s->capformat!=0x34325258 && s->capformat!=0x34325241 && s->capformat!=0x34324258 && s->capformat!=0x34324241) {s->capdone=-3;}
+ }
+ if(s->capdone==1){FILE*out=fopen(path,"wb");fprintf(out,"P6\n%d %d\n255\n",s->capw,s->caph);auto*bytes=(unsigned char*)b->data;for(int n=0;n<s->capw*s->caph;n++){bool rgbOrder=s->capformat==0x34324258||s->capformat==0x34324241;unsigned char rgb[3]={bytes[n*4+(rgbOrder?0:2)],bytes[n*4+1],bytes[n*4+(rgbOrder?2:0)]};fwrite(rgb,1,3,out);}fclose(out);}
  weston_capture_source_v1_destroy(s->shot);s->shot=nullptr;
  // Capture buffers never enter the UI reuse pool: their opaque format differs.
  for(auto it=s->buffers.begin();it!=s->buffers.end();++it)if(*it==b){s->buffers.erase(it);break;}
