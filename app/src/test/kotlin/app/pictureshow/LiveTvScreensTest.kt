@@ -126,7 +126,8 @@ class LiveTvScreensTest {
         }
         compose.onNodeWithText("Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         val cell = compose.onNodeWithTag("live:p:p").performScrollTo()
-        assertTrue(cell.getUnclippedBoundsInRoot().height <= 120.dp, "Long labels must not expand a guide lane")
+        val bounds = cell.getUnclippedBoundsInRoot()
+        assertTrue(bounds.bottom - bounds.top <= 120.dp, "Long labels must not expand a guide lane")
         cell.assert(hasContentDescription(title, substring = true))
     }
 }
