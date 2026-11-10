@@ -1,0 +1,66 @@
+name: Qt libmpv surface proof
+on:
+  push:
+    branches: ['ci/129*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qt-proof-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Open-source Qt SDK
+        shell: pwsh
+        run: |
+          python -m pip install aqtinstall==3.3.0
+          python -m aqt install-qt windows desktop 6.12.0 win64_msvc2022_64 --outputdir C:/Qt --archives qtbase qtdeclarative qtshadertools
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Pinned LGPL libmpv and CC0 media
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip -OutFile mpv.zip
+          if ((Get-FileHash mpv.zip -Algorithm SHA256).Hash.ToLower() -ne '8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce') { throw 'libmpv digest mismatch' }
+          Expand-Archive mpv.zip native
+          choco install ffmpeg --no-progress -y
+          python desktop-qt/tools/fixtures.py desktop-fixtures
+          python desktop-qt/tools/sustain.py desktop-fixtures
+      - name: Build and run real parity vectors
+        shell: pwsh
+        run: |
+          cmake -S desktop-qt -B qt-build -G Ninja -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build qt-build --parallel 2
+          $env:PATH = "C:/Qt/6.12.0/msvc2022_64/bin;$env:PATH"
+          ctest --test-dir qt-build/core --output-on-failure
+      - name: Hosted WARP surfaces and explicit HDR API state
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native -Recurse -Filter '*mpv*.dll' | Select-Object -First 1
+          if (!$dll) { throw 'Missing libmpv DLL' }
+          $env:PATH = "C:/Qt/6.12.0/msvc2022_64/bin;$($dll.DirectoryName);$env:PATH"
+          $env:QSG_RHI_BACKEND = 'd3d11'
+          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = '1'
+          $env:QSG_RHI_HDR = 'scrgb'
+          $env:QSG_INFO = '1'
+          New-Item -ItemType Directory -Force desktop-evidence | Out-Null
+          & qt-build/hdr-api-state.exe > desktop-evidence/hdr-api-state.json
+          & qt-build/qt-proof.exe $dll.FullName desktop-fixtures desktop-evidence/windows --sustain 2>&1 | Tee-Object desktop-evidence/windows.log
+          if ($LASTEXITCODE -ne 0) { throw 'Qt harness failed; inspect artifacts' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-qt-proof
+          retention-days: 7
+          path: |
+            desktop-evidence/**
+            qt-build/core/Testing/**
+            desktop-fixtures/LICENSE.json
