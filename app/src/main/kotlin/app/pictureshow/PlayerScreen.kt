@@ -680,14 +680,16 @@ internal fun PlayerItemScreen(
                     }
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
-                    val announcedPosition = rememberAnnouncedPosition(
-                        paused,
-                        // The preview follows a held key; the server's target can lag it.
-                        seekRequest = seekPreview ?: state.seekTargetMs,
-                        durationMs = duration,
-                        ended = ended,
-                        positionMs = position
-                    )
+                    val announcedPosition = key(host.isLive, host.liveCanTimeShift, host.liveWindow?.goLivePosition() != null) {
+                        rememberAnnouncedPosition(
+                            paused,
+                            // The preview follows a held key; the server's target can lag it.
+                            seekRequest = seekPreview ?: state.seekTargetMs,
+                            durationMs = if (host.isLive) 0 else duration,
+                            ended = ended,
+                            positionMs = position
+                        )
+                    }
                     PlayerTimeline(
                         position,
                         announcedPosition,

@@ -46,11 +46,13 @@ class LivePlayerPresentationTest {
                 )
             }
         }
-        compose.onNodeWithText("−0:17").assertIsDisplayed()
+        assertEquals("−0:17", behindLiveClock(17_000))
+        compose.onNodeWithText("−0:17").assertDoesNotExist()
         val initial = compose.onNodeWithTag("player:position").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         assertEquals("Paused · 17 sec behind live", initial)
         compose.runOnIdle { position.longValue = 11_000 }
-        compose.onNodeWithText("−0:16").assertIsDisplayed()
+        assertEquals("−0:16", behindLiveClock(16_000))
+        compose.onNodeWithText("−0:16").assertDoesNotExist()
         assertEquals(initial, compose.onNodeWithTag("player:position").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
     }
 

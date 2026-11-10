@@ -1915,10 +1915,25 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithText("Current program").assertIsDisplayed()
         compose.onNodeWithText("Generated channel", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Paused · 17 sec behind live").assertIsDisplayed()
-        compose.onNodeWithText("−0:17").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Paused · 17 sec behind live").assertIsDisplayed()
+        assertEquals("−0:17", behindLiveClock(17_000))
+        compose.onNodeWithText("−0:17").assertDoesNotExist()
         val range = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
         assertEquals(0f..30_000f, range.range)
+        val spoken = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        compose.runOnIdle { host.position = 11_000 }
+        settled()
+        assertEquals(spoken, compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.onNodeWithText("Paused · 16 sec behind live").assertDoesNotExist()
+        compose.runOnIdle { host.liveWindow = host.liveWindow?.copy(durationMs = 32_000, defaultPositionMs = 29_000) }
+        settled()
+        assertEquals(spoken, compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.runOnIdle { host.liveWindow = host.liveWindow?.copy(durationMs = 30_000, defaultPositionMs = 27_000) }
+        settled()
+        assertEquals(
+            listOf(spoken),
+            compose.onNodeWithTag("touch:live-status").fetchSemanticsNode().config[SemanticsProperties.ContentDescription]
+        )
         val slider = bounds("touch:scrubber")
         val chip = bounds("touch:go-live")
         assertTrue(slider.right < chip.left, "Go live beside measured slider")
@@ -1945,7 +1960,7 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithTag("touch:scrubber").assertIsNotEnabled()
         compose.onNodeWithTag("touch:back10").assertIsNotEnabled()
-        compose.onNodeWithText("Paused · Buffer expired. Go live to resume.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Paused · Buffer expired. Go live to resume.").assertIsDisplayed()
         compose.onNodeWithTag("touch:go-live").assertIsEnabled()
         compose.runOnIdle { assertTrue(decoder.playWhenReady.not()) }
     }

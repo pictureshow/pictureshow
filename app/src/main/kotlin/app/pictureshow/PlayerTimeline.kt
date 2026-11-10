@@ -57,7 +57,7 @@ internal fun PlayerTimeline(
 ) {
     if (live) {
         val behind = liveWindow?.behindLiveMs(positionMs)
-        val spoken = remember(paused, announcedPositionMs, liveExpired) {
+        val spoken = remember(paused, announcedPositionMs, liveExpired, liveCanTimeShift, liveWindow?.goLivePosition() != null) {
             liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(announcedPositionMs))
         }
         CurrentPositionAccessibility(setOf("player:position")) {
@@ -70,15 +70,14 @@ internal fun PlayerTimeline(
                     liveTimelineLabel(paused, liveCanTimeShift, liveExpired, behind),
                     modifier = Modifier.clearAndSetSemantics {}
                 )
-                Text(
-                    behindLiveClock(behind),
+                Box(
                     modifier = Modifier.testTag("player:position")
                         .clickable(enabled = liveCanTimeShift && !liveExpired, onClickLabel = "Seek in live buffer", onClick = onOpenSeek)
                         .semantics {
                             contentDescription = "Live playback position"
                             stateDescription = spoken
                         }
-                )
+                ) { Text(behindLiveClock(behind), modifier = Modifier.clearAndSetSemantics {}) }
             }
         }
         return

@@ -15,11 +15,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -52,14 +54,17 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
     val position = ui.scrubMs ?: host.position
     val behind = window?.behindLiveMs(position)
     val atEdge = window?.atLiveEdge(position, host.liveBufferExpired) == true
-    val announced = rememberAnnouncedPosition(
-        paused,
-        ui.scrubMs ?: host.seekPreview ?: host.state.seekTargetMs,
-        window?.durationMs ?: 0,
-        false,
-        host.position
-    )
-    val spoken = remember(paused, announced, host.liveBufferExpired) {
+    val announced = key(window?.canTimeShift, window?.goLivePosition() != null) {
+        rememberAnnouncedPosition(
+            paused = paused,
+            seekRequest = ui.scrubMs ?: host.seekPreview ?: host.state.seekTargetMs,
+            // A growing live window is a decoder tick, not a deliberate seek or a reason to speak again.
+            durationMs = 0,
+            ended = false,
+            positionMs = host.position
+        )
+    }
+    val spoken = remember(paused, announced, host.liveBufferExpired, host.liveCanTimeShift, window?.goLivePosition() != null) {
         liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired, window?.behindLiveMs(announced))
     }
     val accent = MaterialTheme.colorScheme.primary
@@ -107,13 +112,14 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
             Text(
                 liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired, behind),
                 color = Color.White.copy(alpha = .8f),
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics { contentDescription = spoken }
             )
             Text(
                 behindLiveClock(behind),
                 color = Color.White,
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.testTag("touch:behind-live")
+                modifier = Modifier.testTag("touch:behind-live").clearAndSetSemantics {}
             )
         }
     }
