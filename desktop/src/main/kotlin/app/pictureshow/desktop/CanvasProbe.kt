@@ -107,7 +107,7 @@ fun canvasMain(args: Array<String>) {
                                 File(out,"$name-geometry.txt").writeText("window=$b\nscreen=$screen\nundecorated=${window.isUndecorated}\nfullscreen=$fullscreen\noverlayClicks=$clicks\n")
                             }
                             mpv.dump(name,"Linux GLCanvas; fullscreen=$fullscreen; overlayClicks=$clicks")
-                            File(out,"$name-render.txt").writeText("renderCalls=${video?.renderCalls?.get()}\nnewVideoFrames=${video?.newVideoFrames?.get()}\nperFrameCPUReadbacks=0\n")
+                            File(out,"$name-render.txt").writeText("renderCalls=${video?.renderCalls?.get()}\nqueuedNewFrameObservations=${video?.queuedNewFrameObservations?.get()}\nperFrameCPUReadbacks=0\n")
                         }
                         ready();stage("01-window")
                         SwingUtilities.invokeAndWait {
@@ -145,20 +145,20 @@ fun canvasMain(args: Array<String>) {
                             mpv.set("pause","yes");mpv.command("seek","0","absolute+exact");Thread.sleep(500)
                             check(mpv.get("video-params/w")=="1920" && mpv.get("video-params/h")=="1080"){"Expected 1920x1080 fixture"}
                             check(kotlin.math.abs(mpv.get("container-fps")!!.toDouble()-60.0)<0.01){"Expected 60fps fixture"}
-                            val startFrames=video!!.newVideoFrames.get();val start=System.nanoTime()
+                            val startFrames=video!!.queuedNewFrameObservations.get();val start=System.nanoTime()
                             val first=mpv.get("time-pos")!!.toDouble()
                             check(first<1.0){"Seek to soak origin did not complete: $first"}
                             mpv.set("pause","no")
                             File(out,"progress.tsv").bufferedWriter().use {log ->
-                                log.write("elapsed\ttime-pos\tnewVideoFrames\trenderCalls\tvoDrops\tdecoderDrops\n")
+                                log.write("elapsed\ttime-pos\tqueuedNewFrameObservations\trenderCalls\tvoDrops\tdecoderDrops\n")
                                 repeat(sustain) {
                                     Thread.sleep(1000);alive();check(mpv.get("eof-reached")!="yes"){"EOF during soak"}
-                                    log.write("${(System.nanoTime()-start)/1e9}\t${mpv.get("time-pos")}\t${video!!.newVideoFrames.get()-startFrames}\t${video!!.renderCalls.get()}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n");log.flush()
+                                    log.write("${(System.nanoTime()-start)/1e9}\t${mpv.get("time-pos")}\t${video!!.queuedNewFrameObservations.get()-startFrames}\t${video!!.renderCalls.get()}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n");log.flush()
                                 }
                             }
                             val elapsed=(System.nanoTime()-start)/1e9;val advanced=mpv.get("time-pos")!!.toDouble()-first
                             check(elapsed>=125 && advanced>=elapsed-3){"Playback stalled: elapsed=$elapsed advanced=$advanced"}
-                            File(out,"sustain.txt").writeText("seconds=$elapsed\nmediaAdvance=$advanced\nnewVideoFrames=${video!!.newVideoFrames.get()-startFrames}\n")
+                            File(out,"sustain.txt").writeText("seconds=$elapsed\nmediaAdvance=$advanced\nqueuedNewFrameObservations=${video!!.queuedNewFrameObservations.get()-startFrames}\n")
                             stage("07-sustain-end")
                         }
                         // Run shutdown off the worker so it can join this thread before freeing native objects.

@@ -38,7 +38,7 @@ class GlCanvasSurface(private val mpv:Mpv, media:String, private val failed:(Thr
     private val closed=AtomicBoolean(false)
     private var loader:Thread?=null
     val renderCalls=AtomicLong()
-    val newVideoFrames=AtomicLong()
+    val queuedNewFrameObservations=AtomicLong()
     private val frameApi=Native.load(System.getenv("MPV_LIBRARY") ?: "mpv",CanvasRenderApi::class.java)
     private val lib=NativeLibrary.getInstance("GL")
     private val proc=GlProc {_,name->lib.getFunction("glXGetProcAddressARB").invokePointer(arrayOf(name))}
@@ -62,15 +62,17 @@ class GlCanvasSurface(private val mpv:Mpv, media:String, private val failed:(Thr
             }
             override fun display(d:GLAutoDrawable) {
                 try {context?.let {ctx->
+                    val fbo=GlFbo().apply{fbo=0;width=d.surfaceWidth;height=d.surfaceHeight;write()}
+                    val p=renderParams(3 to fbo.pointer,4 to intMemory(1))
                     val info=CanvasFrameInfo()
                     val infoParam=CanvasFrameParam().apply {data=info.pointer;write()}
                     mpv.check(frameApi.mpv_render_context_get_info(ctx,infoParam));info.read()
-                    val fbo=GlFbo().apply{fbo=0;width=d.surfaceWidth;height=d.surfaceHeight;write()}
-                    val p=renderParams(3 to fbo.pointer,4 to intMemory(1))
                     mpv.check(mpv.api.mpv_render_context_render(ctx,p[0].pointer))
                     renderCalls.incrementAndGet()
-                    // PRESENT without REDRAW/REPEAT is a new queued video frame, not a present-call count.
-                    if(info.flags and 1L != 0L && info.flags and 6L == 0L) newVideoFrames.incrementAndGet()
+                    // Snapshot of PRESENT without REDRAW/REPEAT, immediately before render.
+                    // A frame can arrive between these separate API calls; this is an observation count,
+                    // not an exact decode count or physical-display presentation count.
+                    if(info.flags and 1L != 0L && info.flags and 6L == 0L) queuedNewFrameObservations.incrementAndGet()
                 }}catch(e:Throwable){failed(e)}
             }
             override fun reshape(d:GLAutoDrawable,x:Int,y:Int,w:Int,h:Int) {}
