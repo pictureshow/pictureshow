@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -197,14 +198,15 @@ internal fun <T> TvSettingsChoicePicker(
 }
 
 @Composable
-private fun TvSettingsRow(
+internal fun TvSettingsRow(
     title: String,
     supportingText: String?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean = false,
     onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)? = null
+    trailing: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -215,6 +217,7 @@ private fun TvSettingsRow(
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
+        leadingContent = leading,
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
@@ -255,6 +258,9 @@ internal fun TvSettingsPanel(
     firstFocus: FocusRequester,
     modifier: Modifier = Modifier,
     preview: (@Composable () -> Unit)? = null,
+    scrollContent: Boolean = true,
+    footer: (@Composable () -> Unit)? = null,
+    lazyState: LazyListState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler(onBack = onClose)
@@ -276,7 +282,29 @@ internal fun TvSettingsPanel(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) { it() } }
-                TvSettingsList(Modifier.weight(1f), content)
+                if (scrollContent) {
+                    TvSettingsList(Modifier.weight(1f), content)
+                } else {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        Column(Modifier.fillMaxSize(), content = content)
+                        val surface = MaterialTheme.colorScheme.surface
+                        if (lazyState?.canScrollBackward == true) {
+                            Box(
+                                Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter)
+                                    .testTag("tv-settings:fade-top").background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                            )
+                        }
+                        if (lazyState?.canScrollForward == true) {
+                            Box(
+                                Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter)
+                                    .testTag(
+                                        "tv-settings:fade-bottom"
+                                    ).background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                            )
+                        }
+                    }
+                }
+                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() } }
             }
         }
         LaunchedEffect(firstFocus) {
