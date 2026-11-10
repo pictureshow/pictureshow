@@ -550,7 +550,9 @@ internal fun PlayerItemScreen(
                 }
                 .focusable()
         ) {
-            ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
+            // The presentation coroutine may be cancelled off-thread by a host/test lifecycle.
+            val presentationPlayer = remember(player) { player?.let(::ListenerCleanupPlayer) }
+            ContentFrame(presentationPlayer, Modifier.fillMaxSize().clearAndSetSemantics {})
             val controlsVisible =
                 controls && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching
             val actionsVisible =
@@ -792,7 +794,11 @@ internal fun PlayerItemScreen(
                                 } else {
                                     null
                                 },
-                                autoPlay = !accessibleControls && foreground && !pauseIntent && deferredNext == null
+                                autoPlay = !accessibleControls &&
+                                    foreground &&
+                                    !pauseIntent &&
+                                    deferredNext == null &&
+                                    host.localPreferences.tuning.canAutomaticallyAdvance(ended)
                             )
                         }
                     }

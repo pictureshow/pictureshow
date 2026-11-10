@@ -104,7 +104,8 @@ class NextEpisodePlayedTest {
     @Test fun defaultKeepScenesCardWaitsForManualPlayInsteadOfCompletingAtCredits() {
         launchCard()
         enableDecoderCountdown()
-        compose.mainClock.advanceTimeBy(11_000)
+        // This exceeds the 18 s remaining in the held source: only a real EOS may auto-advance.
+        compose.mainClock.advanceTimeBy(25_000)
         compose.waitForIdle()
         assertTrue(next.isEmpty())
         assertTrue(service.actions.isEmpty())

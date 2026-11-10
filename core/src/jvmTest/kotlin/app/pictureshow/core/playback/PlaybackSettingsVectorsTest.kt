@@ -61,6 +61,7 @@ class PlaybackSettingsVectorsTest {
                 )
             )
             "resume-position" -> JsonPrimitive(tuning.resumedPositionMs(input.getValue("savedPositionMs").jsonPrimitive.long))
+            "automatic-next" -> JsonPrimitive(tuning.canAutomaticallyAdvance(input.getValue("ended").jsonPrimitive.boolean))
             "early-next" -> JsonPrimitive(tuning.allowEarlyNext(input.getValue("hasPostCreditsScene").jsonPrimitive.boolean))
             "unique-local-address" -> JsonPrimitive(
                 PlaybackNetworkPolicy.isUniqueLocalAddress(

@@ -95,6 +95,7 @@ class PlaybackSettingsTest {
         down("settings:background")
         center()
         assertEquals(SubtitleBackground.None, state.local.subtitleBackground)
+        playbackGroups.forEach { down("settings:advanced:$it") }
         app.pictureshow.core.SegmentType.entries.filter { it != app.pictureshow.core.SegmentType.Unknown }.forEach { type ->
             down("settings:segment:$type")
             center()

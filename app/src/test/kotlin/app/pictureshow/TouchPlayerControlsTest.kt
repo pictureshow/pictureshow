@@ -864,6 +864,27 @@ class TouchPlayerControlsTest {
         assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds))
     }
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w320dp-h700dp-port-xhdpi")
+    @Test
+    fun qualityActionSharesTheTitleLineAndLeavesTransportAndOptionsSeparate() {
+        launch(fontScale = 1.5f)
+        decided(PlayMethod.DirectPlay)
+        settled()
+        val quality = bounds("touch:quality")
+        val title = bounds("touch:title")
+        assertTrue(title.right <= quality.left)
+        assertTrue(quality.right <= bounds("touch:panel").right)
+        assertTrue(quality.bottom <= bounds("touch:toggle").top)
+        assertTrue(quality.width >= 48.dp)
+        val before = host.position
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.runOnIdle {
+            assertEquals(4, host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+    }
+
     // Phone B4: a deliberate layout, not wherever the width ran out.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test

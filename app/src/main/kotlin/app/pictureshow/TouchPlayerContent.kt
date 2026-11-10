@@ -272,7 +272,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             playerTop = it.positionInRoot().y.toInt()
         }
     ) {
-        ContentFrame(host.player, Modifier.fillMaxSize())
+        val presentationPlayer = remember(host.player) { host.player?.let(::ListenerCleanupPlayer) }
+        ContentFrame(presentationPlayer, Modifier.fillMaxSize())
         // Skip and the next card sit at the top, so only the controls panel lifts the captions.
         val overlayTop = controlsTop.takeIf { controlsVisible }
         PlayerSubtitles(
@@ -406,7 +407,31 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(host.item.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        host.item.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f).testTag("touch:title")
+                    )
+                    TouchBarButton(
+                        {
+                            host.overrideQuality()
+                            ui.interact()
+                        },
+                        Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
+                            contentDescription = "Quality · ${host.qualityLabel}"
+                            stateDescription = host.qualityLabel
+                        },
+                        enabled = !host.state.preparing && host.state.decision != null
+                    ) {
+                        Text(
+                            "Quality · ${qualityBitrateLabel(host.effectiveSettings.maxStreamingBitrate)}",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 val spoken = rememberAnnouncedPosition(
                     paused,
                     seekRequest = ui.scrubMs ?: host.seekPreview ?: host.state.seekTargetMs,
@@ -455,18 +480,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     }
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
-                    add { placement ->
-                        TouchBarButton(
-                            {
-                                host.overrideQuality()
-                                ui.interact()
-                            },
-                            placement.testTag("touch:quality"),
-                            enabled = !host.state.preparing && host.state.decision != null
-                        ) {
-                            Text("Quality · ${host.qualityLabel}", maxLines = 1)
-                        }
-                    }
                     TouchPlayerSheet.entries.forEach { sheet ->
                         if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
                             add { placement ->
@@ -590,7 +603,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         val suspended =
                             paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
                         val creditsCountdown = host.creditsCountdown && creditsStartMs(host.duration, host.segments) != null
-                        val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
+                        val autoPlay = !accessible &&
+                            foreground &&
+                            !pauseIntent &&
+                            host.deferredNext == null &&
+                            host.localPreferences.tuning.canAutomaticallyAdvance(host.ended)
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
                             ?.takeIf { (host.localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         NextEpisodeControl(

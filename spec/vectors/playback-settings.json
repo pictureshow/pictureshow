@@ -785,6 +785,50 @@
         ]
       },
       "expected": false
+    },
+    {
+      "id": "playback-settings.credits.automatic-keepscenes-false",
+      "operation": "automatic-next",
+      "input": {
+        "ended": false,
+        "tuning": {
+          "postCredits": "KeepScenes"
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.credits.automatic-keepscenes-true",
+      "operation": "automatic-next",
+      "input": {
+        "ended": true,
+        "tuning": {
+          "postCredits": "KeepScenes"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.credits.automatic-nextepisode-false",
+      "operation": "automatic-next",
+      "input": {
+        "ended": false,
+        "tuning": {
+          "postCredits": "NextEpisode"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.credits.automatic-nextepisode-true",
+      "operation": "automatic-next",
+      "input": {
+        "ended": true,
+        "tuning": {
+          "postCredits": "NextEpisode"
+        }
+      },
+      "expected": true
     }
   ]
 }

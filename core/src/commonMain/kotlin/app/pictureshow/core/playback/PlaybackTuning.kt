@@ -66,6 +66,9 @@ data class PlaybackTuning(
     fun resumedPositionMs(savedPositionMs: Long): Long =
         (savedPositionMs.coerceAtLeast(0) - normalized().rewindSeconds.toLong() * 1_000).coerceAtLeast(0)
 
+    /** A running remaining-time clock is not proof the stream reached physical end. */
+    fun canAutomaticallyAdvance(ended: Boolean): Boolean = ended || postCredits == PostCredits.NextEpisode
+
     /** Keep-scenes prevents the credits card from completing an item before its physical end. */
     fun allowEarlyNext(hasPostCreditsScene: Boolean = true): Boolean = postCredits == PostCredits.NextEpisode || !hasPostCreditsScene
 }
