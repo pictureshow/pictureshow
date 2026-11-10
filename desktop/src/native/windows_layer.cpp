@@ -80,7 +80,17 @@ static void placeHdrDiagnostic(HWND window) {
             if(!output)break;IDXGIOutput6 *o6=nullptr;DXGI_OUTPUT_DESC1 d={};
             if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){
                 if(SUCCEEDED(o6->GetDesc1(&d))&&d.AttachedToDesktop&&d.ColorSpace==DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020){
-                    SetWindowPos(window,nullptr,d.DesktopCoordinates.left+16,d.DesktopCoordinates.top+16,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);placed=true;
+                    // A hosted HDR VDD can start at 800x600. Keep the whole
+                    // actual video visible so every numeric fixture bar is
+                    // represented in the independent monitor capture.
+                    RECT current={};GetWindowRect(window,&current);
+                    int availableWidth=d.DesktopCoordinates.right-d.DesktopCoordinates.left-32;
+                    int availableHeight=d.DesktopCoordinates.bottom-d.DesktopCoordinates.top-32;
+                    int width=current.right-current.left,height=current.bottom-current.top;
+                    if(availableWidth>=64&&availableHeight>=64&&width>0&&height>0){
+                        double scale=std::min(1.0,std::min((double)availableWidth/width,(double)availableHeight/height));
+                        SetWindowPos(window,nullptr,d.DesktopCoordinates.left+16,d.DesktopCoordinates.top+16,(int)(width*scale),(int)(height*scale),SWP_NOZORDER|SWP_NOACTIVATE);placed=true;
+                    }
                 }
                 o6->Release();
             }

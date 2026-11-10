@@ -3,8 +3,9 @@
 Run the `Desktop numeric HDR Windows` workflow on an authorized test branch.
 It installs a signed virtual display driver only on the disposable hosted runner,
 tries enabling HDR, then plays generated PQ and SDR fixtures through the actual
-Compose/libmpv native video window. A separate process captures both the window
-and monitor using Windows.Graphics.Capture RGBA16Float. No screenshot/JPEG is used
+Compose/libmpv native video window. A separate process attempts window and monitor capture using
+Windows.Graphics.Capture RGBA16Float. The current tool-style video HWND can be
+rejected by per-window capture; monitor capture remains the required boundary. No screenshot/JPEG is used
 for the numeric verdict. One optional app swapchain readback identifies which
 boundary first changed the signal; it never substitutes for a display capture.
 

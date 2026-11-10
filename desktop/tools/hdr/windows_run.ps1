@@ -41,7 +41,9 @@ foreach ($media in @('pq', 'sdr')) {
 }
 foreach ($prefix in $captures) {
   & $py desktop/tools/hdr/windows_samples.py $prefix desktop-fixtures/hdr/manifest.json "$prefix-samples.json"
-  if ($LASTEXITCODE -ne 0) { throw 'Numeric sample extraction failed' }
+  # Preserve the other boundary's diagnostic even if one capture is unusable.
+  # Fresh per-run directories and the strict display verdict keep this closed.
+  if ($LASTEXITCODE -ne 0) { Write-Warning "Numeric sample extraction failed: $prefix" }
 }
 # Strict verification is a separate explicit gate: a successful capture is not an HDR PASS.
 & $py desktop/tools/hdr/windows_verdict.py desktop-evidence desktop-fixtures/hdr/manifest.json

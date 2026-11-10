@@ -2,6 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) Legitimate LLC.
 set -euo pipefail
+# A previous capture must never satisfy this invocation, including after a failed run.
+for old_output in "$PWD/desktop-evidence/hdr-linux/hdr-output" "$PWD/desktop-evidence/hdr-linux/sdr-output"; do
+ if [[ -e "$old_output" ]]; then
+  echo "Refusing existing capture output: $old_output; choose a fresh checkout/evidence directory." >&2
+  exit 2
+ fi
+done
 build="$PWD/desktop/build/hdr-linux"
 prefix="$build/prefix"
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
