@@ -230,6 +230,7 @@ class CatalogCustomizationTest {
         compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Genres", select = {}, close = {}) } }
         compose.onNodeWithText("Old choice").assertIsDisplayed()
         compose.onNode(hasSetTextAction()).performTextInput("replacement")
+        compose.onNodeWithText("Old choice").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithText("Old choice").assertDoesNotExist()
         compose.runOnIdle { pending.complete(ClientResult.Success(ItemPage(listOf(MediaItem("new", "Replacement choice")), 1))) }
