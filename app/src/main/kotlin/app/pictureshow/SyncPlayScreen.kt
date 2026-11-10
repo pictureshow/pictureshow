@@ -219,10 +219,10 @@ private fun SyncPlayJoined(state: SyncPlayPresentation, onAction: (String, Strin
     }
     Text("Playback and the queue are shared. Tracks, subtitles and quality stay personal to this device.")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SyncPlayAction("Previous", { onAction("previous", null) }, ready, Modifier.testTag("sync:previous"))
-        SyncPlayAction("Play", { onAction("play", null) }, ready, Modifier.testTag("sync:play"))
-        SyncPlayAction("Pause", { onAction("pause", null) }, ready, Modifier.testTag("sync:pause"))
-        SyncPlayAction("Next", { onAction("next", null) }, ready, Modifier.testTag("sync:next"))
+        SyncPlayAction("Previous", { onAction("previous", null) }, Modifier.testTag("sync:previous"), enabled = ready)
+        SyncPlayAction("Play", { onAction("play", null) }, Modifier.testTag("sync:play"), enabled = ready)
+        SyncPlayAction("Pause", { onAction("pause", null) }, Modifier.testTag("sync:pause"), enabled = ready)
+        SyncPlayAction("Next", { onAction("next", null) }, Modifier.testTag("sync:next"), enabled = ready)
     }
     SyncPlayAction(
         if (state.ignoreWait) "Include this device in waiting" else "Ignore wait for this device",
@@ -281,7 +281,7 @@ private fun SyncPlayJoined(state: SyncPlayPresentation, onAction: (String, Strin
 
 /** A visible focus outline is needed when this material3 button is reached with a TV remote. */
 @Composable
-private fun SyncPlayAction(label: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
+private fun SyncPlayAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(24.dp)
     OutlinedButton(
