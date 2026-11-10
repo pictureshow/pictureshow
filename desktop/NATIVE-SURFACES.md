@@ -6,7 +6,9 @@ linked LGPL libmpv with matching architecture and public headers.
 
 `layer MEDIA EVIDENCE [--sustain=125]` selects native presentation on macOS or Windows.
 Set `MPV_LIBRARY` to the full libmpv path and `SPIKE_LAYER_BRIDGE` to the adapter.
-`canvas MEDIA EVIDENCE --auto [--sustain=125]` selects the Linux GLCanvas experiment.
+`wayland MEDIA EVIDENCE [--sustain=125]` selects the new native Wayland/EGL route;
+see `tools/linux-wayland/README.md` for the isolated compositor and build recipe.
+`canvas MEDIA EVIDENCE --auto [--sustain=125]` retains the failed Linux GLX experiment.
 `window METHOD EVIDENCE` isolates macOS window requests without mpv or JOGL.
 The older `render` path still reads RGBA8 pixels; it is not this candidate's frame path.
 
@@ -17,7 +19,12 @@ storage is wrapped as a Metal texture and GPU-blitted into a CAMetalLayer drawab
 The layer requests extended linear ITU-R BT.2020 and extended dynamic range. A native
 borderless child window sits below the transparent Compose window. GPU completion
 waits establish cross-API ownership; there is no per-frame CPU pixel transfer.
-This synchronous bridge is a qualification candidate, not a finished frame scheduler.
+Rendering is update-driven and target-time blocking is disabled with a zero video
+timing offset. GL completion still establishes GL-to-Metal ownership; Metal completion
+is awaited at IOSurface reuse and final drain. Native receipts separate render, GL wait,
+drawable wait, Metal reuse wait and scheduler poll gaps. A user-interactive render-thread
+QoS request is recorded. These changes have not qualified smooth 60 fps on the measured
+shared Mac; retaining all ownership waits is necessary for correctness.
 Window bounds, layer state and the presenting NSScreen's actual/potential EDR limits
 are recorded. A float format and EDR request do not prove physical HDR brightness.
 The prototype resolves its own NSWindow by exact title; production needs explicit
@@ -32,13 +39,20 @@ A separate native HWND is kept behind the transparent Compose control window.
 render thread to enter its message loop. Hosted CI explicitly uses WARP and a null
 audio sink; this cannot qualify real GPU throughput, audible surround or HDR output.
 
-Linux: an application-owned GLX GLCanvas presents libmpv without readback. Compose
-controls occupy two popup windows above the heavyweight canvas. This requires window
-manager, focus, accessibility and multi-monitor hardening. GLX does not establish
-direct Intel VAAPI interop; that requires EGL plus the native display resource.
-`egl_probe.cpp` is a separate render-node isolation tool. It performs ONE final image
-readback for comparison, so it is diagnostic evidence, not the application's frame path.
-Xvfb is software X11 with no HDR compositor. A render-node result is not display output.
+Linux: the `wayland` mode owns an xdg-toplevel video surface and an SDR subsurface
+above it. Compose ImageComposeScene draws the controls and performs pointer hit tests;
+only changing UI pixels pass through wl_shm. A separate render thread owns EGL and
+mpv rendering. The 10-bit EGL window is described as PQ/BT.2020 through
+wp_color_manager_v1; the adapter requires advertised support and a ready image
+description, then binds it to the video surface. The measured Weston 16 color-lcms
+compositor accepts the committed surface without a protocol error. It may convert
+that HDR surface to an SDR output, so this proves protocol-level source handling,
+not connected HDR scanout. A native DRM render-node resource enables direct Intel
+VAAPI import; no decoded video pixels are copied to the JVM.
+
+The old GLX GLCanvas/popups remain as failed comparison paths. `egl_probe.cpp` is a
+separate render-node isolation tool with one final readback, not an application frame
+path. Diagnostic compositor screenshot capture is also separate from playback.
 
 ## Observed failures and interpretation
 
@@ -49,7 +63,7 @@ alone did not repair the locked-session failure. The native-layer probe also mea
 borderless window/video bounds equal to the screen and restored them. Screen recording
 and Accessibility permissions belong to the automated screenshot/input harness.
 
-Linux remains a FAILED surface experiment. `compose.layers.type=WINDOW` and Openbox
+The retained Linux GLX/popup path remains a FAILED surface experiment. `compose.layers.type=WINDOW` and Openbox
 made popup controls initially visible and clickable, but controls became black after
 resize. Recreating popup peers made labels visible, yet a real click after fullscreen
 triggered recomposition and reverted the owner to floating bounds. Updating Compose's
@@ -64,6 +78,13 @@ crops and independent review confirmed them. However, the BtbN FFmpeg shared avf
 build incorporates static libass/libplacebo filter dependencies; separate direct mpv
 DLL imports do not establish a fully dynamic transitive closure. This remains open.
 
+The new Wayland route passes the 125-second 1080p60 Main10 diagnostic with zero
+VO or decoder drops on the measured Intel render node. A controlled legacy timer/
+target-time configuration on that same EGL route also passes: scheduling alone does
+not explain the old GLX failure. The complete path changed, including EGL/decoder
+interop, native thread ownership and presentation. Do not claim an isolated GLX
+cause without a separate experiment.
+
 Measured two-minute playback retains material frame loss on the tested Mac and WARP
 runner. Zero application pixel readbacks is not enough if the decoder uses `vaapi-copy`,
 which downloads GPU-decoded frames to CPU. The separately measured Linux `hwdec=no`
@@ -77,6 +98,11 @@ Full-screen acceptance requires borderless actual window bounds equal to display
 visible video and controls, then restoration. A placement flag or a green job is insufficient.
 Global Robot, AppKit-queued and local AWT input fallbacks have distinct evidence names.
 Only the first establishes system pointer routing; local dispatch establishes less.
+
+The layer harness saves exact soak counter deltas in `soak-metrics.json`, a TSV
+baseline at elapsed zero, and native timing snapshots without screenshot settling.
+Its final GPU drain is checked after native renderer destruction and mpv teardown;
+a late deferred Metal/device error must fail the sequence.
 
 The sustained fixture is generated CC0 1920x1080 Main10 at 60fps with continuous
 135-second timestamps. The probe runs at least 125 seconds without looping and records
