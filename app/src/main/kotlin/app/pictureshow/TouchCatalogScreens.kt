@@ -118,7 +118,7 @@ internal fun TouchCatalogHome(
     val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     if (librariesOnly) {
-        TouchLibrariesGrid(state, rows.flatMap(HomeRow::items), account, onOpen, onRetry)
+        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry)
         return
     }
     LazyColumn(

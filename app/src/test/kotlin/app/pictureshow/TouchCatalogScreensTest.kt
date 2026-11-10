@@ -59,12 +59,30 @@ class TouchCatalogScreensTest {
     // Catalog B4: the tab lists every library, with no sideways scrolling to find the last.
     @Test fun librariesTabShowsEveryLibraryInView() {
         val libraries = listOf("Collections", "Movies", "Shows").map { MediaItem(it, it, "CollectionFolder") }
-        val state = CatalogHomeState(rows = listOf(HomeRow("libraries", "Libraries", libraries, library = true)), loading = false)
+        val state =
+            CatalogHomeState(
+                rows = listOf(HomeRow("libraries", "Libraries", libraries, library = true)),
+                libraries = libraries,
+                loading = false
+            )
         compose.setContent { MaterialTheme { TouchCatalogHome(state, account, {}, {}, librariesOnly = true) } }
         libraries.forEach { compose.onNodeWithTag("touch:card:${it.id}").assertIsDisplayed() }
         compose.onNodeWithText("Libraries").assertIsDisplayed()
         compose.onNodeWithText("Explore your collection").assertDoesNotExist()
         compose.onNodeWithText("Your libraries").assertDoesNotExist()
+    }
+
+    @Test fun librariesTabIgnoresHomeRowHidingAndDisplayExclusions() {
+        val allowed = MediaItem("allowed", "Allowed library", "CollectionFolder", isFolder = true)
+        val state = CatalogHomeState(
+            rows = emptyList(),
+            libraries = listOf(allowed),
+            preferences = app.pictureshow.core.HomePreferences(hidden = setOf("libraries")),
+            loading = false
+        )
+        compose.setContent { MaterialTheme { TouchCatalogHome(state, account, {}, {}, librariesOnly = true) } }
+        compose.onNodeWithTag("touch:card:allowed").assertIsDisplayed()
+        compose.onNodeWithText("No libraries are available for this account.").assertDoesNotExist()
     }
 
     // Catalog B3, tablet B8: a row of cards has one height whatever the data.
@@ -113,6 +131,7 @@ class TouchCatalogScreensTest {
                 HomeRow("resume", "Continue watching", listOf(movie)),
                 HomeRow("libraries", "Libraries", listOf(library), library = true)
             ),
+            libraries = listOf(library),
             loading = false
         )
         compose.setContent { MaterialTheme { TouchCatalogHome(state, account, {}, {}, librariesOnly = true) } }
