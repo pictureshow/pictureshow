@@ -166,7 +166,10 @@ private final class SubtitleInertPlayer: AVPlayer {
             automaticCriteriaAtAttachment.append(appliesMediaSelectionCriteriaAutomatically)
         }
     }
-    override func currentTime() -> CMTime { .invalid }
+    // Most subtitle/seek tests intentionally have no decoder clock. Retry-budget
+    // tests opt into healthy A/V progress independently of the optional text clock.
+    var mediaTime: () -> CMTime = { .invalid }
+    override func currentTime() -> CMTime { mediaTime() }
     override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime, completionHandler: @escaping (Bool) -> Void) {
         seekTargets.append(time); completionHandler(true)
     }
@@ -371,12 +374,11 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertNil(loader.text(atFullMediaMs: 122_000))
     }
 
-    private func readySession(loader: ExternalTextSubtitles, expectedCaptionPath: String? = "/jellyfin/captions/selected.vtt", subtitleIndex: Int = 4) async throws -> (PlaybackSession, SubtitleInertPlayer) {
+    private func readySession(loader: ExternalTextSubtitles, player: SubtitleInertPlayer = SubtitleInertPlayer(), expectedCaptionPath: String? = "/jellyfin/captions/selected.vtt", subtitleIndex: Int = 4) async throws -> (PlaybackSession, SubtitleInertPlayer) {
         let client = JellyfinClient(deviceID: "external-subtitle-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
         let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "external-subtitle-test")
         var item = MediaItem(id: "movie", name: "Fixture movie", type: "Movie")
         item.mediaSources = [try JSONDecoder().decode(MediaSource.self, from: JSONSerialization.data(withJSONObject: ExternalSubtitleHTTP.source))]
-        let player = SubtitleInertPlayer()
         let session = PlaybackSession(client: client, account: account, item: item, player: player, externalSubtitles: loader)
         try await session.prepare(startTicks: 0, audio: nil, subtitle: subtitleIndex)
         XCTAssertEqual(loader.selected?.url.path, expectedCaptionPath,
@@ -762,14 +764,28 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertNil(loader.selected); XCTAssertTrue(loader.cues.isEmpty)
     }
     func testMalformedSelectedTextRetriesWithoutConsumingAVFailureBudget() async throws {
-        try await assertOptionalFailureDoesNotGateAV(.malformed)
+        try await assertOptionalFailureDoesNotGateAV(.malformed, observeVideoFor: .seconds(15))
     }
-    private func assertOptionalFailureDoesNotGateAV(_ failure: ExternalSubtitleHTTP.Delivery) async throws {
+    private func assertOptionalFailureDoesNotGateAV(_ failure: ExternalSubtitleHTTP.Delivery, observeVideoFor: Duration = .zero) async throws {
         ExternalSubtitleHTTP.reset(failure)
         let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
         defer { loader.release(); clock.finish() }
-        let (session, player) = try await readySession(loader: loader)
+        let player = SubtitleInertPlayer()
+        let videoStart = ContinuousClock.now
+        player.mediaTime = {
+            let elapsed = videoStart.duration(to: .now).components
+            return CMTime(seconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18, preferredTimescale: 60_000)
+        }
+        let (session, _) = try await readySession(loader: loader, player: player)
+        defer { player.mediaTime = { .invalid } }
         try await eventually("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(30)) { clock.elapsedMs >= 242_000 }
+        // Cross the real 12-second A/V watchdog even on a fast runner. An invalid
+        // or frozen fake video clock used to make these subtitle assertions depend
+        // on URLSession throughput; healthy video must retain Direct play instead.
+        try await Task.sleep(for: observeVideoFor)
+        try await eventually("Healthy video must advance while optional subtitles retry") { session.positionTicks > 0 }
+        XCTAssertFalse(session.isPaused)
+        print("OPTIONAL_SUBTITLE_AV_PROGRESS elapsed=\(videoStart.duration(to: .now)) positionTicks=\(session.positionTicks) retryMs=\(clock.elapsedMs) status=\(session.status)")
         XCTAssertEqual(Array(clock.delays.prefix(12)), [1_000,2_000,3_000,4_000,5_000,6_000,7_000,8_000,9_000,10_000,10_000,10_000])
         XCTAssertTrue(loader.unavailable); XCTAssertTrue(loader.loading)
         XCTAssertGreaterThanOrEqual(captionRequests.count, 29)
