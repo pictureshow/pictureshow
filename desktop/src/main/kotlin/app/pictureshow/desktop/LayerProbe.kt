@@ -208,8 +208,8 @@ fun layerMain(args: Array<String>) {
                             val startPos=mpv.get("time-pos")!!.toDouble()
                             val progress=File(out,"sustain-progress.tsv").apply {writeText("elapsed\ttime-pos\tframe-drops\tdecoder-drops\n")}
                             val started=System.nanoTime()
-                            repeat(sustain) {n -> Thread.sleep(1000); failure.get()?.let{throw it}
-                                progress.appendText("${n+1}\t${mpv.get("time-pos")}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n")
+                            while((System.nanoTime()-started)/1e9 < sustain) { Thread.sleep(1000); failure.get()?.let{throw it}
+                                progress.appendText("${(System.nanoTime()-started)/1e9}\t${mpv.get("time-pos")}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n")
                             }
                             check(mpv.get("time-pos")!!.toDouble()-startPos>sustain-4) {"Playback did not advance in real time"}
                             check(mpv.get("eof-reached")!="yes") {"Fixture ended during sustained playback"}
