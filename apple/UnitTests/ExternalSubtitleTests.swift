@@ -298,6 +298,19 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         }
         XCTFail(message, file: file, line: line)
     }
+    private func joinValidSelection(_ loader: ExternalTextSubtitles) async throws {
+        let selectedTask = try XCTUnwrap(loader.task, "A cold valid selection must own a loading task")
+        let completed = expectation(description: "Selected fetch, parse and publication completed")
+        // Joining donates the test's priority to the real worker and its detached
+        // parser. Keep the same two-second bound; no fake parser or longer timeout.
+        let join = Task(priority: .userInitiated) {
+            await selectedTask.value
+            guard !Task.isCancelled else { return }
+            completed.fulfill()
+        }
+        defer { join.cancel() }
+        await fulfillment(of: [completed], timeout: 2)
+    }
     private var captionRequests: [ExternalSubtitleHTTP.Recorded] { ExternalSubtitleHTTP.requests.filter { ExternalSubtitleHTTP.isCaptionPath($0.path) } }
 
     func testOnlySelectedTrackLoadsAndOffTrackChangeReleaseCancelHTTP() async throws {
@@ -366,11 +379,13 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let loader = ExternalTextSubtitles(fetch: { _ in Data("WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nRebased".utf8) })
         defer { loader.release() }
         loader.select(asset("rebased", originMs: 120_000))
+        try await joinValidSelection(loader)
         try await eventually("Rebased cues did not load") { !loader.loading }
         XCTAssertNil(loader.text(atFullMediaMs: 2_000))
         XCTAssertEqual(loader.text(atFullMediaMs: 122_000), "Rebased")
         XCTAssertNil(loader.text(atFullMediaMs: 124_000))
         loader.select(asset("full", originMs: 0))
+        try await joinValidSelection(loader)
         try await eventually("Full-file cues did not load") { !loader.loading }
         XCTAssertEqual(loader.text(atFullMediaMs: 2_000), "Rebased")
         XCTAssertNil(loader.text(atFullMediaMs: 122_000))
@@ -620,6 +635,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
             let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
             defer { loader.release(); clock.finish() }
             let (session, _) = try await readySession(loader: loader, expectedCaptionPath: expectedPath)
+            try await joinValidSelection(loader)
             try await eventually("Resolved selected caption did not load from \(expectedPath)") { !loader.loading && !loader.cues.isEmpty }
             XCTAssertEqual(captionRequests.map(\.path), [expectedPath], "No other caption path may be prefetched")
             XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")

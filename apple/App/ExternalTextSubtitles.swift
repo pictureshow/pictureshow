@@ -25,7 +25,9 @@ import PictureshowCore
     @Published private(set) var loading = false
     @Published private(set) var unavailable = false
     private(set) var selected: Asset?
-    private var task: Task<Void, Never>?
+    // Internal read-only task receipt lets tests join real fetch/parse/publication
+    // with a bounded deadline instead of guessing scheduler progress by polling.
+    private(set) var task: Task<Void, Never>?
     private(set) var revision = 0
     struct DiagnosticEvent: Equatable {
         let kind: String

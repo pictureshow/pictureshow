@@ -49,8 +49,27 @@ private final class SeekRaceProtocol: URLProtocol {
     static var includeNextEpisode = false
     static var holdNegotiation = false
     static var heldNegotiations: [SeekRaceProtocol] = []
+    private static let progressHoldLock = NSLock()
+    private static var holdNextProgress = false
+    private static var progressCompletion: (() -> Void)?
+    static func holdNextProgressResponse() {
+        progressHoldLock.lock(); defer { progressHoldLock.unlock() }
+        holdNextProgress = true
+    }
+    static var hasHeldProgress: Bool {
+        progressHoldLock.lock(); defer { progressHoldLock.unlock() }
+        return progressCompletion != nil
+    }
+    static func releaseProgressResponse() {
+        progressHoldLock.lock()
+        let complete = progressCompletion
+        progressCompletion = nil; holdNextProgress = false
+        progressHoldLock.unlock()
+        complete?()
+    }
 
     static func reset(includeNext: Bool = false) {
+        releaseProgressResponse()
         playbackInfoCount = 0; streamTitle = "Original"; holdNegotiation = false; heldNegotiations = []
         playbackInfoBodies = []
         startReportBodies = []; reportBodies = []; reportStatuses = []
@@ -127,9 +146,19 @@ private final class SeekRaceProtocol: URLProtocol {
             let data = try JSONSerialization.data(withJSONObject: body)
             let response = HTTPURLResponse(url: request.url!, statusCode: path.contains("/Sessions/Playing") && !Self.reportStatuses.isEmpty ? Self.reportStatuses.removeFirst() : 200, httpVersion: "HTTP/1.1",
                                            headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+            let complete = { [self] in
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: data)
+                client?.urlProtocolDidFinishLoading(self)
+            }
+            Self.progressHoldLock.lock()
+            if path.hasSuffix("/Sessions/Playing/Progress"), Self.holdNextProgress {
+                Self.holdNextProgress = false; Self.progressCompletion = complete
+                Self.progressHoldLock.unlock()
+                return
+            }
+            Self.progressHoldLock.unlock()
+            complete()
         } catch {
             client?.urlProtocol(self, didFailWithError: error)
         }
@@ -288,9 +317,21 @@ private final class SeekRaceProtocol: URLProtocol {
     }
 
     func testEveryReportReceiptMatchesWireBodyAndIndependentChoiceOrigins() async throws {
-        try await makeReadySession()
+        try await makePreparedSession(startTicks: 0)
+        SeekRaceProtocol.holdNextProgressResponse()
+        defer { SeekRaceProtocol.releaseProgressResponse() }
+        session.ready(version: 0)
         _ = await waitForStartReport()
+        session.backgrounded() // Deliberately queue an automatic report before the pick.
+        for _ in 0..<100 {
+            if SeekRaceProtocol.hasHeldProgress { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(SeekRaceProtocol.hasHeldProgress, "An automatic progress response must cross the viewer pick")
+        let automaticWireCount = SeekRaceProtocol.reportBodies.count
         await session.selectTrack(type: "Audio", index: 1)
+        XCTAssertEqual(SeekRaceProtocol.reportBodies.count, automaticWireCount, "The held response must serialize later report requests")
+        SeekRaceProtocol.releaseProgressResponse()
         await session.stop()
         let lines = session.diagnostics.reportLines
         let wire = SeekRaceProtocol.reportBodies
@@ -302,15 +343,20 @@ private final class SeekRaceProtocol: URLProtocol {
             let fields = PlaybackReportFields.describe(kind: kind,
                 positionTicks: (body["PositionTicks"] as? NSNumber)?.int64Value ?? -1,
                 audio: body["AudioStreamIndex"] as? Int, subtitle: body["SubtitleStreamIndex"] as? Int,
-                audioViewer: kind != "start", subtitleViewer: false)
+                audioViewer: offset >= automaticWireCount, subtitleViewer: false)
             XCTAssertTrue(line.contains(fields), line)
+            if kind == "progress" {
+                if offset < automaticWireCount { XCTAssertNil(body["AudioStreamIndex"]) }
+                else { XCTAssertEqual(body["AudioStreamIndex"] as? Int, 1) }
+            }
             XCTAssertTrue(line.contains("status=200 failure=none elapsedMs="), line)
             XCTAssertFalse(line.contains("fixture-token")); XCTAssertFalse(line.contains("https:"))
         }
         XCTAssertEqual(wire.first?.0, "start"); XCTAssertEqual(wire.last?.0, "stop")
         XCTAssertNil(wire.first?.1["AudioStreamIndex"])
         XCTAssertNil(wire.last?.1["AudioStreamIndex"])
-        XCTAssertTrue(wire.contains { $0.0 == "progress" && $0.1["AudioStreamIndex"] as? Int == 1 })
+        XCTAssertTrue(wire.prefix(automaticWireCount).contains { $0.0 == "progress" && $0.1["AudioStreamIndex"] == nil })
+        XCTAssertTrue(wire.dropFirst(automaticWireCount).contains { $0.0 == "progress" && $0.1["AudioStreamIndex"] as? Int == 1 })
     }
 
     func testRelativeStepsDuringReplacementNegotiationSurviveUntilMatchingReady() async throws {
