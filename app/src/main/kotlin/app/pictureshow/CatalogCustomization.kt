@@ -106,7 +106,7 @@ private fun CatalogEditor(
         colorScheme = if (tv) darkColorScheme(background = CatalogBackground, surface = CatalogBackground) else MaterialTheme.colorScheme
     ) {
         if (tv) {
-            TvSettingsPanel(title, close, first, scrollContent = false, footer = footer) {
+            TvSettingsPanel(title, close, first, scrollContent = false, footer = footer, lazyState = list) {
                 LazyColumn(
                     state = list,
                     modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
@@ -320,7 +320,14 @@ internal fun HomeCustomization(
         moving = null
         draftOrder = null
     }
-    CatalogEditor("Customize home", close, first, list) {
+    CatalogEditor("Customize home", {
+        if (moving != null) {
+            moving = null
+            draftOrder = null
+        } else {
+            close()
+        }
+    }, first, list) {
         if (state.saving) item("saving") { Text("Saving layout…", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
         state.preferenceStatus?.let { status ->
             item("save-status") {

@@ -291,15 +291,15 @@ internal fun TvSettingsPanel(
                         if (lazyState?.canScrollBackward == true) {
                             Box(
                                 Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter)
-                                    .testTag("tv-settings:fade-top").background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                                    .testTag("tv-settings:fade-top")
+                                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
                             )
                         }
                         if (lazyState?.canScrollForward == true) {
                             Box(
                                 Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter)
-                                    .testTag(
-                                        "tv-settings:fade-bottom"
-                                    ).background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                                    .testTag("tv-settings:fade-bottom")
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
                             )
                         }
                     }

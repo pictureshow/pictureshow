@@ -126,15 +126,16 @@ internal fun HomeReorderRow(
                 enabled = enabled,
                 modifier = Modifier.size(48.dp).testTag("home:visibility:$key")
             ) {
-                Icon(touchActionIcon(if (shown) "eye" else "eye-off"), if (shown) "Hide $title" else "Show $title")
+                androidx.tv.material3.Icon(touchActionIcon(if (shown) "eye" else "eye-off"), if (shown) "Hide $title" else "Show $title")
             }
-            androidx.tv.material3.ListItem(
-                selected = moving,
-                onClick = pickOrDrop,
-                enabled = enabled,
+            TvSettingsRow(
+                title,
+                null,
                 modifier = Modifier.weight(1f).then(semantics).testTag("home:reorder:$key"),
-                headlineContent = { Text(title) },
-                trailingContent = { Icon(touchActionIcon("drag"), if (moving) "Drop row" else "Reorder row") }
+                selected = moving,
+                enabled = enabled,
+                onClick = pickOrDrop,
+                trailing = { androidx.tv.material3.Icon(touchActionIcon("drag"), if (moving) "Drop row" else "Reorder row") }
             )
             if (unpin != null) {
                 androidx.tv.material3.IconButton(
@@ -142,7 +143,7 @@ internal fun HomeReorderRow(
                     enabled = enabled,
                     modifier = Modifier.size(48.dp).testTag("home:overflow:$key")
                 ) {
-                    Icon(touchActionIcon("more"), "Options for $title")
+                    androidx.tv.material3.Icon(touchActionIcon("more"), "Options for $title")
                 }
             }
         } else {
@@ -189,7 +190,17 @@ internal fun HomeReorderRow(
             }
         }
         // Only pinned rows have this overflow. It never expands the normal row into a stack of bars.
-        DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+        if (tv && overflow) {
+            TvSettingsChoicePicker(
+                "Row options",
+                "Unpin",
+                listOf("Unpin"),
+                { it },
+                { unpin?.invoke() },
+                { overflow = false }
+            )
+        }
+        DropdownMenu(expanded = !tv && overflow, onDismissRequest = { overflow = false }) {
             DropdownMenuItem(text = { Text("Unpin") }, onClick = {
                 overflow = false
                 unpin?.invoke()
