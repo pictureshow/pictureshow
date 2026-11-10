@@ -17,6 +17,8 @@
 #include <iostream>
 #include <vector>
 #include <clocale>
+#include <fcntl.h>
+#include <unistd.h>
 static void *proc(void*,const char *name){void *p=(void*)eglGetProcAddress(name);return p?p:dlsym(RTLD_DEFAULT,name);}
 static void check(int rc){if(rc<0){std::cerr<<mpv_error_string(rc)<<std::endl;std::exit(2);}}
 int main(int argc,char**argv){
@@ -51,7 +53,8 @@ int main(int argc,char**argv){
     if(argc>4)opt("vd-lavc-dr",argv[4]);
     check(mpv_initialize(mpv));
     mpv_opengl_init_params init={proc,nullptr};mpv_render_context *render=nullptr;
-    mpv_render_param p[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_OPENGL},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_INVALID,nullptr}};
+    mpv_opengl_drm_params_v2 drm={};drm.fd=-1;drm.render_fd=open("/dev/dri/renderD128",O_RDWR);
+    mpv_render_param p[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_OPENGL},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_DRM_DISPLAY_V2,&drm},{MPV_RENDER_PARAM_INVALID,nullptr}};
     check(mpv_render_context_create(&render,mpv,p));
     const char *load[]={"loadfile",argv[1],nullptr};check(mpv_command(mpv,load));
     mpv_opengl_fbo fbo={(int)target,640,360,GL_RGBA8};int flip=0;
@@ -70,6 +73,7 @@ int main(int argc,char**argv){
     std::cout<<"renderCalls="<<calls<<"\nfinalReadbacks=1\n";
     for(const char *key:{"time-pos","video-params/pixelformat","video-params/w","video-params/h","frame-drop-count","decoder-frame-drop-count","hwdec-current","mpv-configuration","ffmpeg-version"}){char *v=mpv_get_property_string(mpv,key);std::cout<<key<<"="<<(v?v:"null")<<"\n";mpv_free(v);}
     mpv_render_context_free(render);mpv_terminate_destroy(mpv);
+    if(drm.render_fd>=0)close(drm.render_fd);
     glDeleteFramebuffers(1,&target);glDeleteTextures(1,&texture);
     eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);eglDestroyContext(display,gl);eglDestroySurface(display,surface);eglTerminate(display);
 }

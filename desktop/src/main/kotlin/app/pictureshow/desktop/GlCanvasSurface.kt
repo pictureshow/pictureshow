@@ -28,7 +28,8 @@ private interface CanvasRenderApi : Library {
 }
 
 /** Application-owned GLX window. LGPL mpv does not own or implement the X11 VO.
- * Controls use a Compose popup above this heavyweight; pixels never leave the GPU.
+ * Controls use a Compose popup above this heavyweight; no per-frame readback or JVM pixel copy.
+ * GLX does not qualify direct Intel VAAPI interop, which requires EGL and a native display resource.
  */
 class GlCanvasSurface(private val mpv:Mpv, media:String, private val failed:(Throwable)->Unit) : VideoSurface {
     @Volatile override var width=640
