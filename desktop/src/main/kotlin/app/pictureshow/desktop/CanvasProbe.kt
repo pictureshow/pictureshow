@@ -25,6 +25,8 @@ import javax.swing.SwingUtilities
 /** Linux GLX presentation experiment. Xvfb runs prove no physical display or HDR capability. */
 fun canvasMain(args: Array<String>) {
     require(com.sun.jna.Platform.isLinux()) {"The GLX canvas probe requires Linux"}
+    // Popup controls need separate native windows above the heavyweight GLCanvas.
+    System.setProperty("compose.layers.type", "WINDOW")
     require(args.size >= 2) { "Usage: canvas MEDIA EVIDENCE [--auto] [--sustain=125]" }
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
@@ -156,8 +158,11 @@ fun canvasMain(args: Array<String>) {
                             mpv.set("pause","no")
                             File(out,"progress.tsv").bufferedWriter().use {log ->
                                 log.write("elapsed\ttime-pos\tqueuedNewFrameObservations\trenderCalls\tvoDrops\tdecoderDrops\n")
-                                repeat(sustain) {
-                                    Thread.sleep(1000);alive();check(mpv.get("eof-reached")!="yes"){"EOF during soak"}
+                                val deadline=start+sustain*1_000_000_000L
+                                while(System.nanoTime()<deadline) {
+                                    val remaining=(deadline-System.nanoTime())/1_000_000L
+                                    Thread.sleep(minOf(1000L,maxOf(1L,remaining)))
+                                    alive();check(mpv.get("eof-reached")!="yes"){"EOF during soak"}
                                     log.write("${(System.nanoTime()-start)/1e9}\t${mpv.get("time-pos")}\t${video!!.queuedNewFrameObservations.get()-startFrames}\t${video!!.renderCalls.get()-startRenders}\t${counter("frame-drop-count")-startVoDrops}\t${counter("decoder-frame-drop-count")-startDecoderDrops}\n");log.flush()
                                 }
                             }
