@@ -189,6 +189,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
             // Playable resume/watched state is just as sensitive as parent counts. The primary
             // projection may be ambiguous, so any failed batch read must retain the Retry barrier.
             is ClientResult.Failure -> batch
+
             is ClientResult.Success -> batch.value.items.firstOrNull { it.id == id }?.let {
                 ClientResult.Success(detail.value.copy(userData = it.userData))
             } ?: catalogFailure(ErrorKind.INVALID_RESPONSE, "The server did not return this item's current state. Try again.")
@@ -241,7 +242,9 @@ internal class CatalogClient(private val client: HttpClient, private val identit
                 in 200..299 -> ClientResult.Success(
                     if (T::class == Unit::class) Unit as T else json.decodeFromString<T>(response.bodyAsText())
                 )
+
                 401 -> catalogFailure(ErrorKind.EXPIRED, "Your session has expired. Sign in again.")
+
                 else -> catalogFailure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
             }
         } ?: catalogFailure(ErrorKind.NETWORK, "The server took too long to respond. Try again.")
@@ -264,6 +267,13 @@ private fun catalogFailure(kind: ErrorKind, message: String) = ClientResult.Fail
 
 /** Image GET is public in the server API; no access token is put in URLs or image cache keys. */
 fun imageUrl(server: Server, item: MediaItem, width: Int, height: Int? = null, wide: Boolean = false): String? {
+    // Container artwork can be a server-generated collage of children this viewer cannot access.
+    // Image GET is public, so a permitted container/image tag cannot authorize those child pixels.
+    if (item.type in setOf("CollectionFolder", "UserView", "Folder", "BoxSet", "Playlist", "Genre", "MusicGenre", "Studio") ||
+        !item.collectionType.isNullOrBlank()
+    ) {
+        return null
+    }
     val image = chooseImage(item, wide) ?: return null
     return URLBuilder("${server.url.trimEnd('/')}/Items/${image.id.encodeURLPathPart()}/Images/${image.type}").apply {
         parameters.append("tag", image.tag)
