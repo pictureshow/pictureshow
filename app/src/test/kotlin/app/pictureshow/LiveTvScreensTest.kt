@@ -37,6 +37,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h1080dp-xhdpi")
 class LiveTvScreensTest {
@@ -87,7 +88,7 @@ class LiveTvScreensTest {
         // The fake's broadcast is in 1970: a new guide window has no current broadcast.
         compose.onNodeWithText(
             "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
-        ).performScrollTo().assertIsDisplayed()
+        ).assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, tuned) }
     }
 
@@ -259,6 +260,7 @@ class LiveTvScreensTest {
         compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, { tuned++ }, {}, {}) } }
         compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithContentDescription("Add favorite").performClick()
+        compose.waitUntil(5_000) { !vm.state.value.loading && vm.state.value.channels.single().userData.isFavorite }
         compose.onNodeWithContentDescription("Remove favorite").assertIsOn()
         compose.runOnIdle {
             assertEquals(1, fake.favoriteWrites)

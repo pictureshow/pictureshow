@@ -197,7 +197,11 @@ internal fun LiveTvScreen(
                             androidx.compose.material3.Tab(tab == next, {
                                 select(next)
                             }, text = {
-                                androidx.compose.material3.Text(next, maxLines = 1)
+                                androidx.compose.material3.Text(
+                                    next,
+                                    maxLines = 1,
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                                )
                             }, modifier = Modifier.testTag("live:tab:$next"))
                         }
                     }

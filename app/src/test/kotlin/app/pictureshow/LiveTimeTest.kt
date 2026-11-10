@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(sdk = [30], application = android.app.Application::class, shadows = [LiveClockPatternShadow::class])
 class LiveTimeTest {
     private val zone = ZoneId.of("America/New_York")
     private val today = Instant.parse("2026-11-10T18:00:00Z").toEpochMilli()
