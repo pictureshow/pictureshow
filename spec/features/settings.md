@@ -121,7 +121,12 @@ the actual playback subtitle renderer.
 Viewer labels are translated independently of stored identifiers: Default, Extra large, As in the file; Play to the
 end / Next episode when credits start; Automatic / Stereo (2) / 5.1 / 7.1; Dolby Digital, Dolby Digital Plus, Dolby Atmos
 (Dolby Digital Plus), Dolby TrueHD, DTS and DTS-HD. HDR and Dolby Vision offer Automatic / Always on / Off; HDR Off also
-states conversion to SDR. Always on explains that hardware support is still required and playback may fail. The
+states conversion to SDR. Always on explains that hardware support is still required and playback may fail. Shared phone/tablet/TV wording refers to the device, without assuming the viewer is using a TV. The
 styled-subtitle switch says Use my style for styled subtitles and explains ASS/SSA fonts and colors. These labels and
 capability consequences have portable cases in `settings-presentation.json`; player quality states have
 `player-quality.json`. Native focus/geometry tests complement those cases; portable vectors do not prove UI layout.
+
+On short touch windows (under 480 dp high), the Android reference uses compact vertical spacing and a shorter live
+preview, preserving a readable text scale. Text and image samples occupy separate horizontal regions, so changing
+subtitle position cannot cover the image sample. At 360 dp landscape height and 1.3x UI text, the complete first
+setting row, its current value and Done remain visible; the remaining settings and their explanations scroll.

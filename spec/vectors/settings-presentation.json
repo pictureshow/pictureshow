@@ -196,7 +196,7 @@
         "value": "Detected",
         "hdr": true
       },
-      "expected": "Uses the formats your TV and player support. HDR switches automatically with the video."
+      "expected": "Uses supported formats. HDR switches automatically with the video."
     },
     {
       "id": "settings-presentation.capability-consequence.Force.24",
@@ -205,7 +205,7 @@
         "value": "Force",
         "hdr": true
       },
-      "expected": "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+      "expected": "Only if your device supports it but Automatic gets it wrong. Video may fail to play."
     },
     {
       "id": "settings-presentation.capability-consequence.Disable.25",
@@ -250,7 +250,7 @@
         "value": "Detected",
         "hdr": false
       },
-      "expected": "Uses the formats your TV and player support. HDR switches automatically with the video."
+      "expected": "Uses supported formats. HDR switches automatically with the video."
     },
     {
       "id": "settings-presentation.capability-consequence.Force.30",
@@ -259,7 +259,7 @@
         "value": "Force",
         "hdr": false
       },
-      "expected": "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+      "expected": "Only if your device supports it but Automatic gets it wrong. Video may fail to play."
     },
     {
       "id": "settings-presentation.capability-consequence.Disable.31",

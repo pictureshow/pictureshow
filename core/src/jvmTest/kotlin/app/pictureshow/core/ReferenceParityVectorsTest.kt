@@ -93,6 +93,7 @@ class ReferenceParityVectorsTest {
                         "playback-settings",
                         "player-quality",
                         "settings-presentation",
+                        "playback-settings-layout",
                         "frame-rate-match",
                         "playback-start"
                     )

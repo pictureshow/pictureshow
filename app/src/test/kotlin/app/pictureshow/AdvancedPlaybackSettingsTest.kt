@@ -8,6 +8,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -38,7 +40,11 @@ class AdvancedPlaybackSettingsTest {
         compose.onNodeWithText("Image subtitle opacity").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
             check(it())
         }
-        compose.onNodeWithText("80%").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.onNode(
+            hasText("80%") and hasTestTag("tv-settings:option:1")
+        ).performSemanticsAction(SemanticsActions.OnClick) {
+            check(it())
+        }
         compose.runOnIdle { assertEquals(80, prefs.subtitleStyle.imageOpacity) }
         compose.onNodeWithText("Use my style for styled subtitles").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
             check(it())
@@ -85,6 +91,6 @@ class AdvancedPlaybackSettingsTest {
         compose.onNodeWithText("HDR").performClick()
         compose.onNodeWithText("Always on").performClick()
         compose.runOnIdle { assertEquals(app.pictureshow.core.playback.CapabilityOverride.Force, prefs.tuning.hdr) }
-        compose.onNodeWithText("Only if your TV supports it but Automatic gets it wrong. Video may fail to play.").assertExists()
+        compose.onNodeWithText("Only if your device supports it but Automatic gets it wrong. Video may fail to play.").assertExists()
     }
 }

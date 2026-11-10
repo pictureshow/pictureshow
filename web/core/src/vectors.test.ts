@@ -58,6 +58,7 @@ const pendingPortSuites = new Set([
     "playback-settings",
     "player-quality",
     "settings-presentation",
+    "playback-settings-layout",
     "music-catalog",
     "music-queue",
     "music-session",

@@ -34,12 +34,12 @@ object PlaybackSettingsPresentation {
         CapabilityOverride.Disable -> if (hdr) "Off (convert to SDR)" else "Off"
     }
     fun capabilityConsequence(value: CapabilityOverride, hdr: Boolean) = when (value) {
-        CapabilityOverride.Force -> "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+        CapabilityOverride.Force -> "Only if your device supports it but Automatic gets it wrong. Video may fail to play."
         CapabilityOverride.Disable -> if (hdr) {
             "Converts HDR video to SDR. This may require video conversion on your server."
         } else {
             "Uses another supported format or converts the video. This may require conversion on your server."
         }
-        CapabilityOverride.Detected -> "Uses the formats your TV and player support. HDR switches automatically with the video."
+        CapabilityOverride.Detected -> "Uses supported formats. HDR switches automatically with the video."
     }
 }

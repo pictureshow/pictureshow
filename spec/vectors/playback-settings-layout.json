@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-settings-layout",
+  "cases": [
+    {
+      "id": "playback-settings-layout.subtitle-landscape-360-font1.3",
+      "operation": "settings-first-row-visible",
+      "input": {
+        "widthDp": 800,
+        "heightDp": 360,
+        "fontScale": 1.3,
+        "group": "Subtitle appearance",
+        "currentValue": "Default"
+      },
+      "expected": {
+        "firstRowFullyVisible": true,
+        "currentValueFullyVisible": true,
+        "doneFullyVisible": true
+      }
+    }
+  ]
+}

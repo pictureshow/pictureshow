@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -66,12 +67,16 @@ internal fun AdvancedPlaybackSettings(
     }
     if (touch) {
         val scroll = rememberScrollState()
+        val compact = isShortTouchWindow()
         Dialog(onDismissRequest = onClose) {
             androidx.compose.material3.Surface(
+                modifier = Modifier.testTag("settings:touch-panel"),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                 color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
-                Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(24.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
+                ) {
                     androidx.compose.material3.Text(
                         group,
                         modifier = Modifier.semantics { heading() }.padding(bottom = 12.dp),
@@ -80,7 +85,7 @@ internal fun AdvancedPlaybackSettings(
                     if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
                     if (scroll.value > 0) androidx.compose.material3.HorizontalDivider()
                     Column(
-                        Modifier.weight(1f, fill = false).verticalScroll(scroll),
+                        Modifier.weight(1f, fill = false).verticalScroll(scroll).testTag("settings:touch-list"),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) { content() }
                     if (scroll.canScrollForward) androidx.compose.material3.HorizontalDivider()
@@ -327,8 +332,7 @@ private fun PlaybackSettingRows(
                 "Prefer Dolby Vision over HDR10+",
                 tuning.preferDolbyVision,
                 touch,
-                supporting = "Chooses Dolby Vision for compatible videos when both formats are available. Your TV and player " +
-                    "must support it."
+                supporting = "Chooses Dolby Vision for compatible videos when both formats are available. Your device must support it."
             ) {
                 onLocal { it.copy(tuning = it.tuning.copy(preferDolbyVision = !it.tuning.preferDolbyVision)) }
             }
@@ -415,12 +419,14 @@ private fun SettingSupportingText(text: String, touch: Boolean) {
 internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = false) {
     val context = LocalContext.current
     val image = remember { imageSubtitleSample() }
+    val previewHeight = if (touch && isShortTouchWindow()) 64.dp else 108.dp
     val cues = remember(appearance) {
         appearance.cues(
             listOf(
-                Cue.Builder().setText("A moment worth watching").build(),
-                Cue.Builder().setBitmap(image).setPosition(0.5f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
-                    .setLine(0.25f, Cue.LINE_TYPE_FRACTION).setSize(0.5f).build()
+                Cue.Builder().setText("Text subtitle").setPosition(0.25f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+                    .setSize(0.45f).build(),
+                Cue.Builder().setBitmap(image).setPosition(0.75f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+                    .setLine(0.25f, Cue.LINE_TYPE_FRACTION).setSize(0.45f).build()
             )
         )
     }
@@ -430,16 +436,16 @@ internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = fa
                 SubtitleView(it).apply {
                     isFocusable = false
                     contentDescription =
-                        "Live subtitle preview: A moment worth watching; image subtitle sample"
+                        "Live subtitle preview: Text subtitle; image subtitle sample"
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(
-                108.dp
-            ).background(Brush.horizontalGradient(listOf(Color(0xFF152438), Color(0xFFE6D8AD)))),
+            modifier = Modifier.fillMaxWidth().height(previewHeight).testTag("settings:subtitle-preview")
+                .background(Brush.horizontalGradient(listOf(Color(0xFF152438), Color(0xFFE6D8AD), Color(0xFF152438), Color(0xFFE6D8AD)))),
             update = {
                 appearance.applyTo(it, context)
                 it.setFractionalTextSize(
-                    0.14f *
+                    // Keep the sample readable when the compact preview gives controls more room.
+                    (14f / previewHeight.value) *
                         (
                             appearance.resolve(1f, androidx.media3.ui.CaptionStyleCompat.DEFAULT).textFraction /
                                 SubtitleView.DEFAULT_TEXT_SIZE_FRACTION
