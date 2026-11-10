@@ -1,0 +1,91 @@
+name: Compose separate LGPL DLL runtime
+on:
+  push:
+    branches: ["ci/128-shared-*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-compose-shared-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-libass
+            mingw-w64-ucrt-x86_64-libplacebo
+            curl tar unzip
+      - name: Build mpv with separate LGPL shared dependencies and audit PE imports
+        shell: msys2 {0}
+        run: bash desktop/tools/windows-shared/build.sh
+      - name: Verify actual FFmpeg runtime license and configuration
+        shell: pwsh
+        run: |
+          python desktop/tools/windows-shared/runtime-audit.py
+          $env:PATH = "$(Resolve-Path native/runtime);$env:PATH"
+          & native/runtime/mpv.exe --version | Tee-Object desktop-evidence/licensing/mpv-version.txt
+          if ($LASTEXITCODE -ne 0) { throw 'mpv startup failed' }
+      - name: Core vectors and probe runtime
+        run: ./gradlew.bat --no-daemon :desktop:test :desktop:spikeRuntime
+      - name: Generate only CC0 test media with separate tool FFmpeg
+        shell: pwsh
+        run: |
+          choco install ffmpeg --no-progress -y
+          $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
+          python desktop/tools/fixtures.py desktop-fixtures
+          python desktop/tools/performance_fixture.py desktop-fixtures
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build native surface adapter
+        shell: pwsh
+        run: |
+          $header = 'native/install/include/mpv/client.h'
+          (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
+          cl /nologo /EHsc /LD /std:c++17 /I native/install/include desktop/src/native/windows_layer.cpp /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Adapter build failed' }
+      - name: Native LayerProbe five-case matrix including 125 seconds at 1080p60
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native/runtime -Filter '*mpv*.dll' | Select-Object -First 1
+          $env:MPV_LIBRARY = $dll.FullName
+          $env:PATH = "$(Resolve-Path native/runtime);C:\Windows\System32;$env:JAVA_HOME\bin"
+          $env:SPIKE_NULL_AUDIO = '1'
+          $env:SPIKE_SOFTWARE_GPU = '1'
+          $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
+          $env:SKIKO_RENDER_API = 'SOFTWARE'
+          $failed = $false
+          foreach ($media in @('hevc-main', 'hevc-main10', 'av1', 'hevc-pq-metadata', 'hevc-main10-1080p60')) {
+            $extra = @()
+            if ($media -eq 'hevc-main10-1080p60') { $extra = @('--sustain=125') }
+            java --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt layer "desktop-fixtures/$media.mkv" "desktop-evidence/windows-layer-$media" @extra
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { throw 'LayerProbe failure; inspect evidence' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-compose-shared
+          retention-days: 7
+          path: |
+            desktop-evidence/**
+            native/mpv-build/meson-logs/**
+            native/runtime/**
+            desktop/build/test-results/**
+            desktop/build/reports/tests/**
+            desktop-fixtures/*LICENSE.json
