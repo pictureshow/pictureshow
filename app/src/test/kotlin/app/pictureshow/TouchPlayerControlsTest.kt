@@ -880,13 +880,36 @@ class TouchPlayerControlsTest {
         assertTrue(quality.right - quality.left >= 48.dp)
         val before = host.position
         compose.onNodeWithTag("touch:quality").performClick()
+        compose.runOnIdle { assertNull(host.qualityOverrideMbps) }
+        compose.onNodeWithTag("player:quality-choice:4").performClick()
         compose.runOnIdle {
             assertEquals(4, host.qualityOverrideMbps)
             assertEquals(before, host.position)
         }
         compose.onNodeWithTag("touch:quality").assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 Mbps override")
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 Mbps")
         )
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.onNodeWithTag("player:quality-choice:auto").performClick()
+        compose.runOnIdle {
+            assertNull(host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+        compose.onNodeWithTag("touch:quality").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w1600dp-h700dp-land-xhdpi")
+    @Test
+    fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
+        launch()
+        settled()
+        val chapter = textBounds("Chapters")
+        val speed = textBounds("Speed · 1×")
+        val info = textBounds("Playback info")
+        assertEquals(chapter.top.value, speed.top.value, 1f)
+        assertEquals(speed.top.value, info.top.value, 1f)
+        assertEquals((speed.left - chapter.right).value, (info.left - speed.right).value, 1f)
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.

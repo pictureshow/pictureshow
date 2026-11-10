@@ -61,7 +61,7 @@ class PlaybackQualityRequestTest {
         override fun release() = Unit
     }
 
-    @Test fun bandwidthDropAndOneTapOverrideChangeServerRequestAndKeepPositionAndPauseWithoutNewViewing() = runTest {
+    @Test fun bandwidthDropAndExplicitQualityChoiceChangeServerRequestAndKeepPositionAndPauseWithoutNewViewing() = runTest {
         val account = Account(Server("s", "Server", "https://example.test", "12.0.0"), User("u", "Viewer"), "fictional")
         val context = RuntimeEnvironment.getApplication()
         val host = PlaybackHostState(MediaItem(id = "item", name = "Film"), 0, Media3PlaybackOutput(context, account.server), {}, {})
@@ -76,6 +76,7 @@ class PlaybackQualityRequestTest {
                         requests += Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
                         respond(
                             """{"MediaSources":[{"Id":"src","Container":"mkv","SupportsTranscoding":true,
+                            "DefaultAudioStreamIndex":2,"DefaultSubtitleStreamIndex":7,"MediaStreams":[{"Type":"Audio","Index":2,"Codec":"aac"},{"Type":"Subtitle","Index":7,"Codec":"subrip","IsExternal":true,"DeliveryUrl":"/sub.srt"}],
                             "TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src","TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
                             HttpStatusCode.OK,
                             headersOf(HttpHeaders.ContentType, "application/json")
@@ -93,7 +94,7 @@ class PlaybackQualityRequestTest {
         val session = PlaybackSession(gateway, output, backgroundScope, "en")
         host.controller = session
         try {
-            session.start(73_000)
+            session.start(73_000, PlaybackStartTracks("src", 2, 7))
             runCurrent()
             session.ready()
             runCurrent()
@@ -107,15 +108,30 @@ class PlaybackQualityRequestTest {
             assertEquals(PlaybackPosition(74_000, true), output.moment)
             session.ready()
             runCurrent()
-            host.overrideQuality() // 4 Mbps override
+            host.setQualityOverride(4)
             runCurrent()
             session.ready()
             runCurrent()
-            host.overrideQuality() // 10 Mbps override ignores previous bandwidth reduction
+            host.setQualityOverride(10) // Explicit choice ignores previous bandwidth reduction
             runCurrent()
             assertEquals(10_000_000, requests.last().getValue("MaxStreamingBitrate").jsonPrimitive.int)
             assertEquals(10_000_000, requests.last().getValue("DeviceProfile").jsonObject.getValue("MaxStreamingBitrate").jsonPrimitive.int)
             assertEquals(PlaybackPosition(74_000, true), output.moment)
+            session.ready()
+            runCurrent()
+            host.setQualityOverride(null)
+            runCurrent()
+            assertEquals(20_000_000, requests.last().getValue("MaxStreamingBitrate").jsonPrimitive.int)
+            assertEquals(20_000_000, requests.last().getValue("DeviceProfile").jsonObject.getValue("MaxStreamingBitrate").jsonPrimitive.int)
+            assertEquals(740_000_000L, requests.last().getValue("StartTimeTicks").jsonPrimitive.long)
+            assertEquals(PlaybackPosition(74_000, true), output.moment)
+            assertEquals(null, host.estimatedBandwidth)
+            assertEquals("Auto", host.qualityLabel)
+            assertEquals(null, host.adaptiveQualityNotice)
+            requests.forEach { request ->
+                assertEquals(2, request.getValue("AudioStreamIndex").jsonPrimitive.int)
+                assertEquals(7, request.getValue("SubtitleStreamIndex").jsonPrimitive.int)
+            }
         } finally {
             session.close()
             runCurrent()

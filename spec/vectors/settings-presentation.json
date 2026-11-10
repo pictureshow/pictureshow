@@ -1,0 +1,274 @@
+{
+  "schemaVersion": 1,
+  "suite": "settings-presentation",
+  "cases": [
+    {
+      "id": "settings-presentation.subtitle-label.System.0",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "System"
+      },
+      "expected": "Default"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Small.1",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Small"
+      },
+      "expected": "Small"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Normal.2",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Normal"
+      },
+      "expected": "Normal"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Large.3",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Large"
+      },
+      "expected": "Large"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.ExtraLarge.4",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "ExtraLarge"
+      },
+      "expected": "Extra large"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Authored.5",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Authored"
+      },
+      "expected": "As in the file"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Outline.6",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Outline"
+      },
+      "expected": "Outline"
+    },
+    {
+      "id": "settings-presentation.subtitle-label.Box.7",
+      "operation": "subtitle-label",
+      "input": {
+        "value": "Box"
+      },
+      "expected": "Box"
+    },
+    {
+      "id": "settings-presentation.credits-label.KeepScenes.8",
+      "operation": "credits-label",
+      "input": {
+        "value": "KeepScenes"
+      },
+      "expected": "Play to the end"
+    },
+    {
+      "id": "settings-presentation.credits-label.NextEpisode.9",
+      "operation": "credits-label",
+      "input": {
+        "value": "NextEpisode"
+      },
+      "expected": "Next episode when credits start"
+    },
+    {
+      "id": "settings-presentation.channel-label.None.10",
+      "operation": "channel-label",
+      "input": {
+        "value": null
+      },
+      "expected": "Automatic"
+    },
+    {
+      "id": "settings-presentation.channel-label.2.11",
+      "operation": "channel-label",
+      "input": {
+        "value": 2
+      },
+      "expected": "Stereo (2)"
+    },
+    {
+      "id": "settings-presentation.channel-label.6.12",
+      "operation": "channel-label",
+      "input": {
+        "value": 6
+      },
+      "expected": "5.1"
+    },
+    {
+      "id": "settings-presentation.channel-label.8.13",
+      "operation": "channel-label",
+      "input": {
+        "value": 8
+      },
+      "expected": "7.1"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.AC3.14",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "AC3"
+      },
+      "expected": "Dolby Digital"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.EAC3.15",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "EAC3"
+      },
+      "expected": "Dolby Digital Plus"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.EAC3_JOC.16",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "EAC3_JOC"
+      },
+      "expected": "Dolby Atmos (Dolby Digital Plus)"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.TRUEHD.17",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "TRUEHD"
+      },
+      "expected": "Dolby TrueHD"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.DTS.18",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "DTS"
+      },
+      "expected": "DTS"
+    },
+    {
+      "id": "settings-presentation.passthrough-label.DTS_HD.19",
+      "operation": "passthrough-label",
+      "input": {
+        "value": "DTS_HD"
+      },
+      "expected": "DTS-HD"
+    },
+    {
+      "id": "settings-presentation.capability-label.Detected.20",
+      "operation": "capability-label",
+      "input": {
+        "value": "Detected",
+        "hdr": true
+      },
+      "expected": "Automatic"
+    },
+    {
+      "id": "settings-presentation.capability-label.Force.21",
+      "operation": "capability-label",
+      "input": {
+        "value": "Force",
+        "hdr": true
+      },
+      "expected": "Always on"
+    },
+    {
+      "id": "settings-presentation.capability-label.Disable.22",
+      "operation": "capability-label",
+      "input": {
+        "value": "Disable",
+        "hdr": true
+      },
+      "expected": "Off (convert to SDR)"
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Detected.23",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Detected",
+        "hdr": true
+      },
+      "expected": "Uses the formats your TV and player support. HDR switches automatically with the video."
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Force.24",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Force",
+        "hdr": true
+      },
+      "expected": "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Disable.25",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Disable",
+        "hdr": true
+      },
+      "expected": "Converts HDR video to SDR. This may require video conversion on your server."
+    },
+    {
+      "id": "settings-presentation.capability-label.Detected.26",
+      "operation": "capability-label",
+      "input": {
+        "value": "Detected",
+        "hdr": false
+      },
+      "expected": "Automatic"
+    },
+    {
+      "id": "settings-presentation.capability-label.Force.27",
+      "operation": "capability-label",
+      "input": {
+        "value": "Force",
+        "hdr": false
+      },
+      "expected": "Always on"
+    },
+    {
+      "id": "settings-presentation.capability-label.Disable.28",
+      "operation": "capability-label",
+      "input": {
+        "value": "Disable",
+        "hdr": false
+      },
+      "expected": "Off"
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Detected.29",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Detected",
+        "hdr": false
+      },
+      "expected": "Uses the formats your TV and player support. HDR switches automatically with the video."
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Force.30",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Force",
+        "hdr": false
+      },
+      "expected": "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+    },
+    {
+      "id": "settings-presentation.capability-consequence.Disable.31",
+      "operation": "capability-consequence",
+      "input": {
+        "value": "Disable",
+        "hdr": false
+      },
+      "expected": "Uses another supported format or converts the video. This may require conversion on your server."
+    }
+  ]
+}

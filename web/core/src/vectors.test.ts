@@ -56,6 +56,8 @@ const pendingPortSuites = new Set([
     "frame-rate-match",
     "playback-start",
     "playback-settings",
+    "player-quality",
+    "settings-presentation",
     "music-catalog",
     "music-queue",
     "music-session",

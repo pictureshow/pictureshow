@@ -74,32 +74,38 @@ internal class PlaybackHostState(
     var localPreferences by mutableStateOf(PlaybackPreferences())
     val initialPositionMs get() = app.pictureshow.core.playback.PlaybackStartPosition.of(startMs, startOrigin, localPreferences.tuning)
     var network by mutableStateOf(PlaybackNetwork.Remote)
-    var estimatedBandwidth by mutableStateOf<Long?>(null)
-    var qualityOverrideMbps by mutableStateOf<Int?>(null)
-    private val qualityGuard = BandwidthQualityGuard()
-    val effectiveSettings get() = localPreferences.deviceSettings(network, estimatedBandwidth, qualityOverrideMbps)
-    val qualityLabel get() = qualityBitrateLabel(effectiveSettings.maxStreamingBitrate) +
-        if (qualityOverrideMbps != null) {
-            " override"
-        } else if (estimatedBandwidth != null) {
-            " adjusted"
-        } else {
-            " ${network.name.lowercase()}"
+    private var qualitySelection by mutableStateOf(app.pictureshow.core.playback.PlaybackQualitySelection())
+    var estimatedBandwidth: Long?
+        get() = qualitySelection.estimatedBandwidth
+        set(value) {
+            qualitySelection = qualitySelection.copy(estimatedBandwidth = value)
         }
+    val qualityOverrideMbps get() = qualitySelection.overrideMbps
+    private var qualityGuard = BandwidthQualityGuard()
+    val effectiveSettings get() = localPreferences.deviceSettings(network, estimatedBandwidth, qualityOverrideMbps)
+    val qualityLabel get() = app.pictureshow.core.playback.PlaybackQualityPresentation.choiceLabel(qualityOverrideMbps)
+    private val configuredQualityBitrate get() = localPreferences.deviceSettings(network).maxStreamingBitrate
+    val automaticQualityContext get() = app.pictureshow.core.playback.PlaybackQualityPresentation.automaticContext(
+        network,
+        configuredQualityBitrate
+    )
+    val adaptiveQualityNotice get() = app.pictureshow.core.playback.PlaybackQualityPresentation.reductionNotice(
+        qualityOverrideMbps,
+        effectiveSettings.maxStreamingBitrate,
+        configuredQualityBitrate
+    )
     val creditsCountdown get() = localPreferences.tuning.postCredits == PostCredits.NextEpisode
 
     /** Keep post-credits scenes by waiting for the actual end, even when an outro marker exists. */
     fun nextTriggerMs(): Long? = playbackNextTriggerMs(duration, segments, creditsCountdown)
-    fun overrideQuality() {
-        qualityOverrideMbps = when (qualityOverrideMbps) {
-            null -> 4
-            4 -> 10
-            10 -> 20
-            20 -> 40
-            40 -> 120
-            else -> null
-        }
-        controller?.routeChanged()
+
+    /** A deliberate choice belongs to this viewing. Auto starts fresh at the configured network limit. */
+    fun setQualityOverride(mbps: Int?) {
+        val selected = qualitySelection.choose(mbps)
+        val changed = selected != qualitySelection
+        qualitySelection = selected
+        qualityGuard = BandwidthQualityGuard()
+        if (changed) controller?.routeChanged()
     }
     fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long) {
         if (!localPreferences.tuning.autoAdjustQuality || qualityOverrideMbps != null || state.preparing || atEnd) return

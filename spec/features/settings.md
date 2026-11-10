@@ -80,13 +80,13 @@ These are not portable server preferences. This table keeps the rest of the audi
 
 This extension supersedes the local gaps above for the rows below. Defaults preserve detected device capabilities;
 these are local viewer choices, not server account configuration. Android TV and touch expose the same values in
-Network quality, Subtitle appearance, Subtitle conversion, and Continuation and output. They save immediately,
+Network quality, Subtitle appearance, Subtitle conversion, Playback, Audio output, and Video output. They save immediately,
 apply on the next viewing, and have bounded, scrollable controls. Renderer limits are stated beside the setting.
 
 | ID | Setting | Acceptance |
 |---|---|---|
 | SET-13 | Network quality | Existing SET-01 becomes the Home cap (Auto/120/80/40/20/10/4 Mbps). Remote defaults to 20 Mbps; metered defaults to 4 Mbps, same choices. Metered wins over local classification. A resolved private/loopback/link-local server, including IPv6 unique-local fc00::/7, uses Home; unknown/public addresses use Remote, including on Wi-Fi. Auto means 200 Mbps. The PlaybackInfo bitrate and device profile both carry the effective cap. |
-| SET-14 | Automatic quality and player override | Default On. Two substantial bandwidth samples below the current cap can reduce the cap to the largest allowed rung under 80% of measured bandwidth; below 4 Mbps uses the smaller budget. Progressive media supplies samples during an open network transfer: each window requires at least 131,072 successful bytes and 1 s spent inside network reads. Time between reads (loader buffering allowance, paused viewer) is excluded. Local and intentionally throttled/not-full-speed transfers do not count. Start a fresh window on a new transfer; EOF, error and close never flush a partial window. Use one sampling path per source and ignore queued samples after that player is replaced. HLS may retain segment-completion estimates. Debounce reductions for 30 s. Never auto-raise during a viewing. A one-tap Quality control cycles 4/10/20/40/120 Mbps then returns to network/automatic quality; the override suppresses adaptation and is scoped to that viewing. Reprepare preserves clock, pause and track intent. A compact quality label still exposes the full cap/network/override state to accessibility clients. Neither network nor override changes another viewing's stored caps. |
+| SET-14 | Automatic quality and player override | Default On. Two substantial bandwidth samples below the current cap can reduce the cap to the largest allowed rung under 80% of measured bandwidth; below 4 Mbps uses the smaller budget. Progressive media supplies samples during an open network transfer: each window requires at least 131,072 successful bytes and 1 s spent inside network reads. Time between reads (loader buffering allowance, paused viewer) is excluded. Local and intentionally throttled/not-full-speed transfers do not count. Start a fresh window on a new transfer; EOF, error and close never flush a partial window. Use one sampling path per source and ignore queued samples after that player is replaced. HLS may retain segment-completion estimates. Debounce reductions for 30 s. Never auto-raise during a viewing. A one-tap Quality control opens a native single-choice picker containing Automatic and 4/10/20/40/120 Mbps; the override suppresses adaptation and is scoped to that viewing. Reprepare preserves clock, pause and track intent. The player label is Quality · Auto for automatic/network limits or Quality · <cap> for an explicit choice. Its menu states the network and configured limit. A reduction notice states the effective lower cap and buffering reason. Selecting Automatic clears the previous estimate and starts fresh samples; downloaded playback has a fixed-quality explanation. Neither network nor override changes another viewing's stored caps. |
 | SET-15 | Subtitle appearance and preview | Live preview uses the same Media3 SubtitleView and cue transformation as playback, including an image sample. Size/background retain SET-03/04. Text color System/White/Yellow/Black/Green/Cyan; opacity 0–100%; edge System/None/Outline/Shadow with color; background color and opacity; position Authored/Bottom/Middle/Top; bold and italic. Image opacity is independent and never mutates the decoder's bitmap. Image coordinates remain authored, subject to PLAY-12 safe bounds. Defaults retain authored/system styling. Explicit Override authored ASS styling removes embedded text styling and sizes. Without it, authored ASS spans may win over local text colors. Burned-in pixels cannot be styled; preview explains that limit. |
 | SET-16 | Subtitle burn-in | Automatic (default), Always, Only image formats. Automatic advertises supported local subtitle renderers. Always advertises Encode only for selected subtitles. Only image formats forces image subtitles to Encode while supported text remains local; unsupported text still converts when required. Off remains Off. The screen states video-conversion cost and that burned-in subtitles cannot use local styling/timing. Changing policy must change the actual PlaybackInfo profile, not merely a label. PLAY-27 remedy respects Always: select Automatic or turn subtitles off. |
 | SET-17 | After credits | Default Keep scenes after credits waits for physical end before automatic next; final-window card may still offer manual Play now. Next episode during credits opts into PLAY-17 early countdown. Existing Outro Ask/Automatic/Off remains independent and skips only its marker; a scene after the marker must survive. In Keep scenes mode, reaching an outro or a remaining-time countdown cannot complete watched state early; automatic advance requires a real end-of-file event. |
@@ -100,3 +100,28 @@ Malformed stored JSON fields default independently, preserving accepted values i
 Portable policy cases: `spec/vectors/playback-settings.json` and `spec/vectors/frame-rate-match.json`. Every platform owes these rules and request/profile
 assertions; unsupported output controls must state the actual platform limitation. Vector success is not UI or
 hardware-output evidence.
+
+## Native settings presentation (leg 131 design revision)
+
+TV settings use one shared list row system on the main page and all six panels. Choice rows show the label at left,
+current value at right, and a chevron. OK opens a radio picker with focus and scroll position on the current value;
+choosing a value closes it and returns focus to the row. Back cancels a picker without changing the value and returns
+focus to its opener. Left/right may step one choice as a shortcut. Toggles show a switch and expose one switch target,
+not a nested button. Initial panel focus belongs to the first setting. Back closes a settings panel.
+
+TV panels occupy the full available height at the right, with a fixed heading and optional fixed live preview. The
+list scrolls as focus moves; fades show additional content above/below. Supporting explanations belong to the row
+whose consequence they describe, so the last row brings its explanation into view. Main Settings retains focus on
+return from About, Supporter and device information. Rows grow for larger fonts instead of clipping labels or values.
+Phone and tablet retain native value rows, switches and radio dialogs, with a headline title, theme surface, rounded
+corners, scrolling content, an overflow divider and an end-aligned Done action. Landscape and 1.3x font settings remain
+operable. The subtitle preview includes legible text and outlined image text over both light and dark areas, through
+the actual playback subtitle renderer.
+
+Viewer labels are translated independently of stored identifiers: Default, Extra large, As in the file; Play to the
+end / Next episode when credits start; Automatic / Stereo (2) / 5.1 / 7.1; Dolby Digital, Dolby Digital Plus, Dolby Atmos
+(Dolby Digital Plus), Dolby TrueHD, DTS and DTS-HD. HDR and Dolby Vision offer Automatic / Always on / Off; HDR Off also
+states conversion to SDR. Always on explains that hardware support is still required and playback may fail. The
+styled-subtitle switch says Use my style for styled subtitles and explains ASS/SSA fonts and colors. These labels and
+capability consequences have portable cases in `settings-presentation.json`; player quality states have
+`player-quality.json`. Native focus/geometry tests complement those cases; portable vectors do not prove UI layout.

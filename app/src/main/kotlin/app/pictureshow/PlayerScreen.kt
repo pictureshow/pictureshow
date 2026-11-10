@@ -223,6 +223,12 @@ internal fun PlayerItemScreen(
     val chaptersFocus = remember { FocusRequester() }
     val speedFocus = remember { FocusRequester() }
     val infoFocus = remember { FocusRequester() }
+    val qualityFocus = remember { FocusRequester() }
+    fun extraPanelFocus(title: String?) = when (title) {
+        "Playback speed" -> speedFocus
+        "Quality" -> qualityFocus
+        else -> infoFocus
+    }
     fun openExtraPanel(title: String, opener: FocusRequester) {
         // Keep the opener stable for both key and touch activation.
         opener.requestFocus()
@@ -263,6 +269,7 @@ internal fun PlayerItemScreen(
         when (returnFocus) {
             speedFocus -> "player:speed"
             infoFocus -> "player:info"
+            qualityFocus -> "player:quality"
             else -> null
         }
     }
@@ -327,7 +334,7 @@ internal fun PlayerItemScreen(
         when {
             switching -> finish(reason = "back-during-next")
             extraPanel != null -> {
-                returnFocus = if (extraPanel == "Playback speed") speedFocus else infoFocus
+                returnFocus = extraPanelFocus(extraPanel)
                 extraPanel = null
             }
             chaptersOpen -> {
@@ -433,16 +440,23 @@ internal fun PlayerItemScreen(
             }
         }
     }
-    val openerReturnGone = !openerShown && (returnFocus == speedFocus || returnFocus == infoFocus)
+    val openerReturnGone = !openerShown && (returnFocus == speedFocus || returnFocus == infoFocus || returnFocus == qualityFocus)
     LaunchedEffect(openerReturnGone) {
         if (openerReturnGone) {
             PlaybackDiagnostics.write("panel-return cancelled controls=$controls error=${error != null} switching=$switching")
             returnFocus = null
         }
     }
-    LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, extraPanel, windowFocused) {
+    LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, extraPanel, windowFocused, state.preparing) {
         val target = returnFocus
-        if (target != null && windowFocused && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen) {
+        if (target != null &&
+            windowFocused &&
+            chooser == null &&
+            extraPanel == null &&
+            !chaptersOpen &&
+            !seekOpen &&
+            (target != qualityFocus || !state.preparing)
+        ) {
             androidx.compose.runtime.withFrameNanos { }
             val requested = target.requestFocus()
             PlaybackDiagnostics.write("panel-return requested=$requested")
@@ -452,6 +466,7 @@ internal fun PlayerItemScreen(
                 when (target) {
                     speedFocus -> "player:speed"
                     infoFocus -> "player:info"
+                    qualityFocus -> "player:quality"
                     else -> null
                 }
             }
@@ -762,12 +777,22 @@ internal fun PlayerItemScreen(
                         Button(
                             scale = playerButtonScale(),
                             onClick = {
-                                host.overrideQuality()
+                                openExtraPanel("Quality", qualityFocus)
                                 interaction++
                             },
-                            modifier = Modifier.testTag("player:quality").then(readerOpenerOnly("player:quality")),
-                            enabled = !state.preparing && state.decision != null
-                        ) { Text("Quality · ${host.qualityLabel}") }
+                            modifier = Modifier.focusRequester(
+                                qualityFocus
+                            ).testTag("player:quality").then(readerOpenerOnly("player:quality"))
+                                .playerTouchClick {
+                                    if (offline == null &&
+                                        !state.preparing &&
+                                        state.decision != null
+                                    ) {
+                                        openExtraPanel("Quality", qualityFocus)
+                                    }
+                                },
+                            enabled = offline == null && !state.preparing && state.decision != null
+                        ) { Text("Quality · ${if (offline != null) "Download" else host.qualityLabel}") }
                         Button(
                             scale = playerButtonScale(),
                             onClick = { finish(reason = "stop-button") },
@@ -775,6 +800,16 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Stop")
                         }
+                    }
+                    val qualityNotice = if (offline !=
+                        null
+                    ) {
+                        "Quality is fixed for this download."
+                    } else {
+                        host.adaptiveQualityNotice.takeUnless { state.preparing }
+                    }
+                    qualityNotice?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("player:quality-notice"))
                     }
                     state.reportError?.let { Text("Could not save progress: $it") }
                 }
@@ -922,27 +957,36 @@ internal fun PlayerItemScreen(
         extraPanel?.takeIf { error == null && !switching }?.let { title ->
             val dismiss: () -> Unit = {
                 extraPanel = null
-                returnFocus = if (title == "Playback speed") speedFocus else infoFocus
+                returnFocus = extraPanelFocus(title)
             }
-            PlayerPanel(title, dismiss, scrollable = title != "Playback speed", inActivityWindow = true) {
-                if (title == "Playback speed") {
-                    SpeedChoices(speedState, state.decision?.method == app.pictureshow.core.playback.PlayMethod.Transcode) { value ->
-                        select({
-                            output.setSpeed(value)
-                            interaction++
-                        }, dismiss)
+            if (title == "Quality") {
+                PlayerQualityMenu(host.qualityOverrideMbps, host.automaticQualityContext, host.adaptiveQualityNotice, false, {
+                    if (!exitRequested && !switching && offline == null) {
+                        host.setQualityOverride(it)
+                        interaction++
                     }
-                } else {
-                    PlaybackInformationContent(
-                        state.decision,
-                        state.audioIndex,
-                        state.subtitleIndex,
-                        host.effectiveSettings.maxStreamingBitrate / 1_000_000,
-                        player,
-                        localPreferences.tuning,
-                        host.effectiveSettings.maxStreamingBitrate
-                    ) {
-                        close(dismiss)
+                }, dismiss)
+            } else {
+                PlayerPanel(title, dismiss, scrollable = title != "Playback speed", inActivityWindow = true) {
+                    if (title == "Playback speed") {
+                        SpeedChoices(speedState, state.decision?.method == app.pictureshow.core.playback.PlayMethod.Transcode) { value ->
+                            select({
+                                output.setSpeed(value)
+                                interaction++
+                            }, dismiss)
+                        }
+                    } else {
+                        PlaybackInformationContent(
+                            state.decision,
+                            state.audioIndex,
+                            state.subtitleIndex,
+                            host.effectiveSettings.maxStreamingBitrate / 1_000_000,
+                            player,
+                            localPreferences.tuning,
+                            host.effectiveSettings.maxStreamingBitrate
+                        ) {
+                            close(dismiss)
+                        }
                     }
                 }
             }

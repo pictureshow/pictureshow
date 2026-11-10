@@ -69,3 +69,10 @@ PLAY-27 keeps its trigger rules, but Always-burn subtitles offer Automatic/off a
 HDR/Dolby Vision capability names that setting rather than blaming a missing device feature. Quality caps continue to
 explain conversion in Playback info (PLAY-26), without the device-limit notice. SET-20 rate matching is a platform
 request, never evidence of a display switch or successful HDR output.
+
+Playback settings presentation: Quality opens a choice menu; Auto applies the current network limit and shows that
+limit inside the menu. A manual bitrate is scoped to this viewing. Returning to Auto discards the prior estimate;
+fresh bandwidth samples can then reduce quality. A reduction is identified in the player controls with its effective
+bitrate and buffering reason. Downloads show fixed quality. Both native surfaces use these states (SET-14), preserving
+clock, pause and track intent across request changes. SET-16/21 choices keep PLAY-27 conversion causes and remedies
+accurate; changing presentation labels never changes compatibility facts.

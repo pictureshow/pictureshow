@@ -121,7 +121,7 @@ internal fun TouchSettings(
             TouchChoice("Subtitle background", local.subtitleBackground, SubtitleBackground.entries, { settingLabel(it.name) }) { value ->
                 onLocal { it.copy(subtitleBackground = value) }
             }
-            TouchHelper("System follows Android caption settings. Bitmap subtitles keep their authored appearance.")
+            TouchHelper("Default follows Android caption settings. Image subtitles keep their appearance from the file.")
         }
         TouchSection("More playback settings") {
             playbackGroups.forEach { group -> TouchNavRow(group) { advanced = group } }
@@ -155,7 +155,11 @@ internal fun TouchSettings(
                 ready
             ) { onServer("SubtitleLanguagePreference", it) }
             TouchChoice("Subtitle mode", configuration?.subtitleMode ?: "Default", subtitleModes, {
-                it
+                when (it) {
+                    "OnlyForced" -> "Only forced"
+                    "None" -> "Off"
+                    else -> it
+                }
             }, ready) { onServer("SubtitleMode", it) }
             TouchMessage(state.error)
             if (state.error != null) TouchAction("Retry", enabled = !state.saving, onClick = onRetry)
@@ -242,7 +246,7 @@ internal fun TouchThisDevice(
 }
 
 private fun settingLabel(value: String): String = when (value) {
-    "System" -> "System (default)"
+    "System" -> "Default"
     "ExtraLarge" -> "Extra large"
     else -> value
 }
@@ -254,10 +258,16 @@ internal fun <T> TouchChoice(
     values: List<T>,
     label: (T) -> String,
     enabled: Boolean = true,
+    supporting: String? = null,
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    TouchValueRow(title, label(value), enabled) { open = true }
+    Column {
+        TouchValueRow(title, label(value), enabled) { open = true }
+        supporting?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
     if (open) {
         val shortWindow = isShortTouchWindow()
         AlertDialog(

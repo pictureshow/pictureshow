@@ -91,6 +91,8 @@ class ReferenceParityVectorsTest {
                         "recovery",
                         "playback-information",
                         "playback-settings",
+                        "player-quality",
+                        "settings-presentation",
                         "frame-rate-match",
                         "playback-start"
                     )
