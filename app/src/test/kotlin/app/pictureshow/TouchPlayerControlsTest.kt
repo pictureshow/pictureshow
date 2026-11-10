@@ -876,13 +876,16 @@ class TouchPlayerControlsTest {
         assertTrue(title.right <= quality.left)
         assertTrue(quality.right <= bounds("touch:panel").right)
         assertTrue(quality.bottom <= bounds("touch:toggle").top)
-        assertTrue(quality.width >= 48.dp)
+        assertTrue(quality.right - quality.left >= 48.dp)
         val before = host.position
         compose.onNodeWithTag("touch:quality").performClick()
         compose.runOnIdle {
             assertEquals(4, host.qualityOverrideMbps)
             assertEquals(before, host.position)
         }
+        compose.onNodeWithTag("touch:quality").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 Mbps override")
+        )
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.
