@@ -502,6 +502,15 @@ class SyncPlayHostTest {
             rig.join()
             rig.snapshot()
             assertTrue(rig.host.membership.generation > oldGeneration)
+            // Each fresh authoritative queue selects its entry, including the deliberate rejoin.
+            assertEquals(
+                listOf(
+                    SyncOpen(oldGeneration, "entry-a", "local-item", 55_000_000L),
+                    SyncOpen(rig.host.membership.generation, "entry-a", "local-item", 55_000_000L)
+                ),
+                rig.opens
+            )
+            rig.opens.clear()
             val membership = rig.host.membership
             val renderer = rig.renderer.value
             val applied = rig.renderer.applied.toList()
@@ -918,6 +927,12 @@ class SyncPlayHostTest {
         val rig = Rig(this)
         rig.join()
         rig.snapshot()
+        // The initial authoritative queue legitimately opens its entry before this local selection.
+        assertEquals(
+            listOf(SyncOpen(rig.host.membership.generation, "entry-a", "local-item", 55_000_000L)),
+            rig.opens
+        )
+        rig.opens.clear()
         rig.sent.clear()
         val selected = Renderer().apply {
             value = value.copy(

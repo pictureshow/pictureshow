@@ -1113,7 +1113,9 @@ class MusicHostTest {
     @Test fun groupedMusicEosRequestsNextOnceAndDoesNotRepeatOrAutoAdvanceItsLocalQueue() {
         val (music, rig) = groupedMusic(repeat = "RepeatOne")
         rig.sent.clear()
-        music.syncBridge.apply(0L, true, 1.0)
+        // Start the ready slot: seek/rebuffer needs another server barrier, covered by the incoming seek/Ready test.
+        music.syncBridge.apply(null, true, 1.0)
+        until("the group track to actually start before EOS") { "start a" in log }
         until("one group Next at actual audio EOS") { rig.sent.any { it.operation == "NextItem" } }
         pump(400)
         assertEquals(1, rig.sent.count { it.operation == "NextItem" }, "One rendering completion produces one request")

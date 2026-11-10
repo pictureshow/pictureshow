@@ -41,7 +41,7 @@ Prove two independent viewers, mixed platform pairs, same and differently transc
 
 The Android reference uses the signed-in viewer's existing Jellyfin socket. Disabling remote UI receiving does not disable this group channel. Incoming server transport is applied through an explicit decoder bypass so it cannot echo a second group request. Ordinary UI, hardware and remote transport is intercepted before the decoder moves. Each renderer keeps its existing single report owner.
 
-The executable `sync-clock`, `sync-drift`, `sync-state` and `sync-queue` suites exercise production Kotlin policies. Tick values are decimal strings at JSON adapter boundaries where a number would exceed JavaScript's exact integer range. A vector pass proves the policy, not native timer or renderer precision.
+The executable `sync-clock`, `sync-drift`, `sync-state`, `sync-queue` and `sync-source` suites exercise production Kotlin policies. Source cases cover positive signed-64-bit duration boundaries and every combination of seekable, live, infinite and offline flags. Tick values are decimal strings at JSON adapter boundaries where a number would exceed JavaScript's exact integer range. A vector pass proves the policy, not native timer or renderer precision.
 
 An acknowledged new empty Idle group can emit Stop with an all-zero PlaylistItemId and no PlayQueue. Retain Idle membership without inventing a queue or entering a resnapshot loop. After a populated queue, Stop refers to its current PlaylistItemId. Ready can schedule Unpause before a subsequent StateUpdate; consume the scheduled command when received, preserving it independently of the transient reducer field.
 
