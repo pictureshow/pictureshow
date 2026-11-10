@@ -24,10 +24,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -109,6 +111,15 @@ internal fun LiveTvScreen(
         restoreFocus = true
     }
     LaunchedEffect(state.policy?.access) { if (state.policy?.access == false) closeDetail() }
+    LaunchedEffect(state.writeVersion) { if (state.writeVersion > 0 && state.lastWriteOutcome == "ok") closeDetail() }
+    LaunchedEffect(state.channels, state.policy) {
+        if (selectedProgram?.channelId?.let { id -> state.channels.none { it.id == id } } == true ||
+            state.policy?.manage == false &&
+            (selectedSchedule != null || state.draft != null)
+        ) {
+            closeDetail()
+        }
+    }
     val draft = state.draft
     val schedule = selectedSchedule
     val program = selectedProgram
@@ -183,7 +194,6 @@ internal fun LiveTvScreen(
                             enabled = !state.writing
                         ) {
                             vm.cancel(schedule, selectedSeries)
-                            closeDetail()
                         }
                     }
                 }
@@ -191,7 +201,6 @@ internal fun LiveTvScreen(
                 item("schedule-form") {
                     LiveScheduleEditor(schedule, selectedSeries, tv, state.writing, true) {
                         vm.save(it, selectedSeries, true)
-                        closeDetail()
                     }
                 }
                 item("status") {
@@ -244,7 +253,6 @@ internal fun LiveTvScreen(
                     LiveText("Permanently delete the recorded file “${recording.name}”. Its recording schedule is a separate action.", tv)
                     LiveButton("Delete recorded file", tv, enabled = !state.writing) {
                         vm.delete(recording)
-                        closeDetail()
                     }
                 }
             }

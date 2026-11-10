@@ -10,6 +10,9 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
@@ -21,11 +24,22 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class LivePlaybackClientTest {
+    private fun TestScope.mockClient(
+        handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData
+    ): HttpClient = HttpClient(MockEngine) {
+        engine {
+            dispatcher = StandardTestDispatcher(testScheduler)
+            addHandler(handler)
+        }
+    }
+
     private val account = Account(Server("server", "Demo", "https://example.test/base", "12"), User("viewer", "Viewer"), "token")
     private val identity = ClientIdentity("TV", "device")
     private val initial = """{"PlaySessionId":"viewing","MediaSources":[{"Id":"tuner","RequiresOpening":true,"OpenToken":"open-once"}]}"""
@@ -35,8 +49,8 @@ class LivePlaybackClientTest {
     @Test fun sourceIsOpenedOnceWithConsistentJsonAndReturnedSourceIsUsed() = runTest {
         val paths = mutableListOf<String>()
         var body = ""
-        val http = HttpClient(
-            MockEngine { request ->
+        val http = mockClient(
+            { request ->
                 paths += request.url.encodedPath
                 if (request.url.encodedPath.endsWith("PlaybackInfo")) {
                     respond(initial, headers = headersOf(HttpHeaders.ContentType, "application/json"))
@@ -70,8 +84,8 @@ class LivePlaybackClientTest {
 
     @Test fun returnedExistingLiveIdIsNotOpenedOrClaimed() = runTest {
         var requests = 0
-        val http = HttpClient(
-            MockEngine {
+        val http = mockClient(
+            {
                 requests++
                 respond(
                     """{"PlaySessionId":"viewing","MediaSources":[{"Id":"shared","RequiresOpening":true,
@@ -92,8 +106,8 @@ class LivePlaybackClientTest {
 
     @Test fun deniedOpenIsVisibleAndNeverInventsAStreamUrl() = runTest {
         var requests = 0
-        val http = HttpClient(
-            MockEngine {
+        val http = mockClient(
+            {
                 requests++
                 if (requests == 1) {
                     respond(initial, headers = headersOf(HttpHeaders.ContentType, "application/json"))
@@ -112,8 +126,8 @@ class LivePlaybackClientTest {
 
     @Test fun close404IsAlreadyClosedBut500RemainsFailure() = runTest {
         for ((status, success) in listOf(HttpStatusCode.NotFound to true, HttpStatusCode.InternalServerError to false)) {
-            val http = HttpClient(
-                MockEngine { request ->
+            val http = mockClient(
+                { request ->
                     assertEquals("owned/id", request.url.parameters["liveStreamId"])
                     respond("", status)
                 }
@@ -129,8 +143,8 @@ class LivePlaybackClientTest {
 
     @Test fun unsafeOpenedSourceIsClosedInsteadOfLeaked() = runTest {
         val paths = mutableListOf<String>()
-        val http = HttpClient(
-            MockEngine { request ->
+        val http = mockClient(
+            { request ->
                 paths += request.url.encodedPath
                 val body = when {
                     request.url.encodedPath.endsWith("PlaybackInfo") -> initial
@@ -158,8 +172,8 @@ class LivePlaybackClientTest {
 
     @Test fun openedSourceWithoutIdentityIsRejectedBeforeAnyMediaUrlIsBuilt() = runTest {
         var count = 0
-        val http = HttpClient(
-            MockEngine {
+        val http = mockClient(
+            {
                 count++
                 respond(
                     if (count == 1) initial else """{"MediaSource":{"Id":"opened","SupportsDirectStream":true}}""",

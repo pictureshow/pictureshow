@@ -40,7 +40,9 @@ internal data class LiveTvState(
     val error: String? = null,
     val notice: String? = null,
     val draft: LiveSchedule? = null,
-    val draftSeries: Boolean = false
+    val draftSeries: Boolean = false,
+    val writeVersion: Long = 0,
+    val lastWriteOutcome: String? = null
 )
 
 /** Navigation-entry scoped, with no global cache: account changes cannot reuse another viewer's guide. */
@@ -158,7 +160,13 @@ internal class LiveTvViewModel(
             if (!policy.access || !policy.manage) throw LiveReadFailure("Recording management is disabled for this viewer.")
             val fresh = api.program(account, program.id).required()
             val defaults = api.defaults(account, program.id).required()
-            mutable.value = mutable.value.copy(policy = policy, draft = timerDraft(defaults, fresh, series), draftSeries = series)
+            mutable.value = mutable.value.copy(
+                policy = policy,
+                draft = runCatching { timerDraft(defaults, fresh, series) }.getOrElse {
+                    throw LiveReadFailure("This program no longer has valid schedule dates. Refresh Live TV.")
+                },
+                draftSeries = series
+            )
         } catch (failure: LiveReadFailure) {
             mutable.value = mutable.value.copy(error = failure.message)
         } finally {
@@ -191,7 +199,12 @@ internal class LiveTvViewModel(
                 }
                 val result = operation()
                 mutable.value =
-                    mutable.value.copy(notice = result.message, draft = if (result.outcome == "ok") null else mutable.value.draft)
+                    mutable.value.copy(
+                        notice = result.message,
+                        draft = if (result.outcome == "ok") null else mutable.value.draft,
+                        writeVersion = mutable.value.writeVersion + 1,
+                        lastWriteOutcome = result.outcome
+                    )
                 refresh()
             } catch (failure: LiveReadFailure) {
                 mutable.value = mutable.value.copy(error = failure.message)
