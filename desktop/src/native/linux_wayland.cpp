@@ -121,15 +121,21 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
       FILE *out=fopen(path,"w");
       if(!out){s->renderFailure=-4;break;}
       const char *names[]={"black","gray100","gray203","gray1000","red100","green100","blue100","gray50"};
-      fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app GL backbuffer BEFORE compositor\",\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",w,h);
+      GLint readFbo=0,drawFbo=0,readBuffer=0,alphaBits=0;
+      glGetIntegerv(0x8CAA,&readFbo);glGetIntegerv(0x8CA6,&drawFbo);glGetIntegerv(GL_READ_BUFFER,&readBuffer);glGetIntegerv(GL_ALPHA_BITS,&alphaBits);
+      auto bindFramebuffer=(void(*)(GLenum,GLuint))eglGetProcAddress("glBindFramebuffer");
+      if(!bindFramebuffer){fclose(out);s->renderFailure=-6;break;}
+      bindFramebuffer(0x8CA8,0);glReadBuffer(GL_BACK);
+      fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app explicit EGL default GL_BACK BEFORE compositor\",\"readFbo\":0,\"previousReadFbo\":%d,\"drawFbo\":%d,\"previousReadBuffer\":%d,\"previousDrawAlphaBits\":%d,\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",readFbo,drawFbo,readBuffer,alphaBits,w,h);
       for(int n=0;n<8;n++) {
-       float pixels[75];glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGB,GL_FLOAT,pixels);
-       float channels[3][25];
-       for(int k=0;k<25;k++)for(int c=0;c<3;c++)channels[c][k]=pixels[k*3+c];
-       for(int c=0;c<3;c++)std::sort(channels[c],channels[c]+25);
-       fprintf(out,"%s{\"name\":\"%s\",\"rgb\":[%.9g,%.9g,%.9g]}",n?",":"",names[n],channels[0][12],channels[1][12],channels[2][12]);
+       float pixels[100];glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGBA,GL_FLOAT,pixels);
+       float channels[4][25];
+       for(int k=0;k<25;k++)for(int c=0;c<4;c++)channels[c][k]=pixels[k*4+c];
+       for(int c=0;c<4;c++)std::sort(channels[c],channels[c]+25);
+       fprintf(out,"%s{\"name\":\"%s\",\"rgb\":[%.9g,%.9g,%.9g],\"alpha\":%.9g}",n?",":"",names[n],channels[0][12],channels[1][12],channels[2][12],channels[3][12]);
       }
       fprintf(out,"]}\n");fclose(out);
+      bindFramebuffer(0x8CA8,readFbo);glReadBuffer(readBuffer);
       if(glGetError()!=GL_NO_ERROR){s->renderFailure=-5;break;}
      }
      if(!eglSwapBuffers(s->ed,s->es)){s->renderFailure=-2;break;}double c=seconds();mpv_render_context_report_swap(s->render);

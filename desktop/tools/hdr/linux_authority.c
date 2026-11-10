@@ -21,13 +21,15 @@ static void output_frame(struct wl_listener *l, void *damage) {
  capture_pending=false;
  // Stock Weston GL renderer emits output.frame_signal after drawing to its final
  // output framebuffer. Observe that buffer synchronously without altering color code.
- GLint fbo=0, viewport[4];glGetIntegerv(GL_FRAMEBUFFER_BINDING,&fbo);glGetIntegerv(GL_VIEWPORT,viewport);
+ GLint fbo=0,readFbo=0,packBuffer=0, viewport[4];glGetIntegerv(GL_FRAMEBUFFER_BINDING,&fbo);glGetIntegerv(0x8CAA,&readFbo);glGetIntegerv(0x88ED,&packBuffer);glGetIntegerv(GL_VIEWPORT,viewport);
+ weston_log("HDR_NUMERIC_BINDING readFbo=%d drawFbo=%d packBuffer=%d\n",readFbo,fbo,packBuffer);
  GLenum prior=glGetError();
- if(!fbo || viewport[2]!=observed_output->width || viewport[3]!=observed_output->height || prior!=GL_NO_ERROR) {
+ if(!fbo || packBuffer || viewport[2]!=observed_output->width || viewport[3]!=observed_output->height || prior!=GL_NO_ERROR) {
   weston_log("HDR_NUMERIC_DIRECT invalid FBO=%d viewport=%dx%d GLerror=%u\n",fbo,viewport[2],viewport[3],prior);return;
  }
  char path[4096];snprintf(path,sizeof(path),"%s/direct-compositor-%u.json",root,capture_number);
  FILE *out=fopen(path,"w");if(!out)return;
+ glBindFramebuffer(0x8CA8,fbo); // Explicit READ_FRAMEBUFFER = the actual output DRAW_FRAMEBUFFER.
  bool pq=weston_output_get_eotf_mode(observed_output)==WESTON_EOTF_MODE_ST2084;
  const char *names[]={"black","gray100","gray203","gray1000","red100","green100","blue100","gray50"};
  fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":%d,\"boundary\":\"stock Weston final output FBO at frame_signal AFTER composition\",\"fbo\":%d,\"width\":%d,\"height\":%d,\"samples\":[",pq?"pq":"gamma2.2",pq?"bt2020":"bt709",pq?203:80,fbo,viewport[2],viewport[3]);
@@ -40,6 +42,7 @@ static void output_frame(struct wl_listener *l, void *damage) {
  }
  unsigned char ui[4];glReadPixels(viewport[2]-140,viewport[3]-32,1,1,GL_RGBA,GL_UNSIGNED_BYTE,ui);
  GLenum error=glGetError();fprintf(out,"],\"diagnosticUiRGBA8\":[%u,%u,%u,%u],\"glError\":%u}\n",ui[0],ui[1],ui[2],ui[3],error);fclose(out);
+ glBindFramebuffer(0x8CA8,readFbo);
  weston_log("HDR_NUMERIC_DIRECT captured=%u FBO=%d GLerror=%u\n",capture_number,fbo,error);
 }
 static void authorize(struct wl_listener *l, struct weston_output_capture_attempt *a) {
