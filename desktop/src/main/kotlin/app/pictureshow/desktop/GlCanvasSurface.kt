@@ -48,6 +48,9 @@ class GlCanvasSurface(private val mpv:Mpv, media:String, private val failed:(Thr
     private val canvas:GLCanvas
     private val animator:FPSAnimator
     init {
+        // GLX cannot import Intel VAAPI frames directly. auto-safe selected vaapi-copy,
+        // which downloads every GPU-decoded frame; keep this path on CPU decode + GL upload.
+        mpv.option("hwdec","no")
         mpv.option("vo","libmpv"); mpv.initialize()
         GLProfile.initSingleton()
         canvas=GLCanvas(GLCapabilities(GLProfile.get(GLProfile.GL3)))
