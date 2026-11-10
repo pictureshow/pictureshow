@@ -4,9 +4,11 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,21 +42,29 @@ internal fun LiveScheduleEditor(
     var validationError by remember(original) { mutableStateOf<String?>(null) }
     val merged = JsonObject(original.fields + edits)
     val enabled = !confirmed && !busy
+    val textInset = if (tv) Modifier.padding(start = 16.dp) else Modifier
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        LiveText(original.name, tv, heading = true)
+        LiveText(original.name, tv, textInset, heading = true)
         LiveText(
             "${original.channelName ?: "Channel ${original.channelId}"} · ${time.range(original.startDate, original.endDate)}",
             tv,
+            textInset,
             small = true
         )
         if (confirmed) {
             LiveText(
                 "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
                     "Completed recordings are retained if you cancel the schedule.",
-                tv
+                tv,
+                textInset
             )
-            validationError?.let { LiveText(it, tv, warning = true) }
-            LiveAction(if (existing) "Confirm save changes" else "Confirm recording", tv, Modifier.liveFocus("editor:confirm", tv), !busy) {
+            validationError?.let { LiveText(it, tv, textInset, warning = true) }
+            LiveAction(
+                if (existing) "Confirm save changes" else "Confirm recording",
+                tv,
+                textInset.liveFocus("editor:confirm", tv),
+                !busy
+            ) {
                 runCatching { editSchedule(original, JsonObject(edits), series) }
                     .onSuccess {
                         validationError = null
@@ -62,9 +72,9 @@ internal fun LiveScheduleEditor(
                     }
                     .onFailure { validationError = it.message ?: "Review the recording options before saving." }
             }
-            LiveAction("Review settings", tv, enabled = !busy) { confirmed = false }
+            LiveAction("Review settings", tv, textInset, enabled = !busy) { confirmed = false }
         } else {
-            LiveAction("Review ${if (existing) "changes" else "recording"}", tv, enabled = !busy) { confirmed = true }
+            LiveAction("Review ${if (existing) "changes" else "recording"}", tv, textInset, enabled = !busy) { confirmed = true }
         }
         val padding = listOf(0, 1, 2, 5, 10, 15).map { minutes ->
             JsonPrimitive(minutes * 60) to if (minutes ==
@@ -164,9 +174,9 @@ internal fun LiveScheduleEditor(
                 LiveOption("Delete", label, choices, tv, enabled) { edits = edits + ("KeepUntil" to it) }
             }
             if ("Days" in original.fields) {
-                LiveText("Days", tv, small = true)
+                LiveText("Days", tv, textInset, small = true)
                 val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday").forEach { day ->
                         LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled) {
                             val next = if (day in days) days - day else days + day
@@ -177,7 +187,9 @@ internal fun LiveScheduleEditor(
             }
         }
         if ("Priority" in original.fields) {
-            LiveChip("More options", more, tv, enabled) { more = !more }
+            Box(textInset) {
+                LiveChip("More options", more, tv, enabled) { more = !more }
+            }
             if (more) {
                 LiveOption(
                     "Priority",
@@ -200,7 +212,7 @@ internal fun LiveScheduleEditor(
                 }
             }
         }
-        LiveText("Options shown are supported by this provider. Other recording settings are kept.", tv, small = true)
+        LiveText("Some options depend on your server.", tv, textInset, small = true)
     }
 }
 
@@ -223,6 +235,7 @@ private fun LiveOption(
             modifier = modifier.fillMaxWidth(),
             enabled = enabled,
             trailingContent = { LiveText(value, true) },
+            scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f),
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
