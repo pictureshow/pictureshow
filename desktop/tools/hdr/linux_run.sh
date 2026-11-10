@@ -34,6 +34,7 @@ color-management=true
 idle-time=0
 [shell]
 locking=false
+startup-animation=none
 panel-position=none
 background-color=0xff000000
 [output]
