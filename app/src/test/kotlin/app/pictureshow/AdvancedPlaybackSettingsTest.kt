@@ -1,12 +1,18 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) Legitimate LLC.
  */
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package app.pictureshow
 
 import android.app.Application
+import android.provider.Settings
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -15,17 +21,46 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.media3.ui.SubtitleView
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class AdvancedPlaybackSettingsTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun livePreviewUsesSystemCaptionScaleUntilAnExplicitSizeIsChosen() {
+        val context = RuntimeEnvironment.getApplication()
+        Settings.Secure.putInt(context.contentResolver, "accessibility_captioning_enabled", 1)
+        Settings.Secure.putFloat(context.contentResolver, "accessibility_captioning_font_scale", 1.6f)
+        var appearance by mutableStateOf(SubtitleAppearance())
+        lateinit var root: View
+        compose.setContent {
+            root = LocalView.current.rootView
+            androidx.tv.material3.MaterialTheme { SubtitlePreview(appearance) }
+        }
+        fun subtitle(view: View): SubtitleView? = when (view) {
+            is SubtitleView -> view
+            is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { subtitle(view.getChildAt(it)) }
+            else -> null
+        }
+        compose.runOnIdle {
+            val preview = requireNotNull(subtitle(root))
+            assertEquals(14f / 108f * 1.6f, ReflectionHelpers.getField<Float>(preview, "defaultTextSize"), 0.00001f)
+            appearance = appearance.copy(size = SubtitleSize.Large)
+        }
+        compose.runOnIdle {
+            val preview = requireNotNull(subtitle(root))
+            assertEquals(14f / 108f * 1.25f, ReflectionHelpers.getField<Float>(preview, "defaultTextSize"), 0.00001f)
+        }
+    }
 
     @Test fun tvSubtitleControlsChangeActualAppearanceAndExposeConsequences() {
         var prefs by mutableStateOf(PlaybackPreferences())

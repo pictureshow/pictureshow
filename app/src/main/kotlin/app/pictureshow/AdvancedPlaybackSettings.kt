@@ -442,14 +442,12 @@ internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = fa
             modifier = Modifier.fillMaxWidth().height(previewHeight).testTag("settings:subtitle-preview")
                 .background(Brush.horizontalGradient(listOf(Color(0xFF152438), Color(0xFFE6D8AD), Color(0xFF152438), Color(0xFFE6D8AD)))),
             update = {
-                appearance.applyTo(it, context)
-                it.setFractionalTextSize(
-                    // Keep the sample readable when the compact preview gives controls more room.
-                    (14f / previewHeight.value) *
-                        (
-                            appearance.resolve(1f, androidx.media3.ui.CaptionStyleCompat.DEFAULT).textFraction /
-                                SubtitleView.DEFAULT_TEXT_SIZE_FRACTION
-                            )
+                // Normalize the sample height through the real caption resolver, preserving
+                // the viewer's system caption scale when Font size is Default.
+                appearance.applyTo(
+                    it,
+                    context,
+                    heightScale = (14f / previewHeight.value) / SubtitleView.DEFAULT_TEXT_SIZE_FRACTION
                 )
                 it.setCues(cues)
             }
