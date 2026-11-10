@@ -83,8 +83,12 @@ data class SubtitleAppearance(
                 if (custom.bold || custom.italic) {
                     Typeface.create(
                         base.typeface,
-                        (if (custom.bold) Typeface.BOLD else 0) or
-                            (if (custom.italic) Typeface.ITALIC else 0)
+                        when {
+                            custom.bold && custom.italic -> Typeface.BOLD_ITALIC
+                            custom.bold -> Typeface.BOLD
+                            custom.italic -> Typeface.ITALIC
+                            else -> Typeface.NORMAL
+                        }
                     )
                 } else {
                     base.typeface
@@ -112,8 +116,12 @@ data class SubtitleAppearance(
                     val text = SpannableString(if (style.overrideEmbedded) cue.text.toString() else cue.text)
                     text.setSpan(
                         StyleSpan(
-                            (if (style.bold) Typeface.BOLD else 0) or
-                                (if (style.italic) Typeface.ITALIC else 0)
+                            when {
+                                style.bold && style.italic -> Typeface.BOLD_ITALIC
+                                style.bold -> Typeface.BOLD
+                                style.italic -> Typeface.ITALIC
+                                else -> Typeface.NORMAL
+                            }
                         ),
                         0,
                         text.length,
