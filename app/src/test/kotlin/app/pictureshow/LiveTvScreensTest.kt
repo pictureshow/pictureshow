@@ -75,4 +75,31 @@ class LiveTvScreensTest {
         ).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, tuned) }
     }
+
+    @Test fun emptyRecordingDaysShowsValidationWithoutSubmittingOrCrashing() {
+        var writes = 0
+        val original = app.pictureshow.core.livetv.LiveSchedule(
+            kotlinx.serialization.json.buildJsonObject {
+                put("Name", kotlinx.serialization.json.JsonPrimitive("Generated series"))
+                put("Days", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive("Monday"))))
+            }
+        )
+        compose.setContent {
+            TouchTheme {
+                androidx.compose.foundation.lazy.LazyColumn {
+                    item { LiveScheduleEditor(original, true, false, false, false) { writes++ } }
+                }
+            }
+        }
+        compose.onNodeWithText("Monday: On").performScrollTo().performClick()
+        compose.onNodeWithText("Review recording").performScrollTo().performClick()
+        compose.onNodeWithText("Confirm recording").performScrollTo().performClick()
+        compose.onNodeWithText("Select at least one valid day without duplicates.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, writes) }
+        compose.onNodeWithText("Review settings").performScrollTo().performClick()
+        compose.onNodeWithText("Monday: Off").performScrollTo().performClick()
+        compose.onNodeWithText("Review recording").performScrollTo().performClick()
+        compose.onNodeWithText("Confirm recording").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, writes) }
+    }
 }

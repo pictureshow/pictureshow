@@ -522,7 +522,7 @@ internal fun LiveTvScreen(
 }
 
 @Composable
-private fun LiveScheduleEditor(
+internal fun LiveScheduleEditor(
     original: LiveSchedule,
     series: Boolean,
     tv: Boolean,
@@ -533,6 +533,7 @@ private fun LiveScheduleEditor(
     var edits by remember(original) { mutableStateOf<Map<String, JsonElement>>(emptyMap()) }
     val merged = JsonObject(original.fields + edits)
     var confirmed by remember(original) { mutableStateOf(false) }
+    var validationError by remember(original) { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         LiveText(
             "${original.name} · ${liveDates(
@@ -634,8 +635,14 @@ private fun LiveScheduleEditor(
                 )}, channel ${original.fields["ChannelName"]?.jsonPrimitive?.content ?: original.channelId}. Recording availability depends on the server tuner and storage.",
                 tv
             )
+            validationError?.let { LiveText(it, tv, warning = true) }
             LiveButton(if (existing) "Confirm save changes" else "Confirm recording", tv, enabled = !busy) {
-                onSave(editSchedule(original, JsonObject(edits), series))
+                runCatching { editSchedule(original, JsonObject(edits), series) }
+                    .onSuccess {
+                        validationError = null
+                        onSave(it)
+                    }
+                    .onFailure { validationError = it.message ?: "Review the recording options before saving." }
             }
             LiveButton("Review settings", tv, enabled = !busy) { confirmed = false }
         } else {
