@@ -62,6 +62,13 @@ class PlaybackSettingsVectorsTest {
             )
             "resume-position" -> JsonPrimitive(tuning.resumedPositionMs(input.getValue("savedPositionMs").jsonPrimitive.long))
             "early-next" -> JsonPrimitive(tuning.allowEarlyNext(input.getValue("hasPostCreditsScene").jsonPrimitive.boolean))
+            "unique-local-address" -> JsonPrimitive(
+                PlaybackNetworkPolicy.isUniqueLocalAddress(
+                    input.getValue("addressBytes").jsonArray.map {
+                        it.jsonPrimitive.int.toByte()
+                    }.toByteArray()
+                )
+            )
             "network-classification" -> JsonPrimitive(
                 PlaybackNetworkPolicy.classify(
                     input.getValue("metered").jsonPrimitive.boolean,
