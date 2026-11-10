@@ -908,13 +908,23 @@ fun CatalogGrid(
                                     sortRequests[state.sortBy] = firstSort
                                     onDispose { sortRequests.remove(state.sortBy) }
                                 }
-                                Button(onClick = { sorting = true },
-                                    modifier = Modifier.focusRequester(firstSort).then(sortControl(0)).testTag("grid:sort:${state.sortBy}")) {
-                                    SortChipContent("${GridSorts.firstOrNull { it.first == state.sortBy }?.second ?: "Name"} ${if (state.descending) "↓" else "↑"}", "chevron-down")
+                                Button(
+                                    onClick = { sorting = true },
+                                    modifier = Modifier.focusRequester(firstSort).then(sortControl(0)).testTag("grid:sort:${state.sortBy}")
+                                ) {
+                                    SortChipContent(
+                                        "${GridSorts.firstOrNull {
+                                            it.first == state.sortBy
+                                        }?.second ?: "Name"} ${if (state.descending) "↓" else "↑"}",
+                                        "chevron-down"
+                                    )
                                 }
                                 if (onFilters != null) {
-                                    androidx.tv.material3.FilterChip(selected = state.filters.active, onClick = onFilters,
-                                        modifier = sortControl(1).testTag("grid:filters")) { Text(filterChipLabel(state.filters)) }
+                                    androidx.tv.material3.FilterChip(
+                                        selected = state.filters.active,
+                                        onClick = onFilters,
+                                        modifier = sortControl(1).testTag("grid:filters")
+                                    ) { Text(filterChipLabel(state.filters)) }
                                 }
                                 if (onDisplayList != null) {
                                     Button(onClick = { onDisplayList(!state.list) }, modifier = sortControl(2).testTag("grid:display")) {
@@ -931,8 +941,14 @@ fun CatalogGrid(
                         if (state.loading && state.items.isEmpty()) Text("Loading…")
                         if (!state.loading && state.items.isEmpty() && state.error == null) {
                             Text(emptyGridLabel(state.parent, state.filters))
-                            if (state.filters.active && onClearFilters != null) Button(onClick = onClearFilters,
-                                modifier = Modifier.focusRequester(clearFiltersFocus).testTag("grid:clear-filters")) { Text("Clear filters") }
+                            if (state.filters.active && onClearFilters != null) {
+                                Button(
+                                    onClick = onClearFilters,
+                                    modifier = Modifier.focusRequester(clearFiltersFocus).testTag("grid:clear-filters")
+                                ) {
+                                    Text("Clear filters")
+                                }
+                            }
                         }
                     }
                 }

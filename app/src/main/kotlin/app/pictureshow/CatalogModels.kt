@@ -320,7 +320,14 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
         mutableState.update { it.copy(saving = true) }
         viewModelScope.launch {
             val saved = session.homePreferences.change(account, transform)
-            mutableState.update { it.copy(preferences = saved.preferences, preferenceStatus = saved.status, preferenceRetryable = saved.retrySave, saving = false) }
+            mutableState.update {
+                it.copy(
+                    preferences = saved.preferences,
+                    preferenceStatus = saved.status,
+                    preferenceRetryable = saved.retrySave,
+                    saving = false
+                )
+            }
             reload()
         }
     }

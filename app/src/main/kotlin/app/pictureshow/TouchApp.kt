@@ -5,7 +5,6 @@ package app.pictureshow
 
 import android.net.Uri
 import android.widget.Toast
-import app.pictureshow.core.withoutConstraint
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
@@ -34,6 +33,7 @@ import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.serverLabel
+import app.pictureshow.core.withoutConstraint
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel

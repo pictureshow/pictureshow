@@ -85,6 +85,7 @@ import app.pictureshow.core.editableHomeKeys
 import app.pictureshow.core.homeEditorPinLabel
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.moveHomeRow
+import app.pictureshow.core.namedPickerChoices
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -497,12 +498,17 @@ internal fun NamedCatalogPicker(
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(account.key, kind, parentId, selectedKeys) {
         currentChoices = emptyList()
-        val authorized = selectedKeys.take(60).mapNotNull { key ->
-            if (kind in listOf("Genres", "Studios")) {
-                (service.namedItems(account, kind, parentId, key, 0) as? ClientResult.Success)?.value?.items
-                    ?.firstOrNull { it.name == key }
-            } else {
-                (service.item(account, key) as? ClientResult.Success)?.value?.takeIf { it.id == key && it.name.isNotBlank() }
+        val parentAllowed = parentId.isBlank() || service.item(account, parentId) is ClientResult.Success
+        val authorized = if (!parentAllowed) {
+            emptyList()
+        } else {
+            selectedKeys.take(60).mapNotNull { key ->
+                if (kind in listOf("Genres", "Studios")) {
+                    (service.namedItems(account, kind, parentId, key, 0) as? ClientResult.Success)?.value?.items
+                        ?.firstOrNull { it.name == key }
+                } else {
+                    (service.item(account, key) as? ClientResult.Success)?.value?.takeIf { it.id == key && it.name.isNotBlank() }
+                }
             }
         }
         currentCoroutineContext().ensureActive()
@@ -530,7 +536,7 @@ internal fun NamedCatalogPicker(
         }
         loading = false
     }
-    val choices = if (requested.isBlank() && page == 0) (currentChoices + pageChoices).distinctBy(MediaItem::id) else pageChoices
+    val choices = namedPickerChoices(currentChoices, pageChoices, requested, page)
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
     val title = when (kind) {
@@ -614,6 +620,7 @@ internal fun NamedCatalogPicker(
             list.scrollToItem(initial + 1)
             withFrameNanos { }
             choiceFocus.requestFocus()
+            keyboard?.hide()
         }
     }
 }
@@ -677,7 +684,8 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     LaunchedEffect(state.account.key, state.parent.id, draft.personId) {
         personLabel = "Selected person"
         draft.personId?.let { id ->
-            val result = service.item(state.account, id)
+            val parent = service.item(state.account, state.parent.id)
+            val result = if (parent is ClientResult.Success) service.item(state.account, id) else parent
             currentCoroutineContext().ensureActive()
             if (result is ClientResult.Success && result.value.name.isNotBlank()) personLabel = result.value.name
         }

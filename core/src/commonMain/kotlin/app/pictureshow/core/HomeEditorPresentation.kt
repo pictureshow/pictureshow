@@ -53,3 +53,7 @@ fun filteredEmptyLabel(collectionType: String?): String = "No ${when (collection
     "music" -> "music"
     else -> "titles"
 }} match these filters"
+
+/** Already authorized current choices are visible on the first unsearched page only. */
+fun namedPickerChoices(current: List<MediaItem>, page: List<MediaItem>, term: String, offset: Int): List<MediaItem> =
+    (if (term.isBlank() && offset == 0) current + page else page).distinctBy(MediaItem::id)

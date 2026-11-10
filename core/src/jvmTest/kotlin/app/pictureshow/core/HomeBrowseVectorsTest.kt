@@ -35,6 +35,14 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "named-picker-choices" -> Json.encodeToJsonElement(
+                    namedPickerChoices(
+                        Json.decodeFromJsonElement<List<VectorItem>>(input.getValue("current")).map { MediaItem(it.id) },
+                        Json.decodeFromJsonElement<List<VectorItem>>(input.getValue("page")).map { MediaItem(it.id) },
+                        input.getValue("term").jsonPrimitive.content,
+                        input.getValue("offset").jsonPrimitive.content.toInt()
+                    ).map { it.id }
+                )
                 "home-rows" -> {
                     val rows = Json.decodeFromJsonElement<List<Row>>(input.getValue("rows")).map {
                         HomeRow(it.key, it.title, it.items.map { item -> MediaItem(item.id, seriesId = item.seriesId) })

@@ -1411,6 +1411,95 @@
         "empty": "No movies match these filters",
         "active": false
       }
+    },
+    {
+      "id": "picker-current-outside-page",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "first"
+          }
+        ],
+        "term": "",
+        "offset": 0
+      },
+      "expected": [
+        "saved",
+        "first"
+      ]
+    },
+    {
+      "id": "picker-current-deduplicated",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "first"
+          },
+          {
+            "id": "saved"
+          }
+        ],
+        "term": "",
+        "offset": 0
+      },
+      "expected": [
+        "saved",
+        "first"
+      ]
+    },
+    {
+      "id": "picker-search-does-not-inject-saved",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "match"
+          }
+        ],
+        "term": "query",
+        "offset": 0
+      },
+      "expected": [
+        "match"
+      ]
+    },
+    {
+      "id": "picker-next-page-does-not-inject-saved",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "next"
+          }
+        ],
+        "term": "",
+        "offset": 60
+      },
+      "expected": [
+        "next"
+      ]
     }
   ]
 }

@@ -207,6 +207,21 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:choice:first").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
     }
 
+    @Test fun deniedLibraryCannotResolveSavedPersonMetadata() {
+        service.detail = { id ->
+            if (id == library.id) {
+                ClientResult.Failure(ClientError(ErrorKind.SERVER, "Denied"))
+            } else {
+                ClientResult.Success(MediaItem(id, "Previously selected person", "Person"))
+            }
+        }
+        compose.setContent {
+            MaterialTheme { NamedCatalogPicker(account, service, "Persons", library.id, {}, {}, setOf("saved")) }
+        }
+        compose.onNodeWithText("Previously selected person").assertDoesNotExist()
+        compose.onNodeWithTag("catalog:choice:saved").assertDoesNotExist()
+    }
+
     @Test fun lateFailedChoiceCannotReplaceNewSuccessfulSearch() {
         val old = CompletableDeferred<ClientResult<ItemPage>>()
         service.named = { term ->
