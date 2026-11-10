@@ -666,6 +666,34 @@
         "failed": false,
         "includeHidden": "true"
       }
+    },
+    {
+      "id": "home-server-layout-survives-device-cache-failure",
+      "operation": "home-preferences-local-failure",
+      "input": {
+        "afterPost": false
+      },
+      "expected": {
+        "merged": true,
+        "landing": "home",
+        "warned": true,
+        "serverSaved": false,
+        "pending": false
+      }
+    },
+    {
+      "id": "home-acknowledged-save-survives-local-sync-marker-failure",
+      "operation": "home-preferences-local-failure",
+      "input": {
+        "afterPost": true
+      },
+      "expected": {
+        "merged": true,
+        "landing": "libraries",
+        "warned": true,
+        "serverSaved": true,
+        "pending": true
+      }
     }
   ]
 }

@@ -25,7 +25,15 @@ class HomePreferencesStore(private val service: CatalogService, private val acco
             }
             is ClientResult.Success -> {
                 val preferences = readHomePreferences(result.value) ?: local
-                if (snapshot.accounts.any { it.key == account.key }) accounts.saveHomePreferences(account.key, preferences, pending = false)
+                if (snapshot.accounts.any { it.key == account.key }) {
+                    try {
+                        accounts.saveHomePreferences(account.key, preferences, pending = false)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        return Read(preferences, "Using the server layout. Could not save a copy on this device.")
+                    }
+                }
                 Read(preferences)
             }
         }
@@ -46,7 +54,13 @@ class HomePreferencesStore(private val service: CatalogService, private val acco
         if (document is ClientResult.Success) {
             val saved = service.saveDisplayPreferences(account, homePreferencesDocument(document.value, next))
             if (saved is ClientResult.Success) {
-                accounts.saveHomePreferences(account.key, next, pending = false)
+                try {
+                    accounts.saveHomePreferences(account.key, next, pending = false)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    return@withLock Read(next, "Saved on the server and this device. Could not confirm sync locally; retry server save.")
+                }
                 return@withLock Read(next, "Saved for this viewer on the server.")
             }
             if (saved is ClientResult.Failure) expire(account, saved)

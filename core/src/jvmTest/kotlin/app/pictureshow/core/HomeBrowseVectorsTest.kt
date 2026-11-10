@@ -84,6 +84,49 @@ class HomeBrowseVectorsTest {
                         put("roundtrip", readHomePreferences(after) == prefs)
                     }
                 }
+                "home-preferences-local-failure" -> {
+                    val afterPost = input.getValue("afterPost").jsonPrimitive.content == "true"
+                    var post = false
+                    var reject = false
+                    val accounts = AccountStore(object : TextPersistence {
+                        var value: String? = null
+                        override suspend fun read() = value
+                        override suspend fun write(value: String) {
+                            if (reject && (!afterPost || post)) error("Simulated unavailable device storage")
+                            this.value = value
+                        }
+                    })
+                    val viewer = Account(Server("s", "Cinema", "https://media.example.test", "12.0.0"), User("v", "Viewer"), "fake")
+                    accounts.remember(viewer)
+                    val remote = homePreferencesDocument(JsonObject(emptyMap()), HomePreferences(mergeWatching = true))
+                    val http = HttpClient(
+                        MockEngine(
+                            io.ktor.client.engine.mock.MockEngineConfig().apply {
+                                dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                                addHandler { request ->
+                                    if (request.method == io.ktor.http.HttpMethod.Post) {
+                                        post = true
+                                        respond("", HttpStatusCode.NoContent)
+                                    } else {
+                                        respond(remote.toString())
+                                    }
+                                }
+                            }
+                        )
+                    )
+                    http.use {
+                        val store = HomePreferencesStore(CatalogClient(it, ClientIdentity("Vectors", "vector-device")), accounts)
+                        reject = true
+                        val result = if (afterPost) store.change(viewer) { it.copy(landing = "libraries") } else store.read(viewer)
+                        buildJsonObject {
+                            put("merged", result.preferences.mergeWatching)
+                            put("landing", result.preferences.landing)
+                            put("warned", result.status != null)
+                            put("serverSaved", post)
+                            put("pending", viewer.key in accounts.load().pendingHomePreferences)
+                        }
+                    }
+                }
                 "catalog-parent-guard", "catalog-latest-authority", "catalog-views-display-hidden" -> {
                     val paths = mutableListOf<String>()
                     var includeHidden: String? = null
