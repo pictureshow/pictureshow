@@ -8,6 +8,9 @@ package app.pictureshow
 import android.content.Context
 import android.media.AudioManager
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.test.utils.FakeAudioRenderer
 import androidx.media3.test.utils.FakeClock
@@ -90,6 +93,8 @@ class MusicHostTest {
     private val hosts = mutableListOf<MusicHost>()
     private val log = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val negotiated = java.util.Collections.synchronizedList(mutableListOf<String>())
+    private val playerErrors = java.util.Collections.synchronizedList(mutableListOf<String>())
+    private val fixtureHttp = java.util.Collections.synchronizedList(mutableListOf<String>())
     private var gone = emptySet<String>()
     private var remote: String? = null
     private var services = 0
@@ -170,7 +175,19 @@ class MusicHostTest {
                 arrayOf(FakeAudioRenderer(clock.createHandler(handler.looper, null), audio))
             }
             .build()
-            .also { lastPlayer = it }
+            .also {
+                lastPlayer = it
+                it.addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        val causes = generateSequence<Throwable>(error) { cause -> cause.cause }.take(8).toList()
+                        val statuses = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().map { cause ->
+                            cause.responseCode
+                        }
+                        playerErrors +=
+                            "code=${error.errorCode} causes=${causes.map { cause -> cause.javaClass.simpleName }} http=$statuses"
+                    }
+                })
+            }
     }
 
     private fun host(): MusicHost {
@@ -195,10 +212,15 @@ class MusicHostTest {
     @Before fun open() {
         val audio = wav()
         server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = when {
-                request.path!!.startsWith("/denied") -> MockResponse().setResponseCode(401)
-                request.path!!.startsWith("/broken") -> MockResponse().setBody("this is not audio at all, not even close".repeat(40))
-                else -> MockResponse().setHeader("Content-Type", "audio/wav").setBody(Buffer().write(audio))
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val response = when {
+                    request.path!!.startsWith("/denied") -> MockResponse().setResponseCode(401)
+                    request.path!!.startsWith("/broken") -> MockResponse().setBody("this is not audio at all, not even close".repeat(40))
+                    else -> MockResponse().setHeader("Content-Type", "audio/wav").setBody(Buffer().write(audio))
+                }
+                val status = response.status.split(' ').getOrNull(1)?.toIntOrNull()
+                fixtureHttp += "${request.method} ${request.path?.substringBefore('?')?.take(120)} status=$status"
+                return response
             }
         }
         server.start()
@@ -251,7 +273,9 @@ class MusicHostTest {
                 System.currentTimeMillis() < end,
                 "Waited for: $what. Log: $log. Ui: ${hosts.lastOrNull()?.state?.value?.let {
                     it.message to it.queue?.order
-                }}"
+                }}. Player: ${lastPlayer?.let { it.playbackState to it.playWhenReady }}. " +
+                    "Errors: ${synchronized(playerErrors) { playerErrors.takeLast(8) }}. " +
+                    "HTTP counts: ${synchronized(fixtureHttp) { fixtureHttp.groupingBy { it }.eachCount() }}"
             )
             ShadowLooper.idleMainLooper()
             Thread.sleep(5)
