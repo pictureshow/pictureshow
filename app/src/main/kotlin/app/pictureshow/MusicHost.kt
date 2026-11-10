@@ -300,11 +300,9 @@ internal class MusicHost(
         val requestedGroup = group()
         val groupGeneration = requestedGroup?.membership?.generation
         jobs.trySend {
-            if (asked == binding && (
-                    requestedGroup == null ||
-                        (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
-                    )
-            ) {
+            val sameGroup = requestedGroup == null ||
+                (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
+            if (asked == binding && sameGroup) {
                 job()
             }
         }
@@ -320,11 +318,9 @@ internal class MusicHost(
         val groupGeneration = requestedGroup?.membership?.generation
         jobs.trySend {
             if (owner != account?.key && accounts.snapshots.value.currentAccount?.key == owner) bindLatest()
-            if (owner == account?.key && (
-                    requestedGroup == null ||
-                        (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
-                    )
-            ) {
+            val sameGroup = requestedGroup == null ||
+                (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
+            if (owner == account?.key && sameGroup) {
                 job()
             }
         }
@@ -499,7 +495,9 @@ internal class MusicHost(
         val rows = (gateway.items(owner, listOf(id)) as? ClientResult.Success)?.value ?: return false
         val item = rows.firstOrNull { it.id == id && it.type == "Audio" } ?: return false
         enqueueFor(owner.key) {
-            if (!host.participating || host.membership.generation != generation ||
+            if (
+                !host.participating ||
+                host.membership.generation != generation ||
                 host.membership.queue?.current?.playlistItemId != entry.playlistItemId
             ) {
                 return@enqueueFor
@@ -516,7 +514,9 @@ internal class MusicHost(
             )
             val before = snapshot(queue.committed)
             val saved = store.save(owner, MusicSnapshot(next, null, "Watch together", sequence, listOf(track)))
-            if (!host.participating || host.membership.generation != generation ||
+            if (
+                !host.participating ||
+                host.membership.generation != generation ||
                 host.membership.queue?.current?.playlistItemId != entry.playlistItemId ||
                 accounts.snapshots.value.currentAccount?.key != owner.key
             ) {
@@ -1086,8 +1086,9 @@ internal class MusicHost(
             val q = queue.committed
             val media = q.entries.firstOrNull { it.id == q.current }?.media.orEmpty()
             val matches = running?.currentMediaItem?.mediaId == q.current
-            val available = matches && running != null && running.playbackState == Player.STATE_READY &&
-                running.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+            val isPrepared = running != null && running.playbackState == Player.STATE_READY
+            val unsuppressed = running?.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+            val available = matches && isPrepared && unsuppressed
             val duration = durationMs()?.let(::millisecondsToSyncTicks) ?: 0
             val position = running?.currentPosition?.coerceAtLeast(0)?.let(::millisecondsToSyncTicks)
             val preparedTrack = running?.currentMediaItem?.mediaId?.let(prepared::get)
@@ -1096,10 +1097,11 @@ internal class MusicHost(
                 position ?: 0,
                 duration,
                 ready = available && position != null,
-                buffering = !matches || running?.playbackState == Player.STATE_BUFFERING ||
-                    running?.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE,
+                buffering = !matches || running?.playbackState == Player.STATE_BUFFERING || !unsuppressed,
                 playing = matches && running?.isPlaying == true,
-                seekable = matches && running?.isCurrentMediaItemSeekable == true && duration > 0 &&
+                seekable = matches &&
+                    running?.isCurrentMediaItemSeekable == true &&
+                    duration > 0 &&
                     preparedTrack?.decision?.mediaSource?.liveStreamId == null,
                 // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
                 rateSupported = false
@@ -1134,8 +1136,11 @@ internal class MusicHost(
                 val generation = queue.committed.generation
                 val at = running.currentPosition.coerceAtLeast(0).let(::millisecondsToSyncTicks) ?: return
                 enqueue {
-                    if (player !== running || queue.committed.current != entry ||
-                        queue.committed.generation != generation || (localPause && group() != null)
+                    if (
+                        player !== running ||
+                        queue.committed.current != entry ||
+                        queue.committed.generation != generation ||
+                        (localPause && group() != null)
                     ) {
                         return@enqueue
                     }

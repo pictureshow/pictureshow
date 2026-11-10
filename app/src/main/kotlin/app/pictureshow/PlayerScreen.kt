@@ -789,8 +789,11 @@ internal fun PlayerItemScreen(
                                     null
                                 },
                                 autoPlay =
-                                    host.sync?.participating != true && !accessibleControls && foreground && !pauseIntent &&
-                                        deferredNext == null
+                                host.sync?.participating != true &&
+                                    !accessibleControls &&
+                                    foreground &&
+                                    !pauseIntent &&
+                                    deferredNext == null
                             )
                         }
                     }
