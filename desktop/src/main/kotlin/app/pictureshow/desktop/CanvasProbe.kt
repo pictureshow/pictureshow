@@ -76,6 +76,9 @@ fun canvasMain(args: Array<String>) {
             MaterialTheme(colors=darkColors()) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
                     SwingPanel(factory={GlCanvasSurface(mpv,media,{failure.compareAndSet(null,it)}).also{video=it}.panel},modifier=Modifier.fillMaxSize())
+                    // Recreate native popup peers when owner geometry changes; moved translucent
+                    // peers otherwise retained black backing buffers in Linux GLCanvas proof.
+                    key(state.size,fullscreen) {
                     Popup(alignment=Alignment.TopEnd,offset=IntOffset(-16,16),properties=PopupProperties(focusable=false)) {
                         Button(onClick={if(!stopping.get()){clicks++;mpv.command("cycle","pause")}}) {Text("COMPOSE OVER VIDEO · $clicks")}
                     }
@@ -87,6 +90,7 @@ fun canvasMain(args: Array<String>) {
                             Spacer(Modifier.width(8.dp))
                             Button(onClick={stop()}) {Text("Close")}
                         }
+                    }
                     }
                 }
             }
