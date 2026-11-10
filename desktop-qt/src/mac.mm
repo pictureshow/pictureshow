@@ -41,7 +41,7 @@ void macDraw(void *state,void *target,void *buffer,int w,int h){
   auto *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float width:w height:h mipmapped:NO];desc.storageMode=MTLStorageModeShared;desc.usage=MTLTextureUsageShaderRead;
   s->texture=[s->device newTextureWithDescriptor:desc iosurface:s->surface plane:0];if(!s->texture)qFatal("Metal IOSurface texture failed");s->w=w;s->h=h;
  }
- glBindFramebuffer(GL_FRAMEBUFFER,s->fbo);mpv_opengl_fbo fbo{int(s->fbo),w,h,GL_RGBA16F};int flip=1;
+ glBindFramebuffer(GL_FRAMEBUFFER,s->fbo);mpv_opengl_fbo fbo{int(s->fbo),w,h,GL_RGBA16F};int flip=0;
  mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
  int e=s->p->api.render_context_render(s->ctx,params);if(e<0)qFatal("CGL render %d",e);
  glFinish(); // completes GL writes before Metal consumes the shared IOSurface
@@ -54,3 +54,5 @@ void macDestroy(void *state){auto*s=(Mac*)state;CGLSetCurrentContext(s->gl);s->p
 static QJsonArray rect(NSRect r){return {r.origin.x,r.origin.y,r.size.width,r.size.height};}
 static void layers(CALayer *l,QJsonArray &a){if([l isKindOfClass:[CAMetalLayer class]]){auto *m=(CAMetalLayer*)l;a.append(QJsonObject{{"class",QString::fromUtf8(object_getClassName(m))},{"pixelFormat",int(m.pixelFormat)},{"wantsExtendedDynamicRangeContent",bool(m.wantsExtendedDynamicRangeContent)},{"colorspace",m.colorspace?QString::fromUtf8(CFStringGetCStringPtr(CGColorSpaceGetName(m.colorspace),kCFStringEncodingUTF8)):QString()},{"drawableWidth",m.drawableSize.width},{"drawableHeight",m.drawableSize.height}});}for(CALayer *s in l.sublayers)layers(s,a);}
 QJsonObject macReceipt(WId id){NSView *v=(NSView*)id;NSWindow*w=v.window;NSScreen*s=w.screen;QJsonArray a;layers(v.layer,a);return {{"windowFrame",rect(w.frame)},{"screenFrame",rect(s.frame)},{"styleMask",qint64(w.styleMask)},{"nativeFullscreen",bool(w.styleMask&NSWindowStyleMaskFullScreen)},{"screenMaximumEDR",s.maximumExtendedDynamicRangeColorComponentValue},{"screenPotentialEDR",s.maximumPotentialExtendedDynamicRangeColorComponentValue},{"screenReferenceEDR",s.maximumReferenceExtendedDynamicRangeColorComponentValue},{"metalLayers",a}};}
+
+void macActivate(WId id){[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[NSApp activateIgnoringOtherApps:YES];NSWindow*w=((NSView*)id).window;[w makeKeyAndOrderFront:nil];}

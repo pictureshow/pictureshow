@@ -28,6 +28,9 @@ int main(int argc,char**argv){
  Player player(args[1]);Surface::player=&player;Proof proof(&player);
  QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("proof",&proof);engine.load(QUrl("qrc:/Main.qml"));
  if(engine.rootObjects().isEmpty())return 2;auto*w=qobject_cast<QQuickWindow*>(engine.rootObjects().first());w->requestActivate();
+#ifdef Q_OS_MACOS
+ macActivate(w->winId());
+#endif
  bool failed=false;QElapsedTimer elapsed;elapsed.start();
  auto capture=[&](QString name){
   auto r=player.receipt();r["stage"]=name;r["elapsedMs"]=elapsed.elapsed();r["qtVersion"]=qVersion();r["windowGeometry"]=rect(w->geometry());r["frameGeometry"]=rect(w->frameGeometry());r["screenGeometry"]=rect(w->screen()->geometry());r["devicePixelRatio"]=w->devicePixelRatio();r["qtVisibility"]=int(w->visibility());r["clicks"]=w->property("clicks").toInt();
@@ -36,9 +39,14 @@ int main(int argc,char**argv){
 #ifdef Q_OS_MACOS
   r["native"]=macReceipt(w->winId());
 #endif
-  auto image=w->grabWindow();if(image.isNull()){r["captureError"]="Qt grabWindow returned null";failed=true;}else image.scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+".jpg","JPG",50);
-  // Whole screen is a separate diagnostic; may be denied by OS screen-recording permissions.
-  auto screen=w->screen()->grabWindow(0);if(!screen.isNull())screen.toImage().scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+"-display.jpg","JPG",50);
+  // Use native display capture for evidence; Qt6.12 grabWindow misinterprets FP16 readback on macOS.
+  auto screen=w->screen()->grabWindow(0);
+  if(!screen.isNull()) {
+   auto image=screen.toImage();auto sg=w->screen()->geometry();qreal scale=qreal(image.width())/sg.width();
+   QRect content=w->geometry().translated(-sg.topLeft());QRect px(qRound(content.x()*scale),qRound(content.y()*scale),qRound(content.width()*scale),qRound(content.height()*scale));
+   image.copy(px).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+".jpg","JPG",50);
+   image.scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+"-display.jpg","JPG",50);r["captureMethod"]="native whole-display and geometry crop";
+  } else {auto image=w->grabWindow();r["captureMethod"]="Qt grabWindow fallback; HDR capture requires independent review";r["captureImageFormat"]=int(image.format());if(image.isNull())failed=true;else image.convertToFormat(QImage::Format_RGB32).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+".jpg","JPG",50);}
   QFile f(out+"/"+name+".json");f.open(QFile::WriteOnly);f.write(QJsonDocument(r).toJson());
   if(!player.error.isEmpty())failed=true;qInfo()<<"CAPTURE"<<name;
  };
