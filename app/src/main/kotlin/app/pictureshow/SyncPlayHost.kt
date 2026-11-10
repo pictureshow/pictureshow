@@ -125,6 +125,7 @@ internal class SyncPlayHost(
     private var requestedOpen: String? = null
     private var createQueue = false
     private var ignoreWait = false
+    private var waitRequest: Job? = null
     private var operation: Job? = null
     private var sequence = 0L
 
@@ -440,9 +441,15 @@ internal class SyncPlayHost(
 
             "ignore-wait" -> {
                 val requested = value == "true"
-                send(syncIgnoreWait(requested)) {
-                    ignoreWait = requested
-                    publish()
+                val previous = waitRequest
+                val version = sequence
+                waitRequest = scope.launch {
+                    previous?.join()
+                    if (version != sequence) return@launch
+                    send(syncIgnoreWait(requested)) {
+                        ignoreWait = requested
+                        publish()
+                    }?.join()
                 }
             }
 
@@ -462,14 +469,14 @@ internal class SyncPlayHost(
         return true
     }
 
-    private fun send(request: SyncRequest, confirmed: (() -> Unit)? = null) {
-        val target = account ?: return
+    private fun send(request: SyncRequest, confirmed: (() -> Unit)? = null): Job? {
+        val target = account ?: return null
         if (!connected || membership.group == null || membership.phase in setOf("Error", "Reconnecting")) {
             note("Group controls are unavailable until membership and synchronization are refreshed.")
-            return
+            return null
         }
         val version = sequence
-        scope.launch {
+        return scope.launch {
             val status = gateway.send(target, request)
             if (current(target, version) && status in 200..299) confirmed?.invoke()
             if (current(target, version) && status !in 200..299) {

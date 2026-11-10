@@ -691,4 +691,58 @@ class SyncPlayHostTest {
             assertEquals(listOf("SetIgnoreWait", "SetIgnoreWait", "SetIgnoreWait"), rig.operations())
         }
     }
+
+    @Test fun overlappingIgnoreWaitChoicesAreDispatchedInInvocationOrder() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val firstReply = CompletableDeferred<Unit>()
+        val secondReply = CompletableDeferred<Unit>()
+        rig.sendGate = firstReply
+        rig.host.action("ignore-wait", "true")
+        runCurrent()
+        rig.sendGate = secondReply
+        rig.host.action("ignore-wait", "false")
+        runCurrent()
+        assertEquals(listOf("SetIgnoreWait"), rig.operations())
+        assertTrue(rig.sent.single().second.body!!.getValue("IgnoreWait").jsonPrimitive.boolean)
+        assertFalse(rig.host.state.value.ignoreWait)
+        firstReply.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("SetIgnoreWait", "SetIgnoreWait"), rig.operations())
+        assertFalse(rig.sent.last().second.body!!.getValue("IgnoreWait").jsonPrimitive.boolean)
+        assertTrue(rig.host.state.value.ignoreWait)
+        secondReply.complete(Unit)
+        runCurrent()
+        assertFalse(rig.host.state.value.ignoreWait)
+    }
+
+    @Test fun leavingAndRejoiningDropsQueuedIgnoreWaitFromTheOldMembership() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val oldReply = CompletableDeferred<Unit>()
+        rig.sendGate = oldReply
+        rig.host.action("ignore-wait", "true")
+        runCurrent()
+        rig.host.action("ignore-wait", "false")
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "SetIgnoreWait" })
+        val oldGeneration = rig.host.membership.generation
+        rig.sendGate = null
+        rig.host.leave()
+        runCurrent()
+        rig.join()
+        rig.snapshot()
+        val rejoined = rig.host.membership
+        assertTrue(rejoined.generation > oldGeneration)
+        assertFalse(rig.host.state.value.ignoreWait)
+        oldReply.complete(Unit)
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "SetIgnoreWait" })
+        assertEquals(rejoined, rig.host.membership)
+        assertFalse(rig.host.state.value.ignoreWait)
+    }
 }
