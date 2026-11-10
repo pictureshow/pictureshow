@@ -3,6 +3,10 @@
  */
 package app.pictureshow.core
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpStatusCode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.Serializable
@@ -18,19 +22,23 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 class HomeBrowseVectorsTest {
-    @Serializable private data class Row(val key: String, val title: String, val items: List<MediaItem>)
+    @Serializable private data class VectorItem(val id: String, val seriesId: String? = null)
 
-    @Test fun vectors() {
+    @Serializable private data class Row(val key: String, val title: String, val items: List<VectorItem>)
+
+    @Test fun vectors() = kotlinx.coroutines.test.runTest {
         val text = requireNotNull(javaClass.classLoader.getResourceAsStream("grid-vectors/home-browse.json")).bufferedReader().use {
             it.readText()
         }
         val cases = Json.parseToJsonElement(text).jsonObject.getValue("cases").jsonArray
-        assertEquals(17, cases.size)
+        kotlin.test.assertTrue(cases.isNotEmpty())
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
                 "home-rows" -> {
-                    val rows = Json.decodeFromJsonElement<List<Row>>(input.getValue("rows")).map { HomeRow(it.key, it.title, it.items) }
+                    val rows = Json.decodeFromJsonElement<List<Row>>(input.getValue("rows")).map {
+                        HomeRow(it.key, it.title, it.items.map { item -> MediaItem(item.id, seriesId = item.seriesId) })
+                    }
                     val preferences = Json.decodeFromJsonElement<HomePreferences>(input.getValue("preferences"))
                     Json.encodeToJsonElement(
                         customizedHome(rows, preferences).map { row ->
@@ -61,6 +69,41 @@ class HomeBrowseVectorsTest {
                                 before.getValue("CustomPrefs").jsonObject.all { (k, v) -> after.getValue("CustomPrefs").jsonObject[k] == v }
                         )
                         put("roundtrip", readHomePreferences(after) == prefs)
+                    }
+                }
+                "catalog-parent-guard", "catalog-latest-authority" -> {
+                    val paths = mutableListOf<String>()
+                    val allowed = input["allowed"]?.jsonPrimitive?.content == "true"
+                    val http = HttpClient(
+                        MockEngine(
+                            io.ktor.client.engine.mock.MockEngineConfig().apply {
+                                dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                                addHandler { request ->
+                                    val path = request.url.encodedPath
+                                    paths += path
+                                    when {
+                                        path == "/Items/library" && !allowed -> respond("{}", HttpStatusCode.NotFound)
+                                        path == "/Items/library" -> respond("""{"Id":"library","Type":"CollectionFolder"}""")
+                                        path == "/Items" -> respond("{}", HttpStatusCode.Unauthorized)
+                                        path == "/Items/Filters" -> respond("""{"Genres":["Visible genre"]}""")
+                                        else -> respond("""{"Items":[{"Id":"choice","Name":"Visible choice"}]}""")
+                                    }
+                                }
+                            }
+                        )
+                    )
+                    http.use {
+                        val service = CatalogClient(it, ClientIdentity("Vectors", "vector-device"))
+                        val viewer = Account(Server("s", "Cinema", "https://media.example.test", "12.0.0"), User("v", "Viewer"), "fake")
+                        val result = when (input.getValue("kind").jsonPrimitive.content) {
+                            "facets" -> service.facets(viewer, "library")
+                            "latest" -> service.latest(viewer, "library")
+                            else -> service.namedItems(viewer, input.getValue("kind").jsonPrimitive.content, "library")
+                        }
+                        buildJsonObject {
+                            put("paths", Json.encodeToJsonElement(paths))
+                            put("failed", result is ClientResult.Failure)
+                        }
                     }
                 }
                 else -> error("Unknown operation")

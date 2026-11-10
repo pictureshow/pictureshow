@@ -406,6 +406,135 @@
         "preserved": true,
         "roundtrip": true
       }
+    },
+    {
+      "id": "access-facets-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "facets",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-facets-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "facets",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Items/Filters"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-genres-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Genres",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-genres-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Genres",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Genres"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-studios-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Studios",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-studios-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Studios",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Studios"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-persons-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Persons",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-persons-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Persons",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Persons"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-latest-uses-authorized-browse",
+      "operation": "catalog-latest-authority",
+      "input": {
+        "kind": "latest"
+      },
+      "expected": {
+        "paths": [
+          "/Items"
+        ],
+        "failed": true
+      }
     }
   ]
 }

@@ -74,20 +74,26 @@ class HomePreferencesTest {
     @Test fun filterRequestIntersectsAllFacetsAndPreservesPagingSortAndViewerAuthority() = runTest {
         val filters = LibraryFilters("Animation & stories", 2025, "PG-13", true, true, VideoResolution.FULL_HD, "person", "Studio & Co")
         val http = HttpClient(
-            MockEngine { request ->
-                assertEquals("/base/Items", request.url.encodedPath)
-                assertEquals("v", request.url.parameters["userId"])
-                assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("viewer-token"))
-                val p = request.url.parameters
-                mapOf(
-                    "genres" to "Animation & stories", "years" to "2025", "officialRatings" to "PG-13", "isPlayed" to "false",
-                    "isFavorite" to "true", "minWidth" to "1920", "maxWidth" to "3839", "personIds" to "person", "studios" to "Studio & Co",
-                    "sortBy" to "DateCreated", "sortOrder" to "Descending", "startIndex" to "60", "parentId" to "library"
-                ).forEach { (k, v) ->
-                    assertEquals(v, p[k], k)
+            MockEngine(
+                io.ktor.client.engine.mock.MockEngineConfig().apply {
+                    dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        assertEquals("/base/Items", request.url.encodedPath)
+                        assertEquals("v", request.url.parameters["userId"])
+                        assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("viewer-token"))
+                        val p = request.url.parameters
+                        mapOf(
+                            "genres" to "Animation & stories", "years" to "2025", "officialRatings" to "PG-13", "isPlayed" to "false",
+                            "isFavorite" to "true", "minWidth" to "1920", "maxWidth" to "3839", "personIds" to "person",
+                            "studios" to "Studio & Co",
+                            "sortBy" to "DateCreated", "sortOrder" to "Descending", "startIndex" to "60", "parentId" to "library"
+                        ).forEach { (k, v) ->
+                            assertEquals(v, p[k], k)
+                        }
+                        respond("""{"Items":[],"TotalRecordCount":0}""", headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
                 }
-                respond("""{"Items":[],"TotalRecordCount":0}""", headers = headersOf(HttpHeaders.ContentType, "application/json"))
-            }
+            )
         )
         http.use {
             assertIs<ClientResult.Success<ItemPage>>(
@@ -116,12 +122,17 @@ class HomePreferencesTest {
     @Test fun facetsPinsSearchAndDisplayPreferencesUseOnlyCurrentViewerEvenOnDenial() = runTest {
         val seen = mutableListOf<String>()
         val http = HttpClient(
-            MockEngine { request ->
-                seen += request.url.encodedPath
-                assertEquals("v", request.url.parameters["userId"])
-                assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("viewer-token"))
-                respond("{}", HttpStatusCode.Forbidden, headersOf(HttpHeaders.ContentType, "application/json"))
-            }
+            MockEngine(
+                io.ktor.client.engine.mock.MockEngineConfig().apply {
+                    dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        seen += request.url.encodedPath
+                        assertEquals("v", request.url.parameters["userId"])
+                        assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("viewer-token"))
+                        respond("{}", HttpStatusCode.Forbidden, headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
+                }
+            )
         )
         http.use {
             val service = CatalogClient(it, identity)
@@ -141,15 +152,20 @@ class HomePreferencesTest {
     fun deniedParentNeverReachesLeakyMetadataOrLatestEndpoints() = runTest {
         val seen = mutableListOf<String>()
         val http = HttpClient(
-            MockEngine { request ->
-                val path = request.url.encodedPath.removePrefix("/base/")
-                seen += path
-                when (path) {
-                    "Items/denied" -> respond("{}", HttpStatusCode.NotFound)
-                    "Items" -> respond("{}", HttpStatusCode.Unauthorized)
-                    else -> respond("""{"Items":[{"Id":"secret","Name":"Forbidden title"}],"Genres":["Forbidden genre"]}""")
+            MockEngine(
+                io.ktor.client.engine.mock.MockEngineConfig().apply {
+                    dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        val path = request.url.encodedPath.removePrefix("/base/")
+                        seen += path
+                        when (path) {
+                            "Items/denied" -> respond("{}", HttpStatusCode.NotFound)
+                            "Items" -> respond("{}", HttpStatusCode.Unauthorized)
+                            else -> respond("""{"Items":[{"Id":"secret","Name":"Forbidden title"}],"Genres":["Forbidden genre"]}""")
+                        }
+                    }
                 }
-            }
+            )
         )
         http.use {
             val service = CatalogClient(it, identity)
@@ -167,17 +183,22 @@ class HomePreferencesTest {
         var remote = Json.parseToJsonElement("""{"CustomPrefs":{"unrelated":"retain"}}""").jsonObject
         var writes = 0
         val http = HttpClient(
-            MockEngine { request ->
-                if (fail) {
-                    respond("{}", HttpStatusCode.ServiceUnavailable)
-                } else if (request.method == HttpMethod.Post) {
-                    remote = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
-                    writes++
-                    respond("", HttpStatusCode.NoContent)
-                } else {
-                    respond(remote.toString())
+            MockEngine(
+                io.ktor.client.engine.mock.MockEngineConfig().apply {
+                    dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        if (fail) {
+                            respond("{}", HttpStatusCode.ServiceUnavailable)
+                        } else if (request.method == HttpMethod.Post) {
+                            remote = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+                            writes++
+                            respond("", HttpStatusCode.NoContent)
+                        } else {
+                            respond(remote.toString())
+                        }
+                    }
                 }
-            }
+            )
         )
         val persistence = object : TextPersistence {
             var value: String? = null

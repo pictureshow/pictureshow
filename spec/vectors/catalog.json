@@ -160,7 +160,10 @@
         "responses": [
           {
             "status": 200,
-            "body": []
+            "body": {
+              "Items": [],
+              "TotalRecordCount": 0
+            }
           }
         ]
       },
@@ -168,7 +171,7 @@
         "requests": [
           {
             "method": "GET",
-            "path": "/jellyfin/Items/Latest",
+            "path": "/jellyfin/Items",
             "query": {
               "userId": [
                 "viewer"
@@ -181,6 +184,24 @@
               ],
               "fields": [
                 "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Movie,Series"
+              ],
+              "sortBy": [
+                "DateCreated"
+              ],
+              "sortOrder": [
+                "Descending"
+              ],
+              "startIndex": [
+                "0"
+              ],
+              "enableTotalRecordCount": [
+                "true"
               ]
             },
             "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",

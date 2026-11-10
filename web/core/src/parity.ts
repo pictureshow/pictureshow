@@ -856,12 +856,11 @@ export class ParityCatalogClient {
             seriesId,
         });
     }
-    latest(parentId: string) {
-        return this.request("Items/Latest", {
-            parentId,
-            limit: 24,
-            fields: CARD_FIELDS,
-        });
+    async latest(parentId: string) {
+        const page = await this.items({ parentId, recursive: true,
+            includeItemTypes: "Movie,Series", sortBy: "DateCreated",
+            descending: true, limit: 24 });
+        return page.Items ?? [];
     }
     items(q: any = {}) {
         const limit = Math.max(1, Math.min(q.limit ?? 60, 200));
