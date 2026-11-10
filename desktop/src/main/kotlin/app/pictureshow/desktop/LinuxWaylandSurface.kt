@@ -100,10 +100,14 @@ fun waylandMain(args:Array<String>) {
   if(args.contains("--hdr-numeric")){
    // Dedicated generated fixture gate: no seeking, subtitle assumptions or UI injection.
    // Keep the decoded static frame available after the two-frame file reaches EOF.
-   mpv.set("pause","yes")
    native.ps_wayland_fullscreen_set(context,1)
    waitFor(5000){native.ps_wayland_fullscreen(context)==1}
    check(native.ps_wayland_fullscreen(context)==1)
+   // A one-fps fixture's first frame can be dropped while llvmpipe compiles shaders.
+   // vo-configured/time-pos=0 alone does not prove any visible frame was committed.
+   waitFor(15000){(mpv.get("time-pos")?.toDoubleOrNull()?:-1.0)>=1.0}
+   check((mpv.get("time-pos")?.toDoubleOrNull()?:-1.0)>=1.0){"Numeric fixture did not reach its second frame"}
+   mpv.set("pause","yes")
    stage("numeric")
    check(mpv.get("video-params/primaries") == if(media.endsWith("pq.mkv")) "bt.2020" else "bt.709")
    File(out,"sequence.txt").writeText("numeric=true\nactualCompositorFramebuffer=true\n")

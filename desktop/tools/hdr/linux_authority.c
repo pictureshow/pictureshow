@@ -17,6 +17,13 @@ static void authorize(struct wl_listener *l, struct weston_output_capture_attemp
   char *details=weston_color_profile_get_details(output->color_profile);
   if(details) {weston_log("HDR_NUMERIC_PROFILE %s\n",details);free(details);}
  }
+ struct weston_view *view;
+ wl_list_for_each(view, &compositor->view_list, link) {
+  const pixman_box32_t *box=pixman_region32_extents(&view->transform.boundingbox);
+  weston_log("HDR_NUMERIC_VIEW mapped=%d surfaceMapped=%d size=%dx%d alpha=%g visibleMask=%u bounds=%d,%d,%d,%d\n",
+   view->is_mapped,view->surface->is_mapped,view->surface->width,view->surface->height,view->alpha,
+   view->output_visibility_mask,box->x1,box->y1,box->x2,box->y2);
+ }
  a->authorized=true;
 }
 WL_EXPORT int wet_module_init(struct weston_compositor *c, int *argc, char *argv[]) {
