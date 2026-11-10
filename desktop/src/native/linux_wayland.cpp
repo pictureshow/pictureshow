@@ -39,7 +39,7 @@ struct Surface {
  mpv_render_context*render=nullptr;mpv_handle*mpv=nullptr;std::atomic<bool>update{true};
  bool legacy=false;bool configured=false,fullscreen=false,closed=false,ready=false,hdr=false,pq=false,bt2020=false,parametric=false;
  std::atomic<int> width{960},height{640};int uiw=0,uih=0;std::atomic<bool>running{true};std::atomic<int>renderFailure{0};std::thread renderThread;std::mutex metrics; double px=0,py=0;std::vector<int>input;
- unsigned frames=0,redraws=0;double renderMs=0,swapMs=0;int redBits=0,greenBits=0,blueBits=0;int renderFd=-1;
+ unsigned frames=0,redraws=0;double renderMs=0,swapMs=0;int redBits=0,greenBits=0,blueBits=0,alphaBits=0;int renderFd=-1;
  std::vector<Buffer*>buffers;FILE*log=nullptr;int capw=0,caph=0;uint32_t capformat=0;int capdone=0;
 };
 static void note(Surface*s,const char*t){if(s->log){fprintf(s->log,"%s\n",t);fflush(s->log);}}
@@ -99,6 +99,7 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  s->ed=eglGetDisplay((EGLNativeDisplayType)s->d);EGLint major,minor;check(eglInitialize(s->ed,&major,&minor),"eglInitialize");check(eglBindAPI(EGL_OPENGL_API),"eglBindAPI");
  EGLint attrs[]={EGL_SURFACE_TYPE,EGL_WINDOW_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_BIT,EGL_RED_SIZE,hdr?10:8,EGL_GREEN_SIZE,hdr?10:8,EGL_BLUE_SIZE,hdr?10:8,EGL_ALPHA_SIZE,0,EGL_NONE};EGLConfig config;EGLint n;check(eglChooseConfig(s->ed,attrs,&config,1,&n)&&n,"EGL 10-bit window config");
  eglGetConfigAttrib(s->ed,config,EGL_RED_SIZE,&s->redBits);eglGetConfigAttrib(s->ed,config,EGL_GREEN_SIZE,&s->greenBits);eglGetConfigAttrib(s->ed,config,EGL_BLUE_SIZE,&s->blueBits);
+ eglGetConfigAttrib(s->ed,config,EGL_ALPHA_SIZE,&s->alphaBits);
  EGLint context[]={EGL_CONTEXT_MAJOR_VERSION,3,EGL_CONTEXT_MINOR_VERSION,3,EGL_NONE};s->ec=eglCreateContext(s->ed,config,EGL_NO_CONTEXT,context);check(s->ec!=EGL_NO_CONTEXT,"eglCreateContext");
  s->ew=wl_egl_window_create(s->video,s->width,s->height);s->es=eglCreateWindowSurface(s->ed,config,(EGLNativeWindowType)s->ew,nullptr);check(s->es!=EGL_NO_SURFACE,"eglCreateWindowSurface");check(eglMakeCurrent(s->ed,s->es,s->es,s->ec),"eglMakeCurrent");eglSwapInterval(s->ed,1);
  fprintf(s->log,"GL_VENDOR=%s\nGL_RENDERER=%s\nGL_VERSION=%s\nEGL_RGB_BITS=%d,%d,%d\nvideoReadbacks=regular-path-zero; explicit-HDR-diagnostic=%d\nUI=Compose ImageComposeScene -> SDR wl_shm subsurface\n",glGetString(GL_VENDOR),glGetString(GL_RENDERER),glGetString(GL_VERSION),s->redBits,s->greenBits,s->blueBits,getenv("SPIKE_HDR_APP_SAMPLES")?1:0);fflush(s->log);
@@ -121,22 +122,40 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
       FILE *out=fopen(path,"w");
       if(!out){s->renderFailure=-4;break;}
       const char *names[]={"black","gray100","gray203","gray1000","red100","green100","blue100","gray50"};
-      GLint readFbo=0,drawFbo=0,readBuffer=0,alphaBits=0;
-      glGetIntegerv(0x8CAA,&readFbo);glGetIntegerv(0x8CA6,&drawFbo);glGetIntegerv(GL_READ_BUFFER,&readBuffer);glGetIntegerv(GL_ALPHA_BITS,&alphaBits);
+      GLint readFbo=0,drawFbo=0,readBuffer=0,drawBuffer=0;
+      GLboolean doubleBuffered=GL_FALSE;EGLint eglRenderBuffer=0;
+      glGetIntegerv(0x8CAA,&readFbo);glGetIntegerv(0x8CA6,&drawFbo);glGetIntegerv(GL_READ_BUFFER,&readBuffer);glGetIntegerv(GL_DRAW_BUFFER,&drawBuffer);
+      glGetBooleanv(GL_DOUBLEBUFFER,&doubleBuffered);eglQuerySurface(s->ed,s->es,EGL_RENDER_BUFFER,&eglRenderBuffer);
+      double mediaTime=-1;int eof=0;
+      mpv_get_property(s->mpv,"time-pos",MPV_FORMAT_DOUBLE,&mediaTime);mpv_get_property(s->mpv,"eof-reached",MPV_FORMAT_FLAG,&eof);
       auto bindFramebuffer=(void(*)(GLenum,GLuint))eglGetProcAddress("glBindFramebuffer");
       if(!bindFramebuffer){fclose(out);s->renderFailure=-6;break;}
       bindFramebuffer(0x8CA8,0);glReadBuffer(GL_BACK);
-      fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app explicit EGL default GL_BACK BEFORE compositor\",\"readFbo\":0,\"previousReadFbo\":%d,\"drawFbo\":%d,\"previousReadBuffer\":%d,\"previousDrawAlphaBits\":%d,\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",readFbo,drawFbo,readBuffer,alphaBits,w,h);
+      fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app explicit EGL default GL_BACK BEFORE compositor\",\"readFbo\":0,\"previousReadFbo\":%d,\"drawFbo\":%d,\"previousReadBuffer\":%d,\"drawBuffer\":%d,\"doubleBuffered\":%s,\"eglRenderBuffer\":%d,\"eglRGBABits\":[%d,%d,%d,%d],\"frame\":%u,\"mediaTime\":%.9g,\"eof\":%s,\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",readFbo,drawFbo,readBuffer,drawBuffer,doubleBuffered?"true":"false",eglRenderBuffer,s->redBits,s->greenBits,s->blueBits,s->alphaBits,s->frames,mediaTime,eof?"true":"false",w,h);
+      GLenum diagnosticError=GL_NO_ERROR;
       for(int n=0;n<8;n++) {
        float pixels[100];glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGBA,GL_FLOAT,pixels);
        float channels[4][25];
        for(int k=0;k<25;k++)for(int c=0;c<4;c++)channels[c][k]=pixels[k*4+c];
        for(int c=0;c<4;c++)std::sort(channels[c],channels[c]+25);
-       fprintf(out,"%s{\"name\":\"%s\",\"rgb\":[%.9g,%.9g,%.9g],\"alpha\":%.9g}",n?",":"",names[n],channels[0][12],channels[1][12],channels[2][12],channels[3][12]);
+       float rgbPixels[75],rgbChannels[3][25],frontPixels[100]={},frontChannels[4][25];
+       glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGB,GL_FLOAT,rgbPixels);
+       for(int k=0;k<25;k++)for(int c=0;c<3;c++)rgbChannels[c][k]=rgbPixels[k*3+c];
+       for(int c=0;c<3;c++)std::sort(rgbChannels[c],rgbChannels[c]+25);
+       GLenum backError=glGetError();if(backError!=GL_NO_ERROR)diagnosticError=backError;
+       glReadBuffer(GL_FRONT);glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGBA,GL_FLOAT,frontPixels);
+       GLenum frontError=glGetError();glReadBuffer(GL_BACK);
+       for(int k=0;k<25;k++)for(int c=0;c<4;c++)frontChannels[c][k]=frontPixels[k*4+c];
+       for(int c=0;c<4;c++)std::sort(frontChannels[c],frontChannels[c]+25);
+       fprintf(out,"%s{\"name\":\"%s\",\"rgb\":[%.9g,%.9g,%.9g],\"alpha\":%.9g,\"rgbRead\":[%.9g,%.9g,%.9g],\"frontRGBA\":[%.9g,%.9g,%.9g,%.9g],\"backError\":%u,\"frontError\":%u}",n?",":"",names[n],channels[0][12],channels[1][12],channels[2][12],channels[3][12],rgbChannels[0][12],rgbChannels[1][12],rgbChannels[2][12],frontChannels[0][12],frontChannels[1][12],frontChannels[2][12],frontChannels[3][12],backError,frontError);
       }
       fprintf(out,"]}\n");fclose(out);
+      std::string framePath=std::string(path)+".frame-"+std::to_string(s->frames)+".json";
+      FILE *source=fopen(path,"rb"),*snapshot=fopen(framePath.c_str(),"wb");
+      if(source&&snapshot){char bytes[4096];size_t count;while((count=fread(bytes,1,sizeof(bytes),source)))fwrite(bytes,1,count,snapshot);}
+      if(source)fclose(source);if(snapshot)fclose(snapshot);
       bindFramebuffer(0x8CA8,readFbo);glReadBuffer(readBuffer);
-      if(glGetError()!=GL_NO_ERROR){s->renderFailure=-5;break;}
+      if(glGetError()!=GL_NO_ERROR || diagnosticError!=GL_NO_ERROR){s->renderFailure=-5;break;}
      }
      if(!eglSwapBuffers(s->ed,s->es)){s->renderFailure=-2;break;}double c=seconds();mpv_render_context_report_swap(s->render);
      {std::lock_guard<std::mutex> lock(s->metrics);s->frames++;s->renderMs+=(b-a)*1000;s->swapMs+=(c-b)*1000;}
