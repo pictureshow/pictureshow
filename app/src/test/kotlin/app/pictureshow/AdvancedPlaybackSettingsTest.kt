@@ -3,13 +3,16 @@
  */
 package app.pictureshow
 
+import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.junit.Rule
@@ -18,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(sdk = [30], application = Application::class)
 class AdvancedPlaybackSettingsTest {
     @get:Rule val compose = createComposeRule()
 
@@ -29,11 +32,15 @@ class AdvancedPlaybackSettingsTest {
                 AdvancedPlaybackSettings("Subtitle appearance", prefs, false, { prefs = it(prefs) }, {})
             }
         }
-        compose.onNodeWithText("Text color: System").performScrollTo().performClick()
+        compose.onNodeWithText("Text color: System").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
         compose.runOnIdle { assertEquals("White", prefs.subtitleStyle.foreground) }
-        compose.onNodeWithText("Image subtitle opacity: 100%").performScrollTo().performClick()
+        compose.onNodeWithText("Image subtitle opacity: 100%").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
+            check(it())
+        }
         compose.runOnIdle { assertEquals(80, prefs.subtitleStyle.imageOpacity) }
-        compose.onNodeWithText("Override authored ASS styling: Off").performScrollTo().performClick()
+        compose.onNodeWithText("Override authored ASS styling: Off").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
+            check(it())
+        }
         compose.runOnIdle { assertEquals(true, prefs.subtitleStyle.overrideEmbedded) }
     }
 
