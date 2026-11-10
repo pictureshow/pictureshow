@@ -38,7 +38,17 @@ fun renderParams(vararg values: Pair<Int, Pointer>): Array<RenderParam> {
 fun intMemory(value: Int) = Memory(4).apply { setInt(0, value) }
 fun cString(value: String) = Memory((value.toByteArray().size + 1).toLong()).apply { setString(0, value) }
 
+private interface NumericLocale : Library { fun setlocale(category: Int, locale: String): String? }
+
 class Mpv(val out: File) : AutoCloseable {
+    init {
+        // libmpv rejects a JVM process with a non-C numeric locale.
+        // LC_NUMERIC is 1 on Linux, 4 on Darwin/Windows; preserve other locale categories.
+        val libraries = if (Platform.isWindows()) listOf("msvcrt", "ucrtbase") else listOf(Platform.C_LIBRARY_NAME)
+        libraries.forEach { library ->
+            Native.load(library, NumericLocale::class.java).setlocale(if (Platform.isLinux()) 1 else 4, "C")
+        }
+    }
     val api = Native.load(System.getenv("MPV_LIBRARY") ?: "mpv", MpvApi::class.java)
     val handle = requireNotNull(api.mpv_create()) { "mpv_create failed" }
     init {
