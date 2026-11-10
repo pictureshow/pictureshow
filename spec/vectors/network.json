@@ -1,594 +1,630 @@
 {
-    "schemaVersion": 1,
-    "suite": "reference",
-    "sources": [
-        "core/src/commonTest/kotlin/app/pictureshow/core/AddressCandidatesTest.kt",
-        "core/src/commonTest/kotlin/app/pictureshow/core/AuthorizationHeaderTest.kt",
-        "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlayDecisionTest.kt",
-        "core/src/commonTest/kotlin/app/pictureshow/core/CatalogClientTest.kt"
-    ],
-    "context": {
-        "server": {
-            "id": "server",
-            "name": "Fixture server",
-            "url": "https://media.example.test/jellyfin",
-            "version": "12.0.0"
-        },
-        "identity": {
-            "deviceName": "Fixture TV",
-            "deviceId": "install",
-            "version": "0.1.0"
-        },
-        "account": {
-            "userId": "viewer",
-            "token": "fixture-token",
-            "deviceId": "account-device"
-        }
+  "schemaVersion": 1,
+  "suite": "reference",
+  "sources": [
+    "core/src/commonTest/kotlin/app/pictureshow/core/AddressCandidatesTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/AuthorizationHeaderTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlayDecisionTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/CatalogClientTest.kt"
+  ],
+  "context": {
+    "server": {
+      "id": "server",
+      "name": "Fixture server",
+      "url": "https://media.example.test/jellyfin",
+      "version": "12.0.0"
     },
-    "cases": [
-        {
-            "id": "address-0",
-            "operation": "address",
-            "input": {
-                "value": " media.example.test/base/ "
-            },
-            "expected": {
-                "urls": [
-                    "https://media.example.test/base",
-                    "https://media.example.test:8920/base",
-                    "http://media.example.test/base",
-                    "http://media.example.test:8096/base"
-                ]
-            }
+    "identity": {
+      "deviceName": "Fixture TV",
+      "deviceId": "install",
+      "version": "0.1.0"
+    },
+    "account": {
+      "userId": "viewer",
+      "token": "fixture-token",
+      "deviceId": "account-device"
+    }
+  },
+  "cases": [
+    {
+      "id": "address-0",
+      "operation": "address",
+      "input": {
+        "value": " media.example.test/base/ "
+      },
+      "expected": {
+        "urls": [
+          "https://media.example.test/base",
+          "https://media.example.test:8920/base",
+          "http://media.example.test/base",
+          "http://media.example.test:8096/base"
+        ]
+      }
+    },
+    {
+      "id": "address-1",
+      "operation": "address",
+      "input": {
+        "value": "media.example.test:8123"
+      },
+      "expected": {
+        "urls": [
+          "https://media.example.test:8123",
+          "http://media.example.test:8123"
+        ]
+      }
+    },
+    {
+      "id": "address-2",
+      "operation": "address",
+      "input": {
+        "value": "https://media.example.test"
+      },
+      "expected": {
+        "urls": [
+          "https://media.example.test",
+          "https://media.example.test:8920"
+        ]
+      }
+    },
+    {
+      "id": "address-3",
+      "operation": "address",
+      "input": {
+        "value": "http://[2001:db8::1]:8096/jellyfin/"
+      },
+      "expected": {
+        "urls": [
+          "http://[2001:db8::1]:8096/jellyfin"
+        ]
+      }
+    },
+    {
+      "id": "address-invalid-4",
+      "operation": "address",
+      "input": {
+        "value": ""
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-5",
+      "operation": "address",
+      "input": {
+        "value": "bad host"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-6",
+      "operation": "address",
+      "input": {
+        "value": "ftp://media.example.test"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-7",
+      "operation": "address",
+      "input": {
+        "value": "https://a:b@media.example.test"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-8",
+      "operation": "address",
+      "input": {
+        "value": "media.example.test/?api_key=fixture"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-9",
+      "operation": "address",
+      "input": {
+        "value": "media.example.test/#x"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "address-invalid-10",
+      "operation": "address",
+      "input": {
+        "value": "http://media.example.test:99999"
+      },
+      "expected": {
+        "error": "IllegalArgumentException"
+      }
+    },
+    {
+      "id": "auth-unsigned",
+      "operation": "authorization",
+      "input": {},
+      "expected": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"install\", Version=\"0.1.0\""
+    },
+    {
+      "id": "auth-special-values",
+      "operation": "authorization",
+      "input": {
+        "deviceName": "TV, \"été\" + 100% \\ screen\r\n",
+        "deviceId": "id=42,+%\"",
+        "version": "0.1.0+preview",
+        "token": "a+b/%=,\""
+      },
+      "expected": "MediaBrowser Client=\"Pictureshow\", Device=\"TV%2C%20%22%C3%A9t%C3%A9%22%20%2B%20100%25%20%5C%20screen%0D%0A\", DeviceId=\"id%3D42%2C%2B%25%22\", Version=\"0.1.0%2Bpreview\", Token=\"a%2Bb%2F%25%3D%2C%22\""
+    },
+    {
+      "id": "origin-13",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://MEDIA.example.test:443/x"
+      },
+      "expected": true
+    },
+    {
+      "id": "origin-14",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://media.example.test:444/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-15",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "http://media.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-16",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "//media.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-17",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://media.example.test:0/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-18",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://media.example.test:/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-19",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://u@media.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-20",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://%6Dedia.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-21",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "https://media.example.test\\@evil.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-22",
+      "operation": "sameOrigin",
+      "input": {
+        "url": " https://media.example.test/x"
+      },
+      "expected": false
+    },
+    {
+      "id": "origin-23",
+      "operation": "sameOrigin",
+      "input": {
+        "url": "file:///x"
+      },
+      "expected": false
+    },
+    {
+      "id": "resolve-24",
+      "operation": "resolve",
+      "input": {
+        "url": "/captions/a.srt"
+      },
+      "expected": "https://media.example.test/jellyfin/captions/a.srt"
+    },
+    {
+      "id": "resolve-25",
+      "operation": "resolve",
+      "input": {
+        "url": "captions/a.srt"
+      },
+      "expected": "https://media.example.test/jellyfin/captions/a.srt"
+    },
+    {
+      "id": "resolve-26",
+      "operation": "resolve",
+      "input": {
+        "url": "//other.example.test/x"
+      },
+      "expected": "https://other.example.test/x"
+    },
+    {
+      "id": "resolve-27",
+      "operation": "resolve",
+      "input": {
+        "url": "https://other.example.test/x"
+      },
+      "expected": "https://other.example.test/x"
+    },
+    {
+      "id": "strip-token-28",
+      "operation": "stripApiKey",
+      "input": {
+        "url": "https://media.example.test/x?ApiKey=a&x=1&api_key=b#f"
+      },
+      "expected": "https://media.example.test/x?x=1#f"
+    },
+    {
+      "id": "strip-token-29",
+      "operation": "stripApiKey",
+      "input": {
+        "url": "/x?%41piKey=a&X-Emby-Token=b&X-MediaBrowser-Token=c"
+      },
+      "expected": "/x"
+    },
+    {
+      "id": "strip-token-30",
+      "operation": "stripApiKey",
+      "input": {
+        "url": "/x?tag=normal&ApiKey=fixture"
+      },
+      "expected": "/x?tag=normal"
+    },
+    {
+      "id": "image-primary-bounds",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "film",
+          "ImageTags": {
+            "Primary": "tag & one"
+          }
         },
-        {
-            "id": "address-1",
-            "operation": "address",
-            "input": {
-                "value": "media.example.test:8123"
-            },
-            "expected": {
-                "urls": [
-                    "https://media.example.test:8123",
-                    "http://media.example.test:8123"
-                ]
-            }
+        "width": 0,
+        "height": -1
+      },
+      "expected": "https://media.example.test/jellyfin/Items/film/Images/Primary?tag=tag+%26+one&maxWidth=1&maxHeight=1&quality=85"
+    },
+    {
+      "id": "image-episode-parent",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "episode",
+          "Type": "Episode",
+          "ParentBackdropItemId": "series",
+          "ParentBackdropImageTags": [
+            "back"
+          ]
         },
-        {
-            "id": "address-2",
-            "operation": "address",
-            "input": {
-                "value": "https://media.example.test"
-            },
-            "expected": {
-                "urls": [
-                    "https://media.example.test",
-                    "https://media.example.test:8920"
-                ]
-            }
+        "width": 400
+      },
+      "expected": "https://media.example.test/jellyfin/Items/series/Images/Backdrop?tag=back&maxWidth=400&quality=85"
+    },
+    {
+      "id": "image-missing",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "film"
         },
-        {
-            "id": "address-3",
-            "operation": "address",
-            "input": {
-                "value": "http://[2001:db8::1]:8096/jellyfin/"
-            },
-            "expected": {
-                "urls": ["http://[2001:db8::1]:8096/jellyfin"]
-            }
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "chapter-image",
+      "operation": "chapterImage",
+      "input": {
+        "itemId": "film",
+        "index": 2,
+        "tag": "v1"
+      },
+      "expected": "https://media.example.test/jellyfin/Items/film/Images/Chapter/2?tag=v1&maxWidth=320"
+    },
+    {
+      "id": "trickplay-sheet",
+      "operation": "trickplaySheet",
+      "input": {
+        "itemId": "film",
+        "mediaSourceId": "version",
+        "width": 320,
+        "sheet": 2
+      },
+      "expected": "https://media.example.test/jellyfin/Videos/film/Trickplay/320/2.jpg?mediaSourceId=version"
+    },
+    {
+      "id": "image-no-aggregate-collage-collectionfolder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "CollectionFolder",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-4",
-            "operation": "address",
-            "input": {
-                "value": ""
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-userview",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "UserView",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-5",
-            "operation": "address",
-            "input": {
-                "value": "bad host"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-folder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Folder",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-6",
-            "operation": "address",
-            "input": {
-                "value": "ftp://media.example.test"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-boxset",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "BoxSet",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-7",
-            "operation": "address",
-            "input": {
-                "value": "https://a:b@media.example.test"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-playlist",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Playlist",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-8",
-            "operation": "address",
-            "input": {
-                "value": "media.example.test/?api_key=fixture"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-genre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Genre",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-9",
-            "operation": "address",
-            "input": {
-                "value": "media.example.test/#x"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-musicgenre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "MusicGenre",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "address-invalid-10",
-            "operation": "address",
-            "input": {
-                "value": "http://media.example.test:99999"
-            },
-            "expected": {
-                "error": "IllegalArgumentException"
-            }
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-studio",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Studio",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
         },
-        {
-            "id": "auth-unsigned",
-            "operation": "authorization",
-            "input": {},
-            "expected": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"install\", Version=\"0.1.0\""
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-unknown-library-collage",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "virtual-library",
+          "CollectionType": "playlists",
+          "ImageTags": {
+            "Primary": "collage"
+          }
         },
-        {
-            "id": "auth-special-values",
-            "operation": "authorization",
-            "input": {
-                "deviceName": "TV, \"\u00e9t\u00e9\" + 100% \\ screen\r\n",
-                "deviceId": "id=42,+%\"",
-                "version": "0.1.0+preview",
-                "token": "a+b/%=,\""
-            },
-            "expected": "MediaBrowser Client=\"Pictureshow\", Device=\"TV%2C%20%22%C3%A9t%C3%A9%22%20%2B%20100%25%20%5C%20screen%0D%0A\", DeviceId=\"id%3D42%2C%2B%25%22\", Version=\"0.1.0%2Bpreview\", Token=\"a%2Bb%2F%25%3D%2C%22\""
+        "width": 400
+      },
+      "expected": null
+    },
+    {
+      "id": "image-authorized-movie-unchanged",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted",
+          "Type": "Movie",
+          "ImageTags": {
+            "Primary": "poster"
+          }
         },
-        {
-            "id": "origin-13",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://MEDIA.example.test:443/x"
-            },
-            "expected": true
+        "width": 400
+      },
+      "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
+    },
+    {
+      "id": "image-authorized-series-unchanged",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted",
+          "Type": "Series",
+          "ImageTags": {
+            "Primary": "poster"
+          }
         },
-        {
-            "id": "origin-14",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://media.example.test:444/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-15",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "http://media.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-16",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "//media.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-17",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://media.example.test:0/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-18",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://media.example.test:/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-19",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://u@media.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-20",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://%6Dedia.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-21",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "https://media.example.test\\@evil.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-22",
-            "operation": "sameOrigin",
-            "input": {
-                "url": " https://media.example.test/x"
-            },
-            "expected": false
-        },
-        {
-            "id": "origin-23",
-            "operation": "sameOrigin",
-            "input": {
-                "url": "file:///x"
-            },
-            "expected": false
-        },
-        {
-            "id": "resolve-24",
-            "operation": "resolve",
-            "input": {
-                "url": "/captions/a.srt"
-            },
-            "expected": "https://media.example.test/jellyfin/captions/a.srt"
-        },
-        {
-            "id": "resolve-25",
-            "operation": "resolve",
-            "input": {
-                "url": "captions/a.srt"
-            },
-            "expected": "https://media.example.test/jellyfin/captions/a.srt"
-        },
-        {
-            "id": "resolve-26",
-            "operation": "resolve",
-            "input": {
-                "url": "//other.example.test/x"
-            },
-            "expected": "https://other.example.test/x"
-        },
-        {
-            "id": "resolve-27",
-            "operation": "resolve",
-            "input": {
-                "url": "https://other.example.test/x"
-            },
-            "expected": "https://other.example.test/x"
-        },
-        {
-            "id": "strip-token-28",
-            "operation": "stripApiKey",
-            "input": {
-                "url": "https://media.example.test/x?ApiKey=a&x=1&api_key=b#f"
-            },
-            "expected": "https://media.example.test/x?x=1#f"
-        },
-        {
-            "id": "strip-token-29",
-            "operation": "stripApiKey",
-            "input": {
-                "url": "/x?%41piKey=a&X-Emby-Token=b&X-MediaBrowser-Token=c"
-            },
-            "expected": "/x"
-        },
-        {
-            "id": "strip-token-30",
-            "operation": "stripApiKey",
-            "input": {
-                "url": "/x?tag=normal&ApiKey=fixture"
-            },
-            "expected": "/x?tag=normal"
-        },
-        {
-            "id": "image-primary-bounds",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "film",
-                    "ImageTags": {
-                        "Primary": "tag & one"
-                    }
-                },
-                "width": 0,
-                "height": -1
-            },
-            "expected": "https://media.example.test/jellyfin/Items/film/Images/Primary?tag=tag+%26+one&maxWidth=1&maxHeight=1&quality=85"
-        },
-        {
-            "id": "image-episode-parent",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "episode",
-                    "Type": "Episode",
-                    "ParentBackdropItemId": "series",
-                    "ParentBackdropImageTags": ["back"]
-                },
-                "width": 400
-            },
-            "expected": "https://media.example.test/jellyfin/Items/series/Images/Backdrop?tag=back&maxWidth=400&quality=85"
-        },
-        {
-            "id": "image-missing",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "film"
-                },
-                "width": 320
-            },
-            "expected": null
-        },
-        {
-            "id": "chapter-image",
-            "operation": "chapterImage",
-            "input": {
-                "itemId": "film",
-                "index": 2,
-                "tag": "v1"
-            },
-            "expected": "https://media.example.test/jellyfin/Items/film/Images/Chapter/2?tag=v1&maxWidth=320"
-        },
-        {
-            "id": "trickplay-sheet",
-            "operation": "trickplaySheet",
-            "input": {
-                "itemId": "film",
-                "mediaSourceId": "version",
-                "width": 320,
-                "sheet": 2
-            },
-            "expected": "https://media.example.test/jellyfin/Videos/film/Trickplay/320/2.jpg?mediaSourceId=version"
-        },
-        {
-            "id": "image-no-aggregate-collage-collectionfolder",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "CollectionFolder",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-userview",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "UserView",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-folder",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "Folder",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-boxset",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "BoxSet",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-playlist",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "Playlist",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-genre",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "Genre",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-musicgenre",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "MusicGenre",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-aggregate-collage-studio",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted-container",
-                    "Type": "Studio",
-                    "ImageTags": {
-                        "Primary": "collage",
-                        "Thumb": "collage-thumb"
-                    },
-                    "BackdropImageTags": ["collage-back"],
-                    "ParentBackdropItemId": "denied-child",
-                    "ParentBackdropImageTags": ["parent-back"],
-                    "ParentThumbItemId": "denied-child",
-                    "ParentThumbImageTag": "parent-thumb"
-                },
-                "width": 400,
-                "wide": true
-            },
-            "expected": null
-        },
-        {
-            "id": "image-no-unknown-library-collage",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "virtual-library",
-                    "CollectionType": "playlists",
-                    "ImageTags": {
-                        "Primary": "collage"
-                    }
-                },
-                "width": 400
-            },
-            "expected": null
-        },
-        {
-            "id": "image-authorized-movie-unchanged",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted",
-                    "Type": "Movie",
-                    "ImageTags": {
-                        "Primary": "poster"
-                    }
-                },
-                "width": 400
-            },
-            "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
-        },
-        {
-            "id": "image-authorized-series-unchanged",
-            "operation": "image",
-            "input": {
-                "item": {
-                    "Id": "permitted",
-                    "Type": "Series",
-                    "ImageTags": {
-                        "Primary": "poster"
-                    }
-                },
-                "width": 400
-            },
-            "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
-        }
-    ]
+        "width": 400
+      },
+      "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
+    }
+  ]
 }

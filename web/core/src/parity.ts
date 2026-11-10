@@ -342,9 +342,7 @@ export function gridVerticalMove(
     const last = count - 1;
     if (index + columns <= last) return index + columns;
     if (loadingMore) return null;
-    return Math.floor(last / columns) > Math.floor(index / columns)
-        ? last
-        : null;
+    return Math.floor(last / columns) > Math.floor(index / columns) ? last : null;
 }
 export function nextCountdown(
     wallSeconds: number,
@@ -858,10 +856,7 @@ export class ParityCatalogClient {
         }
     }
     views() {
-        return this.request("UserViews", {
-            fields: CARD_FIELDS,
-            includeHidden: "true",
-        });
+        return this.request("UserViews", { fields: CARD_FIELDS, includeHidden: "true" });
     }
     resume() {
         return this.request("UserItems/Resume", {
@@ -878,14 +873,9 @@ export class ParityCatalogClient {
         });
     }
     async latest(parentId: string) {
-        const page = await this.items({
-            parentId,
-            recursive: true,
-            includeItemTypes: "Movie,Series",
-            sortBy: "DateCreated",
-            descending: true,
-            limit: 24,
-        });
+        const page = await this.items({ parentId, recursive: true,
+            includeItemTypes: "Movie,Series", sortBy: "DateCreated",
+            descending: true, limit: 24 });
         return page.Items ?? [];
     }
     items(q: any = {}) {
