@@ -46,8 +46,12 @@ CONFIG
  export SPIKE_HDR_COMPOSITOR_SAMPLES="$out"
  "$prefix/bin/weston" -B headless --renderer=gl --width=640 --height=360 --socket="$WAYLAND_DISPLAY" --config="$out/weston.ini" --modules="$build/native/capture-authority.so" --log="$out/weston.log" > "$out/weston-console.log" 2>&1 &
  compositor_pid=$!
- for n in $(seq 1 100); do [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break; kill -0 "$compositor_pid"; sleep .1; done
- [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]
+ # Mesa software initialization on a busy hosted runner can exceed ten seconds.
+ for n in $(seq 1 600); do [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break; kill -0 "$compositor_pid"; sleep .1; done
+ if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+  echo "Weston did not create its owned socket within the startup budget; inspect $out/weston.log" >&2
+  exit 1
+ fi
  for media in pq sdr; do
   mkdir -p "$out/$media"
   export SPIKE_HDR_APP_SAMPLES="$out/$media/app-backbuffer.json"
