@@ -4,7 +4,7 @@ import XCTest
 
 final class RemoteVectorTests: XCTestCase {
     func testAllRemoteVectors() throws {
-        let expectedCounts = ["remote-wire": (77, 78), "remote-targets": (17, 17), "remote-receive": (51, 81), "remote-reconnect": (35, 127), "remote-queue": (15, 56)]
+        let expectedCounts = ["remote-wire": (77, 78), "remote-targets": (17, 17), "remote-receive": (51, 81), "remote-reconnect": (35, 127), "remote-queue": (16, 62)]
         var ids = Set<String>(), failures: [String] = [], totalCases = 0, totalSteps = 0
         for suite in expectedCounts.keys.sorted() {
             let doc = try RemoteVectorRunner.document(suite)
@@ -26,7 +26,7 @@ final class RemoteVectorTests: XCTestCase {
         }
         print("Remote vectors: \(totalCases) cases, \(totalSteps) passing steps, \(failures.count) failed cases; zero skips")
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
-        if failures.isEmpty { XCTAssertEqual(totalSteps, 359) }
+        if failures.isEmpty { XCTAssertEqual(totalSteps, 365) }
     }
     func testStrictRemoteBoundary() throws {
         let valid: [String: Any] = ["server": "s", "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]

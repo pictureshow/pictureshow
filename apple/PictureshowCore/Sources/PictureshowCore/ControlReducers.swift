@@ -358,7 +358,7 @@ public enum ControlReducers {
             let id = try int64(event["id"], at: "session-command.id")
             let now = try int64(event["nowMs"], at: "session-command.nowMs")
             if let current = pending, int64String(current["id"]) == id, current["result"] as? String == "sent",
-               now >= int64String(current["sentAtMs"]), now &- int64String(current["sentAtMs"]) >= 5_000 {
+               now >= int64String(current["sentAtMs"]), now &- int64String(current["sentAtMs"]) >= commandConfirmationWindowMs(operation: current["operation"] as? String) {
                 pending?["result"] = "unknown"; fresh = false; seekTarget = nil; effect = "refresh"
             }
         case "observe":
@@ -371,7 +371,7 @@ public enum ControlReducers {
             guard let reportedTicks, reportedTicks >= 0, reportedTicks <= duration else { rejection = "invalid-ticks"; break }
             if var current = pending, int64String(current["id"]) == id, current["result"] as? String == "sent" {
                 let start = int64String(current["sentAtMs"])
-                let deadline = now >= start && now &- start < 5_000
+                let deadline = now >= start && now &- start < commandConfirmationWindowMs(operation: current["operation"] as? String)
                 let matchesTicks = current["ticks"] is NSNull || String(reportedTicks) == current["ticks"] as? String
                 let matchesEntry = current["entry"] is NSNull || reportedEntry == current["entry"] as? String
                 let matchesPaused = current["paused"] is NSNull || reportedPaused == current["paused"] as? Bool
@@ -404,6 +404,12 @@ public enum ControlReducers {
         default: break
         }
         return commandState(owner: owner, capabilities: capabilities, authorized: authorized, fresh: fresh, observed: observed, duration: duration, sequence: sequence, seekTarget: seekTarget, pending: pending, effect: effect, rejection: rejection)
+    }
+
+    /// Starting a title also waits for target wake-up, negotiation and buffering.
+    /// Transport commands retain their shorter confirmation window.
+    private static func commandConfirmationWindowMs(operation: String?) -> Int64 {
+        operation == "play-now" ? 12_000 : 5_000
     }
 
     private static func commandObservation(_ raw: Any?) throws -> [String: Any] {

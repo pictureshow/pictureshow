@@ -4,10 +4,15 @@ import XCTest
 
 final class CatchupPolicyTests: XCTestCase {
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
-        XCTAssertEqual(SpecCaseManifest.contracts.count, 1433)
+        XCTAssertEqual(SpecCaseManifest.contracts.count, 1442)
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: "music-session.invented",suite: "music-session",operation: "session"))
         let id = try XCTUnwrap(SpecCaseManifest.contracts.keys.first)
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: id,suite: "unknown-suite",operation: "unknown-operation"))
+    }
+    func testSeasonRetentionRequiresTheSameMountedCard() {
+        XCTAssertTrue(DetailAvailability.retainsSeasonFocus(selectedSection: "seasons", restored: true, semanticsRevealed: true, selectedId: "specials", seasonIds: ["specials", "s1"]))
+        XCTAssertFalse(DetailAvailability.retainsSeasonFocus(selectedSection: "seasons", restored: true, semanticsRevealed: true, selectedId: "specials", seasonIds: ["replacement"]))
+        XCTAssertFalse(DetailAvailability.retainsSeasonFocus(selectedSection: "seasons", restored: true, semanticsRevealed: false, selectedId: "specials", seasonIds: ["specials"]))
     }
     func testEveryHeldGridMoveEndsEvenAfterFailureOrAnEmptyPage() {
         for count in 1...24 {

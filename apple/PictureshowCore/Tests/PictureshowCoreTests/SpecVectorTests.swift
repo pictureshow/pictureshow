@@ -243,6 +243,7 @@ final class SpecVectorTests:XCTestCase {
                 return cue as Any? ?? NSNull()
             }
         case "detail-pending-plain-label":return DetailFeedback.pendingPlainLabel(target:try required(String.self,i,"target"),known:try required(Bool.self,i,"known"),played:try required(Bool.self,i,"played"),favorite:try required(Bool.self,i,"favorite"))
+        case "detail-retain-season-focus":return DetailAvailability.retainsSeasonFocus(selectedSection:try required(String.self,i,"selectedSection"),restored:try required(Bool.self,i,"restored"),semanticsRevealed:try required(Bool.self,i,"semanticsRevealed"),selectedId:try required(String.self,i,"selectedId"),seasonIds:try required([String].self,i,"seasonIds"))
         case "detail-ready-cue":return DetailFeedback.readyCue(actionLabel:try required(String.self,i,"label"))
         case "next-countdown":return NextEpisodeCard.seconds(wallSeconds:try required(Int64.self,i,"wallSeconds"),creditsCountdown:try required(Bool.self,i,"creditsCountdown"),mediaLeftMs:try required(Int64.self,i,"mediaLeftMs"),speed:try required(Double.self,i,"speed"),autoPlay:try required(Bool.self,i,"autoPlay"),ended:try required(Bool.self,i,"ended"),suspended:try required(Bool.self,i,"suspended")) as Any? ?? NSNull()
         case "server-label": return ServerLabels.label(try required(Server.self,i,"server"),all:try required([Server].self,i,"all"))

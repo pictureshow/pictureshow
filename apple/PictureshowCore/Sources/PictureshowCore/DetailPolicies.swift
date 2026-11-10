@@ -158,6 +158,11 @@ public struct DetailPendingFeedback: Sendable {
 }
 
 public enum DetailAvailability {
+    /// Retain a reader target during dependent reads only while the exact season card remains.
+    public static func retainsSeasonFocus(selectedSection: String, restored: Bool, semanticsRevealed: Bool, selectedId: String, seasonIds: [String]) -> Bool {
+        selectedSection == "seasons" && restored && semanticsRevealed && seasonIds.contains(selectedId)
+    }
+
     /// Empty means a complete successful read, including dependent episode and season shelves.
     public static func showEmptyState(itemType: String?, loading: Bool, readSucceeded: Bool, readFailed: Bool, episodeCount: Int, seasonCount: Int) -> Bool {
         ["Series", "Season"].contains(itemType) && !loading && readSucceeded && !readFailed && episodeCount == 0 && seasonCount == 0

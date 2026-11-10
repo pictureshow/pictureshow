@@ -21,7 +21,9 @@ swift test --package-path apple/PictureshowTransport
 Use leased simulator/build capacity and an external DerivedData/scratch directory in shared
 workspaces. Keep builds serial. The core test runner discovers every JSON fixture recursively in
 this checkout's `spec/vectors/` by default; `PICTURESHOW_SPEC_DIR` overrides the directory containing
-`vectors/`. Unknown schema versions, suites, operations, duplicate IDs and empty suites fail.
+`vectors/`. Unknown schema versions, suites, operations, unregistered or mismatched case IDs, duplicate IDs and empty suites fail.
+The reviewed case manifest tracks main at `f64875a1`, including the leg 126 focus-retention and
+Play Now confirmation additions; all 1,442 shared cases execute in the complete cohort.
 No baseline vector families are skipped. `ReferenceDeviceProfile` translates the reference
 capability inputs for contract verification; the application uses the separate conservative
 `AppleProfile` and does not claim Android decoder or FFmpeg capabilities.

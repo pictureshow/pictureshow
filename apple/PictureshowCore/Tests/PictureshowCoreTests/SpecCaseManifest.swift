@@ -2,7 +2,7 @@
 // Copyright (c) Legitimate LLC.
 import Foundation
 
-/// Known main case identities at 25a04f58. No expected results are stored here.
+/// Known main case identities at f64875a1. No expected results are stored here.
 /// Adding, renaming or removing a contract case requires explicit adapter review.
 enum SpecCaseManifest {
     static let contracts: [String: String] = {
@@ -1440,6 +1440,15 @@ enum SpecCaseManifest {
         session-owner.end-before-temporary-issue-settles|session-owner/temporary
         session-owner.local-owner-reports-until-commit|session-owner/owner
         session-owner.crash-during-logout-retries-before-provision|session-owner/temporary
+        detail.retain-season-focus.episode-read-keeps-card|application/detail-retain-season-focus
+        detail.retain-season-focus.full-refresh-removed-card|application/detail-retain-season-focus
+        detail.retain-season-focus.item-replaced-card|application/detail-retain-season-focus
+        detail.retain-season-focus.unrestored-page|application/detail-retain-season-focus
+        detail.retain-season-focus.hidden-page|application/detail-retain-season-focus
+        detail.retain-season-focus.another-section|application/detail-retain-season-focus
+        remote-queue.play-next-episode-after-an-added-movie-keeps-the-series-after-the-movie|remote-queue/queue
+        session-command.play-now-waits-for-the-title-to-start|session-command/command
+        session-command.play-now-unconfirmed-after-its-window|session-command/command
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)
