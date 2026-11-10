@@ -14,6 +14,7 @@ import android.view.Display
 import android.view.Window
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.media3.common.C
@@ -74,7 +75,7 @@ internal fun AndroidFrameRateMatch(player: Player?, enabled: Boolean) {
     val context = LocalContext.current
     val activity = context.frameRateActivity()
     val view = LocalView.current
-    val television = context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+    val television = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
     DisposableEffect(player, enabled, activity, television) {
         val active = player
         if (!enabled || active == null || activity == null || !television) return@DisposableEffect onDispose {}

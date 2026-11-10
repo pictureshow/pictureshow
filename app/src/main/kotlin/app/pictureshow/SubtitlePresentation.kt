@@ -15,6 +15,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StyleSpan
 import android.view.accessibility.CaptioningManager
+import androidx.core.graphics.createBitmap
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
@@ -106,7 +107,7 @@ data class SubtitleAppearance(
             val builder = cue.buildUpon()
             cue.bitmap?.let { original ->
                 if (style.imageOpacity < 100) {
-                    val copy = Bitmap.createBitmap(original.width, original.height, Bitmap.Config.ARGB_8888)
+                    val copy = createBitmap(original.width, original.height, Bitmap.Config.ARGB_8888)
                     Canvas(copy).drawBitmap(original, 0f, 0f, Paint().apply { alpha = style.imageOpacity * 255 / 100 })
                     builder.setBitmap(copy)
                 }

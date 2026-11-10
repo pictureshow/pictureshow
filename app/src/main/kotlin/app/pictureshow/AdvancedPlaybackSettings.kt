@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.core.graphics.createBitmap
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
 import app.pictureshow.core.playback.CapabilityOverride
@@ -298,7 +299,7 @@ private fun SettingText(text: String, touch: Boolean, heading: Boolean = false) 
 @Composable
 internal fun SubtitlePreview(appearance: SubtitleAppearance) {
     val context = LocalContext.current
-    val image = remember { Bitmap.createBitmap(120, 20, Bitmap.Config.ARGB_8888).apply { eraseColor(AndroidColor.WHITE) } }
+    val image = remember { createBitmap(120, 20, Bitmap.Config.ARGB_8888).apply { eraseColor(AndroidColor.WHITE) } }
     val cues = remember(appearance) {
         appearance.cues(
             listOf(
