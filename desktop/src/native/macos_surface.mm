@@ -16,6 +16,8 @@
 #include <chrono>
 #include <algorithm>
 #include <pthread/qos.h>
+#include <condition_variable>
+#include <mutex>
 #include <cstdlib>
 
 @interface PSMainCall : NSObject
@@ -55,6 +57,8 @@ struct Surface {
     // Diagnostic ablation uses the same rendering path and retains all GPU ownership waits.
     bool paced = std::getenv("SPIKE_LEGACY_PACING")==nullptr;
     std::string glRenderer;
+    std::mutex updateMutex; std::condition_variable updateWake;
+    std::atomic<bool> updatePending{true};
 };
 static void *getProc(void *, const char *name) { return dlsym(RTLD_DEFAULT,name); }
 extern "C" void ps_destroy(void *ptr);
@@ -91,6 +95,11 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     mpv_opengl_init_params init={getProc,nullptr};
     mpv_render_param params[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_OPENGL},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_INVALID,nullptr}};
     if(mpv_render_context_create(&s->render,(mpv_handle*)mpvPtr,params)<0) { ps_destroy(s); return nullptr; }
+    mpv_render_context_set_update_callback(s->render,[](void *p) {
+        auto *surface=(Surface*)p;
+        { std::lock_guard<std::mutex> lock(surface->updateMutex); surface->updatePending=true; }
+        surface->updateWake.notify_one();
+    },s);
     return s;
 }
 extern "C" int ps_frame(void *ptr, int w, int h) {
@@ -101,6 +110,11 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
     if(s->polls.fetch_add(1)>0) s->pollGap.add(ms(s->previousPollEnd));
     struct PollEnd { Surface *s; ~PollEnd() { s->previousPollEnd=Clock::now(); } } pollEnd{s};
     bool resized=s->w!=w || s->h!=h;
+    if(s->paced && !resized) {
+        std::unique_lock<std::mutex> lock(s->updateMutex);
+        s->updateWake.wait_for(lock,std::chrono::milliseconds(20),[s]{return s->updatePending.load();});
+        s->updatePending=false;
+    }
     uint64_t update=mpv_render_context_update(s->render);
     if(s->paced && !(update & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
     if(w<1||h<1) return -1;
@@ -149,7 +163,7 @@ extern "C" const char *ps_receipt(void *ptr) {
     Surface *s=(Surface*)ptr;
     mainCall(^{
         NSScreen *screen=s->overlay.screen; NSRect a=s->overlay.frame,b=screen.frame,c=s->video.frame;
-        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
+        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"callbackWake":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
         NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
         s->receipt.assign((const char*)data.bytes,data.length);
     });
@@ -175,7 +189,7 @@ extern "C" int ps_finish(void *ptr) {
 extern "C" void ps_destroy(void *ptr) {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
     if(s->inflight) { [s->inflight waitUntilCompleted]; s->inflight=nil; }
-    if(s->render) mpv_render_context_free(s->render);
+    if(s->render) { mpv_render_context_set_update_callback(s->render,nullptr,nullptr); mpv_render_context_free(s->render); }
     if(s->texture) glDeleteTextures(1,&s->texture); if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
     s->shared=nil; if(s->io) CFRelease(s->io); CGLSetCurrentContext(nullptr); if(s->gl) CGLDestroyContext(s->gl);
     mainCall(^{NSApp.presentationOptions=NSApplicationPresentationDefault; [s->overlay removeChildWindow:s->video]; [s->video orderOut:nil]; [s->video close];});

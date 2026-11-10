@@ -51,7 +51,7 @@ fun layerMain(args: Array<String>) {
     val failure=AtomicReference<Throwable?>(null)
     val stopping=AtomicBoolean(false)
     var surface:Pointer?=null
-    var tick:java.util.concurrent.ScheduledFuture<*>?=null
+    var tick:java.util.concurrent.Future<*>?=null
     val pixels=AtomicReference(java.awt.Dimension(960,640))
     val worker=AtomicReference<Thread?>(null)
     var geometryListener:java.awt.event.ComponentListener?=null
@@ -148,9 +148,16 @@ fun layerMain(args: Array<String>) {
                             window.addComponentListener(geometryListener)
                         }
                         sync()
-                        tick=executor.scheduleWithFixedDelay({try {
-                            val size=pixels.get(); val rc=bridge.ps_frame(surface!!,size.width,size.height); check(rc>=0) {"Native frame failed: $rc"}
-                        }catch(e:Throwable){failure.compareAndSet(null,e); tick?.cancel(false)}},0,1,TimeUnit.MILLISECONDS)
+                        val renderFrame={
+                            val size=pixels.get(); val rc=bridge.ps_frame(surface!!,size.width,size.height)
+                            check(rc>=0) {"Native frame failed: $rc"}
+                        }
+                        tick=if(Platform.isMac() && System.getenv("SPIKE_LEGACY_PACING")==null) executor.submit {
+                            // Native update callbacks wake this loop. No JVM timer between frames.
+                            try { while(!stopping.get()) renderFrame() }
+                            catch(e:Throwable) { failure.compareAndSet(null,e) }
+                        } else executor.scheduleWithFixedDelay({try { renderFrame() }
+                            catch(e:Throwable){failure.compareAndSet(null,e); tick?.cancel(false)}},0,1,TimeUnit.MILLISECONDS)
                         mpv.command("loadfile",media)
                         Thread.sleep(4500)
                         fun stage(name:String) {

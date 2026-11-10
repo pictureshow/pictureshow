@@ -20,10 +20,14 @@ The layer requests extended linear ITU-R BT.2020 and extended dynamic range. A n
 borderless child window sits below the transparent Compose window. GPU completion
 waits establish cross-API ownership; there is no per-frame CPU pixel transfer.
 Rendering is update-driven and target-time blocking is disabled with a zero video
-timing offset. GL completion still establishes GL-to-Metal ownership; Metal completion
+timing offset. A bounded native condition wait is signaled by mpv update callbacks;
+the Mac executor loops without a JVM timer between frames. Callbacks only signal
+local state and are unregistered before render-context destruction. GL completion still establishes GL-to-Metal ownership; Metal completion
 is awaited at IOSurface reuse and final drain. Native receipts separate render, GL wait,
 drawable wait, Metal reuse wait and scheduler poll gaps. A user-interactive render-thread
-QoS request is recorded. These changes have not qualified smooth 60 fps on the measured
+QoS request is recorded. In callback mode total frame duration includes notification
+idle wait; render/GL/Metal timings remain separate. These changes have not qualified
+smooth 60 fps on the measured
 shared Mac; retaining all ownership waits is necessary for correctness.
 Window bounds, layer state and the presenting NSScreen's actual/potential EDR limits
 are recorded. A float format and EDR request do not prove physical HDR brightness.
@@ -81,9 +85,12 @@ DLL imports do not establish a fully dynamic transitive closure. This remains op
 The new Wayland route passes the 125-second 1080p60 Main10 diagnostic with zero
 VO or decoder drops on the measured Intel render node. A controlled legacy timer/
 target-time configuration on that same EGL route also passes: scheduling alone does
-not explain the old GLX failure. The complete path changed, including EGL/decoder
-interop, native thread ownership and presentation. Do not claim an isolated GLX
-cause without a separate experiment.
+not explain the old GLX failure. A separate controlled old-GLX experiment retained
+the same CPU decode, fixture and Intel renderer: zero timing offset alone retained
+2,514 VO drops, while disabling Mesa vblank synchronization alone produced zero.
+This isolates the nested GLX/Xwayland/Weston vblank presentation chain as the old
+limiter; the exact internal driver wait was not isolated. The chosen Wayland route
+passes without that diagnostic environment override.
 
 Measured two-minute playback retains material frame loss on the tested Mac and WARP
 runner. Zero application pixel readbacks is not enough if the decoder uses `vaapi-copy`,
