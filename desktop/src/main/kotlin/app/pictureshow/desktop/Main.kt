@@ -21,7 +21,6 @@ import java.awt.event.InputEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import com.sun.jna.Native
-import com.sun.jna.Library
 import java.util.concurrent.atomic.AtomicReference
 import java.awt.event.MouseEvent
 import java.awt.BorderLayout
@@ -35,8 +34,6 @@ import javax.imageio.ImageWriteParam
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
-interface MacActivation : Library { fun pictureshow_activate(); fun pictureshow_fullscreen(enabled: Int) }
-
 fun main(args: Array<String>) {
     require(args.size >= 2) { "Usage: <render|wid> <media-file> [evidence-dir] [--auto]" }
     val shape = args[0]
@@ -45,7 +42,6 @@ fun main(args: Array<String>) {
     val out = File(args.getOrNull(2) ?: "desktop-evidence")
     val auto = args.contains("--auto")
     System.setProperty("compose.interop.blending", "true")
-    val mac = System.getenv("SPIKE_MAC_BRIDGE")?.let { Native.load(it, MacActivation::class.java) }
     val mpv = Mpv(out)
     var gl: VideoSurface? = null
     val frame = mutableStateOf<ImageBitmap?>(null)
@@ -60,11 +56,14 @@ fun main(args: Array<String>) {
         var paused by remember { mutableStateOf(false) }
         fun stop(code: Int = 0) {
             Thread {
-                gl?.close()
-                mpv.close()
-                SwingUtilities.invokeLater { exitApplication(); if (code != 0) kotlin.system.exitProcess(code) }
+                var result = code
+                try { gl?.close(); mpv.close() } catch (e: Throwable) { failure.compareAndSet(null, e); result = 2 }
+                failure.get()?.let { File(out, "failure.txt").writeText(it.stackTraceToString()); result = 2 }
+                if (result == 0 && auto) File(out, "sequence.txt").writeText("overlayClicks=$clicks\n")
+                kotlin.system.exitProcess(result)
             }.start()
         }
+
         Window(onCloseRequest = { stop() }, title = "Pictureshow · $shape surface probe", state = state) {
             MaterialTheme(colors = darkColors()) {
                 Column(Modifier.fillMaxSize().background(Color(0xFF141820))) {
@@ -111,7 +110,7 @@ fun main(args: Array<String>) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = { paused = !paused; mpv.set("pause", if (paused) "yes" else "no") }) { Text(if (paused) "Play" else "Pause") }
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick = { val next = state.placement != WindowPlacement.Fullscreen; if (mac != null) mac.pictureshow_fullscreen(if (next) 1 else 0) else state.placement = if (next) WindowPlacement.Fullscreen else WindowPlacement.Floating }) { Text("Fullscreen") }
+                        Button(onClick = { if (com.sun.jna.Platform.isMac()) toggleMacFullscreen(window) else state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen }) { Text("Fullscreen") }
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = { mpv.command("cycle", "sub") }) { Text("Subtitle") }
                         Text(status, Modifier.padding(start = 12.dp), color = Color.White)
@@ -122,7 +121,10 @@ fun main(args: Array<String>) {
                 Thread {
                     try {
                     Thread.sleep(1000)
-                    mac?.pictureshow_activate()
+                    if (com.sun.jna.Platform.isMac()) SwingUtilities.invokeAndWait {
+                        runCatching { java.awt.Desktop.getDesktop().requestForeground(true) }
+                        window.toFront(); window.requestFocus()
+                    }
                     fun stage(name: String) {
                         failure.get()?.let { throw it }
                         Thread.sleep(1200)
@@ -171,10 +173,10 @@ fun main(args: Array<String>) {
                         mpv.set("pause", "no")
                         SwingUtilities.invokeAndWait { state.size = androidx.compose.ui.unit.DpSize(740.dp, 500.dp) }
                         stage("02-resize")
-                        SwingUtilities.invokeAndWait { if (mac != null) mac.pictureshow_fullscreen(1) else state.placement = WindowPlacement.Fullscreen }
+                        SwingUtilities.invokeAndWait { if (com.sun.jna.Platform.isMac()) toggleMacFullscreen(window) else state.placement = WindowPlacement.Fullscreen }
                         Thread.sleep(2500)
                         stage("03-fullscreen")
-                        SwingUtilities.invokeAndWait { if (mac != null) mac.pictureshow_fullscreen(0) else state.placement = WindowPlacement.Floating }; Thread.sleep(2000)
+                        SwingUtilities.invokeAndWait { if (com.sun.jna.Platform.isMac()) toggleMacFullscreen(window) else state.placement = WindowPlacement.Floating }; Thread.sleep(2000)
                         val count = mpv.get("track-list/count")?.toIntOrNull() ?: 0
                         val subtitles = (0 until count).filter { mpv.get("track-list/$it/type") == "sub" }
                         check(subtitles.size == 3) { "Expected SRT, ASS and PGS tracks" }
@@ -191,7 +193,6 @@ fun main(args: Array<String>) {
                             check(mpv.get("track-list/$track/selected") == "yes") { "Subtitle did not select: $sid" }
                         }
                         mpv.dump("final", "completed sequence")
-                        File(out, "sequence.txt").writeText("overlayClicks=$clicks\n")
                         stop()
                     }
                     } catch (e: Throwable) {
@@ -217,4 +218,15 @@ private fun jpeg(image: BufferedImage, file: File) {
         writer.write(null, IIOImage(scaled, null, null), params)
     }
     writer.dispose()
+}
+
+// Apple's public JDK desktop extensions marshal the operation to AWT's AppKit thread.
+// Reflection keeps the same JVM artifact usable on Windows and Linux.
+private fun toggleMacFullscreen(window: java.awt.Window) {
+    Class.forName("com.apple.eawt.FullScreenUtilities")
+        .getMethod("setWindowCanFullScreen", java.awt.Window::class.java, java.lang.Boolean.TYPE)
+        .invoke(null, window, true)
+    val appClass = Class.forName("com.apple.eawt.Application")
+    val app = appClass.getMethod("getApplication").invoke(null)
+    appClass.getMethod("requestToggleFullScreen", java.awt.Window::class.java).invoke(app, window)
 }

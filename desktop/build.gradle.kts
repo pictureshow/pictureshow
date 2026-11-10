@@ -34,6 +34,9 @@ compose.desktop {
     application {
         mainClass = "app.pictureshow.desktop.MainKt"
         jvmArgs += listOf("--enable-native-access=ALL-UNNAMED", "-Dcompose.interop.blending=true")
+        if (System.getProperty("os.name").startsWith("Mac")) {
+            jvmArgs += "--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED"
+        }
     }
 }
 // A portable runtime layout; each OS resolves its own Skiko/JOGL native jars.

@@ -25,8 +25,9 @@ class D3dSurface(mpv: Mpv, publish: (ImageBitmap) -> Unit, onFailure: (Throwable
     private val handle = executor.submit<Pointer> {
         requireNotNull(api.pictureshow_d3d_create(mpv.handle, if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") 1 else 0)) { "D3D11 renderer creation failed" }
     }.get(30, TimeUnit.SECONDS)
+    @Volatile private var broken = false
     private val animator = executor.scheduleWithFixedDelay({
-        try {
+        if (!broken) try {
             val w = width.coerceIn(64, 1280); val h = height.coerceIn(64, 720)
             Memory((w * h * 4).toLong()).use { pixels ->
                 mpv.check(api.pictureshow_d3d_frame(handle, w, h, pixels))
@@ -43,7 +44,7 @@ class D3dSurface(mpv: Mpv, publish: (ImageBitmap) -> Unit, onFailure: (Throwable
                 }
                 publish(image.toComposeImageBitmap())
             }
-        } catch (e: Throwable) { onFailure(e) }
+        } catch (e: Throwable) { broken = true; onFailure(e) }
     }, 0, 33, TimeUnit.MILLISECONDS)
     override fun close() {
         animator.cancel(false)
