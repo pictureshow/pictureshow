@@ -169,6 +169,8 @@ private final class SubtitleInertPlayer: AVPlayer {
     // Most subtitle/seek tests intentionally have no decoder clock. Retry-budget
     // tests opt into healthy A/V progress independently of the optional text clock.
     var mediaTime: () -> CMTime = { .invalid }
+    var simulatedTimeControlStatus: AVPlayer.TimeControlStatus?
+    override var timeControlStatus: AVPlayer.TimeControlStatus { simulatedTimeControlStatus ?? super.timeControlStatus }
     override func currentTime() -> CMTime { mediaTime() }
     override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime, completionHandler: @escaping (Bool) -> Void) {
         seekTargets.append(time); completionHandler(true)
@@ -572,8 +574,13 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let event = "expandedInfo.body"
         try await eventually("Info lifecycle must gate continuation while visible") { session.panelOpen && controller.informationVisible }
         #endif
-        try await eventually("The actual hosted panel body did not render") { session.diagnostics.counts[event, default: 0] > 0 }
+        // These controllers are manually contained, not presented by UIKit. Flush
+        // their first layout before asking SwiftUI for its initial body receipt.
+        root.view.setNeedsLayout()
         root.view.layoutIfNeeded()
+        XCTAssertTrue(panel.view.window === window, "Measure the panel attached to the fixture window")
+        XCTAssertFalse(panel.view.bounds.isEmpty, "Measure a laid-out panel with a nonempty viewport")
+        try await eventually("The actual hosted panel body did not render") { session.diagnostics.counts[event, default: 0] > 0 }
         let labels = session.trackLabels.labelsBuilt, revision = session.trackLabels.cacheRevision
         let body = session.diagnostics.counts[event, default: 0]
         let snapshots = session.diagnostics.counts["nativePlayer.snapshot", default: 0]
@@ -772,6 +779,9 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         defer { loader.release(); clock.finish() }
         let player = SubtitleInertPlayer()
         let videoStart = ContinuousClock.now
+        // No item is attached to this inert AVPlayer, so its real transport would
+        // otherwise report waiting even while our simulated media time advances.
+        player.simulatedTimeControlStatus = .playing
         player.mediaTime = {
             let elapsed = videoStart.duration(to: .now).components
             return CMTime(seconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18, preferredTimescale: 60_000)
@@ -785,6 +795,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         try await Task.sleep(for: observeVideoFor)
         try await eventually("Healthy video must advance while optional subtitles retry") { session.positionTicks > 0 }
         XCTAssertFalse(session.isPaused)
+        XCTAssertEqual(player.timeControlStatus, .playing)
         print("OPTIONAL_SUBTITLE_AV_PROGRESS elapsed=\(videoStart.duration(to: .now)) positionTicks=\(session.positionTicks) retryMs=\(clock.elapsedMs) status=\(session.status)")
         XCTAssertEqual(Array(clock.delays.prefix(12)), [1_000,2_000,3_000,4_000,5_000,6_000,7_000,8_000,9_000,10_000,10_000,10_000])
         XCTAssertTrue(loader.unavailable); XCTAssertTrue(loader.loading)
