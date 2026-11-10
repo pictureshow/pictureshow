@@ -490,10 +490,24 @@ internal fun NamedCatalogPicker(
     var requested by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(0) }
     var retry by remember { mutableIntStateOf(0) }
-    var choices by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var pageChoices by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var currentChoices by remember { mutableStateOf(emptyList<MediaItem>()) }
     var total by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(account.key, kind, parentId, selectedKeys) {
+        currentChoices = emptyList()
+        val authorized = selectedKeys.take(60).mapNotNull { key ->
+            if (kind in listOf("Genres", "Studios")) {
+                (service.namedItems(account, kind, parentId, key, 0) as? ClientResult.Success)?.value?.items
+                    ?.firstOrNull { it.name == key }
+            } else {
+                (service.item(account, key) as? ClientResult.Success)?.value?.takeIf { it.id == key && it.name.isNotBlank() }
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        currentChoices = authorized
+    }
     LaunchedEffect(query) {
         delay(300)
         page = 0
@@ -506,16 +520,17 @@ internal fun NamedCatalogPicker(
         currentCoroutineContext().ensureActive()
         when (result) {
             is ClientResult.Success -> {
-                choices = result.value.items.distinctBy(MediaItem::id)
+                pageChoices = result.value.items.distinctBy(MediaItem::id)
                 total = result.value.totalRecordCount
             }
             is ClientResult.Failure -> {
-                choices = emptyList()
+                pageChoices = emptyList()
                 error = result.error.message
             }
         }
         loading = false
     }
+    val choices = if (requested.isBlank() && page == 0) (currentChoices + pageChoices).distinctBy(MediaItem::id) else pageChoices
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
     val title = when (kind) {
@@ -588,9 +603,13 @@ internal fun NamedCatalogPicker(
             }
         }
         if (page > 0) item { CatalogCommand("Previous choices", { page = (page - 60).coerceAtLeast(0) }, enabled = !loading) }
-        if (page + choices.size < total && choices.isNotEmpty()) item { CatalogCommand("More choices", { page += 60 }, enabled = !loading) }
+        if (page + pageChoices.size < total &&
+            pageChoices.isNotEmpty()
+        ) {
+            item { CatalogCommand("More choices", { page += 60 }, enabled = !loading) }
+        }
     }
-    LaunchedEffect(loading, requested, page) {
+    LaunchedEffect(loading, requested, page, currentChoices) {
         if (tv && !loading && choices.isNotEmpty() && query.isBlank()) {
             list.scrollToItem(initial + 1)
             withFrameNanos { }
@@ -655,6 +674,14 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     var retry by remember { mutableIntStateOf(0) }
     var personPicker by remember { mutableStateOf(false) }
     var personLabel by remember { mutableStateOf("Selected person") }
+    LaunchedEffect(state.account.key, state.parent.id, draft.personId) {
+        personLabel = "Selected person"
+        draft.personId?.let { id ->
+            val result = service.item(state.account, id)
+            currentCoroutineContext().ensureActive()
+            if (result is ClientResult.Success && result.value.name.isNotBlank()) personLabel = result.value.name
+        }
+    }
     LaunchedEffect(state.parent.id, retry) {
         loading = true
         facets = LibraryFacets()

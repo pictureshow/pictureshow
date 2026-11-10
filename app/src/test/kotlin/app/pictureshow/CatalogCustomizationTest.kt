@@ -193,6 +193,20 @@ class CatalogCustomizationTest {
         }
     }
 
+    @Test fun selectedPersonOutsideFirstPageIsAuthorizedMarkedAndFocused() {
+        service.named = { ClientResult.Success(ItemPage(listOf(MediaItem("first", "First person", "Person")), 200)) }
+        service.detail = { id -> ClientResult.Success(MediaItem(id, "Selected performer", "Person")) }
+        compose.setContent {
+            MaterialTheme {
+                NamedCatalogPicker(account, service, "Persons", library.id, {}, {}, setOf("saved"))
+            }
+        }
+        compose.onNodeWithTag("catalog:choice:saved").assertIsDisplayed().assertIsFocused()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        compose.onNodeWithText("Selected performer").assertIsDisplayed()
+        compose.onNodeWithTag("catalog:choice:first").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+    }
+
     @Test fun lateFailedChoiceCannotReplaceNewSuccessfulSearch() {
         val old = CompletableDeferred<ClientResult<ItemPage>>()
         service.named = { term ->
@@ -238,6 +252,7 @@ class CatalogCustomizationTest {
 
 private class EditorCatalog : CatalogService {
     var named: suspend (String) -> ClientResult<ItemPage> = { ClientResult.Success(ItemPage()) }
+    var detail: suspend (String) -> ClientResult<MediaItem> = { ClientResult.Success(MediaItem(it)) }
     var facet: suspend (String) -> ClientResult<LibraryFacets> = { ClientResult.Success(LibraryFacets()) }
     override suspend fun namedItems(account: Account, kind: String, parentId: String, term: String, startIndex: Int) = named(term)
     override suspend fun facets(account: Account, parentId: String) = facet(parentId)
@@ -246,7 +261,7 @@ private class EditorCatalog : CatalogService {
     override suspend fun nextUp(account: Account, seriesId: String?) = ClientResult.Success(ItemPage())
     override suspend fun latest(account: Account, parentId: String) = ClientResult.Success(emptyList<MediaItem>())
     override suspend fun items(account: Account, query: app.pictureshow.core.BrowseQuery) = ClientResult.Success(ItemPage())
-    override suspend fun item(account: Account, id: String) = ClientResult.Success(MediaItem(id))
+    override suspend fun item(account: Account, id: String) = detail(id)
     override suspend fun seasons(account: Account, seriesId: String) = ClientResult.Success(ItemPage())
     override suspend fun episodes(account: Account, seriesId: String, seasonId: String) = ClientResult.Success(ItemPage())
     override suspend fun played(account: Account, id: String, value: Boolean) = ClientResult.Success(ItemUserData())
