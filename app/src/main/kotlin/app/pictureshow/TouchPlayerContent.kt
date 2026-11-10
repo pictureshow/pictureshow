@@ -137,10 +137,12 @@ internal class TouchControlsState {
     fun back(exit: () -> Unit) {
         when {
             sheet != null -> sheet = null
+
             visible -> {
                 visible = false
                 scrubMs = null
             }
+
             else -> exit()
         }
         interact()
@@ -407,6 +409,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                Button(onClick = { host.sync?.show() }) { Text("Watch together") }
                 Text(host.item.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
                 val spoken = rememberAnnouncedPosition(
                     paused,
@@ -569,7 +572,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val eligible = host.deferredNext != null || (trigger != null && host.position >= trigger)
                 // With the card up its Play now is the one primary, and Skip travels inside it, quietly.
                 val cardUp = next != null && actionsVisible && (eligible || host.ended)
-                SegmentControl(host.segments, host.position, host.localPreferences.segmentModes, host::seekTo, {
+                SegmentControl(host.segments, host.position, host.segmentModesForViewing(), host::seekTo, {
                 }, showButton = actionsVisible && !cardUp, button = { label, action ->
                     // 48 dp drawn, not 40 in a 48 dp target: its top then meets the notice's beside it.
                     Button(onClick = action, Modifier.heightIn(min = 48.dp).testTag("touch:skip")) { Text(label) }
@@ -579,7 +582,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         val suspended =
                             paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
                         val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
-                        val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
+                        val autoPlay =
+                            host.sync?.participating != true && !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
                             ?.takeIf { (host.localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         NextEpisodeControl(

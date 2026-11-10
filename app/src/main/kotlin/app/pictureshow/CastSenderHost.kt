@@ -626,7 +626,10 @@ internal class CastSenderHost(
     }
 
     /** The one call that starts a handoff, and only a viewer's pick reaches it. */
+    var beforeExternalRoute: (((() -> Unit)) -> Boolean)? = null
+
     fun pick(route: CastRoute) {
+        if (beforeExternalRoute?.invoke { pick(route) } == true) return
         val active = account ?: return
         val playRequest = request ?: return
         if (!capability(0).canDiscover) return

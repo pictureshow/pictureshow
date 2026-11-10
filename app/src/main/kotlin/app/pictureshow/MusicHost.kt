@@ -70,6 +70,15 @@ import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
 import app.pictureshow.core.playback.Ticks
+import app.pictureshow.core.sync.SyncRequest
+import app.pictureshow.core.sync.millisecondsToSyncTicks
+import app.pictureshow.core.sync.syncEnqueue
+import app.pictureshow.core.sync.syncMove
+import app.pictureshow.core.sync.syncNewQueue
+import app.pictureshow.core.sync.syncRemove
+import app.pictureshow.core.sync.syncRepeat
+import app.pictureshow.core.sync.syncSelect
+import app.pictureshow.core.sync.syncShuffle
 import com.google.common.util.concurrent.ListenableFuture
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -220,6 +229,46 @@ internal class MusicHost(
     /** The Cast device in use. The touch interface sets this, because a TV must never load the sender. */
     var castAttached: () -> String? = { null }
 
+    /** Bound by the application graph; both OS and in-app controls take the same group path. */
+    var syncHost: () -> SyncPlayHost? = { null }
+
+    private fun group(): SyncPlayHost? = syncHost()?.takeIf {
+        it.participating && account?.key == accounts.snapshots.value.currentAccount?.key
+    }
+
+    private fun groupTransport(command: String, positionMs: Long? = null): Boolean = group()?.transport(command, positionMs) == true
+
+    /** Consumed even without a usable snapshot: no stale local queue edit may escape into this participant. */
+    private fun groupEdit(request: (SyncPlayHost) -> SyncRequest?): Boolean {
+        val host = group() ?: return false
+        val edit = request(host)
+        if (edit != null) {
+            host.queueRequest(edit)
+        } else {
+            publish {
+                it.copy(message = "Open Watch together to edit the server's current queue.")
+            }
+        }
+        return true
+    }
+
+    private fun groupEntry(host: SyncPlayHost, entry: String): String? {
+        val shared = host.membership.queue ?: return null
+        if (shared.entries.any { it.playlistItemId == entry }) return entry
+        val local = queue.committed
+        val media = local.entries.firstOrNull { it.id == entry }?.media
+        return shared.current?.takeIf { local.current == entry && it.itemId == media }?.playlistItemId
+    }
+
+    private fun groupPlay(play: MusicPlay): Boolean {
+        val host = group() ?: return false
+        val limited = play.tracks.take(MUSIC_QUEUE_LIMIT)
+        if (limited.isEmpty()) return true
+        host.queueRequest(syncNewQueue(limited.map(MusicTrack::id), play.start?.coerceIn(limited.indices) ?: 0))
+        if (play.shuffle) host.queueRequest(syncShuffle(true))
+        return true
+    }
+
     private val mutable = MutableStateFlow(MusicUi())
     val state = mutable.asStateFlow()
 
@@ -239,6 +288,7 @@ internal class MusicHost(
     private val viewings = HashMap<Long, PreparedTrack>()
     private var preparing: Job? = null
     private var ticker: Job? = null
+    private var syncUpdates: Job? = null
     private var ceiling = 0
     private var endedHandled = false
     private var binding = 0L
@@ -247,7 +297,17 @@ internal class MusicHost(
     /** A step belongs to the account that was bound when it was asked for; once another is bound it no longer runs. */
     private fun enqueue(job: suspend () -> Unit) {
         val asked = binding
-        jobs.trySend { if (asked == binding) job() }
+        val requestedGroup = group()
+        val groupGeneration = requestedGroup?.membership?.generation
+        jobs.trySend {
+            if (asked == binding && (
+                    requestedGroup == null ||
+                        (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
+                    )
+            ) {
+                job()
+            }
+        }
     }
 
     /**
@@ -256,9 +316,17 @@ internal class MusicHost(
      * step being dropped for arriving before it.
      */
     private fun enqueueFor(owner: String, job: suspend () -> Unit) {
+        val requestedGroup = syncHost()?.takeIf { it.participating }
+        val groupGeneration = requestedGroup?.membership?.generation
         jobs.trySend {
             if (owner != account?.key && accounts.snapshots.value.currentAccount?.key == owner) bindLatest()
-            if (owner == account?.key) job()
+            if (owner == account?.key && (
+                    requestedGroup == null ||
+                        (requestedGroup.participating && requestedGroup.membership.generation == groupGeneration)
+                    )
+            ) {
+                job()
+            }
         }
     }
 
@@ -363,6 +431,7 @@ internal class MusicHost(
     // What the screens and the session call.
 
     fun request(play: MusicPlay) = enqueueFor(play.owner) {
+        if (groupPlay(play)) return@enqueueFor
         val q = queue.committed
         val decision = musicPlayDecision(
             MusicPlayRequest(
@@ -418,11 +487,69 @@ internal class MusicHost(
         return true
     }
 
+    /**
+     * A server-selected audio item uses this participant's own access, decoder and reporting session.
+     * The local queue is only a paused rendering slot; the group panel owns the full authoritative queue.
+     */
+    suspend fun openSync(owner: Account, id: String, ticks: Long): Boolean {
+        val host = syncHost()?.takeIf { it.participating } ?: return false
+        if (accounts.snapshots.value.currentAccount?.key != owner.key) return false
+        val entry = host.membership.queue?.current?.takeIf { it.itemId == id } ?: return false
+        val generation = host.membership.generation
+        val rows = (gateway.items(owner, listOf(id)) as? ClientResult.Success)?.value ?: return false
+        val item = rows.firstOrNull { it.id == id && it.type == "Audio" } ?: return false
+        enqueueFor(owner.key) {
+            if (!host.participating || host.membership.generation != generation ||
+                host.membership.queue?.current?.playlistItemId != entry.playlistItemId
+            ) {
+                return@enqueueFor
+            }
+            if (queue.committed.current == entry.playlistItemId && player != null) return@enqueueFor
+            val track = owner.musicTrack(item)
+            val next = QueueState(
+                owner.server.id,
+                owner.user.id,
+                entries = listOf(QueueEntry(entry.playlistItemId, id)),
+                current = entry.playlistItemId,
+                positionTicks = ticks.coerceAtLeast(0),
+                paused = true
+            )
+            val before = snapshot(queue.committed)
+            val saved = store.save(owner, MusicSnapshot(next, null, "Watch together", sequence, listOf(track)))
+            if (!host.participating || host.membership.generation != generation ||
+                host.membership.queue?.current?.playlistItemId != entry.playlistItemId ||
+                accounts.snapshots.value.currentAccount?.key != owner.key
+            ) {
+                // Leave or viewer change won during disk I/O; the old local resume still owns this file.
+                if (saved) store.save(owner, before)
+                return@enqueueFor
+            }
+            if (!saved) {
+                host.resolved(SyncOpen(generation, entry.playlistItemId, id, ticks), false)
+                publish { it.copy(message = "Couldn't save this device's paused music position. Leave the group and try again.") }
+                return@enqueueFor
+            }
+            restoring?.cancel()
+            preparing?.cancel()
+            queue = QueueStoreState(next)
+            tracks = mapOf(id to track)
+            playContext = null
+            contextName = "Watch together"
+            applySession("viewer-play")
+            applySession("viewer-pause")
+            activate()
+            sync()
+            publish { it.copy(prompt = null, message = null, canRetrySave = false) }
+        }
+        return true
+    }
+
     fun dismissPrompt() = enqueue { publish { it.copy(prompt = null) } }
 
     fun dismissMessage() = enqueue { publish { it.copy(message = null) } }
 
     private suspend fun jumpOrStart(play: MusicPlay) {
+        if (groupPlay(play)) return
         val q = queue.committed
         val media = play.start?.let(play.tracks::getOrNull)?.id
         val entry = q.entries.firstOrNull { it.media == media }?.id
@@ -433,6 +560,7 @@ internal class MusicHost(
 
     private suspend fun start(play: MusicPlay) {
         if (play.owner != account?.key) return
+        if (groupPlay(play)) return
         val limited = play.tracks.take(MUSIC_QUEUE_LIMIT)
         if (limited.isEmpty()) return
         val entries = musicEntries(limited.map(MusicTrack::id), sequence)
@@ -464,6 +592,14 @@ internal class MusicHost(
     }
 
     private fun add(owner: Account, items: List<MusicTrack>, op: String) = enqueueFor(owner.key) {
+        if (groupEdit {
+                items.take(MUSIC_QUEUE_LIMIT).takeIf { it.isNotEmpty() }?.let {
+                    syncEnqueue(it.map(MusicTrack::id), op == "play-next")
+                }
+            }
+        ) {
+            return@enqueueFor
+        }
         val limited = items.take((MUSIC_QUEUE_LIMIT - queue.committed.entries.size).coerceAtLeast(0))
         if (limited.isEmpty()) {
             if (items.isNotEmpty()) publish { it.copy(message = "The queue is full.") }
@@ -493,19 +629,31 @@ internal class MusicHost(
     fun append(owner: Account, items: List<MusicTrack>) = add(owner, items, "append")
 
     fun remove(entry: String) = enqueue {
+        if (groupEdit { host -> groupEntry(host, entry)?.let { syncRemove(listOf(it)) } }) return@enqueue
         commit { QueueEvent("remove", revision = it.revision, generation = it.generation, entry = entry) }
         if (queue.committed.current == null) endOutput("stop-clear")
     }
 
     fun move(entry: String, index: Int) = enqueue {
+        if (groupEdit { host -> groupEntry(host, entry)?.let { syncMove(it, index.coerceAtLeast(0)) } }) return@enqueue
         commit { QueueEvent("move", revision = it.revision, generation = it.generation, entry = entry, index = index) }
     }
 
     fun clearUpcoming() = enqueue {
+        if (groupEdit { host ->
+                host.membership.queue?.let { shared ->
+                    val ids = shared.entries.drop(shared.currentIndex + 1).map { it.playlistItemId }
+                    ids.takeIf { it.isNotEmpty() }?.let { syncRemove(it) }
+                }
+            }
+        ) {
+            return@enqueue
+        }
         commit { QueueEvent("clear-upcoming", revision = it.revision, generation = it.generation) }
     }
 
     fun clear() = enqueue {
+        if (groupEdit { syncRemove(emptyList(), clearPlaylist = true, clearPlayingItem = true) }) return@enqueue
         applySession("queue-clear")
         commit { QueueEvent("clear-all", revision = it.revision, generation = it.generation) }
         teardown()
@@ -514,6 +662,7 @@ internal class MusicHost(
     }
 
     fun jump(entry: String, positionMs: Long = 0) = enqueue {
+        if (groupEdit { host -> groupEntry(host, entry)?.let(::syncSelect) }) return@enqueue
         activate()
         val jumped = commit { QueueEvent("jump", revision = it.revision, generation = it.generation, entry = entry) }
         if (jumped && positionMs > 0) {
@@ -523,6 +672,7 @@ internal class MusicHost(
     }
 
     fun play() = enqueue {
+        if (groupTransport("play")) return@enqueue
         if (queue.committed.current == null) return@enqueue
         applySession("viewer-play")
         val fromIdle = player == null
@@ -533,21 +683,26 @@ internal class MusicHost(
     }
 
     fun pause() = enqueue {
+        if (groupTransport("pause")) return@enqueue
         applySession("viewer-pause")
         savePosition()
         commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
     }
 
     fun toggle() {
-        if (mutable.value.isPlaying || (mutable.value.outputActive && mutable.value.queue?.paused == false)) pause() else play()
+        // A group Leave pauses the actual renderer before its local paused-resume save finishes.
+        val intendsPlay = player?.playWhenReady ?: (mutable.value.outputActive && mutable.value.queue?.paused == false)
+        if (mutable.value.isPlaying || intendsPlay) pause() else play()
     }
 
     fun next() = enqueue {
+        if (groupTransport("next")) return@enqueue
         activateIfPlaying()
         commit { QueueEvent("next", revision = it.revision, generation = it.generation, completion = it.completion) }
     }
 
     fun previous() = enqueue {
+        if (groupTransport("previous")) return@enqueue
         val at = player?.currentPosition
         if (at != null) {
             commit {
@@ -560,6 +715,7 @@ internal class MusicHost(
     }
 
     fun seekTo(positionMs: Long) = enqueue {
+        if (groupTransport("seek", positionMs.coerceAtLeast(0))) return@enqueue
         val target = positionMs.coerceAtLeast(0)
         val running = player
         if (running != null) {
@@ -572,6 +728,18 @@ internal class MusicHost(
     }
 
     fun cycleRepeat() = enqueue {
+        if (groupEdit { host ->
+                syncRepeat(
+                    when (host.state.value.repeat) {
+                        "RepeatNone" -> "RepeatAll"
+                        "RepeatAll" -> "RepeatOne"
+                        else -> "RepeatNone"
+                    }
+                )
+            }
+        ) {
+            return@enqueue
+        }
         val next = when (queue.committed.repeat) {
             "off" -> "all"
             "all" -> "one"
@@ -581,12 +749,25 @@ internal class MusicHost(
     }
 
     fun setRepeat(mode: String) = enqueue {
+        if (groupEdit {
+                syncRepeat(
+                    when (mode) {
+                        "one" -> "RepeatOne"
+                        "all" -> "RepeatAll"
+                        else -> "RepeatNone"
+                    }
+                )
+            }
+        ) {
+            return@enqueue
+        }
         commit { QueueEvent("repeat", revision = it.revision, generation = it.generation, repeat = mode) }
     }
 
-    fun toggleShuffle() = setShuffle(!queue.committed.shuffled)
+    fun toggleShuffle() = setShuffle(group()?.state?.value?.shuffle?.let { it != "Shuffle" } ?: !queue.committed.shuffled)
 
     fun setShuffle(on: Boolean) = enqueue {
+        if (groupEdit { syncShuffle(on) }) return@enqueue
         val q = queue.committed
         if (on == q.shuffled) return@enqueue
         if (on) {
@@ -605,6 +786,10 @@ internal class MusicHost(
     }
 
     fun retrySave() = enqueue {
+        if (group() != null) {
+            publish { it.copy(message = "The server owns the Watch together queue. Leave the group before retrying a local edit.") }
+            return@enqueue
+        }
         val active = account ?: return@enqueue
         val retried = reduceQueueStore(queue, QueueStoreEvent("retry-persist"))
         if (retried.effect != "persist") return@enqueue
@@ -613,10 +798,14 @@ internal class MusicHost(
     }
 
     /** Stop means the sound, the notification and the session end. The queue stays, ready to play. */
-    fun stop() = enqueue { endOutput("stop") }
+    fun stop() = enqueue { if (!groupTransport("stop")) endOutput("stop") }
 
     /** Called before a video opens. Twice is harmless: the second finds nothing to stop. */
-    fun beforeVideo() = enqueue { endOutput("video-start") }
+    fun beforeVideo() {
+        val asked = binding
+        // A lifecycle teardown must still happen if membership changes before this queued step runs.
+        jobs.trySend { if (asked == binding) endOutput("video-start") }
+    }
 
     /** What the session's button handler calls with the press's own stamp, so one press acts once by any route. */
     fun acceptKey(stamp: String): Boolean {
@@ -661,10 +850,12 @@ internal class MusicHost(
         when (outcome) {
             // The queue ran out: Play starts its last track again rather than landing on its final second.
             "stopped" -> endOutput("stop", 0)
+
             "exhausted" -> {
                 endOutput("stop")
                 publish { it.copy(message = "None of the tracks left in this queue could play.") }
             }
+
             "skipped-unavailable" -> publish { it.copy(message = "Skipped a track that couldn't play.") }
         }
         return true
@@ -691,7 +882,22 @@ internal class MusicHost(
 
     private inline fun publish(change: (MusicUi) -> MusicUi = { it }) {
         val running = player
-        val q = queue.committed
+        val shared = group()?.state?.value
+        val q = queue.committed.let {
+            if (shared == null) {
+                it
+            } else {
+                it.copy(
+                    repeat = when (shared.repeat) {
+                        "RepeatOne" -> "one"
+                        "RepeatAll" -> "all"
+                        else -> "off"
+                    },
+                    shuffled = shared.shuffle == "Shuffle",
+                    paused = running?.playWhenReady != true
+                )
+            }
+        }
         mutable.update {
             change(it).copy(
                 account = account,
@@ -711,7 +917,7 @@ internal class MusicHost(
     private fun sync() {
         preparing?.cancel()
         val running = player ?: return
-        running.repeatMode = if (musicOutputRepeats(queue.committed)) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        running.repeatMode = if (group() == null && musicOutputRepeats(queue.committed)) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         running.playWhenReady = !queue.committed.paused
         preparing = scope.launch { prepareWindow() }
     }
@@ -719,7 +925,7 @@ internal class MusicHost(
     private suspend fun prepareWindow() {
         val active = account ?: return
         val q = queue.committed
-        val target = musicWindow(q)
+        val target = if (group() != null) listOfNotNull(q.current) else musicWindow(q)
         if (target.isEmpty()) return
         val next = musicBitrateCeiling(preferences().musicQuality, metered())
         if (next != ceiling) {
@@ -736,8 +942,11 @@ internal class MusicHost(
                 when {
                     outcome is ClientResult.Success && outcome.value is PlayOutcome.Play ->
                         prepared[entry] = PreparedTrack((outcome.value as PlayOutcome.Play).decision, entry, media)
+
                     index > 0 -> return applyWindow(active, target)
+
                     outcome is ClientResult.Failure -> return negotiationFailed(outcome.error)
+
                     else -> {
                         // The server has no way to give this device this file: skipping it is the honest move.
                         enqueue { failCurrent() }
@@ -750,9 +959,15 @@ internal class MusicHost(
     }
 
     private fun negotiationFailed(error: ClientError) {
+        if (group() != null && error.kind != ErrorKind.EXPIRED) {
+            enqueue { failCurrent() }
+            return
+        }
         when {
             error.kind == ErrorKind.EXPIRED -> enqueue { revoked() }
+
             error.status == 403 || error.status == 404 -> enqueue { failCurrent() }
+
             else -> enqueue {
                 player?.playWhenReady = false
                 commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
@@ -762,6 +977,15 @@ internal class MusicHost(
     }
 
     private suspend fun failCurrent() {
+        val host = group()
+        if (host != null) {
+            player?.playWhenReady = false
+            host.membership.queue?.current?.let {
+                host.resolved(SyncOpen(host.membership.generation, it.playlistItemId, it.itemId, currentTicks()), false)
+            }
+            publish { it.copy(message = "This track could not play. Watch together is paused; leave the group to recover.") }
+            return
+        }
         commit { QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true) }
     }
 
@@ -848,12 +1072,76 @@ internal class MusicHost(
         created.addListener(listener)
         ticker = scope.launch { tick() }
         remoteTarget()?.setPlayer(this, remoteBridge)
+        syncHost()?.let { host ->
+            host.bindRenderer(this, syncBridge)
+            syncUpdates = scope.launch { host.state.collect { publish() } }
+        }
         publish()
+    }
+
+    /** Incoming group corrections bypass the viewer/OS command functions, so they never echo. */
+    internal val syncBridge = object : SyncRenderer {
+        override fun snapshot(): SyncRendererState {
+            val running = player
+            val q = queue.committed
+            val media = q.entries.firstOrNull { it.id == q.current }?.media.orEmpty()
+            val matches = running?.currentMediaItem?.mediaId == q.current
+            val available = matches && running != null && running.playbackState == Player.STATE_READY &&
+                running.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+            val duration = durationMs()?.let(::millisecondsToSyncTicks) ?: 0
+            val position = running?.currentPosition?.coerceAtLeast(0)?.let(::millisecondsToSyncTicks)
+            val preparedTrack = running?.currentMediaItem?.mediaId?.let(prepared::get)
+            return SyncRendererState(
+                media,
+                position ?: 0,
+                duration,
+                ready = available && position != null,
+                buffering = !matches || running?.playbackState == Player.STATE_BUFFERING ||
+                    running?.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE,
+                playing = matches && running?.isPlaying == true,
+                seekable = matches && running?.isCurrentMediaItemSeekable == true && duration > 0 &&
+                    preparedTrack?.decision?.mediaSource?.liveStreamId == null,
+                // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
+                rateSupported = false
+            )
+        }
+
+        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double) {
+            val running = player ?: return
+            if (group() != null) {
+                // A preloaded local album must not advance or repeat while membership is being acquired.
+                running.repeatMode = Player.REPEAT_MODE_OFF
+                val after = running.currentMediaItemIndex + 1
+                if (after in 0 until running.mediaItemCount) running.removeMediaItems(after, running.mediaItemCount)
+            }
+            if (running.currentMediaItem?.mediaId != queue.committed.current) {
+                running.playWhenReady = false
+                return
+            }
+            if (positionTicks != null && kotlin.math.abs(running.currentPosition - positionTicks / Ticks.PER_MILLISECOND) > 1) {
+                running.seekTo((positionTicks / Ticks.PER_MILLISECOND).coerceAtLeast(0))
+            }
+            if (running.playbackParameters.speed != rate.toFloat()) running.setPlaybackSpeed(rate.toFloat())
+            if (playing != null) {
+                applySession(if (playing) "viewer-play" else "viewer-pause")
+                if (running.playWhenReady != playing) running.playWhenReady = playing
+                if (!playing && group() == null && !queue.committed.paused) {
+                    val entry = queue.committed.current
+                    enqueue {
+                        if (group() == null && queue.committed.current == entry) {
+                            savePosition()
+                            commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: ExoItem?, reason: Int) {
             val entry = mediaItem?.mediaId ?: return
+            endedHandled = false
             val previous = reports.viewing
             val leaving = tracks[previous?.media]?.durationTicks ?: 0
             val natural = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
@@ -864,8 +1152,9 @@ internal class MusicHost(
                 if (player?.isPlaying == true) report(MusicReportEvent("playing", ticks = 0))
             }
             lastTicks = 0
-            if (natural) {
+            if (natural && group() == null) {
                 enqueue {
+                    if (group() != null) return@enqueue
                     commit { QueueEvent("end", revision = it.revision, generation = it.generation, completion = it.completion) }
                 }
             }
@@ -885,6 +1174,7 @@ internal class MusicHost(
             if (playbackState == Player.STATE_ENDED && !endedHandled) {
                 endedHandled = true
                 enqueue {
+                    if (groupTransport("next")) return@enqueue
                     endedHandled = false
                     commit { QueueEvent("end", revision = it.revision, generation = it.generation, completion = it.completion) }
                 }
@@ -900,6 +1190,7 @@ internal class MusicHost(
             }
             enqueue {
                 applySession(cause)
+                if (groupTransport("pause")) return@enqueue
                 commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
             }
         }
@@ -910,14 +1201,23 @@ internal class MusicHost(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (group() != null) {
+                enqueue {
+                    report(MusicReportEvent("stop", ticks = currentTicks(), failed = true))
+                    failCurrent()
+                }
+                return
+            }
             val cause = error.cause
             when {
                 cause is HttpDataSource.InvalidResponseCodeException && cause.responseCode == 401 -> enqueue { revoked() }
+
                 error.errorCode in NETWORK_ERRORS -> enqueue {
                     savePosition()
                     commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
                     publish { it.copy(message = "Lost the connection. Your place is saved: press Play to try again.") }
                 }
+
                 else -> enqueue {
                     report(MusicReportEvent("stop", ticks = currentTicks(), failed = true))
                     failCurrent()
@@ -972,7 +1272,9 @@ internal class MusicHost(
             if (decision != null) {
                 when (effect.report) {
                     "start" -> gateway.start(active, progressInfo(decision, effect))
+
                     "progress" -> gateway.progress(active, progressInfo(decision, effect))
+
                     else -> gateway.stopped(
                         active,
                         PlaybackStopInfo(
@@ -1024,10 +1326,13 @@ internal class MusicHost(
     private fun teardown() {
         preparing?.cancel()
         ticker?.cancel()
+        syncUpdates?.cancel()
+        syncUpdates = null
         val running = player ?: return publish()
         report(MusicReportEvent("stop", ticks = currentTicks()))
         player = null
         remoteTarget()?.clearPlayer(this)
+        syncHost()?.clearRenderer(this)
         running.removeListener(listener)
         running.stop()
         running.clearMediaItems()
@@ -1062,7 +1367,9 @@ internal class MusicHost(
 
     internal fun appContext(): Context = context
 
-    internal fun hasNext(): Boolean = queue.committed.let { q ->
+    internal fun hasNext(): Boolean = group()?.membership?.queue?.let {
+        it.currentIndex + 1 < it.entries.size || it.repeatMode == "RepeatAll"
+    } ?: queue.committed.let { q ->
         q.current != null && (musicUpcoming(q).isNotEmpty() || q.repeat == "all")
     }
 

@@ -312,23 +312,28 @@ internal fun PlayerItemScreen(
     fun handleBack() {
         when {
             switching -> finish(reason = "back-during-next")
+
             extraPanel != null -> {
                 returnFocus = if (extraPanel == "Playback speed") speedFocus else infoFocus
                 extraPanel = null
             }
+
             chaptersOpen -> {
                 chaptersOpen = false
                 returnFocus = chaptersFocus
             }
+
             seekOpen -> {
                 seekOpen = false
                 restoringSeekFocus = true
                 returnFocus = timelineFocus
             }
+
             chooser != null -> {
                 returnFocus = if (chooser == MediaStreamType.Audio) audioFocus else subtitleFocus
                 chooserRequest = null
             }
+
             controls -> {
                 controls = false
                 if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
@@ -336,6 +341,7 @@ internal fun PlayerItemScreen(
                 val focused = rootFocus.requestFocus()
                 focusSpeaksControlsHidden = accessibleControls && focusMoves && focused
             }
+
             else -> finish(reason = "back")
         }
     }
@@ -493,7 +499,7 @@ internal fun PlayerItemScreen(
                         ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         ?.let { segment ->
                             {
-                                player?.seekTo(segment.endMs)
+                                host.seekTo(segment.endMs)
                                 position = segment.endMs
                                 interaction++
                             }
@@ -683,6 +689,7 @@ internal fun PlayerItemScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Button(scale = playerButtonScale(), onClick = { host.sync?.show() }) { Text("Watch together") }
                         PlaybackToggle(
                             paused,
                             showPlayButton,
@@ -761,8 +768,8 @@ internal fun PlayerItemScreen(
                         .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SegmentControl(segments, position, localPreferences.segmentModes, onSeek = { target ->
-                        player?.seekTo(target)
+                    SegmentControl(segments, position, host.segmentModesForViewing(), onSeek = { target ->
+                        host.seekTo(target)
                         position = target
                         interaction++
                     }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible && openerReturnTag == null)
@@ -781,7 +788,9 @@ internal fun PlayerItemScreen(
                                 } else {
                                     null
                                 },
-                                autoPlay = !accessibleControls && foreground && !pauseIntent && deferredNext == null
+                                autoPlay =
+                                    host.sync?.participating != true && !accessibleControls && foreground && !pauseIntent &&
+                                        deferredNext == null
                             )
                         }
                     }
@@ -794,7 +803,7 @@ internal fun PlayerItemScreen(
                 }, scrollable = false) {
                     ChapterPanel(account, item.id, metadata.chapters, position) { target ->
                         select({
-                            player?.seekTo(target)
+                            host.seekTo(target)
                             position = target
                             interaction++
                         }) {

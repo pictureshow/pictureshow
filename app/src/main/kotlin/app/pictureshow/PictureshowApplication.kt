@@ -105,6 +105,25 @@ class PictureshowApplication : Application() {
                         )
                     }
                     single {
+                        val http = get<HttpClient>()
+                        val store = get<DeviceIdentityStore>()
+                        val name = deviceDisplayName(this@PictureshowApplication)
+                        suspend fun client() = app.pictureshow.core.sync.SyncClient(
+                            http,
+                            ClientIdentity(name, store.getOrCreate(), BuildConfig.VERSION_NAME)
+                        )
+                        SyncPlayHost(
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate),
+                            object : SyncPlayGateway {
+                                override suspend fun groups(account: Account) = client().groups(account)
+                                override suspend fun access(account: Account) = client().access(account)
+                                override suspend fun time(account: Account) = client().utcTime(account)
+                                override suspend fun send(account: Account, request: app.pictureshow.core.sync.SyncRequest) =
+                                    client().send(account, request)
+                            }
+                        )
+                    }
+                    single {
                         createApiHttpClient()
                     }
                     single<JellyfinService> {

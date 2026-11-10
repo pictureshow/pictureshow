@@ -1,6 +1,6 @@
 # SyncPlay / watch together (launch draft)
 
-**Status: required launch scope, not implemented or timing-qualified here.** Apply [shared session/queue](session-control.md), [API version contract](launch-api.md) and APP/PLAY rules. Evidence: [Jellyfin Web SyncPlay behavior](https://github.com/jellyfin/jellyfin-web/tree/master/src/plugins/syncPlay) and server SyncPlay API; [Plex Watch Together](https://support.plex.tv/articles/watch-together/) describes the shared viewing intent but notes retirement from newer native experiences and continuing Web availability. The Plex statement uses its official indexed excerpt and the prior intent inventory; direct article retrieval was blocked on this research date. No live Plex UI test is claimed. No GPL code or Plex service protocol is copied.
+**Status: Android reference implementation in progress; timing qualification is still required. Apple, web and desktop owe native adapters, UI, and independent rendered-output qualification.** Apply [shared session/queue](session-control.md), [API version contract](launch-api.md) and APP/PLAY rules. Evidence: [Jellyfin Web SyncPlay behavior](https://github.com/jellyfin/jellyfin-web/tree/master/src/plugins/syncPlay) and server SyncPlay API; [Plex Watch Together](https://support.plex.tv/articles/watch-together/) describes the shared viewing intent but notes retirement from newer native experiences and continuing Web availability. The Plex statement uses its official indexed excerpt and the prior intent inventory; direct article retrieval was blocked on this research date. No live Plex UI test is claimed. No GPL code or Plex service protocol is copied.
 
 | ID | Behavior | Acceptance criteria |
 |---|---|---|
@@ -35,3 +35,18 @@ Use exact signed 64-bit 100 ns ticks with overflow checks. If local request send
 Android uses Media3 position/rate/seek and native WebSocket; Apple AVPlayer time/rate observers and monotonic timing; web uses media time/rate, WebSocket and performance timing. Browser autoplay may require explicit Join and Play and hidden tabs can lose timing precision; rejoin after suspension. Audio route buffering (AirPlay/Bluetooth), Cast position cadence and TV decoder behavior are measured limits, never inferred from a successful API call.
 
 Prove two independent viewers, mixed platform pairs, same and differently transcoded paths, late join, seek/pause, rebuffer, one slow client, denied library, host departure, network loss and reconnect against isolated 10.10.7, 10.11.11 and 12.4 (household 12.0.0 unchanged for acceptance). Use a generated visual/audio timecode fixture and a shared capture clock; server/request timestamps alone do not prove simultaneous displayed frames. SyncPlay is watch-together synchronization, not sample-accurate multiroom speaker audio or voice/chat.
+
+
+## Android reference adapter and executable contract (2026-11-10)
+
+The Android reference uses the signed-in viewer's existing Jellyfin socket. Disabling remote UI receiving does not disable this group channel. Incoming server transport is applied through an explicit decoder bypass so it cannot echo a second group request. Ordinary UI, hardware and remote transport is intercepted before the decoder moves. Each renderer keeps its existing single report owner.
+
+The executable `sync-clock`, `sync-drift`, `sync-state` and `sync-queue` suites exercise production Kotlin policies. Tick values are decimal strings at JSON adapter boundaries where a number would exceed JavaScript's exact integer range. A vector pass proves the policy, not native timer or renderer precision.
+
+An acknowledged new empty Idle group can emit Stop with an all-zero PlaylistItemId and no PlayQueue. Retain Idle membership without inventing a queue or entering a resnapshot loop. After a populated queue, Stop refers to its current PlaylistItemId. Ready can schedule Unpause before a subsequent StateUpdate; consume the scheduled command when received, preserving it independently of the transient reducer field.
+
+Android uses seek correction unless its actual source/output explicitly qualifies the exact temporary rates. Media3's generic speed capability alone does not establish encoded-output support for 0.97/1.03. The visible status states clock uncertainty and renderer-position drift, with “not qualified” until SYN-06 has independent frame/output evidence. Unqualified background music pauses and leaves, just as video does; it does not claim timing after suspension.
+
+The group chooser is shared by TV and touch. Cast device selection requires a deliberate Leave group and successful server Leave before dispatch; cancellation retains membership and output. Native Jellyfin remote targets remain group participants and convert received transport/queue edits into group requests.
+
+Observed protocol reference: demo Jellyfin 12.0.0, two isolated viewers, 2026-11-10. Group operations, buffering/readiness, timing messages and server queue mutations were exercised through the real API/socket. This does not substitute for the separately required 10.10.7/10.11.11/12.4 compatibility and SYN-06 device matrix. No GPL client code or text was copied.

@@ -67,6 +67,7 @@ internal class PlaybackHostState(
 ) {
     /** Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself. */
     val reportScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    var sync: SyncPlayHost? = null
     var localPreferences by mutableStateOf(PlaybackPreferences())
     var subtitleDelayMs by mutableIntStateOf(0)
     var probe by mutableStateOf<DeviceCapabilityProbe?>(null)
@@ -132,6 +133,8 @@ internal class PlaybackHostState(
     val atEnd get() = ended || deferredNext != null
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
+        if (next != null && sync?.transport("next") == true) return
+        if (next == null && sync?.participating == true) sync?.leave()
         onFinishing()
         if (!exitRequested && !switching) {
             PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))
@@ -191,6 +194,7 @@ internal class PlaybackHostState(
 
     /** A relative step, accumulating against the last intended target (PLAY-07). */
     fun seek(delta: Long) {
+        if (sync?.transport("seek", (position + delta).coerceIn(0, duration.coerceAtLeast(0))) == true) return
         val serverTarget = controller?.stepSeek(delta)
         if (serverTarget != null) {
             position = serverTarget
@@ -209,6 +213,11 @@ internal class PlaybackHostState(
 
     /** An absolute target: a scrub, a chapter or a controller's seek. */
     fun seekTo(targetMs: Long) {
+        if (sync?.transport("seek", targetMs) == true) return
+        seekToLocal(targetMs)
+    }
+
+    fun seekToLocal(targetMs: Long) {
         val current = state.decision
         if (current != null &&
             app.pictureshow.core.playback.TranscodeSeek.required(current) &&
@@ -287,17 +296,20 @@ private fun RemoteTargetBinding(
     val remoteBridge = remember(host) {
         object : RemotePlayerBridge {
             override fun pause() {
-                host.player?.pause()
+                if (host.sync?.transport("pause") != true) host.player?.pause()
             }
             override fun unpause() {
-                host.player?.play()
+                if (host.sync?.transport("play") != true) host.player?.play()
             }
             override fun report() {
                 host.controller?.progress()
             }
             override fun seekTo(positionMs: Long) = host.seekTo(positionMs)
-            override fun stop() = host.finish(reason = "remote-stop")
+            override fun stop() {
+                if (host.sync?.transport("stop") != true) host.finish(reason = "remote-stop")
+            }
             override fun next(item: String?) {
+                if (host.sync?.transport("next") == true) return
                 if (item == null) {
                     host.nextEpisode?.let { host.finish(it, reason = "remote-next") }
                     return
@@ -308,6 +320,7 @@ private fun RemoteTargetBinding(
                     }
                 }
             }
+            override fun previous(): Boolean = host.sync?.transport("previous") == true
             override fun audio(index: Int) {
                 val streams = host.state.decision?.mediaSource?.mediaStreams.orEmpty()
                 if (streams.any { it.type == MediaStreamType.Audio && it.index == index }) {
@@ -357,6 +370,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val output = host.output
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
+    SyncPlaybackBinding(host)
     host.remote?.let { RemoteTargetBinding(host, it, account, catalog, paused) }
     with(host) {
         DisposableEffect(player) {
@@ -421,7 +435,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                     diagnostic = PlaybackDiagnostics::write
                 )
                 controller = session
-                output.onStop = { finish(reason = "system-stop") }
+                output.onStop = { if (sync?.transport("stop") != true) finish(reason = "system-stop") }
                 output.onSeek = { target, source -> session.seek(target, source) }
                 output.onReady = { source, position, target -> session.ready(source, position, target) }
                 output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
@@ -429,6 +443,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 output.onFailure = { retry, source -> session.failed(retry, source) }
                 output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
                 output.onEnded = ended@{ source ->
+                    if (sync?.transport("next") == true) return@ended
                     if (!output.foreground.value || output.pauseIntent.value) return@ended
                     val finalPosition = output.position().milliseconds
                     val finalDuration = output.player.value?.duration?.takeIf { it > 0 } ?: duration
@@ -471,7 +486,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         }
         val upcoming = remote?.upcoming
         LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent, remoteNext, upcoming, remoteNextResolving) {
-            if (!ended || !foreground || pauseIntent) return@LaunchedEffect
+            if (sync?.participating == true || !ended || !foreground || pauseIntent) return@LaunchedEffect
             val lookup = nextLookup
             if (nextCancelled) {
                 finish(reason = "natural-end")

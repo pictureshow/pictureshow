@@ -140,6 +140,7 @@ internal fun PlaybackSettingsScreen(
     onThisTv: () -> Unit = {},
     onAbout: () -> Unit = {},
     onSupport: () -> Unit = {},
+    onSyncPlay: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -155,6 +156,7 @@ internal fun PlaybackSettingsScreen(
         Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Button(onClick = onSyncPlay) { Text("Watch together") }
         Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         Button(
             onClick = {

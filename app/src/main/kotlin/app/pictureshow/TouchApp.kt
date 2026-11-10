@@ -89,6 +89,13 @@ internal fun TouchPictureshow(
         route?.startsWith("login?") != true &&
         route?.startsWith("quick?") != true &&
         !inPlayer
+    val sync: SyncPlayHost = koinInject()
+    SyncPlayCoordinator(state.snapshot.currentAccount, catalog, onMusicOpen = {
+        nav.navigate(MUSIC_NOW_ROUTE) {
+            popUpTo("home")
+            launchSingleTop = true
+        }
+    }) { navigatePlaybackEntry(nav, it) }
     val remote: RemoteControllerHost = koinInject()
     val remoteState by remote.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.snapshot.currentAccount) { remote.bind(state.snapshot.currentAccount) }
@@ -98,6 +105,10 @@ internal fun TouchPictureshow(
     }
     val cast: CastSenderHost = koinInject()
     val castState by cast.state.collectAsStateWithLifecycle()
+    DisposableEffect(cast, sync) {
+        cast.beforeExternalRoute = sync::confirmExternalRoute
+        onDispose { cast.beforeExternalRoute = null }
+    }
     LaunchedEffect(state.snapshot.currentAccount) { cast.bind(state.snapshot.currentAccount) }
     LifecycleResumeEffect(cast) {
         cast.setForeground(true)
@@ -180,9 +191,12 @@ internal fun TouchPictureshow(
             }
             when (entry) {
                 ParsedPlaybackEntry.Ignore -> Unit
+
                 ParsedPlaybackEntry.Invalid -> Toast.makeText(context, ENTRY_INVALID, Toast.LENGTH_SHORT).show()
+
                 is ParsedPlaybackEntry.Play -> when (val resolved = resolvePlaybackEntry(entry.entry, account, catalog)) {
                     ResolvedPlaybackEntry.NormalStartup -> Unit
+
                     ResolvedPlaybackEntry.Unavailable -> {
                         Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
                         nav.navigate("home") {
@@ -190,6 +204,7 @@ internal fun TouchPictureshow(
                             launchSingleTop = true
                         }
                     }
+
                     is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
                 }
             }
@@ -429,8 +444,10 @@ internal fun TouchPictureshow(
                         val vm: PersonViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         TouchPersonScreen(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::retry) { nav.popBackStack() }
-                    } else if (item.isFolder &&
-                        item.type !in listOf("Series", "Season") ||
+                    } else if ((
+                            item.isFolder &&
+                                item.type !in listOf("Series", "Season")
+                            ) ||
                         item.type in listOf("CollectionFolder", "BoxSet", "Folder")
                     ) {
                         val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
@@ -531,6 +548,7 @@ internal fun TouchPictureshow(
                         { nav.navigate("about") },
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
+                        onSyncPlay = sync::show,
                         onThisDevice = { nav.navigate("this-device") },
                         castEnabled = castSwitchState(castState.capability, castStored),
                         onCastEnabled = cast::setEnabled,

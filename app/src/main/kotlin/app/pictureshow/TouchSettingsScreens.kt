@@ -53,6 +53,7 @@ internal fun TouchSettings(
     onSupport: () -> Unit,
     onBack: (() -> Unit)? = null,
     onRemote: () -> Unit = {},
+    onSyncPlay: () -> Unit = {},
     onThisDevice: () -> Unit = {},
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
@@ -68,6 +69,7 @@ internal fun TouchSettings(
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
+            TouchNavRow("Watch together", onClick = onSyncPlay)
             castEnabled?.let {
                 TouchSwitchRow(
                     "Google Cast",
@@ -322,12 +324,15 @@ internal fun TouchSupporter(state: SupporterState, onPurchase: () -> Unit, onBac
         Text(stringResource(R.string.supporter_no_guarantee))
         when (state) {
             SupporterState.Loading -> Text(stringResource(R.string.supporter_loading))
+
             is SupporterState.Offer -> {
                 Text(stringResource(R.string.supporter_price_month, state.product.price), style = MaterialTheme.typography.headlineMedium)
                 Text(stringResource(R.string.supporter_renewal))
                 TouchAction(stringResource(R.string.supporter_subscribe), onClick = onPurchase)
             }
+
             SupporterState.Pending -> Text(stringResource(R.string.supporter_pending))
+
             is SupporterState.Active -> {
                 Text(stringResource(R.string.supporter_thanks), style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(R.string.supporter_code_label))
@@ -353,12 +358,16 @@ internal fun TouchSupporter(state: SupporterState, onPurchase: () -> Unit, onBac
                     Text(stringResource(R.string.supporter_manage_fallback))
                 }
             }
+
             is SupporterState.Unavailable -> TouchMessage(
                 when (state.reason) {
                     BillingFailure.Unavailable ->
                         "Subscribing needs Google Play billing, which is unavailable on this device or its Google account."
+
                     BillingFailure.Network -> stringResource(R.string.supporter_network_unavailable)
+
                     BillingFailure.ProductMissing -> stringResource(R.string.supporter_product_unavailable)
+
                     BillingFailure.Other -> stringResource(R.string.supporter_error)
                 }
             )

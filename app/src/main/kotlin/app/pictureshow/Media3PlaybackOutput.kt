@@ -37,6 +37,19 @@ internal class Media3PlaybackOutput(
     private val renderersFactory: RenderersFactory? = null,
     private val subtitleDelay: SubtitleDelay = SubtitleDelay()
 ) : PlaybackOutput {
+    /** Group transport is intercepted before UI, media keys or controller commands touch the decoder. */
+    var syncRequest: ((String, Long?) -> Boolean)? = null
+    var syncParticipating: () -> Boolean = { false }
+    private var applyingSync = false
+    fun <T> applySync(action: () -> T): T {
+        val before = applyingSync
+        applyingSync = true
+        return try {
+            action()
+        } finally {
+            applyingSync = before
+        }
+    }
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
     fun setSpeed(value: Float) {
@@ -322,12 +335,15 @@ internal class Media3PlaybackOutput(
         val gated = ReleaseGatedPlayer(next)
         val managed = ReopeningPlayer(gated, ::playIntent)
         reopenState = managed
-        val exposed = if (serverSeek) {
+        val timeline = if (serverSeek) {
             TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
                 onSeek(target, decision)
             }
         } else {
             managed
+        }
+        val exposed = SyncTransportPlayer(timeline) { command, target ->
+            !applyingSync && syncRequest?.invoke(command, target) == true
         }
         var initialReady = false
         var initialTargetMs = positionMs
@@ -488,7 +504,12 @@ internal class Media3PlaybackOutput(
             next.setMediaSource(source, if (serverSeek) 0 else positionMs)
         }
         next.playWhenReady =
-            app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(!paused, true, mutableForeground.value, mutablePauseIntent.value)
+            app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(
+                !paused && !syncParticipating(),
+                true,
+                mutableForeground.value,
+                mutablePauseIntent.value
+            )
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
         gated.hold()
         playbackThread.prepare {

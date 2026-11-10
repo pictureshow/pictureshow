@@ -79,7 +79,6 @@ internal class OkHttpRemoteSocketFactory(private val client: OkHttpClient = OkHt
     }
 }
 
-/** What a mounted player can do. Absent when nothing is playing, so a stray command has nothing to act on. */
 /**
  * What was queued from a phone comes next, so the end of a title waits for it instead of exiting. A queued title that
  * cannot be opened holds nothing: the title ends as it would have.
@@ -87,6 +86,7 @@ internal class OkHttpRemoteSocketFactory(private val client: OkHttpClient = OkHt
 internal fun remoteQueueHoldsEnd(upcoming: String?, resolved: MediaItem?, resolving: Boolean): Boolean =
     upcoming != null && (resolved != null || resolving)
 
+/** A mounted player; absent when nothing plays, so stray commands have no local output to act on. */
 internal interface RemotePlayerBridge {
     fun pause()
     fun unpause()
@@ -147,6 +147,16 @@ internal class RemoteTargetHost(
     private val nowMs: () -> Long,
     private val trace: (String) -> Unit = {}
 ) {
+    var syncMessages: (String) -> Unit = {}
+    var syncQueueRequest: (RemoteEffect) -> Boolean = { false }
+    var syncConnection: (Boolean) -> Unit = {}
+    var socketConnected = false
+        private set
+    private var syncSocket = false
+    fun requireSyncSocket(value: Boolean) {
+        syncSocket = value
+        reconcile()
+    }
     private val commands = remoteAdvertisedCommands(fixedVolume = true)
     private var account: Account? = null
     private var policy = "same-viewer"
@@ -211,12 +221,14 @@ internal class RemoteTargetHost(
         loop = null
         socket?.close()
         socket = null
+        socketConnected = false
+        syncConnection(false)
         state = state?.let { reduceRemoteReceive(it, RemoteReceiveEvent("disconnect")) }
     }
 
     private fun reconcile() {
         val current = account
-        val wanted = foreground && current != null && policy != "off"
+        val wanted = foreground && current != null && (policy != "off" || syncSocket)
         if (!wanted) {
             if (loop != null) stop()
             if (foreground && current != null && policy == "off" && withdrawnFor != current.key) withdraw(current)
@@ -293,6 +305,8 @@ internal class RemoteTargetHost(
                         scope.launch {
                             if (!live) return@launch
                             failures = 0
+                            socketConnected = true
+                            syncConnection(true)
                             trace("remote socket-open")
                             beat(DEFAULT_KEEPALIVE_SECONDS)
                             ticker = scope.launch {
@@ -311,6 +325,7 @@ internal class RemoteTargetHost(
                     override fun message(text: String) {
                         scope.launch {
                             if (!live) return@launch
+                            syncMessages(text)
                             val inbound = parseRemoteMessage(text)
                             inbound.keepAliveSeconds?.let(::beat)
                             receive(inbound)
@@ -319,6 +334,8 @@ internal class RemoteTargetHost(
                     override fun closed() {
                         scope.launch {
                             live = false
+                            socketConnected = false
+                            syncConnection(false)
                             done.complete(Unit)
                         }
                     }
@@ -349,6 +366,7 @@ internal class RemoteTargetHost(
     }
 
     private fun apply(effect: RemoteEffect) {
+        if (syncQueueRequest(effect)) return
         val bridge = player
         when (effect.op) {
             "open" -> {
@@ -358,6 +376,7 @@ internal class RemoteTargetHost(
                 queueRevision++
                 mutableOpens.tryEmit(effect)
             }
+
             "queue-next", "queue-add" -> {
                 if (bridge?.enqueue(effect.items, effect.op == "queue-next") == true) return
                 // The reducer also accepts these during preparation; the title on its way is the current entry then,
@@ -366,16 +385,27 @@ internal class RemoteTargetHost(
                 queueFor().add(watching, effect.items, effect.op == "queue-next")
                 queueRevision++
             }
+
             "pause" -> bridge?.pause()
+
             "unpause" -> bridge?.unpause()
+
             "report" -> bridge?.report()
+
             "seek" -> bridge?.seekTo(requireNotNull(effect.ticks) / 10_000)
+
             "stop" -> bridge?.stop()
+
             "next" -> bridge?.next(queue?.upcoming)
+
             "previous" -> if (bridge != null && !bridge.previous()) previous(bridge)
+
             "audio" -> bridge?.audio(requireNotNull(effect.index))
+
             "subtitle" -> bridge?.subtitle(requireNotNull(effect.index))
+
             "nav" -> mutableNavigation.tryEmit(requireNotNull(effect.name))
+
             "text" -> textSink?.invoke(requireNotNull(effect.text))
         }
     }

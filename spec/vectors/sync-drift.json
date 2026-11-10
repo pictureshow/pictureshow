@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-drift",
+  "cases": [
+    {
+      "id": "drift--251",
+      "input": {
+        "driftMs": -251,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "drift--250",
+      "input": {
+        "driftMs": -250,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "RATE",
+        "rate": 1.03
+      }
+    },
+    {
+      "id": "drift--81",
+      "input": {
+        "driftMs": -81,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "RATE",
+        "rate": 1.03
+      }
+    },
+    {
+      "id": "drift--80",
+      "input": {
+        "driftMs": -80,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
+    },
+    {
+      "id": "drift-0",
+      "input": {
+        "driftMs": 0,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
+    },
+    {
+      "id": "drift-80",
+      "input": {
+        "driftMs": 80,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
+    },
+    {
+      "id": "drift-81",
+      "input": {
+        "driftMs": 81,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "RATE",
+        "rate": 0.97
+      }
+    },
+    {
+      "id": "drift-250",
+      "input": {
+        "driftMs": 250,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "RATE",
+        "rate": 0.97
+      }
+    },
+    {
+      "id": "drift-251",
+      "input": {
+        "driftMs": 251,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "no-exact-rate",
+      "input": {
+        "driftMs": 100,
+        "playing": true,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.98
+        ]
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "source-refuses-rate",
+      "input": {
+        "driftMs": 100,
+        "playing": true,
+        "now": 0,
+        "allowsRate": false,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "rate-five-second-cap",
+      "input": {
+        "driftMs": 100,
+        "playing": true,
+        "now": 5000,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ],
+        "rateStarted": 0,
+        "oldRate": 0.97
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "rate-before-cap",
+      "input": {
+        "driftMs": 100,
+        "playing": true,
+        "now": 4999,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ],
+        "rateStarted": 0,
+        "oldRate": 0.97
+      },
+      "expected": {
+        "action": "RATE",
+        "rate": 0.97
+      }
+    },
+    {
+      "id": "rate-restore-in-tolerance",
+      "input": {
+        "driftMs": 80,
+        "playing": true,
+        "now": 1,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ],
+        "rateStarted": 0,
+        "oldRate": 0.97
+      },
+      "expected": {
+        "action": "RESET_RATE",
+        "rate": 1
+      }
+    },
+    {
+      "id": "seek-cooldown-before",
+      "input": {
+        "driftMs": 300,
+        "playing": true,
+        "now": 1999,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ],
+        "lastSeek": 0
+      },
+      "expected": {
+        "action": "WAIT",
+        "rate": 1
+      }
+    },
+    {
+      "id": "seek-cooldown-equality",
+      "input": {
+        "driftMs": 300,
+        "playing": true,
+        "now": 2000,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ],
+        "lastSeek": 0
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "paused-small-seek",
+      "input": {
+        "driftMs": 1,
+        "playing": false,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "paused-aligned",
+      "input": {
+        "driftMs": 0,
+        "playing": false,
+        "now": 0,
+        "allowsRate": true,
+        "rates": [
+          0.97,
+          1.03
+        ]
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
+    }
+  ]
+}

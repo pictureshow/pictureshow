@@ -75,10 +75,15 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         "remote-queue.json"
     )
     from(rootProject.file("spec/vectors")) {
+        exclude("sync-*.json")
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude("grid-navigation.json")
         into("parity-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
+        include("sync-*.json")
+        into("sync-vectors")
     }
     from(rootProject.file("spec/vectors")) {
         include("grid-navigation.json")

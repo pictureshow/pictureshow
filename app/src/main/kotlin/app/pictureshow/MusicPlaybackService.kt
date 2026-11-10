@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.view.KeyEvent
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -59,13 +60,16 @@ internal class MusicSessionPlayer(player: Player, private val host: MusicHost) :
 
     override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
 
-    private fun adjust(commands: Player.Commands): Player.Commands = commands.buildUpon()
-        .removeAll(Player.COMMAND_CHANGE_MEDIA_ITEMS, Player.COMMAND_SET_MEDIA_ITEM)
-        .addIf(Player.COMMAND_SEEK_TO_NEXT, host.hasNext())
-        .addIf(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, host.hasNext())
-        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
-        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-        .build()
+    private fun adjust(commands: Player.Commands): Player.Commands {
+        val available = commands.buildUpon()
+            .removeAll(Player.COMMAND_CHANGE_MEDIA_ITEMS, Player.COMMAND_SET_MEDIA_ITEM)
+            .addIf(Player.COMMAND_SEEK_TO_NEXT, host.hasNext())
+            .addIf(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, host.hasNext())
+            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        if (host.syncHost()?.participating == true) available.remove(Player.COMMAND_SET_SPEED_AND_PITCH)
+        return available.build()
+    }
 
     override fun play() = host.play()
 
@@ -79,6 +83,26 @@ internal class MusicSessionPlayer(player: Player, private val host: MusicHost) :
     override fun seekToDefaultPosition(mediaItemIndex: Int) = route(mediaItemIndex, 0)
 
     override fun seekTo(positionMs: Long) = host.seekTo(positionMs)
+
+    override fun seekToDefaultPosition() = host.seekTo(0)
+
+    override fun seekBack() = host.seekTo((currentPosition - seekBackIncrement).coerceAtLeast(0))
+
+    override fun seekForward() {
+        val position = currentPosition.coerceAtLeast(0)
+        val increment = seekForwardIncrement.coerceAtLeast(0)
+        host.seekTo(if (position > Long.MAX_VALUE - increment) Long.MAX_VALUE else position + increment)
+    }
+
+    override fun setPlaybackSpeed(speed: Float) {
+        if (host.syncHost()?.transport("speed") == true) return
+        super.setPlaybackSpeed(speed)
+    }
+
+    override fun setPlaybackParameters(playbackParameters: PlaybackParameters) {
+        if (host.syncHost()?.transport("speed") == true) return
+        super.setPlaybackParameters(playbackParameters)
+    }
 
     private fun route(index: Int, positionMs: Long) {
         if (index == currentMediaItemIndex) return host.seekTo(positionMs.coerceAtLeast(0))

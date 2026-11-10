@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
             entrySequence = savedInstanceState.getLong("playbackEntrySequence")
             playbackEntry = when (savedInstanceState.getString("playbackEntryKind")) {
                 "invalid" -> ParsedPlaybackEntry.Invalid
+
                 "play" -> parsePlaybackEntry(
                     Intent(PLAY_ACTION).putExtra("itemId", savedInstanceState.getString("playbackEntryId")).apply {
                         if (savedInstanceState.containsKey("playbackEntryPosition")) {
@@ -151,6 +152,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
+
                 else -> null
             }
         }
@@ -203,11 +205,13 @@ class MainActivity : ComponentActivity() {
         outState.putLong("playbackEntrySequence", entrySequence)
         when (val pending = playbackEntry) {
             ParsedPlaybackEntry.Invalid -> outState.putString("playbackEntryKind", "invalid")
+
             is ParsedPlaybackEntry.Play -> {
                 outState.putString("playbackEntryKind", "play")
                 outState.putString("playbackEntryId", pending.entry.itemId)
                 pending.entry.positionMs?.let { outState.putLong("playbackEntryPosition", it) }
             }
+
             else -> Unit
         }
         super.onSaveInstanceState(outState)
@@ -408,9 +412,12 @@ internal fun Pictureshow(
         }
         when (entry) {
             ParsedPlaybackEntry.Ignore -> Unit
+
             ParsedPlaybackEntry.Invalid -> Toast.makeText(context, ENTRY_INVALID, Toast.LENGTH_SHORT).show()
+
             is ParsedPlaybackEntry.Play -> when (val resolved = resolvePlaybackEntry(entry.entry, account, catalog)) {
                 ResolvedPlaybackEntry.NormalStartup -> Unit
+
                 ResolvedPlaybackEntry.Unavailable -> {
                     Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
                     nav.navigate("home") {
@@ -418,6 +425,7 @@ internal fun Pictureshow(
                         launchSingleTop = true
                     }
                 }
+
                 is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
             }
         }
@@ -429,6 +437,13 @@ internal fun Pictureshow(
         if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
     }
+    SyncPlayCoordinator(state.snapshot.currentAccount, catalog, onMusicOpen = {
+        nav.navigate(MUSIC_NOW_ROUTE) {
+            popUpTo("home")
+            launchSingleTop = true
+        }
+    }) { navigatePlaybackEntry(nav, it) }
+    val sync: SyncPlayHost = koinInject()
     val remoteTarget: RemoteTargetHost = koinInject()
     val music: MusicHost = koinInject()
     val playbackPreferences: PlaybackPreferencesStore = koinInject()
@@ -888,7 +903,8 @@ internal fun Pictureshow(
                     onBack = { nav.popBackStack() },
                     onThisTv = { nav.navigate("this-tv") },
                     onAbout = { nav.navigate("about") },
-                    onSupport = { nav.navigate("supporter") }
+                    onSupport = { nav.navigate("supporter") },
+                    onSyncPlay = sync::show
                 )
             }
         }
@@ -981,8 +997,10 @@ internal fun Pictureshow(
                     val vm: PersonViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
                     PersonScreen(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::retry, { nav.popBackStack() })
-                } else if (item.isFolder &&
-                    item.type !in listOf("Series", "Season") ||
+                } else if ((
+                        item.isFolder &&
+                            item.type !in listOf("Series", "Season")
+                        ) ||
                     item.type in listOf("CollectionFolder", "BoxSet", "Folder")
                 ) {
                     val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
@@ -1220,11 +1238,13 @@ internal fun RemoteField(
                 .onPreviewKeyEvent {
                     when {
                         !enabled -> false
+
                         navigation.handle(it) { key ->
                             editing = false
                             keyboard?.hide()
                             focusManager.moveFocus(if (key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
                         } -> true
+
                         // Consume both halves so opening the keyboard on release cannot type a key into it.
                         it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter -> {
                             if (it.type == KeyEventType.KeyUp) {
@@ -1232,6 +1252,7 @@ internal fun RemoteField(
                             }
                             true
                         }
+
                         else -> false
                     }
                 }
