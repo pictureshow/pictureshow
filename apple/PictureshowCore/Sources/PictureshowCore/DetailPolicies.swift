@@ -71,6 +71,8 @@ public enum DetailFeedback {
         newlyAccepted && requested && available
     }
 
+    public static func readyCue(actionLabel: String) -> String { "Ready. \(actionLabel)" }
+
     public static func catalogArrivalUsesAnimation(accessibilityEnabled: Bool, sourceIsPlayback: Bool, destinationIsCatalog: Bool, returning: Bool = false) -> Bool {
         if returning { return !(sourceIsPlayback && destinationIsCatalog) }
         return !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog

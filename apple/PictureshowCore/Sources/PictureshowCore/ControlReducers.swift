@@ -20,178 +20,118 @@ public enum ControlReducers {
     }
 
     private static func owner(state input: [String: Any], event: [String: Any]) throws -> [String: Any] {
-        try fields(input, allowed: ["owner", "local", "candidate", "phase", "intent", "route", "generation", "reportSequence", "effect", "reason", "returnConfirmed"], at: "session-owner.state")
-        let owner = try identity(input["owner"], at: "session-owner.owner")
-        let local = try input["local"].map { try identity($0, at: "session-owner.local") } ?? owner
-        let currentGeneration = try input["generation"].map { try int64($0, at: "session-owner.generation") } ?? int64(owner["generation"], at: "owner.generation")
-        let reportSequence = try input["reportSequence"].map { try int64($0, at: "session-owner.reportSequence") } ?? -1
-        var candidate = try input["candidate"].flatMap { $0 is NSNull ? nil : try identity($0, at: "session-owner.candidate") }
-        var phase = input["phase"] as? String ?? "active"
+        try fields(input, allowed: ["owner", "local", "candidate", "phase", "intent", "route", "generation", "reportSequence", "effect", "reason"], at: "session-owner.state")
+        var current = try identity(input["owner"], at: "session-owner.owner")
+        var local = try input["local"].map { try identity($0, at: "session-owner.local") } ?? current
+        var candidate = try input["candidate"].flatMap { isNull($0) ? nil : try identity($0, at: "session-owner.candidate") }
+        var phase = try input["phase"].map { try strictString($0, at: "owner.phase") } ?? "active"
         var intent = try normalizedIntent(input["intent"])
-        var route = input["route"] as? String ?? "native"
-        var sequence = reportSequence
-        var effect = "none"
-        var reason: String?
-        var newOwner = owner
-        var newLocal = local
-        var generation = currentGeneration
-        var returnConfirmed = input["returnConfirmed"] as? Bool ?? false
-
+        var route = try input["route"].map { try strictString($0, at: "owner.route") } ?? "native"
+        var generation = try int64(input["generation"] ?? current["generation"], at: "owner.generation")
+        var sequence = try input["reportSequence"].map { try int64($0, at: "owner.reportSequence") } ?? -1
+        var effect = "none", reason: String?
         let op = try eventString(event, "op")
-        let eventFields: [String: Set<String>] = [
-            "replace": ["op", "identity"], "viewer-switch": ["op", "identity"], "report": ["op", "identity", "sequence"],
-            "airplay": ["op", "identity"], "native-route": ["op", "identity"], "select": ["op", "identity", "intent"],
-            "connect": ["op", "identity"], "prepare": ["op", "identity"], "local-paused": ["op", "identity"],
-            "ready": ["op", "identity", "ticks"], "fail": ["op", "identity"], "timeout": ["op", "identity"],
-            "cancel": ["op", "identity"], "disconnect": ["op", "identity"], "return": ["op", "identity"],
-            "remote-stopped": ["op", "identity", "confirmed"], "resume-here": ["op", "identity", "confirmed"]
-        ]
-        guard let allowed = eventFields[op] else { throw failure("unknown session-owner event \(op)") }
-        try fields(event, allowed: allowed, required: allowed.subtracting(["confirmed", "intent"]), at: "session-owner.\(op)")
-
-        if ["replace", "viewer-switch"].contains(op) {
-            let next = try identity(event["identity"], at: "session-owner.identity")
-            let nextGeneration = try int64(next["generation"], at: "identity.generation")
-            if nextGeneration <= generation { reason = "stale-generation" }
-            else {
-                newOwner = next; generation = nextGeneration; candidate = nil; phase = "active"; route = "native"; sequence = -1
-                if next["kind"] as? String == "local" { newLocal = next }
-                if op == "viewer-switch" || next["server"] as? String != owner["server"] as? String || next["viewer"] as? String != owner["viewer"] as? String {
-                    intent = try normalizedIntent(nil)
-                }
-            }
-        } else if op == "report" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            let report = try int64(event["sequence"], at: "session-owner.sequence")
-            if phase == "active" || phase == "selecting" || phase == "connecting" || phase == "preparing" || phase == "awaiting-ready" {
-                if sameIdentity(identity, newOwner), report > sequence { sequence = report; effect = "report" }
-                else { reason = "stale-report" }
-            }
-        } else if op == "airplay" || op == "native-route" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            if sameIdentity(identity, newLocal) { route = op == "airplay" ? "airplay" : "native" }
-            else { reason = "stale-owner" }
-        } else if op == "select" {
-            let target = try identity(event["identity"], at: "session-owner.identity")
-            let targetGeneration = try int64(target["generation"], at: "identity.generation")
-            let wanted = try normalizedIntent(event["intent"])
-            guard target["kind"] as? String != "local", target["server"] as? String == newOwner["server"] as? String,
-                  target["viewer"] as? String == newOwner["viewer"] as? String, targetGeneration > generation else {
-                candidate = nil; reason = "invalid-target"
-                return ownerState(owner: newOwner, local: newLocal, candidate: candidate, phase: phase, intent: intent, route: route, generation: generation, reportSequence: sequence, effect: effect, reason: reason, returnConfirmed: returnConfirmed)
-            }
-            candidate = target; intent = wanted; phase = "selecting"
-        } else if ["connect", "prepare", "local-paused", "ready", "fail", "timeout", "cancel"].contains(op) {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            guard let target = candidate, sameIdentity(identity, target) else {
-                reason = "not-ready"
-                return ownerState(owner: newOwner, local: newLocal, candidate: candidate, phase: phase, intent: intent, route: route, generation: generation, reportSequence: sequence, effect: effect, reason: reason, returnConfirmed: returnConfirmed)
-            }
-            switch op {
-            case "connect": if phase == "selecting" { phase = "connecting" } else { reason = "not-ready" }
-            case "prepare": if phase == "connecting" { phase = "preparing"; effect = "pause-local" } else { reason = "not-ready" }
-            case "local-paused": if phase == "preparing" { phase = "awaiting-ready"; effect = "request-remote" } else { reason = "not-ready" }
-            case "ready":
-                let ticks = try int64(event["ticks"], at: "session-owner.ticks")
-                if phase == "awaiting-ready", ticks == (try int64(intent["ticks"], at: "intent.ticks")) {
-                    newOwner = target; generation = try int64(target["generation"], at: "candidate.generation"); candidate = nil; phase = "active"; sequence = -1; route = "native"
-                } else { reason = "not-ready" }
-            case "fail", "timeout", "cancel":
-                if ["selecting", "connecting", "preparing", "awaiting-ready"].contains(phase) {
-                    phase = "failed"; candidate = nil; intent["paused"] = true; effect = "resume-here"
-                } else { reason = "not-ready" }
-            default: break
-            }
-        } else if op == "return" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            if sameIdentity(identity, newOwner), newOwner["kind"] as? String != "local" { phase = "returning"; effect = "stop-remote" }
-            else { reason = "stale-owner" }
-        } else if op == "remote-stopped" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            let confirmed = try bool(event["confirmed"], at: "session-owner.confirmed")
-            if sameIdentity(identity, newOwner), phase == "returning" {
-                returnConfirmed = confirmed
-                phase = confirmed ? "return-ready" : "return-uncertain"
-                effect = confirmed ? "resume-here" : "require-choice"
-            } else { reason = "not-ready" }
-        } else if op == "resume-here" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            let nextGeneration = try int64(identity["generation"], at: "identity.generation")
-            let confirmed = event["confirmed"] as? Bool ?? false
-            guard identity["kind"] as? String == "local", identity["server"] as? String == newOwner["server"] as? String,
-                  identity["viewer"] as? String == newOwner["viewer"] as? String, nextGeneration > generation else { reason = "invalid-target"; return ownerState(owner: newOwner, local: newLocal, candidate: candidate, phase: phase, intent: intent, route: route, generation: generation, reportSequence: sequence, effect: effect, reason: reason, returnConfirmed: returnConfirmed) }
-            if phase == "return-uncertain" && !confirmed { reason = "explicit-choice-required" }
-            else if !["failed", "return-ready", "return-uncertain", "disconnected"].contains(phase) { reason = "not-ready" }
-            else {
-                if phase == "return-uncertain" && !confirmed { reason = "explicit-choice-required" }
-                else {
-                    intent["paused"] = false; newOwner = identity; newLocal = identity; generation = nextGeneration
-                    phase = "active"; route = "native"; sequence = -1; candidate = nil; effect = "play-local"; returnConfirmed = false
-                }
-            }
-        } else if op == "disconnect" {
-            let identity = try identity(event["identity"], at: "session-owner.identity")
-            if sameIdentity(identity, newOwner) { phase = "disconnected"; effect = "refresh" }
-            else { reason = "stale-owner" }
+        try fields(event, allowed: ["op", "identity", "intent", "sequence", "ticks", "confirmed"], required: ["op"], at: "owner.event")
+        let target = try event["identity"].flatMap { isNull($0) ? nil : try identity($0, at: "owner.identity") }
+        let requestedIntent = try event["intent"].flatMap { isNull($0) ? nil : try normalizedIntent($0) }
+        let report = try event["sequence"].map { try int64($0, at: "owner.sequence") } ?? 0
+        let ticks = try event["ticks"].flatMap { isNull($0) ? nil : try int64($0, at: "owner.ticks") }
+        let confirmed = try event["confirmed"].map { try bool($0, at: "owner.confirmed") } ?? false
+        func same(_ a:[String:Any]?,_ b:[String:Any]?) -> Bool { guard let a, let b else { return a == nil && b == nil }; return sameIdentity(a,b) }
+        func valid(_ d:[String:Any]) -> Bool {
+            ["server","viewer","device","session"].allSatisfy { !(d[$0] as! String).trimmingCharacters(in:.whitespacesAndNewlines).isEmpty }
+                && ["local","jellyfin","cast"].contains(d["kind"] as! String) && (try? int64(d["generation"],at:"generation")).map { $0 >= 0 } == true
         }
-
-        return ownerState(owner: newOwner, local: newLocal, candidate: candidate, phase: phase, intent: intent, route: route, generation: generation, reportSequence: sequence, effect: effect, reason: reason, returnConfirmed: returnConfirmed)
+        switch op {
+        case "replace", "viewer-switch":
+            if let next = target {
+                let n = try int64(next["generation"],at:"identity.generation")
+                if !valid(next) || n <= generation { reason = "stale-generation" }
+                else { current = next; local = next; candidate = nil; phase = "active"; intent = try requestedIntent ?? normalizedIntent(nil); generation = n; sequence = -1; route = "native" }
+            } else { reason = "invalid-owner" }
+        case "report":
+            if !same(target,current) || report <= sequence || !["active","selecting","connecting","preparing","awaiting-ready"].contains(phase) { reason = "stale-report" }
+            else { sequence = report; effect = "report" }
+        case "airplay", "native-route":
+            if !same(target,current) || current["kind"] as? String != "local" || phase != "active" { reason = "stale-owner" }
+            else { route = op == "airplay" ? "airplay":"native" }
+        case "select":
+            if let next = target {
+                let n = try int64(next["generation"],at:"identity.generation")
+                if !["active","failed","disconnected"].contains(phase) || !valid(next) || next["kind"] as? String == "local" || next["server"] as? String != current["server"] as? String || next["viewer"] as? String != current["viewer"] as? String || n <= generation { reason = "invalid-target" }
+                else { candidate = next; phase = "selecting"; generation = n; intent = requestedIntent ?? intent }
+            } else { reason = "invalid-owner" }
+        case "connect": if !same(target,candidate) || phase != "selecting" { reason = "stale-target" } else { phase = "connecting" }
+        case "prepare": if !same(target,candidate) || phase != "connecting" { reason = "stale-target" } else { phase = "preparing"; effect = "pause-local" }
+        case "local-paused": if !same(target,candidate) || phase != "preparing" { reason = "stale-target" } else { phase = "awaiting-ready"; effect = "request-remote" }
+        case "ready":
+            let intendedTicks = try int64(intent["ticks"],at:"intent.ticks")
+            if !same(target,candidate) || phase != "awaiting-ready" || ticks != intendedTicks { reason = "not-ready" }
+            else { current = candidate!; candidate = nil; phase = "active"; sequence = -1 }
+        case "fail", "timeout", "cancel":
+            if !same(target,candidate) || candidate == nil { reason = "stale-target" }
+            else { candidate = nil; phase = "failed"; intent["paused"] = true; effect = "resume-here" }
+        case "disconnect": if !same(target,current) { reason = "stale-owner" } else { phase = "disconnected"; effect = "refresh" }
+        case "return": if !same(target,current) || current["kind"] as? String == "local" { reason = "stale-owner" } else { phase = "returning"; effect = "stop-remote" }
+        case "remote-stopped":
+            if !same(target,current) || phase != "returning" { reason = "stale-owner" }
+            else if confirmed { phase = "return-ready"; effect = "resume-here" }
+            else { phase = "return-uncertain"; effect = "require-choice"; reason = "remote-may-continue" }
+        case "resume-here":
+            if !["return-ready","return-uncertain","failed"].contains(phase) || (phase == "return-uncertain" && !confirmed) { reason = "explicit-choice-required" }
+            else if let next = target {
+                let n = try int64(next["generation"],at:"identity.generation")
+                if !valid(next) || next["kind"] as? String != "local" || next["server"] as? String != local["server"] as? String || next["viewer"] as? String != local["viewer"] as? String || next["device"] as? String != local["device"] as? String || n <= generation { reason = "stale-generation" }
+                else { current = next; local = next; generation = n; candidate = nil; phase = "active"; intent["paused"] = false; sequence = -1; effect = "play-local"; route = "native" }
+            } else { reason = "invalid-owner" }
+        default: throw failure("unknown session-owner event \(op)")
+        }
+        return ["owner":current,"local":local,"candidate":candidate as Any? ?? NSNull(),"phase":phase,"intent":intent,"route":route,"generation":String(generation),"reportSequence":String(sequence),"effect":effect,"reason":reason as Any? ?? NSNull()]
     }
 
     private static func temporary(state input: [String: Any], event: [String: Any]) throws -> [String: Any] {
         try fields(input, allowed: ["records", "effect", "reason"], at: "temporary.state")
-        var records = try (input["records"] as? [[String: Any]] ?? []).map { try temporaryRecord($0, at: "temporary.record") }
-        let op = try eventString(event, "op")
-        let allowed: [String: Set<String>] = [
-            "create": ["op", "binding"], "issued": ["op", "binding", "returnedViewer", "secretRef"], "end": ["op", "binding"],
-            "persisted": ["op", "binding"], "logout-failed": ["op", "binding"], "reconnect": ["op", "binding"],
-            "logout-ok": ["op", "binding"], "use": ["op", "binding"]
-        ]
-        guard let keys = allowed[op] else { throw failure("unknown temporary event \(op)") }
-        try fields(event, allowed: keys, required: keys.subtracting(["returnedViewer", "secretRef"]), at: "temporary.\(op)")
-        let binding = try temporaryBinding(event["binding"], at: "temporary.binding")
-        var effect = "none", reason: String?
-        let recordIndex = records.firstIndex { sameBinding($0, binding) }
-        switch op {
-        case "create":
-            let occupied = records.contains { sameStableDevice($0, binding) }
-            if occupied { reason = "cleanup-required" }
-            else { records.append(binding.merging(["phase": "creating", "secretRef": NSNull()]) { _, n in n }); effect = "provision" }
-        case "issued":
-            guard let index = recordIndex, records[index]["sender"] as? String == binding["sender"] as? String,
-                  records[index]["generation"] as? String == binding["generation"] as? String else { reason = "stale-binding"; break }
-            let secret = try eventString(event, "secretRef")
-            let returnedViewer = try eventString(event, "returnedViewer")
-            if records[index]["phase"] as? String == "cancelled-creating" || returnedViewer != binding["viewer"] as? String {
-                records[index]["phase"] = "pending-persist"; records[index]["secretRef"] = secret; effect = "persist-revocation"
-            } else if records[index]["phase"] as? String == "creating" {
-                records[index]["phase"] = "active"; records[index]["secretRef"] = secret; effect = "use"
+        let rawRecords = input["records"] ?? [[String:Any]]()
+        guard let array = rawRecords as? [[String:Any]] else { throw failure("temporary.records: expected object array") }
+        var records = try array.map { try temporaryRecord($0, at: "temporary.record") }
+        let op = try eventString(event,"op")
+        try fields(event,allowed:["op","binding","returnedViewer","secretRef"],required:["op","binding"],at:"temporary.event")
+        let rawBinding = try object(event["binding"],at:"temporary.binding")
+        let recordKeys:Set<String> = ["server","viewer","device","sender","generation","phase","secretRef"]
+        try fields(rawBinding,allowed:recordKeys,required:["server","viewer","device","sender","generation"],at:"temporary.binding")
+        let binding = try temporaryBinding(rawBinding.filter { ["server","viewer","device","sender","generation"].contains($0.key) },at:"temporary.binding")
+        for key in ["server","viewer","device","sender"] { _ = try strictString(binding[key]!,at:"temporary.binding.\(key)") }
+        let generation = try int64(binding["generation"],at:"temporary.generation")
+        let index = records.firstIndex { sameStableDevice($0,binding) }
+        var effect = "none", reason:String?
+        if op == "create" {
+            if index != nil { reason = "cleanup-required" }
+            else if generation < 0 || ["server","viewer","device","sender"].contains(where: { (binding[$0] as! String).trimmingCharacters(in:.whitespacesAndNewlines).isEmpty }) { reason = "invalid-binding" }
+            else { records.append(binding.merging(["phase":"creating","secretRef":NSNull()]) { _,n in n }); effect = "provision" }
+        } else {
+            guard ["issued","use","end","persisted","logout-ok","logout-failed","reconnect"].contains(op) else { throw failure("unknown temporary event \(op)") }
+            if let i = index, try int64(records[i]["generation"],at:"record.generation") == generation, records[i]["sender"] as? String == binding["sender"] as? String {
+                let phase = records[i]["phase"] as! String
+                switch op {
+                case "issued":
+                    let secret = try event["secretRef"].flatMap { isNull($0) ? nil : try strictString($0,at:"temporary.secretRef") }
+                    let viewer = try event["returnedViewer"].flatMap { isNull($0) ? nil : try strictString($0,at:"temporary.returnedViewer") }
+                    if !["creating","cancelled-creating"].contains(phase) || secret?.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty != false { reason = "invalid-issue" }
+                    else { let matches = viewer == records[i]["viewer"] as? String && phase != "cancelled-creating"; records[i]["phase"] = matches ? "active":"pending-persist"; records[i]["secretRef"] = secret!; effect = matches ? "use":"persist-revocation" }
+                case "use": if phase == "active" { effect = "use" } else { reason = "cleanup-required" }
+                case "end":
+                    if ["cancelled-creating","pending-persist","revoking","pending-revoke"].contains(phase) { break }
+                    if records[i]["secretRef"] is NSNull { records[i]["phase"] = "cancelled-creating"; effect = "await-issue" }
+                    else { records[i]["phase"] = "pending-persist"; effect = "persist-revocation" }
+                case "persisted": if phase == "pending-persist" { records[i]["phase"] = "revoking"; effect = "logout" } else { reason = "invalid-phase" }
+                case "logout-ok": if phase == "revoking" { records.remove(at:i); effect = "erase-secret" } else { reason = "invalid-phase" }
+                case "logout-failed": if phase == "revoking" { records[i]["phase"] = "pending-revoke"; effect = "pending" } else { reason = "invalid-phase" }
+                case "reconnect": if ["pending-revoke","revoking"].contains(phase) { records[i]["phase"] = "revoking"; effect = "logout" }
+                default: break
+                }
             } else { reason = "stale-binding" }
-        case "use":
-            if let index = recordIndex, records[index]["phase"] as? String == "active" { effect = "use" }
-            else { reason = "cleanup-required" }
-        case "end":
-            guard let index = recordIndex else { reason = "stale-binding"; break }
-            switch records[index]["phase"] as? String {
-            case "creating": records[index]["phase"] = "cancelled-creating"; effect = "await-issue"
-            case "active": records[index]["phase"] = "pending-persist"; effect = "persist-revocation"
-            default: reason = "cleanup-required"
-            }
-        case "persisted":
-            if let index = recordIndex, records[index]["phase"] as? String == "pending-persist" { records[index]["phase"] = "revoking"; effect = "logout" }
-            else { reason = "stale-binding" }
-        case "logout-failed":
-            if let index = recordIndex, records[index]["phase"] as? String == "revoking" { records[index]["phase"] = "pending-revoke"; effect = "pending" }
-            else { reason = "stale-binding" }
-        case "reconnect":
-            if let index = recordIndex, ["pending-revoke", "revoking"].contains(records[index]["phase"] as? String ?? "") { records[index]["phase"] = "revoking"; effect = "logout" }
-            else { reason = "stale-binding" }
-        case "logout-ok":
-            if let index = recordIndex, ["revoking", "pending-revoke"].contains(records[index]["phase"] as? String ?? "") { records.remove(at: index); effect = "erase-secret" }
-            else { reason = "stale-binding" }
-        default: break
         }
-        return ["records": records, "effect": effect, "reason": reason as Any? ?? NSNull()]
+        return ["records":records,"effect":effect,"reason":reason as Any? ?? NSNull()]
     }
 
     private static func mode(state input: [String: Any], event: [String: Any]) throws -> [String: Any] {
@@ -353,11 +293,11 @@ public enum ControlReducers {
             "intent": ["op", "owner", "id", "value", "entry", "nowMs"],
             "observe": ["op", "owner", "id", "nowMs", "entry", "value", "paused", "stopped"],
             "http": ["op", "owner", "id"], "timeout": ["op", "owner", "id", "nowMs"],
-            "refresh": ["op", "owner", "value", "entry", "paused", "capabilities"],
+            "refresh": ["op", "owner", "value", "entry", "paused", "capabilities", "authorized"],
             "denied": ["op", "owner"], "disconnect": ["op", "owner"]
         ]
         guard let eventKeys = allowed[op] else { throw failure("unknown session-command event \(op)") }
-        try fields(event, allowed: eventKeys, required: eventKeys.subtracting(["entry", "nowMs", "paused", "stopped", "value", "capabilities"]), at: "session-command.\(op)")
+        try fields(event, allowed: eventKeys, required: eventKeys.subtracting(["entry", "nowMs", "paused", "stopped", "value", "capabilities", "authorized"]), at: "session-command.\(op)")
         let eventOwner = try identity(event["owner"], at: "session-command.event.owner")
         guard sameIdentity(eventOwner, owner) else {
             rejection = "stale-owner"
@@ -371,7 +311,8 @@ public enum ControlReducers {
             let value = try eventString(event, "value")
             var commandCapability: String? = nil
             switch value {
-            case "play", "play-now": commandCapability = "play"
+            case "play": commandCapability = "play"
+            case "play-now": commandCapability = "play-now"
             case "pause": commandCapability = "pause"
             case "stop": commandCapability = "stop"
             case "seek-absolute", "seek-relative": commandCapability = "seek"
@@ -387,13 +328,14 @@ public enum ControlReducers {
             guard commandID > sequence else { rejection = "stale-command"; break }
 
             let now = try event["nowMs"].map { try int64($0, at: "session-command.nowMs") } ?? 0
-            var entry: Any = NSNull(), ticks: Any = NSNull(), paused: Any = NSNull(), stopped: Any = NSNull()
+            guard now >= 0 else { rejection = "stale-command"; break }
+            var entry: Any = event["entry"] ?? NSNull(), ticks: Any = NSNull(), paused: Any = NSNull(), stopped: Any = NSNull()
             if value == "play" { paused = false }
             else if value == "pause" { paused = true }
             else if value == "stop" { paused = true; stopped = true }
             else if value == "play-now" {
                 guard let rawEntry = event["entry"] as? String, !rawEntry.isEmpty else { rejection = "missing-entry"; break }
-                entry = rawEntry; paused = false; ticks = "0"
+                entry = rawEntry; paused = false
             } else if value == "seek-absolute" || value == "seek-relative" {
                 guard let rawDelta = event["entry"] as? String,
                       let delta = try? int64(rawDelta, at: "session-command.entry"),
@@ -403,15 +345,12 @@ public enum ControlReducers {
                 else { base = 0 }
                 let (added, overflow) = base.addingReportingOverflow(delta)
                 let target = min(max(0, overflow ? (delta >= 0 ? Int64.max : Int64.min) : added), duration)
-                ticks = String(target); seekTarget = target
+                ticks = String(target); seekTarget = target; entry = NSNull()
             }
             if rejection == nil {
                 let next: [String: Any] = ["id": String(commandID), "operation": value, "entry": entry, "ticks": ticks, "paused": paused,
                                            "sentAtMs": String(now), "result": "sent", "stopped": stopped]
-                let duplicateIntent = pending?["operation"] as? String == value && ["sent", "confirmed"].contains(pending?["result"] as? String ?? "")
-                    && pending?["entry"] as? String == entry as? String && pending?["ticks"] as? String == ticks as? String && pending?["paused"] as? Bool == paused as? Bool
-                pending = next; sequence = commandID
-                if !duplicateIntent { effect = "dispatch" }
+                pending = next; sequence = commandID; effect = "dispatch"
             }
         case "http":
             _ = try int64(event["id"], at: "session-command.id")
@@ -419,58 +358,56 @@ public enum ControlReducers {
             let id = try int64(event["id"], at: "session-command.id")
             let now = try int64(event["nowMs"], at: "session-command.nowMs")
             if let current = pending, int64String(current["id"]) == id, current["result"] as? String == "sent",
-               now >= int64String(current["sentAtMs"]) + 5_000 {
-                pending?["result"] = "unknown"; effect = "refresh"
+               now >= int64String(current["sentAtMs"]), now &- int64String(current["sentAtMs"]) >= 5_000 {
+                pending?["result"] = "unknown"; fresh = false; seekTarget = nil; effect = "refresh"
             }
         case "observe":
             let id = try int64(event["id"], at: "session-command.id")
             let now = try event["nowMs"].map { try int64($0, at: "session-command.nowMs") } ?? (pending.map { int64String($0["sentAtMs"]) } ?? 0)
             let reportedTicks = try event["value"].map { try int64($0, at: "session-command.value") }
             let reportedEntry = event["entry"] as? String
-            let reportedPaused = try event["paused"].map { try bool($0, at: "session-command.paused") }
-            let reportedStopped = try event["stopped"].map { try bool($0, at: "session-command.stopped") } ?? false
+            let reportedPaused = try event["paused"].flatMap { $0 is NSNull ? nil : try bool($0, at: "session-command.paused") }
+            let reportedStopped = try event["stopped"].flatMap { $0 is NSNull ? nil : try bool($0, at: "session-command.stopped") } ?? false
+            guard let reportedTicks, reportedTicks >= 0, reportedTicks <= duration else { rejection = "invalid-ticks"; break }
             if var current = pending, int64String(current["id"]) == id, current["result"] as? String == "sent" {
-                let deadline = now - int64String(current["sentAtMs"]) < 5_000
-                let matchesTicks = current["ticks"] is NSNull || (reportedTicks != nil && String(reportedTicks!) == current["ticks"] as? String)
+                let start = int64String(current["sentAtMs"])
+                let deadline = now >= start && now &- start < 5_000
+                let matchesTicks = current["ticks"] is NSNull || String(reportedTicks) == current["ticks"] as? String
                 let matchesEntry = current["entry"] is NSNull || reportedEntry == current["entry"] as? String
                 let matchesPaused = current["paused"] is NSNull || reportedPaused == current["paused"] as? Bool
-                let matchesStopped = current["stopped"] is NSNull || current["stopped"] as? Bool != true || reportedStopped
-                if !deadline { current["result"] = "unknown"; pending = current; effect = "refresh" }
-                else if matchesTicks && matchesEntry && matchesPaused && matchesStopped {
-                    current["result"] = "confirmed"; pending = current
-                    if let reportedTicks { observed["ticks"] = String(reportedTicks) }
-                    if let reportedEntry { observed["entry"] = reportedEntry }
+                let matchesStopped = current["stopped"] is NSNull || current["stopped"] as? Bool == reportedStopped
+                if !deadline { current["result"] = "unknown"; pending = current; fresh = false; seekTarget = nil; effect = "refresh" }
+                else {
+                    observed["ticks"] = String(reportedTicks); observed["entry"] = reportedEntry as Any? ?? NSNull()
                     if let reportedPaused { observed["paused"] = reportedPaused }
-                    if current["operation"] as? String == "seek-absolute" || current["operation"] as? String == "seek-relative" { seekTarget = nil }
+                    if seekTarget == reportedTicks { seekTarget = nil }
+                    if matchesTicks && matchesEntry && matchesPaused && matchesStopped { current["result"] = "confirmed" }
+                    pending = current
                 }
             }
         case "refresh":
+            guard let ticks = try? int64(event["value"], at: "session-command.value"), ticks >= 0, ticks <= duration else { rejection = "invalid-ticks"; break }
             fresh = true
-            capabilities = try event["capabilities"].map { try stringArray($0, at: "session-command.capabilities") } ?? capabilities
-            if let rawTicks = event["value"] { observed["ticks"] = String(try int64(rawTicks, at: "session-command.value")) }
-            if let entry = event["entry"] { observed["entry"] = try strictString(entry, at: "session-command.entry") }
-            if let value = event["paused"] { observed["paused"] = try bool(value, at: "session-command.paused") }
+            let offered = try event["capabilities"].map { try stringArray($0, at: "session-command.capabilities") } ?? []
+            var unique = Set<String>(); capabilities = offered.filter { unique.insert($0).inserted }
+            observed["ticks"] = String(ticks); observed["entry"] = event["entry"] ?? NSNull()
+            observed["paused"] = try event["paused"].map { try bool($0, at: "session-command.paused") } ?? true
             seekTarget = nil
-            authorized = true
-            return commandState(owner: owner, capabilities: capabilities, authorized: authorized, fresh: fresh, observed: observed, duration: duration, sequence: sequence, seekTarget: seekTarget, pending: pending, effect: effect, rejection: rejection)
-        case "denied":
-            authorized = false
-            if let current = pending, current["result"] as? String == "sent" { pending?["result"] = "rejected" }
-            capabilities = []
-            return commandState(owner: owner, capabilities: capabilities, authorized: authorized, fresh: fresh, observed: observed, duration: duration, sequence: sequence, seekTarget: seekTarget, pending: pending, effect: effect, rejection: rejection)
-        case "disconnect":
-            fresh = false; effect = "refresh"
+            authorized = try event["authorized"].map { try bool($0, at: "session-command.authorized") } ?? true
             if let current = pending, current["result"] as? String == "sent" { pending?["result"] = "unknown" }
+        case "denied":
+            authorized = false; seekTarget = nil; capabilities = []
+            if pending != nil { pending?["result"] = "rejected" }
+        case "disconnect":
+            fresh = false; seekTarget = nil; effect = "refresh"
+            if pending != nil { pending?["result"] = "unknown" }
         default: break
         }
         return commandState(owner: owner, capabilities: capabilities, authorized: authorized, fresh: fresh, observed: observed, duration: duration, sequence: sequence, seekTarget: seekTarget, pending: pending, effect: effect, rejection: rejection)
     }
 
     private static func commandObservation(_ raw: Any?) throws -> [String: Any] {
-        guard let raw else { return ["entry": NSNull(), "ticks": "0", "paused": true] }
-        let d = try object(raw, at: "session-command.observed")
-        try fields(d, allowed: ["entry", "ticks", "paused"], at: "session-command.observed")
-        return ["entry": d["entry"] ?? NSNull(), "ticks": String(try d["ticks"].map { try int64($0, at: "observed.ticks") } ?? 0), "paused": try d["paused"].map { try bool($0, at: "observed.paused") } ?? true]
+        try normalizedIntent(raw)
     }
 
     private static func commandPending(_ raw: Any) throws -> [String: Any] {
@@ -499,7 +436,7 @@ public enum ControlReducers {
         return try queueEvent(queue: queue, suite: suite, event: event)
     }
 
-    private static let queueKeys: Set<String> = ["server", "viewer", "entries", "order", "current", "positionTicks", "paused", "history", "visited", "revision", "generation", "completion", "repeat", "shuffled", "failed", "operations"]
+    private static let queueKeys: Set<String> = ["server", "viewer", "entries", "order", "current", "positionTicks", "paused", "history", "visited", "revision", "generation", "completion", "repeat", "shuffled", "failed", "operations", "automatic"]
 
     private static func normalizeQueue(_ raw: [String: Any], at path: String) throws -> [String: Any] {
         try fields(raw, allowed: queueKeys, required: ["server", "viewer"], at: path)
@@ -518,6 +455,8 @@ public enum ControlReducers {
         let paused = try raw["paused"].map { try bool($0, at: "\(path).paused") } ?? true
         let history = try raw["history"].map { try stringArray($0, at: "\(path).history") } ?? []
         let visited = try raw["visited"].map { try stringArray($0, at: "\(path).visited") } ?? Array(NSOrderedSet(array: history)) as? [String] ?? history
+        let automatic = try raw["automatic"].map { try stringArray($0, at: "\(path).automatic") } ?? []
+        guard (history + visited + automatic).allSatisfy({ entryIDs.contains($0) }) else { throw failure("\(path): unknown entry ID") }
         let failed = try raw["failed"].map { try stringArray($0, at: "\(path).failed") } ?? []
         let operations = try raw["operations"].map { try stringArray($0, at: "\(path).operations") } ?? []
         let revision = try raw["revision"].map { try int64($0, at: "\(path).revision") } ?? 0
@@ -529,7 +468,7 @@ public enum ControlReducers {
         return ["server": server, "viewer": viewer, "entries": entries, "order": order,
                 "current": current as Any? ?? NSNull(), "positionTicks": String(ticks), "paused": paused,
                 "history": history, "visited": visited, "revision": String(revision), "generation": String(generation),
-                "completion": String(completion), "repeat": repeatMode, "shuffled": shuffled, "failed": failed, "operations": operations]
+                "completion": String(completion), "repeat": repeatMode, "shuffled": shuffled, "failed": failed, "operations": operations, "automatic": automatic]
     }
 
     private static func normalizeEntry(_ raw: Any, at path: String) throws -> [String: Any] {
@@ -546,35 +485,37 @@ public enum ControlReducers {
         var q = initial
         let op = try eventString(event, "op")
         let keys: [String: Set<String>] = [
-            "play-now": ["op", "revision", "generation", "entries", "operationId"], "play-next": ["op", "revision", "generation", "entries", "operationId"],
-            "append": ["op", "revision", "generation", "entries", "operationId"], "remove": ["op", "revision", "generation", "entry", "operationId"],
+            "play-now": ["op", "revision", "generation", "entries", "automatic", "entry", "permutation", "operationId"], "play-next": ["op", "revision", "generation", "entries", "automatic", "operationId"],
+            "append": ["op", "revision", "generation", "entries", "automatic", "operationId"], "remove": ["op", "revision", "generation", "entry", "operationId"],
             "move": ["op", "revision", "generation", "entry", "index", "operationId"], "clear-upcoming": ["op", "revision", "generation", "operationId"],
             "clear-all": ["op", "revision", "generation", "operationId"], "shuffle": ["op", "revision", "generation", "permutation", "operationId"],
-            "unshuffle": ["op", "revision", "generation", "operationId"], "repeat": ["op", "revision", "generation", "mode", "operationId"],
+            "unshuffle": ["op", "revision", "generation", "operationId"], "repeat": ["op", "revision", "generation", "repeat", "operationId"],
             "end": ["op", "revision", "generation", "completion"], "next": ["op", "revision", "generation", "completion"],
+            "jump": ["op", "revision", "generation", "entry", "operationId"],
             "previous": ["op", "revision", "generation"], "position": ["op", "revision", "generation", "ticks"],
-            "play": ["op", "revision", "generation"], "pause": ["op", "revision", "generation"], "stop": ["op", "revision", "generation"],
+            "play": ["op", "revision", "generation"], "pause": ["op", "revision", "generation"],
             "error": ["op", "revision", "generation", "completion", "music"], "retry": ["op", "revision", "generation"]
         ]
         guard let allowed = keys[op] else { throw failure("unknown queue event \(op)") }
-        try fields(event, allowed: allowed, required: ["op"], at: "queue.\(op)")
+        try fields(event, allowed: allowed.union(["operationId"]), required: ["op"], at: "queue.\(op)")
         let revision = try event["revision"].map { try int64($0, at: "queue.revision") } ?? 0
         let generation = try event["generation"].map { try int64($0, at: "queue.generation") } ?? 0
         let currentRevision = try int64(q["revision"], at: "queue.revision")
         let currentGeneration = try int64(q["generation"], at: "queue.generation")
         let operationID = try event["operationId"].map { try strictString($0, at: "queue.operationId") }
         var outcome: String = "changed", removed: [String] = []
+        if generation != currentGeneration { return ["queue": q, "outcome": "stale-generation", "removed": removed] }
         if let operationID, !operationID.isEmpty, (q["operations"] as? [String] ?? []).contains(operationID) {
             outcome = "duplicate"
             return ["queue": q, "outcome": outcome, "removed": removed]
         }
-        if generation != currentGeneration { return ["queue": q, "outcome": "stale-generation", "removed": removed] }
         if revision != currentRevision { return ["queue": q, "outcome": "refresh-required", "removed": removed] }
 
         var entries = q["entries"] as! [[String: Any]]
         var order = q["order"] as! [String]
         var history = q["history"] as! [String]
         var visited = q["visited"] as! [String]
+        var automatic = q["automatic"] as! [String]
         var failed = q["failed"] as! [String]
         var operations = q["operations"] as! [String]
         var current = (q["current"] as? String)
@@ -583,26 +524,51 @@ public enum ControlReducers {
         var completion = try int64(q["completion"], at: "queue.completion")
         var repeatMode = q["repeat"] as! String
         var shuffled = q["shuffled"] as! Bool
-        let originalCurrent = current
         let orderIndex = current.flatMap { order.firstIndex(of: $0) }
 
+        if currentRevision == Int64.max { return ["queue": q, "outcome": "revision-exhausted", "removed": removed] }
+        if completion == Int64.max && ["play-now", "remove", "clear-all", "previous", "play", "retry", "jump"].contains(op) {
+            return ["queue": q, "outcome": "completion-exhausted", "removed": removed]
+        }
         let editing = ["play-now", "play-next", "append", "remove", "move", "clear-upcoming", "clear-all"].contains(op)
-        if editing, let rawID = operationID, !rawID.isEmpty { operations.append(rawID) }
         if op == "play-now" || op == "play-next" || op == "append" {
-            guard let rawEntries = event["entries"] else { return ["queue": q, "outcome": "invalid-entries", "removed": removed] }
-            let added = try array(rawEntries, at: "queue.entries").enumerated().map { try normalizeEntry($0.element, at: "queue.entries[\($0.offset)]") }
-            let addedIDs = added.compactMap { $0["id"] as? String }
-            let collisionBase = op == "play-now" ? Set<String>() : Set(entries.compactMap { $0["id"] as? String })
-            guard !added.isEmpty, Set(addedIDs).count == addedIDs.count, Set(addedIDs).isDisjoint(with: collisionBase) else {
+            let added = try array(event["entries"] ?? [], at: "queue.entries").enumerated().map { try normalizeEntry($0.element, at: "queue.entries[\($0.offset)]") }
+            let continuation = try array(event["automatic"] ?? [], at: "queue.automatic").enumerated().map { try normalizeEntry($0.element, at: "queue.automatic[\($0.offset)]") }
+            let block = added.map { $0["id"] as! String }, tail = continuation.map { $0["id"] as! String }
+            let all = block + tail
+            let ids = entries.map { $0["id"] as! String }
+            guard !all.isEmpty, (op != "play-now" || !block.isEmpty), Set(all).count == all.count,
+                  op == "play-now" || Set(all).isDisjoint(with: Set(ids)) else {
                 return ["queue": q, "outcome": "invalid-entries", "removed": removed]
             }
             if op == "play-now" {
-                entries = added; order = addedIDs; current = addedIDs.first; ticks = 0; paused = false; history = []; visited = []; failed = []; completion += 1; shuffled = false
+                let permutation = try event["permutation"].map { try stringArray($0, at: "queue.permutation") } ?? []
+                guard permutation.isEmpty || (permutation.count == all.count && Set(permutation) == Set(all)) else { return ["queue": q, "outcome": "invalid-permutation", "removed": removed] }
+                order = permutation.isEmpty ? all : permutation
+                let start = try nullableString(event["entry"] ?? NSNull(), at: "queue.entry") ?? order[0]
+                guard all.contains(start) else { return ["queue": q, "outcome": "missing-entry", "removed": removed] }
+                entries = added + continuation; current = start; automatic = tail
+                ticks = 0; paused = false; history = []; visited = Array(order.prefix(while: { $0 != start })); failed = []; completion += 1; shuffled = !permutation.isEmpty
             } else {
-                entries.append(contentsOf: added)
-                let insertion = current.flatMap { order.firstIndex(of: $0).map { $0 + 1 } } ?? 0
-                if op == "play-next" || current == nil { order.insert(contentsOf: addedIDs, at: insertion) }
-                else { order.append(contentsOf: addedIDs) }
+                let upcoming = Set(order.dropFirst((orderIndex ?? -1) + 1))
+                let named = Set(added.map { $0["media"] as! String })
+                let superseded = Set(entries.filter { automatic.contains($0["id"] as! String) && upcoming.contains($0["id"] as! String) && named.contains($0["media"] as! String) }.map { $0["id"] as! String })
+                automatic.removeAll { superseded.contains($0) }
+                let upcomingAutomatic = Set(automatic.filter { upcoming.contains($0) })
+                func insertAt(_ list: [String]) -> Int {
+                    guard let current else { return 0 }
+                    let before = list.firstIndex(where: { upcomingAutomatic.contains($0) }) ?? list.count
+                    return op == "play-next" ? min((list.firstIndex(of: current) ?? -1) + 1, before) : before
+                }
+                order.removeAll { superseded.contains($0) }
+                entries.removeAll { superseded.contains($0["id"] as! String) }
+                order.insert(contentsOf: block, at: insertAt(order))
+                entries.insert(contentsOf: added, at: insertAt(entries.map { $0["id"] as! String }))
+                var present = Set(entries.map { $0["media"] as! String })
+                let fresh = continuation.filter { present.insert($0["media"] as! String).inserted }
+                let freshIDs = fresh.map { $0["id"] as! String }
+                entries += fresh; order += freshIDs; automatic += freshIDs
+                history.removeAll { superseded.contains($0) }; visited.removeAll { superseded.contains($0) }; failed.removeAll { superseded.contains($0) }
                 if current == nil { paused = true }
             }
         } else if op == "remove" {
@@ -610,14 +576,14 @@ public enum ControlReducers {
             guard let index = order.firstIndex(of: id), let entryIndex = entries.firstIndex(where: { $0["id"] as? String == id }) else { return ["queue": q, "outcome": "missing-entry", "removed": removed] }
             let wasCurrent = current == id
             entries.remove(at: entryIndex); order.remove(at: index)
-            history.removeAll { $0 == id }; visited.removeAll { $0 == id }; failed.removeAll { $0 == id }
+            history.removeAll { $0 == id }; visited.removeAll { $0 == id }; failed.removeAll { $0 == id }; automatic.removeAll { $0 == id }
             if wasCurrent {
                 current = index < order.count ? order[index] : order.last
-                if let current { history.removeAll { $0 == current } }
                 ticks = 0
                 if current == nil { paused = true }
                 completion += 1
             }
+            if let current { history.removeAll { $0 == current }; visited.removeAll { $0 == current } }
         } else if op == "move" {
             let id = try eventString(event, "entry")
             guard let source = entries.firstIndex(where: { $0["id"] as? String == id }), let rawIndex = event["index"] else { return ["queue": q, "outcome": "invalid-move", "removed": removed] }
@@ -626,103 +592,76 @@ public enum ControlReducers {
             let entry = entries.remove(at: source); entries.insert(entry, at: target)
             if !shuffled { order = entries.compactMap { $0["id"] as? String } }
         } else if op == "clear-upcoming" {
-            let keep = Set(order.prefix((orderIndex ?? -1) + 1))
-            removed = order.filter { !keep.contains($0) }
+            let keep = Set(history + (current.map { [$0] } ?? []))
             order.removeAll { !keep.contains($0) }; entries.removeAll { !keep.contains($0["id"] as? String ?? "") }
-            history.removeAll { !keep.contains($0) }; visited.removeAll { !keep.contains($0) }; failed.removeAll { !keep.contains($0) }
+            visited.removeAll { !keep.contains($0) }; automatic.removeAll { !keep.contains($0) }
         } else if op == "clear-all" {
-            removed = entries.compactMap { $0["id"] as? String }
-            entries = []; order = []; current = nil; ticks = 0; paused = true; history = []; visited = []; failed = []; completion += 1; shuffled = false
+            entries = []; order = []; current = nil; ticks = 0; paused = true; history = []; visited = []; automatic = []; failed = []; completion += 1; shuffled = false
         } else if op == "shuffle" {
             let permutation = try event["permutation"].map { try stringArray($0, at: "queue.permutation") } ?? []
-            let upcoming = order.dropFirst((orderIndex ?? -1) + 1).filter { !visited.contains($0) }
+            let seen = Set(visited + (current.map { [$0] } ?? []))
+            let upcoming = entries.map { $0["id"] as! String }.filter { !seen.contains($0) }
             guard permutation.count == upcoming.count, Set(permutation) == Set(upcoming) else { return ["queue": q, "outcome": "invalid-permutation", "removed": removed] }
-            let prefix = Array(order.prefix((orderIndex ?? -1) + 1))
-            order = prefix + permutation; shuffled = true
+            order = order.filter { seen.contains($0) } + permutation.filter { !automatic.contains($0) } + permutation.filter { automatic.contains($0) }; shuffled = true
         } else if op == "unshuffle" {
-            if shuffled {
-                let prefix = Array(order.prefix((orderIndex ?? -1) + 1))
-                let seen = Set(prefix + visited)
-                let canonicalUpcoming = entries.compactMap { $0["id"] as? String }.filter { !seen.contains($0) }
-                order = prefix + canonicalUpcoming; shuffled = false
-            }
+            let seen = Set(visited + (current.map { [$0] } ?? []))
+            order = order.filter { seen.contains($0) } + entries.map { $0["id"] as! String }.filter { !seen.contains($0) }; shuffled = false
         } else if op == "repeat" {
-            let mode = try eventString(event, "mode")
+            let mode = try event["repeat"].map { try strictString($0, at: "queue.repeat") } ?? "off"
             guard ["off", "one", "all"].contains(mode) else { return ["queue": q, "outcome": "invalid-repeat", "removed": removed] }
             repeatMode = mode
         } else if op == "position" {
             let target = try int64(event["ticks"], at: "queue.ticks")
-            guard target >= 0 else { return ["queue": q, "outcome": "invalid-position", "removed": removed] }
+            guard target >= 0 else { return ["queue": q, "outcome": "invalid-ticks", "removed": removed] }
             ticks = target
         } else if op == "play" {
-            paused = false; completion += 1
+            current = current ?? order.first; paused = order.isEmpty; failed = []; completion += 1
         } else if op == "pause" {
             paused = true
-        } else if op == "stop" {
-            paused = true; current = nil; ticks = 0; completion += 1
-        } else if ["end", "next"].contains(op) {
-            let token = try event["completion"].map { try int64($0, at: "queue.completion") } ?? completion
-            guard token == completion else { return ["queue": q, "outcome": "duplicate-completion", "removed": removed] }
-            completion += 1
-            if op == "end", repeatMode == "one", current != nil {
-                ticks = 0; paused = false
-            } else {
-                let idx = current.flatMap { order.firstIndex(of: $0) }
-                if let idx, idx + 1 < order.count {
-                    if let current {
-                        history.append(current)
-                        if (shuffled || !visited.isEmpty || repeatMode == "all") && !visited.contains(current) { visited.append(current) }
-                    }
-                    current = order[idx + 1]; ticks = 0; paused = false
-                } else if repeatMode == "all", !order.isEmpty {
-                    if let current { history.append(current) }
-                    current = order[0]; ticks = 0; paused = false
-                    if shuffled { visited = [] }
-                } else {
-                    paused = true
-                    outcome = "stopped"
-                }
-            }
+        } else if op == "jump" {
+            let id = try eventString(event, "entry")
+            guard order.contains(id) else { return ["queue": q, "outcome": "missing-entry", "removed": removed] }
+            history = (history + (current != id ? current.map { [$0] } ?? [] : [])).filter { $0 != id }
+            visited = Array(order.prefix(while: { $0 != id })); current = id; ticks = 0; paused = false; completion += 1; failed = []
         } else if op == "previous" {
-            if ticks > 30_000_000 {
-                ticks = 0
-            } else if let last = history.popLast() {
-                current = last; ticks = 0
-                visited = Array(order.prefix(while: { $0 != last }))
-            } else if repeatMode == "all", !order.isEmpty {
-                current = order.last; ticks = 0
-            } else {
-                ticks = 0
+            guard let active = current else { return ["queue": q, "outcome": "no-current", "removed": removed] }
+            if ticks <= 30_000_000 {
+                let prior = history.last ?? ((orderIndex ?? 0) > 0 ? order[(orderIndex ?? 0) - 1] : nil) ?? (repeatMode == "all" ? order.last : nil) ?? active
+                current = prior; visited = Array(order.prefix(while: { $0 != prior }))
+                if history.last == prior { history.removeLast() }
             }
-            completion += 1
-        } else if op == "error" {
-            let token = try event["completion"].map { try int64($0, at: "queue.completion") } ?? completion
-            guard token == completion else { return ["queue": q, "outcome": "duplicate-completion", "removed": removed] }
-            completion += 1
-            let isMusic = try event["music"].map { try bool($0, at: "queue.music") } ?? false
-            if !isMusic {
-                paused = true; outcome = "video-error"
-            } else if let active = current {
-                if !failed.contains(active) { failed.append(active) }
-                if let idx = order.firstIndex(of: active), let next = order.dropFirst(idx + 1).first(where: { !failed.contains($0) }) {
-                    history.append(active)
-                    if shuffled && !visited.contains(active) { visited.append(active) }
-                    current = next; ticks = 0; paused = false; outcome = "skipped-unavailable"
-                } else {
-                    paused = true; outcome = "exhausted"
-                }
-            } else { paused = true; outcome = "exhausted" }
+            ticks = 0; failed = []; completion += 1
         } else if op == "retry" {
+            guard current != nil else { return ["queue": q, "outcome": "no-current", "removed": removed] }
             failed = []; paused = false; completion += 1
+        } else if ["end", "next", "error"].contains(op) {
+            let token = try event["completion"].map { try int64($0, at: "queue.completion") } ?? 0
+            guard token == completion else { return ["queue": q, "outcome": "duplicate-completion", "removed": removed] }
+            guard let active = current else { return ["queue": q, "outcome": "no-current", "removed": removed] }
+            guard completion < Int64.max else { return ["queue": q, "outcome": "completion-exhausted", "removed": removed] }
+            completion += 1
+            let isError = op == "error", music = try event["music"].map { try bool($0, at: "queue.music") } ?? false
+            if isError && !music { paused = true; outcome = "video-error" }
+            else if op == "end" && repeatMode == "one" { ticks = 0; failed = [] }
+            else {
+                failed = isError ? Array(NSOrderedSet(array: failed + [active])) as! [String] : []
+                let idx = orderIndex ?? -1
+                let upcoming = Array(order.dropFirst(idx + 1)) + (repeatMode == "all" ? Array(order.prefix(idx + 1)) : [])
+                if let next = upcoming.first(where: { !failed.contains($0) }) {
+                    history.append(active)
+                    visited = (order.firstIndex(of: next) ?? 0) <= idx ? [] : Array(NSOrderedSet(array: visited + [active])) as! [String]
+                    current = next; ticks = 0; outcome = isError ? "skipped-unavailable" : "changed"
+                } else { paused = true; outcome = isError ? "exhausted" : "stopped" }
+            }
         }
 
-        if editing || ["shuffle", "unshuffle", "repeat", "position", "play", "pause", "stop", "end", "next", "previous", "error", "retry"].contains(op) {
+        if editing || ["shuffle", "unshuffle", "repeat", "position", "play", "pause", "end", "next", "previous", "error", "retry", "jump"].contains(op) {
             q["revision"] = String(currentRevision + 1)
         }
-        q["entries"] = entries; q["order"] = order; q["history"] = history; q["visited"] = visited; q["failed"] = failed; q["operations"] = operations
+        if let operationID, !operationID.isEmpty { operations.append(operationID) }
+        q["entries"] = entries; q["order"] = order; q["history"] = history; q["visited"] = visited; q["failed"] = failed; q["operations"] = operations; q["automatic"] = automatic
         q["current"] = current as Any? ?? NSNull(); q["positionTicks"] = String(ticks); q["paused"] = paused
         q["completion"] = String(completion); q["repeat"] = repeatMode; q["shuffled"] = shuffled
-        _ = originalCurrent
         return ["queue": q, "outcome": outcome, "removed": removed]
     }
 
@@ -735,6 +674,9 @@ public enum ControlReducers {
         var ticket = try input["ticket"].map { try int64($0, at: "store.ticket") } ?? 0
         let op = try eventString(event, "op")
         var effect = "none", reason: String?, removed: [String] = []
+        if ["edit", "restore", "partition", "retry-persist"].contains(op), ticket == Int64.max {
+            return ["committed": committed, "pending": pending as Any? ?? NSNull(), "retry": retry as Any? ?? NSNull(), "ticket": String(ticket), "effect": "none", "reason": "ticket-exhausted", "removed": input["removed"] ?? []]
+        }
         switch op {
         case "edit":
             try fields(event, allowed: ["op", "edit"], required: ["op", "edit"], at: "store.edit")
@@ -742,7 +684,7 @@ public enum ControlReducers {
             let edit = try object(event["edit"], at: "store.edit.edit")
             let result = try queueEvent(queue: committed, suite: "queue-edit", event: edit)
             let outcome = result["outcome"] as? String ?? ""
-            if outcome == "changed" {
+            if ["changed", "video-error", "exhausted", "stopped", "skipped-unavailable"].contains(outcome) {
                 pending = try normalizeQueue(result["queue"] as! [String: Any], at: "store.pending")
                 retry = nil; ticket += 1; effect = "persist"; removed = result["removed"] as? [String] ?? []
             } else { reason = outcome }
@@ -760,12 +702,14 @@ public enum ControlReducers {
             try fields(event, allowed: ["op"], required: ["op"], at: "store.retry-persist")
             if pending != nil { reason = "commit-pending" }
             else if let value = retry { pending = value; retry = nil; ticket += 1; effect = "persist" }
-            else { reason = "no-retry" }
+            else { reason = "nothing-to-retry" }
         case "restore":
             try fields(event, allowed: ["op", "saved", "accessible", "offline"], required: ["op", "saved", "accessible"], at: "store.restore")
             if pending != nil { reason = "commit-pending"; break }
             let saved = try normalizeQueue(object(event["saved"], at: "store.saved"), at: "store.saved")
             guard saved["server"] as? String == committed["server"] as? String, saved["viewer"] as? String == committed["viewer"] as? String else { reason = "wrong-partition"; break }
+            let generation = max(try int64(saved["generation"], at: "store.saved.generation"), try int64(committed["generation"], at: "store.generation"))
+            guard generation < Int64.max else { reason = "invalid-queue"; break }
             let accessible = Set(try stringArray(event["accessible"]!, at: "store.accessible"))
             let offline = try event["offline"].map { try bool($0, at: "store.offline") } ?? false
             let savedEntries = saved["entries"] as! [[String: Any]]
@@ -787,14 +731,16 @@ public enum ControlReducers {
             restored["current"] = restoredCurrent as Any? ?? NSNull(); restored["positionTicks"] = String(restoredTicks)
             restored["paused"] = true
             restored["history"] = (saved["history"] as! [String]).filter { retainedIDs.contains($0) && $0 != restoredCurrent }
-            restored["visited"] = (saved["visited"] as! [String]).filter { retainedIDs.contains($0) }
-            restored["failed"] = (saved["failed"] as! [String]).filter { retainedIDs.contains($0) }
-            restored["generation"] = String(try int64(committed["generation"], at: "store.generation") + 1)
-            restored["revision"] = String(try int64(committed["revision"], at: "store.revision") + 1)
+            restored["visited"] = (saved["visited"] as! [String]).filter { retainedIDs.contains($0) && $0 != restoredCurrent }
+            restored["failed"] = []; restored["automatic"] = (saved["automatic"] as! [String]).filter { retainedIDs.contains($0) }
+            restored["generation"] = String(generation + 1)
+            restored["operations"] = [String]()
             pending = try normalizeQueue(restored, at: "store.pending"); retry = nil; ticket += 1; effect = "persist"
         case "partition":
             try fields(event, allowed: ["op", "server", "viewer"], required: ["op", "server", "viewer"], at: "store.partition")
             let server = try eventString(event, "server"), viewer = try eventString(event, "viewer")
+            guard !server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !viewer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { reason = "invalid-partition"; break }
+            guard try int64(committed["generation"], at: "store.generation") < Int64.max else { reason = "generation-exhausted"; break }
             ticket += 1; pending = nil; retry = nil
             committed = try normalizeQueue(["server": server, "viewer": viewer, "entries": [], "order": [], "current": NSNull(), "positionTicks": "0", "paused": true,
                                               "history": [], "visited": [], "revision": "0", "generation": String(try int64(committed["generation"], at: "store.generation") + 1),

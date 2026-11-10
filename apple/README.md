@@ -127,5 +127,7 @@ Real iPhone/iPad and Apple TV checks remain necessary for progressive codec reli
 variants, HDR/Dolby Vision and tone mapping, audio routes/HDMI/encoded output, real Siri Remote
 gestures, AirPlay external playback, local-network permission, physical Keychain entitlements,
 interruptions/background behavior and subtitle renderer differences. Household hardware is not
-part of the simulator acceptance. Live media, downloads, general music/photo playback and profile
-editing are outside the current Android reference scope as described in `spec/features/`.
+part of the simulator acceptance. Main now includes Android music, Cast and phone remote logic;
+the Swift core ports their shared vectors, while their Apple screens, native hosts and device
+acceptance remain pending in [PARITY.md](PARITY.md). Offline/downloads are not part of this catch-up;
+photo playback and profile editing remain separate launch work in `spec/features/`.

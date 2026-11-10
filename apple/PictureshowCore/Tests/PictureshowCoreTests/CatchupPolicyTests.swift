@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: MPL-2.0
+import XCTest
+@testable import PictureshowCore
+
+final class CatchupPolicyTests: XCTestCase {
+    func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
+        XCTAssertEqual(SpecCaseManifest.contracts.count, 1433)
+        XCTAssertThrowsError(try SpecCaseManifest.validate(id: "music-session.invented",suite: "music-session",operation: "session"))
+        let id = try XCTUnwrap(SpecCaseManifest.contracts.keys.first)
+        XCTAssertThrowsError(try SpecCaseManifest.validate(id: id,suite: "unknown-suite",operation: "unknown-operation"))
+    }
+    func testEveryHeldGridMoveEndsEvenAfterFailureOrAnEmptyPage() {
+        for count in 1...24 {
+            for index in 0..<count {
+                XCTAssertNotEqual(GridNavigation.holdRelease(index: index, columns: 5, count: count), .hold)
+                XCTAssertNotEqual(GridNavigation.holdRelease(index: index, columns: 5, count: count, pageFailed: true), .hold)
+            }
+        }
+        XCTAssertEqual(GridNavigation.verticalMove(index: 4, columns: 5, count: 8, down: true, loadingMore: true), .hold)
+        XCTAssertEqual(GridNavigation.holdRelease(index: 4, columns: 5, count: 8), .card(7))
+        XCTAssertEqual(GridNavigation.holdRelease(index: 7, columns: 5, count: 8, pageFailed: true), .pageRetry)
+        XCTAssertEqual(GridNavigation.holdRelease(index: 0, columns: Int.max, count: 1), .stay)
+    }
+    func testCopyingVideoSuppressesDeviceNoticeButBurningCaptionsStillExplainsIt() {
+        let source = MediaSource(id: "source")
+        XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=copy", source: source, reasons: ["VideoCodecNotSupported"]))
+        let notice = ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video?VideoCodec=h264", source: source, reasons: ["VideoCodecNotSupported"], device: "this TV")
+        XCTAssertEqual(notice?.fix, "It still plays, and a 1080p H.264 copy on the server plays directly.")
+        XCTAssertEqual(notice?.reason, "Its video format won't play on this TV.")
+        XCTAssertNil(ConversionNotice.of(method: "Transcode", url: "https://media.example.test/video", source: source, reasons: ["ContainerBitrateExceedsLimit"]))
+    }
+    func testNewOperationsRejectMalformedPolicyInputs() async throws {
+        let runner = SpecVectorTests()
+        for (operation, input) in [
+            ("conversion-notice", ["method":"bad", "url":"https://media.example.test", "reasons":[], "device":"this TV"] as [String:Any]),
+            ("grid-vertical-outcome", ["index":0,"columns":4,"count":3,"down":"true","loadingMore":false]),
+            ("grid-vertical-unknown", [:])
+        ] {
+            do { _ = try await runner.execute(operation,input:input,context:[:]); XCTFail("Accepted malformed \(operation)") } catch { }
+        }
+    }
+    func testQueueRejectsUnknownAutomaticEntryAndMalformedInt64() throws {
+        let state: [String:Any] = ["server":"s","viewer":"v","entries":[["id":"a","media":"m"]],"order":["a"],"current":"a","automatic":["missing"]]
+        XCTAssertThrowsError(try ControlReducers.reduce(suite:"queue-edit",operation:"queue",state:state,event:["op":"pause"]))
+        for value in ["01","9223372036854775808","-0"] {
+            XCTAssertThrowsError(try ControlReducers.reduce(suite:"queue-edit",operation:"queue",state:["server":"s","viewer":"v"],event:["op":"pause","revision":value]))
+        }
+    }
+}

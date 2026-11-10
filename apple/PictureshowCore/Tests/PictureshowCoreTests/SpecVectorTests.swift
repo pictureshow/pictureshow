@@ -80,14 +80,18 @@ final class SpecVectorTests:XCTestCase {
         // Validate every envelope and global case identity before any operation can perform mock HTTP work.
         var ids=Set<String>()
         let controlSuites:Set<String>=["session-owner","session-command","queue-edit","queue-order","playback-mode"]
-        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information"]).union(controlSuites)
+        let musicSuites:Set<String>=["music-catalog","music-playlists","music-quality","music-queue","music-reports","music-session"]
+        let castSuites:Set<String>=["cast-capability","cast-session","cast-handoff"]
+        let remoteSuites:Set<String>=["remote-wire","remote-targets","remote-receive","remote-reconnect","remote-queue"]
+        let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","grid-navigation"]).union(traceSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
             guard try required(Int.self,document,"schemaVersion") == 1 else { throw NSError(domain:"Unknown vector schema in \(file.lastPathComponent)",code:1) }
             let suite=try required(String.self,document,"suite")
             guard allowedSuites.contains(suite) else { throw NSError(domain:"Unknown vector suite \(suite)",code:1) }
-            if controlSuites.contains(suite) {
+            if traceSuites.contains(suite) {
                 guard discoveredControlSuites.insert(suite).inserted else { throw NSError(domain:"Duplicate control suite \(suite)",code:1) }
             }
             let cases=try XCTUnwrap(document["cases"] as? [[String:Any]])
@@ -95,14 +99,26 @@ final class SpecVectorTests:XCTestCase {
             for vector in cases {
                 let id=try required(String.self,vector,"id"),operation=try required(String.self,vector,"operation")
                 guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
-                if controlSuites.contains(suite) {
+                try SpecCaseManifest.validate(id:id,suite:suite,operation:operation)
+                if traceSuites.contains(suite) {
                     let allowedOperations:[String:Set<String>]=[
                         "session-owner":["owner","temporary"], "session-command":["command"],
                         "queue-edit":["queue","store"], "queue-order":["queue","transfer"],
-                        "playback-mode":["mode"]
+                        "playback-mode":["mode"],
+                        "music-catalog":["section","artist-albums","order","discs","artist-line","page","list-state","playable","image","genre-tracks"],
+                        "music-playlists":["create-body","rename-body","playlist","id-batches"],
+                        "music-quality":["ceiling","profile","output"], "music-queue":["queue","entries","permutation","window","plan","decision"],
+                        "music-reports":["report"], "music-session":["session"],
+                        "cast-capability":["capability","controls","reach","profile","media"], "cast-session":["session","reattach"], "cast-handoff":["cast"],
+                        "remote-wire":["request","cap-note","parse","capabilities","advertised","socket-url","targets-path","relay-rights"],
+                        "remote-targets":["targets","track-selected"], "remote-receive":["receive"], "remote-reconnect":["controller"], "remote-queue":["queue"]
                     ]
-                    guard allowedOperations[suite]?.contains(operation) == true,
-                          vector["state"] is [String:Any], let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
+                    guard allowedOperations[suite]?.contains(operation) == true else { throw NSError(domain:"Unknown operation \(suite)/\(operation)",code:1) }
+                    if musicSuites.contains(suite), !["queue", "session", "report", "playlist"].contains(operation) {
+                        guard vector["input"] is [String:Any],vector["expected"] != nil,vector["steps"] == nil,vector["state"] == nil else { throw NSError(domain:"Malformed music vector \(id)",code:1) }
+                        continue
+                    }
+                    guard vector["state"] is [String:Any], let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
                           vector["input"] == nil, vector["expected"] == nil else { throw NSError(domain:"Malformed control vector \(id) or unknown operation \(operation)",code:1) }
                     for step in steps {
                         guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
@@ -113,17 +129,22 @@ final class SpecVectorTests:XCTestCase {
             }
             return (document,cases)
         }
-        guard discoveredControlSuites == controlSuites else { throw NSError(domain:"Missing control suites: \(controlSuites.subtracting(discoveredControlSuites).sorted())",code:1) }
+        guard ids == Set(SpecCaseManifest.contracts.keys) else { throw NSError(domain:"Missing known vector IDs: \(Set(SpecCaseManifest.contracts.keys).subtracting(ids).sorted())",code:1) }
+        guard discoveredControlSuites == traceSuites else { throw NSError(domain:"Missing control suites: \(traceSuites.subtracting(discoveredControlSuites).sorted())",code:1) }
         var count=0;var counts:[String:Int]=[:];var stepsBySuite:[String:Int]=[:];var failures:[String]=[]
         for (document,cases) in documents{
             let suite=text(document,"suite")
             for vector in cases {
                 if let operations, !operations.contains(text(vector,"operation")) { continue }
-                if controlSuites.contains(suite) {
+                if traceSuites.contains(suite), vector["steps"] != nil {
                     guard operations == nil else { continue }
                     let id=text(vector,"id")
                     do {
-                        let steps=try ControlTraceRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]])
+                        let steps: Int
+                        if musicSuites.contains(suite) { steps = try MusicVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
+                        else if castSuites.contains(suite) { steps = try CastVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
+                        else if remoteSuites.contains(suite) { steps = try RemoteVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
+                        else { steps = try ControlTraceRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         if steps > 0 { stepsBySuite[suite,default:0] += steps }
                     } catch { failures.append("\(id): \(error)") }
                     count+=1;counts[suite,default:0]+=1
@@ -131,9 +152,12 @@ final class SpecVectorTests:XCTestCase {
                 }
                 let id=text(vector,"id")
                 do {
-                    let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:])
+                    let result: Any
+                    if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
+                    else { result = try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
                     let actual=try json(result),expected=try json(vector["expected"]!)
-                    if actual != expected { failures.append("\(id)\n expected: \(expected)\n actual: \(actual)") }
+                    let matches = musicSuites.contains(suite) && vector["exact"] == nil ? MusicVectorTests.projection(vector["expected"]!,matches:result) : actual == expected
+                    if !matches { failures.append("\(id)\n expected: \(expected)\n actual: \(actual)") }
                 } catch { failures.append("\(id): \(error)") }
                 count+=1;counts[suite,default:0]+=1
             }
@@ -219,6 +243,21 @@ final class SpecVectorTests:XCTestCase {
                 return cue as Any? ?? NSNull()
             }
         case "detail-pending-plain-label":return DetailFeedback.pendingPlainLabel(target:try required(String.self,i,"target"),known:try required(Bool.self,i,"known"),played:try required(Bool.self,i,"played"),favorite:try required(Bool.self,i,"favorite"))
+        case "detail-ready-cue":return DetailFeedback.readyCue(actionLabel:try required(String.self,i,"label"))
+        case "next-countdown":return NextEpisodeCard.seconds(wallSeconds:try required(Int64.self,i,"wallSeconds"),creditsCountdown:try required(Bool.self,i,"creditsCountdown"),mediaLeftMs:try required(Int64.self,i,"mediaLeftMs"),speed:try required(Double.self,i,"speed"),autoPlay:try required(Bool.self,i,"autoPlay"),ended:try required(Bool.self,i,"ended"),suspended:try required(Bool.self,i,"suspended")) as Any? ?? NSNull()
+        case "server-label": return ServerLabels.label(try required(Server.self,i,"server"),all:try required([Server].self,i,"all"))
+        case "grid-vertical-move", "grid-vertical-outcome", "grid-hold-release":
+            let move = GridNavigation.verticalMove(index:try required(Int.self,i,"index"),columns:try required(Int.self,i,"columns"),count:try required(Int.self,i,"count"),down:operation == "grid-hold-release" ? true : try required(Bool.self,i,"down"),loadingMore:operation == "grid-hold-release" ? false : try defaulted(Bool.self,i,"loadingMore",false),pageFailed:try defaulted(Bool.self,i,"pageFailed",false))
+            if operation == "grid-vertical-move" { if case let .card(index) = move { return index }; return NSNull() }
+            switch move { case let .card(index):return ["outcome":"card","index":index];case .hold:return ["outcome":"hold"];case .stay:return ["outcome":"stay"];case .above:return ["outcome":"above"];case .pageRetry:return ["outcome":"page-retry"] }
+        case "grid-strip-detail":return GridNavigation.stripDetail(sortBy:try required(String.self,i,"sortBy"),descending:try required(Bool.self,i,"descending"))
+        case "fixed-head-collapses":return GridNavigation.fixedHeadCollapses(fontScale:try required(Float.self,i,"fontScale"),contentFocused:try required(Bool.self,i,"contentFocused"),assistiveServiceInUse:try required(Bool.self,i,"assistiveServiceInUse"))
+        case "fixed-head-in-list":return GridNavigation.fixedHeadInList(fontScale:try required(Float.self,i,"fontScale"),assistiveServiceInUse:try required(Bool.self,i,"assistiveServiceInUse"))
+        case "conversion-notice":
+            let method=try required(String.self,i,"method")
+            guard PlayMethod(rawValue:method) != nil else { throw NSError(domain:"Unknown play method \(method)",code:1) }
+            let notice = ConversionNotice.of(method:method,url:try required(String.self,i,"url"),source:try i["source"].map { try decode(MediaSource.self,$0) } ?? MediaSource(id:nil),reasons:try required([String].self,i,"reasons"),subtitleIndex:try defaulted(Int.self,i,"subtitleIndex",-1),device:try required(String.self,i,"device"))
+            return notice.map { "\($0.title)\n\($0.reason)\n\($0.fix)" } ?? "none"
         case "reason":return PlaybackInformation.reason(try required(String.self,i,"reason"),qualityMbps:try defaulted(Int?.self,i,"qualityMbps",nil))
         case "method":return PlaybackInformation.method(try required(String.self,i,"method"),url:try required(String.self,i,"url"))
         case "subtitle":return PlaybackInformation.subtitle(source:try decode(MediaSource.self,i["source"]!),selectedIndex:try required(Int.self,i,"index"))
