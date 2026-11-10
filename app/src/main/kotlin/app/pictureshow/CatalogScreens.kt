@@ -2209,7 +2209,7 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
-                                        onDownload = onDownload?.let { open ->
+                                        onDownload = onDownload?.takeIf { offlineOffersDownload(item) }?.let { open ->
                                             {
                                                 open(
                                                     item,
@@ -2261,7 +2261,7 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
-                                        onDownload = onDownload?.let { open ->
+                                        onDownload = onDownload?.takeIf { offlineOffersDownload(item) }?.let { open ->
                                             {
                                                 open(
                                                     item,

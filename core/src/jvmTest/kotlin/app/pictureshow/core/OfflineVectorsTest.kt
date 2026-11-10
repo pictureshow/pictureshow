@@ -298,7 +298,9 @@ class OfflineVectorsTest {
         o.long("sizeBytes"),
         o.int("bitrate"),
         o.long("runtimeTicks"),
-        o.bool("canDownload")
+        o.bool("canDownload"),
+        o.bool("isInProgress") ?: false,
+        o.text("recordingStatus")
     )
 
     private fun execute(operation: String, state: JsonElement, event: JsonObject): JsonElement = when (operation) {

@@ -426,7 +426,7 @@ internal fun TouchCatalogDetail(
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
                                         // Under the grid, so it moves none of the actions the grid holds still.
-                                        if (onDownload != null) {
+                                        if (onDownload != null && offlineOffersDownload(item)) {
                                             OutlinedButton(
                                                 onClick = {
                                                     val season = if (item.type == "Season") {

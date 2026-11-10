@@ -74,6 +74,10 @@ class OfflineEngineTest {
     private var quickConnect = true
     private var logoutStatus = 204
 
+    @Volatile private var freshItem: String? = null
+
+    @Volatile private var downloadsAllowed = true
+
     @Volatile
     private var serverOff = false
     private var restMs = 1L
@@ -128,7 +132,11 @@ class OfflineEngineTest {
                 val path = request.path.orEmpty().substringBefore('?')
                 return when {
                     holdItems && path.contains("/Items/") -> MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
-                    path.startsWith("/Users/") && path.contains("/Items/") -> json(itemJson(path.substringAfterLast('/')))
+                    path.startsWith("/Users/") && path.contains("/Items/") -> json(freshItem ?: itemJson(path.substringAfterLast('/')))
+                    path == "/Users/Me" -> json(
+                        """{"Policy":{"EnableContentDownloading":$downloadsAllowed,"EnableMediaPlayback":true,
+                        "EnableVideoPlaybackTranscoding":true,"EnableAudioPlaybackTranscoding":true}}"""
+                    )
                     path == "/QuickConnect/Enabled" -> json(if (quickConnect) "true" else "false")
                     path == "/QuickConnect/Initiate" -> json("""{"Code":"123456","Secret":"secret"}""")
                     path == "/QuickConnect/Authorize" -> {
@@ -275,6 +283,56 @@ class OfflineEngineTest {
     private fun mediaFile(engine: OfflineEngine, account: Account, id: String): File {
         val entry = engine.entry(account, id)!!
         return engine.resourceFile(account.key, entry, entry.resources.first { it.id == "media" })
+    }
+
+    @Test
+    fun `a stale completed preview cannot download a recording that is now growing`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        freshItem = itemJson("1").replace("\"Type\":\"Movie\"", "\"Type\":\"Episode\",\"IsInProgress\":true")
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        assertEquals("recording-incomplete", engine.entry(viewerA, "1")?.job?.failure)
+        assertFalse(requests.any { it.path.orEmpty().substringBefore('?').endsWith("/Download") })
+        assertFalse(mediaFile(engine, viewerA, "1").exists())
+    }
+
+    @Test
+    fun `download permission is rechecked after the preview and before bytes move`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        downloadsAllowed = false
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        assertEquals("denied", engine.entry(viewerA, "1")?.job?.failure)
+        assertFalse(requests.any { it.path.orEmpty().substringBefore('?').endsWith("/Download") })
+    }
+
+    @Test
+    fun `item download denial on fresh read blocks an earlier permitted recording`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        freshItem = itemJson("1").replace("\"Type\":\"Movie\"", "\"Type\":\"Episode\",\"CanDownload\":false")
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        assertEquals("denied", engine.entry(viewerA, "1")?.job?.failure)
+        assertFalse(requests.any { it.path.orEmpty().substringBefore('?').endsWith("/Download") })
+    }
+
+    @Test
+    fun `completed finite recording downloads through original path with verified local bytes`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        freshItem = itemJson("1").replace(
+            "\"Type\":\"Movie\"",
+            "\"Type\":\"Episode\",\"CanDownload\":true,\"Status\":\"Completed\",\"IsInProgress\":false"
+        )
+        val recording = kotlinx.serialization.json.Json.decodeFromString<OfflineApiItem>(freshItem!!)
+        engine.enqueue(viewerA, recording, choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertArrayEquals(media, mediaFile(engine, viewerA, "1").readBytes())
+        assertTrue(requests.any { it.path == "/Items/1/Download" })
+        assertEquals(app.pictureshow.core.offline.OfflineMediaKind.episode, engine.entry(viewerA, "1")?.kind)
     }
 
     @Test

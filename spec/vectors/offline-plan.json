@@ -2332,6 +2332,917 @@
      }
     }
    ]
+  },
+  {
+   "id": "offline-plan.recording-completed",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "Completed"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 125,
+        "exactSize": true
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-growing-completed-status",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": true,
+       "recordingStatus": "Completed"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-growing-without-status",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": true,
+       "recordingStatus": null
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-new",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "New"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-active",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "InProgress"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-failed",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "Error"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-cancelled",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "Cancelled"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-unknown-status",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "FutureStatus"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-infinite-completed",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": "Completed",
+       "isInfinite": true
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-denied-completed",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": false,
+       "isInProgress": false,
+       "recordingStatus": "Completed"
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-ordinary-episode",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Episode",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": null
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 125,
+        "exactSize": true
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-container-skips-growing-and-failed",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "preset": "original",
+      "items": [
+       {
+        "itemId": "recording",
+        "type": "Episode",
+        "sizeBytes": 125,
+        "canDownload": true,
+        "isInProgress": false,
+        "recordingStatus": "Completed"
+       },
+       {
+        "itemId": "growing",
+        "type": "Episode",
+        "sizeBytes": 125,
+        "canDownload": true,
+        "isInProgress": true,
+        "recordingStatus": "Completed"
+       },
+       {
+        "itemId": "failed",
+        "type": "Episode",
+        "sizeBytes": 125,
+        "canDownload": true,
+        "isInProgress": false,
+        "recordingStatus": "Error"
+       },
+       {
+        "itemId": "recording",
+        "type": "Episode",
+        "sizeBytes": 125,
+        "canDownload": true,
+        "isInProgress": false,
+        "recordingStatus": "Completed"
+       }
+      ]
+     },
+     "expected": {
+      "itemIds": [
+       "recording"
+      ],
+      "skipped": [
+       "growing",
+       "failed"
+      ],
+      "knownBytes": 125,
+      "estimated": false,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.recording-placeholder-without-progress-field",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "recording",
+       "type": "Recording",
+       "sizeBytes": 125,
+       "canDownload": true,
+       "isInProgress": false,
+       "recordingStatus": null
+      },
+      "qualified": [
+       "original",
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "recording-incomplete",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
   }
  ]
 }
