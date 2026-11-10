@@ -180,6 +180,106 @@
         "position": "0",
         "delay": 1
       }
+    },
+    {
+      "id": "scheduled-zero",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "0",
+        "target": "0"
+      },
+      "expected": null
+    },
+    {
+      "id": "scheduled-ahead80",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "1800000",
+        "target": "1000000"
+      },
+      "expected": null
+    },
+    {
+      "id": "scheduled-behind80",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "200000",
+        "target": "1000000"
+      },
+      "expected": null
+    },
+    {
+      "id": "scheduled-ahead-outside",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "1800001",
+        "target": "1000000"
+      },
+      "expected": "1000000"
+    },
+    {
+      "id": "scheduled-behind-outside",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "199999",
+        "target": "1000000"
+      },
+      "expected": "1000000"
+    },
+    {
+      "id": "scheduled-pause-small",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Pause",
+        "current": "1020000",
+        "target": "1000000"
+      },
+      "expected": "1000000"
+    },
+    {
+      "id": "scheduled-seek-small",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Seek",
+        "current": "1020000",
+        "target": "1000000"
+      },
+      "expected": "1000000"
+    },
+    {
+      "id": "scheduled-invalid-current",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "-1",
+        "target": "0"
+      },
+      "expected": "0"
+    },
+    {
+      "id": "scheduled-large-ticks",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "9223372036854775807",
+        "target": "0"
+      },
+      "expected": "0"
+    },
+    {
+      "id": "scheduled-large-target",
+      "op": "scheduled-position",
+      "input": {
+        "command": "Unpause",
+        "current": "0",
+        "target": "9223372036854775807"
+      },
+      "expected": "9223372036854775807"
     }
   ]
 }

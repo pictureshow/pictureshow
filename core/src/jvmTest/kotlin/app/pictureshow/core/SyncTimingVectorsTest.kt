@@ -9,6 +9,7 @@ import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncDrift
+import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncTarget
 import app.pictureshow.core.sync.syncTransportApplied
 import kotlin.test.Test
@@ -59,6 +60,12 @@ class SyncTimingVectorsTest {
                     assertNotNull(value)
                     assertEquals(e.long("position"), value.positionTicks, row.toString())
                     assertEquals(e.long("delay"), value.delayMillis, row.toString())
+                }
+
+                "scheduled-position" -> {
+                    val i = row.getValue("input").jsonObject
+                    val value = syncScheduledPosition(i.getValue("command").jsonPrimitive.content, i.long("current"), i.long("target"))
+                    assertEquals(if (expected is JsonNull) null else expected.jsonPrimitive.long, value, row.toString())
                 }
 
                 else -> error("Unknown clock operation")

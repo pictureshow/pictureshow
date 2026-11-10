@@ -51,6 +51,7 @@ class SyncPlayHostTest {
     private class Renderer : SyncRenderer {
         var value = SyncRendererState("local-item", 123_456_789L, 9_000_000_000L, true, false, true, true)
         val applied = mutableListOf<Applied>()
+        var bufferOnSeek = false
         override fun snapshot() = value
         override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
             val positionChanged = positionTicks != null && kotlin.math.abs(value.positionTicks / 10_000 - positionTicks / 10_000) > 1
@@ -61,6 +62,7 @@ class SyncPlayHostTest {
                     playing =
                     playing ?: value.playing
                 )
+            if (bufferOnSeek && positionChanged) value = value.copy(ready = false, buffering = true)
             return positionChanged
         }
     }
@@ -247,6 +249,50 @@ class SyncPlayHostTest {
         assertEquals(90_000_000L, rig.renderer.value.positionTicks)
         assertFalse(rig.operations().contains("Unpause"))
         assertFalse(rig.operations().contains("Seek"))
+    }
+
+    @Test fun nearAlignedFutureUnpauseStartsOnTimeWithoutSeekingOrManufacturingBuffering() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 49_950_000L, playing = false)
+        rig.renderer.bufferOnSeek = true
+        rig.renderer.applied.clear()
+        rig.sent.clear()
+        rig.host.receive(rig.command("Unpause", delayMs = 1_000, ticks = 50_000_000L))
+        runCurrent()
+        advanceTimeBy(999)
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        assertFalse(rig.renderer.applied.any { it.position != null })
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(rig.renderer.value.playing)
+        assertTrue(rig.renderer.value.ready)
+        assertFalse(rig.renderer.value.buffering)
+        assertEquals(49_950_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.renderer.applied.any { it.position != null })
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().any { it in setOf("Buffering", "Unpause", "Seek") })
+    }
+
+    @Test fun smallExplicitPauseAndSeekStillApplyTheirAuthoritativePositions() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 50_000_000L)
+        rig.renderer.applied.clear()
+        rig.host.receive(rig.command("Pause", ticks = 50_020_000L))
+        runCurrent()
+        assertEquals(50_020_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.renderer.value.playing)
+        rig.host.receive(rig.command("Seek", ticks = 50_040_000L))
+        runCurrent()
+        assertEquals(50_040_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.renderer.value.playing)
+        assertEquals(listOf(50_020_000L, 50_040_000L), rig.renderer.applied.mapNotNull { it.position })
+        assertFalse(rig.operations().any { it in setOf("Pause", "Seek") })
     }
 
     @Test fun scheduledPositionChangesKeepTheCorrectionCooldownAcrossBufferReadyUnpause() = runTest {

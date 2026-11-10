@@ -35,6 +35,7 @@ import app.pictureshow.core.sync.syncPing
 import app.pictureshow.core.sync.syncReadiness
 import app.pictureshow.core.sync.syncRemove
 import app.pictureshow.core.sync.syncRepeat
+import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
 import app.pictureshow.core.sync.syncTarget
@@ -702,7 +703,8 @@ internal class SyncPlayHost(
             val execution =
                 syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, at, playing, r.durationTicks) ?: return@launch
             diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
-            val positionChanged = renderer?.apply(execution.positionTicks, playing) == true
+            val position = syncScheduledPosition(command.command, r.positionTicks, execution.positionTicks)
+            val positionChanged = renderer?.apply(position, playing) == true
             // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
             drift = syncTransportApplied(drift, monotonic(), positionChanged)
         }

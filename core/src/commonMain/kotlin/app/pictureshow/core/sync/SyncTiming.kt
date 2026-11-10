@@ -85,6 +85,14 @@ fun syncTarget(positionTicks: Long, whenUtcMillis: Long, serverNowTicks: Long, p
     return SyncTarget(if (elapsed >= durationTicks - base) durationTicks else base + elapsed, 0)
 }
 
+/** Skip a decoder seek only for an Unpause already within the playing tolerance at execution. */
+fun syncScheduledPosition(command: String, currentTicks: Long, targetTicks: Long): Long? =
+    if (command == "Unpause" && currentTicks >= 0 && targetTicks >= 0 && currentTicks - targetTicks in -800_000L..800_000L) {
+        null
+    } else {
+        targetTicks
+    }
+
 data class SyncDriftState(val lastSeekMonotonicMillis: Long? = null, val rateStartedMonotonicMillis: Long? = null, val rate: Double = 1.0)
 
 enum class SyncDriftAction { NONE, RATE, SEEK, WAIT, RESET_RATE }
