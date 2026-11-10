@@ -534,7 +534,13 @@ private fun LiveScheduleEditor(
     val merged = JsonObject(original.fields + edits)
     var confirmed by remember(original) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        LiveText("${original.name} · ${liveDates(original.startDate, original.endDate)} · Channel ${original.channelId}", tv)
+        LiveText(
+            "${original.name} · ${liveDates(
+                original.startDate,
+                original.endDate
+            )} · Channel ${original.fields["ChannelName"]?.jsonPrimitive?.content ?: original.channelId}",
+            tv
+        )
         LiveText(
             if (series) {
                 "This schedules a server series rule. Completed recordings are retained when the rule is cancelled."
@@ -625,7 +631,7 @@ private fun LiveScheduleEditor(
                 "Confirm ${if (series) "series rule" else "one recording"}: ${original.name}, ${liveDates(
                     original.startDate,
                     original.endDate
-                )}, channel ${original.channelId}. Recording availability depends on the server tuner and storage.",
+                )}, channel ${original.fields["ChannelName"]?.jsonPrimitive?.content ?: original.channelId}. Recording availability depends on the server tuner and storage.",
                 tv
             )
             LiveButton(if (existing) "Confirm save changes" else "Confirm recording", tv, enabled = !busy) {

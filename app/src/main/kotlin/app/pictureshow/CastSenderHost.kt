@@ -135,6 +135,8 @@ internal interface CastMediaGateway {
     suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue
 
     /** True once the session is gone, including when the server says it already was. */
+    suspend fun takeClosedLiveSources(session: Account): Set<String> = emptySet()
+    suspend fun restoreLiveSources(session: Account, items: List<CastViewedItem>) = Unit
     suspend fun revokeSession(session: Account): Boolean
     suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome>
     suspend fun reportStart(account: Account, report: CastReport)
@@ -149,7 +151,9 @@ internal data class CastReport(
     val playSessionId: String?,
     val method: PlayMethod,
     val positionTicks: Long,
-    val paused: Boolean
+    val paused: Boolean,
+    val liveStreamId: String? = null,
+    val ownedLiveStreamId: String? = null
 )
 
 /** Everything device-specific. The link is built on first need, so nothing before that touches the Cast SDK. */
@@ -335,6 +339,7 @@ internal class CastSenderHost(
             val final = answer?.await()?.let { lastReportOf(requireNotNull(rejoined), it) } ?: last
             if (lastReporter != null && final != null) {
                 gateway.reportStopped(lastReporter, final)
+                rememberClosedLiveSources(lastReporter)
                 final.playSessionId?.let { gateway.stopEncoding(lastReporter, it) }
             }
             records.forEach { endRecord(it, trigger) }
@@ -353,7 +358,9 @@ internal class CastSenderHost(
             item.playSessionId,
             playMethod(item.method),
             (status.durationMs?.takeIf { it > 0 }?.let { minOf(status.positionMs, it) } ?: status.positionMs) * MS_TO_TICKS,
-            status.playerState == "paused"
+            status.playerState == "paused",
+            item.liveStreamId,
+            item.ownedLiveStreamId
         )
     }
 
@@ -409,12 +416,25 @@ internal class CastSenderHost(
     private suspend fun logout(record: TemporarySession) {
         val ref = sessions.state.records.firstOrNull { it.device == record.device && it.server == record.server }?.secretRef
         val secret = ref?.let(sessions.secrets::get)
+        if (secret != null && ref != null) gateway.restoreLiveSources(secret, sessions.liveSources[ref].orEmpty())
         val gone = secret == null || gateway.revokeSession(secret)
         applySession(CastSessionEvent(if (gone) "logout-ok" else "logout-failed", record))
         if (gone && ref != null) {
-            sessions = sessions.copy(secrets = sessions.secrets - ref)
+            sessions = sessions.copy(secrets = sessions.secrets - ref, liveSources = sessions.liveSources - ref)
             environment.saveSessions(sessions)
         }
+    }
+
+    /** Successful closes leave the durable retry journal before a later acquisition can reuse a provider id. */
+    private suspend fun rememberClosedLiveSources(session: Account) {
+        val closed = gateway.takeClosedLiveSources(session)
+        if (closed.isEmpty()) return
+        val refs = sessions.secrets.filterValues { it == session }.keys
+        val sources = sessions.liveSources.mapValues { (ref, items) ->
+            if (ref in refs) items.filterNot { it.ownedLiveStreamId in closed } else items
+        }.filterValues { it.isNotEmpty() }
+        sessions = sessions.copy(liveSources = sources)
+        environment.saveSessions(sessions)
     }
 
     /** Pending revocations go first whenever the server may be back, and before any new session under that identity. */
@@ -857,8 +877,32 @@ internal class CastSenderHost(
             val decisions = mutableMapOf<String, PlayDecision>()
             playRequest.items.forEachIndexed { index, item ->
                 val outcome = gateway.prepare(temporary, item.id, playRequest, if (index == playRequest.startIndex) startMs else 0)
-                if (cast?.owner?.candidate?.generation != serial) return@launch
                 val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+                if (decision?.ownedLiveStreamId != null) {
+                    val ref = sessions.state.records.firstOrNull {
+                        it.device == binding.device && it.generation == binding.generation
+                    }?.secretRef
+                    if (ref != null) {
+                        val source = CastViewedItem(
+                            entryId(index, item.id),
+                            item.id,
+                            decision.mediaSourceId,
+                            decision.playSessionId,
+                            decision.method.name,
+                            liveStreamId = decision.mediaSource.liveStreamId,
+                            ownedLiveStreamId = decision.ownedLiveStreamId
+                        )
+                        sessions = sessions.copy(
+                            liveSources = sessions.liveSources +
+                                (ref to (sessions.liveSources[ref].orEmpty() + source))
+                        )
+                        environment.saveSessions(sessions)
+                    }
+                }
+                if (cast?.owner?.candidate?.generation != serial) {
+                    endRecord(binding, "cancel")
+                    return@launch
+                }
                 if (decision == null) {
                     val refused = outcome is ClientResult.Success
                     dispatch(CastEvent("load-failed", recovery = if (refused) "unsupported-media" else "server-unreachable"))
@@ -886,7 +930,9 @@ internal class CastSenderHost(
                         decision.mediaSourceId,
                         decision.playSessionId,
                         decision.method.name,
-                        castUrlBase(castMediaUrl(decision, temporary.accessToken))
+                        castUrlBase(castMediaUrl(decision, temporary.accessToken)),
+                        decision.mediaSource.liveStreamId,
+                        decision.ownedLiveStreamId
                     )
                 },
                 title = playRequest.items.getOrNull(playRequest.startIndex)?.title,
@@ -928,8 +974,8 @@ internal class CastSenderHost(
             contentType = castContentType(decision),
             title = item.title,
             imageUrl = item.imageUrl,
-            durationMs = item.durationMs,
-            live = item.live,
+            durationMs = item.durationMs.takeUnless { decision.isLive },
+            live = decision.isLive || item.live,
             tracks = tracks,
             customData = mapOf(
                 "app" to "pictureshow",
@@ -969,7 +1015,12 @@ internal class CastSenderHost(
         val active = session
         val report = reportFor()
         reported = report
-        if (active != null && report != null) scope.launch { gateway.reportStart(active, report) }
+        if (active != null && report != null) {
+            scope.launch {
+                gateway.reportStart(active, report)
+                rememberClosedLiveSources(active)
+            }
+        }
         startReporting()
     }
 
@@ -998,7 +1049,10 @@ internal class CastSenderHost(
         val active = session ?: return
         val value = reportFor() ?: return
         reported = value
-        scope.launch { gateway.reportProgress(active, value) }
+        scope.launch {
+            gateway.reportProgress(active, value)
+            rememberClosedLiveSources(active)
+        }
     }
 
     /** The current entry's report: position and pause from the receiver's status, and what it's about from our own record. */
@@ -1009,7 +1063,16 @@ internal class CastSenderHost(
         val item = items.firstOrNull { it.entry == entry } ?: items.firstOrNull()
         val paused = observed.playerState == "paused"
         return if (item != null) {
-            CastReport(item.itemId, item.mediaSourceId, item.playSessionId, playMethod(item.method), observed.ticks, paused)
+            CastReport(
+                item.itemId,
+                item.mediaSourceId,
+                item.playSessionId,
+                playMethod(item.method),
+                observed.ticks,
+                paused,
+                item.liveStreamId,
+                item.ownedLiveStreamId
+            )
         } else {
             reported?.copy(positionTicks = observed.ticks, paused = paused)
         }
@@ -1076,6 +1139,7 @@ internal class CastSenderHost(
         cleanupJob = scope.launch {
             if (reporter != null && last != null) {
                 gateway.reportStopped(reporter, last)
+                rememberClosedLiveSources(reporter)
                 last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
             }
             if (cast?.owner?.generation == serial) dispatch(CastEvent("cleanup-done"))
@@ -1395,7 +1459,9 @@ internal class CastSenderHost(
             item.playSessionId,
             playMethod(item.method),
             status.positionMs * MS_TO_TICKS,
-            status.playerState == "paused"
+            status.playerState == "paused",
+            item.liveStreamId,
+            item.ownedLiveStreamId
         )
         val intent = ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = record.items.map { it.entry })
         val state = castReattachState(ownerOf(record), localIdentity(active, record.generation), intent)

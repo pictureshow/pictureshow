@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.content.edit
 import app.pictureshow.core.Account
+import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.ErrorKind
@@ -20,8 +21,10 @@ import app.pictureshow.core.JellyfinClient
 import app.pictureshow.core.control.CastReceiverFormats
 import app.pictureshow.core.control.CastSenderVpn
 import app.pictureshow.core.control.CastStoredSessions
+import app.pictureshow.core.control.CastViewedItem
 import app.pictureshow.core.control.CastViewingRecord
 import app.pictureshow.core.control.castDeviceProfile
+import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
 import app.pictureshow.core.playback.PlaybackProgressInfo
@@ -36,6 +39,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
@@ -154,6 +159,15 @@ private val REVOKE_FINAL_STATUSES = setOf(403, 404)
 
 internal class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
     CastMediaGateway {
+    private val liveLock = Mutex()
+    private val liveSources = mutableMapOf<Account, MutableList<CastLiveSource>>()
+    private val retired = mutableSetOf<Account>()
+    private val restoredSources = mutableMapOf<Account, List<CastViewedItem>>()
+    private val closedSources = mutableMapOf<Account, MutableSet<String>>()
+    private val activeReports = mutableMapOf<Account, CastReport>()
+
+    private class CastLiveSource(val decision: PlayDecision)
+
     private suspend fun clientIdentity() = ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME)
 
     private suspend fun client() = PlaybackClient(http, clientIdentity())
@@ -174,30 +188,97 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
         return CastSessionIssue.Issued(issued.value)
     }
 
+    override suspend fun restoreLiveSources(session: Account, items: List<CastViewedItem>) = liveLock.withLock {
+        restoredSources[session] = items
+    }
+
+    override suspend fun takeClosedLiveSources(session: Account): Set<String> = liveLock.withLock {
+        closedSources.remove(session).orEmpty()
+    }
+
     /**
      * 401 says it's already gone. 403 and 404 are the server's final word that it won't do this: asking again changes nothing,
      * and waiting would refuse every cast to that receiver until sign-out. If a token did outlive that, the next login
      * under this device id replaces it (observed on the server). Anything else may be the network, so it stays pending.
      */
-    override suspend fun revokeSession(session: Account): Boolean =
+    override suspend fun revokeSession(session: Account): Boolean = liveLock.withLock {
+        retired += session
+        activeReports.remove(session)?.let { stopReport(session, it) }
+        // Keep the credential and ownership pending when Close fails, so reconnect can retry it before Logout.
+        if (!closeOwned(session)) return@withLock false
+        val restored = restoredSources[session].orEmpty()
+        for (source in restored) {
+            val id = source.ownedLiveStreamId ?: continue
+            if (client().closeLiveStream(session, id) !is ClientResult.Success) return@withLock false
+        }
+        restoredSources.remove(session)
         when (val result = JellyfinClient(http, clientIdentity()).logout(session)) {
             is ClientResult.Success -> true
             is ClientResult.Failure -> result.error.kind == ErrorKind.INVALID_CREDENTIALS || result.error.status in REVOKE_FINAL_STATUSES
         }
+    }
 
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> =
-        client().prepareFor(
-            account,
-            itemId,
-            castDeviceProfile(),
-            CastReceiverFormats.MAX_BITRATE,
-            PlaybackRequest(
-                startPosition = startMs.milliseconds,
-                mediaSourceId = request.mediaSourceId,
-                audioStreamIndex = request.audioStreamIndex,
-                subtitleStreamIndex = request.subtitleStreamIndex
+        liveLock.withLock {
+            // Revoke waits for negotiation to finish, closes its result, then invalidates the temporary credential.
+            // It must not log out while Open is in flight: the resulting source would have no credential left to close it.
+            if (account in retired) {
+                return@withLock ClientResult.Failure(ClientError(ErrorKind.EXPIRED, "This Cast viewing has ended."))
+            }
+            val result = client().prepareFor(
+                account,
+                itemId,
+                castDeviceProfile(),
+                CastReceiverFormats.MAX_BITRATE,
+                PlaybackRequest(
+                    startPosition = startMs.milliseconds,
+                    mediaSourceId = request.mediaSourceId,
+                    audioStreamIndex = request.audioStreamIndex,
+                    subtitleStreamIndex = request.subtitleStreamIndex
+                )
             )
+            val decision = ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+            if (decision?.isLive == true) liveSources.getOrPut(account) { mutableListOf() } += CastLiveSource(decision)
+            result
+        }
+
+    private fun CastReport.withLiveSource(account: Account): CastReport {
+        val source = liveSources[account]?.lastOrNull {
+            it.decision.itemId == itemId && it.decision.playSessionId == playSessionId && it.decision.mediaSourceId == mediaSourceId
+        }?.decision
+        return copy(
+            liveStreamId = liveStreamId ?: source?.mediaSource?.liveStreamId,
+            ownedLiveStreamId = ownedLiveStreamId ?: source?.ownedLiveStreamId
         )
+    }
+
+    private suspend fun closeOwned(account: Account, report: CastReport? = null): Boolean {
+        val sources = liveSources[account].orEmpty().filter {
+            report == null ||
+                (
+                    it.decision.itemId == report.itemId &&
+                        it.decision.playSessionId == report.playSessionId &&
+                        it.decision.mediaSourceId == report.mediaSourceId
+                    )
+        }
+        var closed = true
+        for (source in sources) {
+            val id = source.decision.ownedLiveStreamId
+            if (id == null || client().closeLiveStream(account, id) is ClientResult.Success) {
+                liveSources[account]?.remove(source)
+                if (id != null) closedSources.getOrPut(account) { mutableSetOf() } += id
+            } else {
+                closed = false
+            }
+        }
+        // A reattached viewing carries ownership from app-private storage after process death.
+        if (sources.isEmpty() && report?.ownedLiveStreamId != null) {
+            closed = client().closeLiveStream(account, report.ownedLiveStreamId) is ClientResult.Success
+            if (closed) closedSources.getOrPut(account) { mutableSetOf() } += report.ownedLiveStreamId
+        }
+        if (liveSources[account]?.isEmpty() == true) liveSources.remove(account)
+        return closed
+    }
 
     private fun CastReport.progress() = PlaybackProgressInfo(
         itemId = itemId,
@@ -205,27 +286,57 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
         playSessionId = playSessionId,
         playMethod = method,
         positionTicks = positionTicks,
-        isPaused = paused
+        isPaused = paused,
+        liveStreamId = liveStreamId
     )
 
-    override suspend fun reportStart(account: Account, report: CastReport) {
-        client().reportStart(account, report.progress())
+    private suspend fun beginReport(account: Account, report: CastReport): CastReport {
+        val current = report.withLiveSource(account)
+        val previous = activeReports[account]
+        if (previous != null &&
+            previous.liveStreamId != null &&
+            (
+                previous.itemId != current.itemId ||
+                    previous.playSessionId != current.playSessionId ||
+                    previous.mediaSourceId != current.mediaSourceId
+                )
+        ) {
+            stopReport(account, previous)
+            closeOwned(account, previous)
+        }
+        activeReports[account] = current
+        return current
     }
 
-    override suspend fun reportProgress(account: Account, report: CastReport) {
-        client().reportProgress(account, report.progress())
+    override suspend fun reportStart(account: Account, report: CastReport) = liveLock.withLock {
+        if (account !in retired) client().reportStart(account, beginReport(account, report).progress())
+        Unit
     }
 
-    override suspend fun reportStopped(account: Account, report: CastReport) {
+    override suspend fun reportProgress(account: Account, report: CastReport) = liveLock.withLock {
+        if (account !in retired) client().reportProgress(account, beginReport(account, report).progress())
+        Unit
+    }
+
+    private suspend fun stopReport(account: Account, report: CastReport) {
         client().reportStopped(
             account,
             PlaybackStopInfo(
                 itemId = report.itemId,
                 mediaSourceId = report.mediaSourceId,
                 playSessionId = report.playSessionId,
-                positionTicks = report.positionTicks
+                positionTicks = report.positionTicks,
+                liveStreamId = report.liveStreamId
             )
         )
+    }
+
+    override suspend fun reportStopped(account: Account, report: CastReport) = liveLock.withLock {
+        val current = report.withLiveSource(account)
+        stopReport(account, current)
+        closeOwned(account, current)
+        activeReports.remove(account)
+        Unit
     }
 
     override suspend fun stopEncoding(account: Account, playSessionId: String) {
