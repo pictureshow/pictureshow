@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -67,47 +66,52 @@ internal fun LiveProgramDetail(
             )
             if (!current && liveInstant(program.startDate) > now) LiveText("Starts at ${time.clock(program.startDate)}", tv, small = true)
             program.overview?.takeIf { it.isNotBlank() }?.let { LiveText(it, tv) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (current &&
-                    channel != null
-                ) {
-                    LiveAction("Watch now", tv, Modifier.liveFocus("program:watch", tv), canAct) { onPlay(channel.mediaItem()) }
-                }
-                if (state.policy?.manage == true) {
-                    if (timer !=
-                        null
-                    ) {
-                        LiveAction(
-                            if (timer.status ==
-                                "InProgress"
-                            ) {
-                                "● Recording · options"
-                            } else {
-                                "Cancel recording…"
-                            },
+            LiveProgramActions(
+                tv = tv,
+                canWatch = current && channel != null,
+                canRecord = state.policy?.manage == true,
+                hasSeries = program.isSeries,
+                watch = { modifier, primary ->
+                    LiveProgramAction(
+                        "Watch now",
+                        tv,
+                        primary,
+                        modifier.liveFocus("program:watch", tv),
+                        enabled = canAct,
+                        playIcon = true
+                    ) { channel?.let { onPlay(it.mediaItem()) } }
+                },
+                record = { modifier, primary ->
+                    if (timer != null) {
+                        LiveProgramAction(
+                            if (timer.status == "InProgress") "● Recording · options" else "Cancel recording…",
                             tv,
+                            primary,
+                            modifier,
                             enabled = canAct && !state.writing
                         ) { onSchedule(timer, false) }
                     } else {
-                        LiveAction(
+                        LiveProgramAction(
                             "Record once…",
                             tv,
-                            Modifier.liveFocus("program:record", tv && !current),
-                            canAct && !state.writing && liveInstant(program.endDate) > now,
-                            onOnce
+                            primary,
+                            modifier.liveFocus("program:record", tv && !current),
+                            enabled = canAct && !state.writing && liveInstant(program.endDate) > now,
+                            onClick = onOnce
                         )
                     }
-                    if (program.isSeries) {
-                        LiveAction(
-                            if (seriesRule != null) "Manage series…" else "Record series…",
-                            tv,
-                            enabled =
-                            canAct && !state.writing && liveInstant(program.endDate) > now,
-                            onClick = { if (seriesRule != null) onSchedule(seriesRule, true) else onSeries() }
-                        )
-                    }
+                },
+                series = { modifier, primary ->
+                    LiveProgramAction(
+                        if (seriesRule != null) "Manage series…" else "Record series…",
+                        tv,
+                        primary,
+                        modifier,
+                        enabled = canAct && !state.writing && liveInstant(program.endDate) > now,
+                        onClick = { if (seriesRule != null) onSchedule(seriesRule, true) else onSeries() }
+                    )
                 }
-            }
+            )
             if (state.policy?.manage != true) LiveText("Recording management requires server permission.", tv, small = true)
         }
     }
