@@ -59,6 +59,7 @@ class Mpv(val out: File) : AutoCloseable {
         option("log-file", File(out, "mpv.log").absolutePath)
         option("hwdec", "auto-safe")
         if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") option("gpu-sw", "yes")
+        System.getenv("SPIKE_MPV_OPTIONS")?.split(';')?.filter { it.isNotBlank() }?.forEach { pair -> option(pair.substringBefore('='), pair.substringAfter('=')) }
         option("audio-channels", "auto")
         option("volume", "0") // Never emit sound in an unattended probe.
         if (System.getenv("SPIKE_NULL_AUDIO") == "1") option("ao", "null")
@@ -85,7 +86,7 @@ class Mpv(val out: File) : AutoCloseable {
             "video-params/w", "video-params/h", "audio-codec-name", "audio-params/channels",
             "audio-params/channel-count", "audio-out-params/channels", "audio-out-params/channel-count",
             "audio-device", "sid", "sub-codec", "sub-text", "time-pos", "vo-configured",
-            "estimated-vf-fps", "frame-drop-count", "decoder-frame-drop-count", "display-hidpi-scale")
+            "estimated-vf-fps", "container-fps", "vo-passes", "video-sync", "mistimed-frame-count", "vo-delayed-frame-count", "frame-drop-count", "decoder-frame-drop-count", "display-hidpi-scale")
         fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
         val data = keys.associateWith(::get).toMutableMap()
         val count = get("track-list/count")?.toIntOrNull() ?: 0

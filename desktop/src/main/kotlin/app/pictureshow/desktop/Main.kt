@@ -35,9 +35,10 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 fun main(args: Array<String>) {
+    if (args.firstOrNull() == "layer") { layerMain(args.drop(1).toTypedArray()); return }
     require(args.size >= 2) { "Usage: <render|wid> <media-file> [evidence-dir] [--auto]" }
     val shape = args[0]
-    require(shape in setOf("render", "wid"))
+    require(shape in setOf("render", "wid", "canvas"))
     val media = File(args[1]).absolutePath
     val out = File(args.getOrNull(2) ?: "desktop-evidence")
     val auto = args.contains("--auto")
@@ -81,6 +82,8 @@ fun main(args: Array<String>) {
                                     } catch (e: Throwable) { failure.set(e); status = "FAILED: ${e.message}"; e.printStackTrace() }
                                 }.start()
                             }
+                        } else if (shape == "canvas") {
+                            SwingPanel(factory = { GlCanvasSurface(mpv, media, { failure.set(it) }).also { gl = it; started = true }.panel }, modifier = Modifier.fillMaxSize())
                         } else {
                             SwingPanel(factory = {
                                 JPanel(BorderLayout()).apply {
@@ -101,6 +104,11 @@ fun main(args: Array<String>) {
                                     }
                                 }
                             }, modifier = Modifier.fillMaxSize())
+                        }
+                        if (shape == "canvas") {
+                            Popup(alignment = Alignment.TopEnd, offset = androidx.compose.ui.unit.IntOffset(-16, 16), properties = PopupProperties(focusable = false)) {
+                                Button(onClick = { clicks++; mpv.command("cycle", "pause") }) { Text("COMPOSE OVER VIDEO · $clicks") }
+                            }
                         }
                         // Intentional same-window overlap: a native child may occlude this.
                         Row(Modifier.align(Alignment.TopEnd).padding(16.dp).background(Color(0xDD174E72)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,7 +141,7 @@ fun main(args: Array<String>) {
                             val location = window.locationOnScreen
                             val capture = Robot().createScreenCapture(java.awt.Rectangle(location.x, location.y, bounds.width, bounds.height))
                             jpeg(capture, File(out, "$name.jpg"))
-                            mpv.dump(name, "window=${bounds.width}x${bounds.height}; placement=${state.placement}; density=${window.graphicsConfiguration.defaultTransform.scaleX}; overlayClicks=$clicks")
+                            mpv.dump(name, "window=${bounds.width}x${bounds.height}; placement=${state.placement}; screen=${window.graphicsConfiguration.bounds}; undecorated=${window.isUndecorated}; density=${window.graphicsConfiguration.defaultTransform.scaleX}; overlayClicks=$clicks")
                         }
                     }
                     Thread.sleep(5000)
@@ -141,7 +149,12 @@ fun main(args: Array<String>) {
                     if (auto) {
                         stage("01-window")
                         SwingUtilities.invokeAndWait {
-                            overlayBounds?.let { b ->
+                            if (shape == "canvas") {
+                                java.awt.Window.getWindows().filter { it !== window && it.isVisible && it.width > 50 }.lastOrNull()?.let { popup ->
+                                    val p=popup.locationOnScreen
+                                    Robot().apply { mouseMove(p.x+popup.width/2,p.y+popup.height/2);mousePress(InputEvent.BUTTON1_DOWN_MASK);mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
+                                }
+                            } else overlayBounds?.let { b ->
                                 val origin = window.contentPane.locationOnScreen
                                 val transform = window.graphicsConfiguration.defaultTransform
                                 Robot().apply {
@@ -177,6 +190,7 @@ fun main(args: Array<String>) {
                         Thread.sleep(2500)
                         stage("03-fullscreen")
                         SwingUtilities.invokeAndWait { if (com.sun.jna.Platform.isMac()) toggleMacFullscreen(window) else state.placement = WindowPlacement.Floating }; Thread.sleep(2000)
+                        stage("03-restored")
                         val count = mpv.get("track-list/count")?.toIntOrNull() ?: 0
                         val subtitles = (0 until count).filter { mpv.get("track-list/$it/type") == "sub" }
                         check(subtitles.size == 3) { "Expected SRT, ASS and PGS tracks" }
@@ -206,7 +220,7 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun jpeg(image: BufferedImage, file: File) {
+internal fun jpeg(image: BufferedImage, file: File) {
     val w = minOf(800, image.width)
     val h = image.height * w / image.width
     val scaled = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
