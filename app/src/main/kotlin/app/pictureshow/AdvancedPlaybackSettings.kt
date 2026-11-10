@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -66,6 +67,7 @@ internal fun AdvancedPlaybackSettings(
     }
     if (touch) {
         val scroll = rememberScrollState()
+        val showTopDivider = remember(scroll) { derivedStateOf { scroll.value > 0 } }
         Dialog(onDismissRequest = onClose) {
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
@@ -78,7 +80,7 @@ internal fun AdvancedPlaybackSettings(
                         style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
                     )
                     if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
-                    if (scroll.value > 0) androidx.compose.material3.HorizontalDivider()
+                    if (showTopDivider.value) androidx.compose.material3.HorizontalDivider()
                     Column(
                         Modifier.weight(1f, fill = false).verticalScroll(scroll),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
