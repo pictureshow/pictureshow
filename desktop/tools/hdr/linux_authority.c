@@ -54,6 +54,28 @@ static void authorize(struct wl_listener *l, struct weston_output_capture_attemp
  struct weston_view *view;
  wl_list_for_each(view, &compositor->view_list, link) {
   const pixman_box32_t *box=pixman_region32_extents(&view->transform.boundingbox);
+  struct weston_buffer *buffer=view->surface->buffer_ref.buffer;
+  weston_log("HDR_NUMERIC_SURFACE name=%s label=%s role=%s layer=%u opaque=%d bufferType=%d\n",
+   view->surface->internal_name?view->surface->internal_name:"none",
+   view->surface->label?view->surface->label:"none",
+   view->surface->role_name?view->surface->role_name:"none",
+   view->layer_link.layer?(unsigned)view->layer_link.layer->position:0,
+   view->surface->is_opaque,buffer?(int)buffer->type:-1);
+  if(buffer && buffer->type==WESTON_BUFFER_SHM) {
+   struct wl_shm_buffer *shm=buffer->shm_buffer;
+   wl_shm_buffer_begin_access(shm);
+   unsigned char *bytes=wl_shm_buffer_get_data(shm);
+   int stride=wl_shm_buffer_get_stride(shm),w=wl_shm_buffer_get_width(shm),h=wl_shm_buffer_get_height(shm);
+   for(int n=0;n<8;n++) {
+    unsigned char *p=bytes+(h/2)*stride+(int)((n+.5)*w/8)*4;
+    weston_log("HDR_NUMERIC_SHM patch=%d rawBytes=%u,%u,%u,%u\n",n,p[0],p[1],p[2],p[3]);
+   }
+   if(w>140 && h>32) {
+    unsigned char *p=bytes+32*stride+(w-140)*4;
+    weston_log("HDR_NUMERIC_SHM uiPointRawBytes=%u,%u,%u,%u\n",p[0],p[1],p[2],p[3]);
+   }
+   wl_shm_buffer_end_access(shm);
+  }
   weston_log("HDR_NUMERIC_VIEW mapped=%d surfaceMapped=%d size=%dx%d alpha=%g visibleMask=%u bounds=%d,%d,%d,%d\n",
    view->is_mapped,view->surface->is_mapped,view->surface->width,view->surface->height,view->alpha,
    view->output_visibility_mask,box->x1,box->y1,box->x2,box->y2);
