@@ -166,9 +166,27 @@ class MusicHostTest {
     }
 
     private var lastPlayer: ExoPlayer? = null
+    private var paceNetworkClock = false
+    private data class ClockPace(val clock: FakeClock, val originNs: Long, var advancedMs: Long = 0)
+    private val pacedClocks = mutableListOf<ClockPace>()
+    private val fatalHttpStatuses = java.util.Collections.synchronizedList(mutableListOf<Int>())
+
+    // Real HTTP loaders cannot follow an auto clock racing through future player messages.
+    // Only the revocation fixture uses a clock paced by actual elapsed time; retries stay unchanged.
+    private fun advanceNetworkClocks() {
+        pacedClocks.forEach { pace ->
+            val targetMs = (System.nanoTime() - pace.originNs) / 1_000_000L
+            val delta = (targetMs - pace.advancedMs).coerceAtLeast(0)
+            if (delta > 0) {
+                pace.clock.advanceTime(delta)
+                pace.advancedMs += delta
+            }
+        }
+    }
 
     private fun player(context: Context): ExoPlayer {
-        val clock = FakeClock(true)
+        val clock = FakeClock(!paceNetworkClock)
+        if (paceNetworkClock) pacedClocks += ClockPace(clock, System.nanoTime())
         return TestExoPlayerBuilder(context)
             .setClock(clock)
             .setRenderersFactory { handler, _, audio, _, _ ->
@@ -183,6 +201,7 @@ class MusicHostTest {
                         val statuses = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().map { cause ->
                             cause.responseCode
                         }
+                        fatalHttpStatuses.addAll(statuses)
                         playerErrors +=
                             "code=${error.errorCode} causes=${causes.map { cause -> cause.javaClass.simpleName }} http=$statuses"
                     }
@@ -261,6 +280,7 @@ class MusicHostTest {
     private fun pump(ms: Long) {
         val end = System.currentTimeMillis() + ms
         while (System.currentTimeMillis() < end) {
+            advanceNetworkClocks()
             ShadowLooper.idleMainLooper()
             Thread.sleep(5)
         }
@@ -277,6 +297,7 @@ class MusicHostTest {
                     "Errors: ${synchronized(playerErrors) { playerErrors.takeLast(8) }}. " +
                     "HTTP counts: ${synchronized(fixtureHttp) { fixtureHttp.groupingBy { it }.eachCount() }}"
             )
+            advanceNetworkClocks()
             ShadowLooper.idleMainLooper()
             Thread.sleep(5)
         }
@@ -419,10 +440,12 @@ class MusicHostTest {
 
     /** As with video: the account is marked expired, so a sign-in replaces its token, and the same viewer's queue waits. */
     @Test fun aRevokedTokenEndsTheAudioAndMarksTheAccountExpired() {
+        paceNetworkClock = true
         val music = host()
         ready(music)
         music.request(album("denied", "b"))
         until("the end") { music.state.value.message?.contains("sign in again") == true }
+        assertTrue(401 in fatalHttpStatuses, "The real fatal HTTP 401 must reach the player")
         assertFalse(music.state.value.outputActive)
         until("the account marked expired") { accounts.snapshots.value.currentAccount?.expired == true }
         assertEquals(account.key, accounts.snapshots.value.currentKey)

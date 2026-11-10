@@ -215,6 +215,7 @@ internal class SyncPlayHost(
         val after = reduceSyncEvent(before, event, generation)
         if (after === before || after == before) return
         membership = after
+        if (after.phase != before.phase) diagnostic("phase", "phase=${after.phase}")
         after.command?.takeIf { it.command == "Stop" }?.let { stoppedEntry = it.playlistItemId }
         if (after.generation != before.generation || !after.active) {
             renderer?.apply(playing = false)
@@ -625,6 +626,7 @@ internal class SyncPlayHost(
             readyEntry = current.playlistItemId
             wasReady = ready
             if (!ready) output.apply(playing = false)
+            diagnostic("readiness", "ready=$ready buffering=${r.buffering} playing=${r.playing}")
             send(syncReadiness(ready, now / 10_000, r.positionTicks, r.playing, current.playlistItemId))
         }
         val command = timeline ?: return
@@ -644,6 +646,7 @@ internal class SyncPlayHost(
         )
         drift = decision.state
         if (decision.action == SyncDriftAction.SEEK) {
+            diagnostic("correction-seek", "errorTicks=${r.positionTicks - target.positionTicks} targetTicks=${decision.targetTicks}")
             output.apply(decision.targetTicks, playing, decision.rate)
         } else {
             output.apply(playing = playing, rate = decision.rate)
@@ -696,6 +699,7 @@ internal class SyncPlayHost(
             val playing = command.command == "Unpause" || (command.command == "Seek" && membership.phase == "Playing")
             val execution =
                 syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, at, playing, r.durationTicks) ?: return@launch
+            diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
             renderer?.apply(execution.positionTicks, playing)
             drift = stopSyncDrift()
         }
@@ -723,6 +727,13 @@ internal class SyncPlayHost(
     }
     private fun current(target: Account, version: Long) =
         version == sequence && target.key == account?.key && target.accessToken == account?.accessToken
+
+    /** Debug evidence counts transitions and corrections without viewer names, ids or server locations. */
+    private fun diagnostic(event: String, fields: String) {
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d("PictureshowSync", "$event uptimeMs=${android.os.SystemClock.elapsedRealtime()} $fields")
+        }
+    }
     private fun note(text: String) {
         mutable.value = mutable.value.copy(status = text)
     }
