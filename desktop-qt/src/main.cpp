@@ -48,12 +48,12 @@ int main(int argc,char**argv){
  logPath=out+"/runtime.log";
  qmlRegisterType<Surface>("Pictureshow.Proof",1,0,"Surface");
  Player player(args[1]);Surface::player=&player;Proof proof(&player);
+ QJsonObject graphics;QMutex graphicsMutex; // Outlive engine/render-thread callbacks on early window close too.
  QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("proof",&proof);engine.load(QUrl("qrc:/Main.qml"));
  if(engine.rootObjects().isEmpty())return 2;auto*w=qobject_cast<QQuickWindow*>(engine.rootObjects().first());proof.setWindow(w);w->requestActivate();
 #ifdef Q_OS_MACOS
  macActivate(w->winId());
 #endif
- QJsonObject graphics;QMutex graphicsMutex;
  QObject::connect(w,&QQuickWindow::afterRendering,w,[&]{QJsonObject g;if(auto *sc=w->swapChain()){g["swapchainFormat"]=int(sc->format());
 #ifdef Q_OS_WIN
  auto *nativeChain=static_cast<QD3D11SwapChain*>(sc);if(nativeChain->swapChain){DXGI_SWAP_CHAIN_DESC desc{};HRESULT status=nativeChain->swapChain->GetDesc(&desc);g["dxgiGetDescHresult"]=qint64(status);if(SUCCEEDED(status)){g["dxgiPresentFormat"]=int(desc.BufferDesc.Format);g["dxgiWindowed"]=bool(desc.Windowed);g["dxgiSwapEffect"]=int(desc.SwapEffect);}}
