@@ -829,6 +829,267 @@
         }
       },
       "expected": true
+    },
+    {
+      "id": "playback-settings.active-read.emits-before-transfer-end",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 6291456,
+          "bytes": 786432
+        },
+        {
+          "bitrate": 6291456,
+          "bytes": 786432
+        }
+      ]
+    },
+    {
+      "id": "playback-settings.active-read.outside-read-idle-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 100000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 30100000000,
+            "endedNanos": 30200000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 60200000000,
+            "endedNanos": 60300000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 90300000000,
+            "endedNanos": 90400000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 120400000000,
+            "endedNanos": 120500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 150500000000,
+            "endedNanos": 150600000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 180600000000,
+            "endedNanos": 180700000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 210700000000,
+            "endedNanos": 210800000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 240800000000,
+            "endedNanos": 240900000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 270900000000,
+            "endedNanos": 271000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 301000000000,
+            "endedNanos": 301100000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 331100000000,
+            "endedNanos": 331200000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 361200000000,
+            "endedNanos": 361300000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 391300000000,
+            "endedNanos": 391400000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 421400000000,
+            "endedNanos": 421500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 451500000000,
+            "endedNanos": 451600000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 481600000000,
+            "endedNanos": 481700000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 511700000000,
+            "endedNanos": 511800000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 541800000000,
+            "endedNanos": 541900000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 571900000000,
+            "endedNanos": 572000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 62914560,
+          "bytes": 7864320
+        },
+        {
+          "bitrate": 62914560,
+          "bytes": 7864320
+        }
+      ]
+    },
+    {
+      "id": "playback-settings.active-read.local-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": false,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.not-full-speed-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": false,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.eof-does-not-flush",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 500000000
+          },
+          {
+            "bytes": -1,
+            "beganNanos": 500000000,
+            "endedNanos": 1000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.new-transfer-resets",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 1500000000,
+            "reset": true
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.requires-substantial-bytes",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 65536,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 65536,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 524288,
+          "bytes": 131072
+        }
+      ]
     }
   ]
 }

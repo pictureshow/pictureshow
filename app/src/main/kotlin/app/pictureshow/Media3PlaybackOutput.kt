@@ -217,13 +217,24 @@ internal class Media3PlaybackOutput(
         val dataSources = androidx.media3.datasource.DataSource.Factory {
             sourceData.createDataSource().also { it.addTransferListener(loads) }
         }
+        val progressive = androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
+            requireNotNull(media.localConfiguration).uri,
+            media.localConfiguration?.mimeType
+        ) == C.CONTENT_TYPE_OTHER
+        val primaryDataSources = if (progressive) {
+            progressiveBandwidthSources(dataSources, loadHandler, { current === decision && activePlayer === next }, { bitrate, bytes ->
+                onBandwidthEstimate(bitrate, bytes)
+            })
+        } else {
+            dataSources
+        }
         val extractors = if (videoClock) {
             VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
         } else {
             if (detector != null) VideoTailExtractorsFactory(videoTail) else DefaultExtractorsFactory()
         }
         val sourceFactory = DefaultMediaSourceFactory(context, extractors)
-            .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
+            .setDataSourceFactory(detector?.sourceFactory(primaryDataSources) ?: primaryDataSources)
         val baseRenderers =
             renderersFactory
                 ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions, disabledPassthrough) { encoded ->
@@ -284,7 +295,7 @@ internal class Media3PlaybackOutput(
                 totalBytesLoaded: Long,
                 bitrateEstimate: Long
             ) {
-                if (current === decision && totalLoadTimeMs > 0) onBandwidthEstimate(bitrateEstimate, totalBytesLoaded)
+                if (!progressive && current === decision && totalLoadTimeMs > 0) onBandwidthEstimate(bitrateEstimate, totalBytesLoaded)
             }
             private var firstVideoDecoder = true
             override fun onVideoDecoderInitialized(

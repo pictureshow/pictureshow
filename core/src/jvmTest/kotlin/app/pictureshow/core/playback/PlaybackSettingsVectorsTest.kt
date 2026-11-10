@@ -5,6 +5,7 @@ package app.pictureshow.core.playback
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -39,6 +40,22 @@ class PlaybackSettingsVectorsTest {
     private fun execute(operation: String, input: JsonObject): JsonElement {
         val tuning = input["tuning"]?.let { PlaybackJson.decodeFromJsonElement<PlaybackTuning>(it) } ?: PlaybackTuning()
         return when (operation) {
+            "active-read-bandwidth" -> {
+                val meter = ActiveReadBandwidth()
+                val samples = input.getValue("reads").jsonArray.mapNotNull { element ->
+                    val read = element.jsonObject
+                    if (read["reset"]?.jsonPrimitive?.boolean == true) meter.reset()
+                    meter.record(
+                        read.getValue("bytes").jsonPrimitive.int,
+                        read.getValue("endedNanos").jsonPrimitive.long - read.getValue("beganNanos").jsonPrimitive.long,
+                        input.getValue("network").jsonPrimitive.boolean,
+                        input.getValue("fullSpeed").jsonPrimitive.boolean
+                    )?.let { sample ->
+                        JsonObject(mapOf("bitrate" to JsonPrimitive(sample.bitrate), "bytes" to JsonPrimitive(sample.bytes)))
+                    }
+                }
+                JsonArray(samples)
+            }
             "information-reason" -> JsonPrimitive(
                 PlaybackInformation.reason(
                     input.getValue("reason").jsonPrimitive.content,

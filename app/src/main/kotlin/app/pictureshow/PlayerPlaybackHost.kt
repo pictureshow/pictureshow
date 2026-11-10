@@ -47,6 +47,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 /** A pending or failed optional lookup is not evidence that this is the last episode. */
@@ -540,19 +541,25 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         LaunchedEffect(player) {
             var networkCheck = 0
             while (true) {
-                if (networkCheck++ % 20 == 0 && controller != null) {
-                    val currentNetwork = playbackNetwork(context, account.server.url)
-                    if (network != currentNetwork) {
+                val currentNetwork = if (networkCheck++ % 20 == 0 && controller != null) {
+                    playbackNetwork(context, account.server.url)
+                } else {
+                    null
+                }
+                // DNS runs on IO. Explicitly return native player/window work to Main, including with
+                // Compose continuation interceptors that may resume the surrounding effect on IO.
+                withContext(Dispatchers.Main.immediate) {
+                    if (currentNetwork != null && network != currentNetwork) {
                         network = currentNetwork
                         estimatedBandwidth = null
                         controller?.routeChanged()
                     }
+                    player?.let {
+                        position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
+                        duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
+                    }
+                    view.keepScreenOn = player?.playWhenReady == true && state.error == null
                 }
-                player?.let {
-                    position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
-                    duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
-                }
-                view.keepScreenOn = player?.playWhenReady == true && state.error == null
                 delay(500)
             }
         }
