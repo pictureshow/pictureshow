@@ -1,7 +1,7 @@
 # Privacy policy
 
-Pictureshow is a Jellyfin client for Android TV, published by Legitimate LLC. This policy covers the Pictureshow app.
-It was last changed on 22 October 2026.
+Pictureshow is a Jellyfin client for Android TV, published by Legitimate LLC. This policy covers the Pictureshow app and
+the pictureshow.app website. It was last changed on 9 November 2026.
 
 ## What the app sends, and where
 
@@ -46,6 +46,12 @@ controls them, and this policy doesn't cover them.
 
 The app is not aimed at children and doesn't knowingly collect anything from them. It sends nothing to us
 automatically. If you email us a request, you can ask us to delete that email.
+
+## This website
+
+pictureshow.app counts visits with Cloudflare Web Analytics. It sets no cookies and doesn't follow you to other sites.
+For each page view, Cloudflare receives the page address, the page that linked to it, your browser and device type, and
+how long the page took to load. The app doesn't use it.
 
 ## Changes and contact
 
