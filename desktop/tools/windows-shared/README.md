@@ -43,13 +43,13 @@ The audit retained 34 PE files and confirmed direct libmpv imports of `libass-9.
 reported LGPL version 3 or later; mpv reported `gpl=false`, shared libraries and
 `prefer_static=false`. Thirty vector test methods passed with no failures or skips.
 
-This is a **partial surface failure**, despite the green job. The actual Main and
-Main10 fullscreen JPEGs show video and both Compose controls. The AV1 fullscreen
-JPEG has neither control area visible; PQ and 1080p60 fullscreen JPEGs retain the
-top badge but lose the bottom controls. Their layout receipts all say ready=true,
-which therefore does not establish visible controls. The cause is unresolved.
-Restored SRT, ASS and PGS screenshots show subtitles above the control bar, and all
-five cases retain clean teardown receipts.
+The actual Main, Main10, AV1, PQ-metadata and 1080p60 fullscreen JPEGs show video,
+the top Compose badge and bottom Pause/play, Fullscreen and Close controls.
+Focused crops and exact bottom-strip pixel checks confirmed all five; earlier
+whole-image inspection missed that lower strip and incorrectly reported missing
+controls. Those failure claims are withdrawn. Layout ready=true alone would not
+have established painted controls. Restored SRT, ASS and PGS screenshots show
+subtitles above the control bar, and all five cases retain clean teardown receipts.
 
 The sustained run lasted 125.9894291 seconds. Media time advanced 0.633 to 127.458;
 VO drops increased 34 to 6995 (+6961), with decoder drops zero. This WARP result
