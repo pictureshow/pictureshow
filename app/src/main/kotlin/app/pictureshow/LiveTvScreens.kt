@@ -5,25 +5,23 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,47 +30,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Tab as TvTab
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.imageUrl
-import app.pictureshow.core.livetv.LiveChannel
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
-import app.pictureshow.core.livetv.canTune
-import app.pictureshow.core.livetv.editSchedule
 import app.pictureshow.core.livetv.recordingStatus
-import coil3.compose.AsyncImage
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
-private val LiveBackground = Color(0xFF10131C)
-private val LiveMuted = Color(0xFFC3C9D8)
-
-/** Identical destination/actions for TV and touch; platform buttons keep their native focus/reader behavior. */
+/** Platform components share one destination and the same policy/write owner. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LiveTvScreen(
     vm: LiveTvViewModel,
@@ -83,21 +59,23 @@ internal fun LiveTvScreen(
     onBack: () -> Unit
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val time = liveTime()
     var tab by rememberSaveable { mutableStateOf("Channels") }
     var search by rememberSaveable { mutableStateOf("") }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var favorites by rememberSaveable { mutableStateOf(false) }
     var linear by rememberSaveable { mutableStateOf(false) }
     var selectedProgram by remember { mutableStateOf<LiveProgram?>(null) }
     var selectedSchedule by remember { mutableStateOf<LiveSchedule?>(null) }
     var selectedSeries by remember { mutableStateOf(false) }
     var deleteRecording by remember { mutableStateOf<MediaItem?>(null) }
+    var recordingMenu by remember { mutableStateOf<MediaItem?>(null) }
     var cancelling by remember { mutableStateOf(false) }
     var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocus by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
+    val guideList = rememberLazyListState()
     val guideScroll = rememberScrollState()
-    var chosenTime by rememberSaveable { mutableStateOf("") }
-    var timeError by remember { mutableStateOf<String?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -114,6 +92,10 @@ internal fun LiveTvScreen(
         vm.dismissDraft()
         restoreFocus = true
     }
+    fun focused(key: String) {
+        returnFocus = key
+        restoreFocus = false
+    }
     LaunchedEffect(state.policy?.access) { if (state.policy?.access == false) closeDetail() }
     LaunchedEffect(state.writeVersion) { if (state.writeVersion > 0 && state.lastWriteOutcome == "ok") closeDetail() }
     LaunchedEffect(state.channels, state.policy) {
@@ -128,326 +110,445 @@ internal fun LiveTvScreen(
     val schedule = selectedSchedule
     val program = selectedProgram
     val recording = deleteRecording
-    BackHandler(enabled = draft != null || schedule != null || program != null || recording != null) { closeDetail() }
+    val detail = draft != null || schedule != null || program != null || recording != null
+    BackHandler(enabled = detail) { closeDetail() }
     val title = when {
         draft != null -> if (state.draftSeries) "Record series" else "Record once"
         schedule != null -> if (cancelling) "Cancel ${if (selectedSeries) "series" else "recording"}?" else "Recording schedule"
-        program != null -> program.name
+        program != null -> "Program details"
         recording != null -> "Delete recording?"
         else -> "Live TV"
     }
     val canAct = state.actionsAvailable(now)
-    val detail = draft != null || schedule != null || program != null || recording != null
-    LazyColumn(
-        state = if (detail) rememberLazyListState() else list,
-        modifier = Modifier.fillMaxSize().background(LiveBackground).testTag(if (tv) "live:tv" else "live:touch"),
-        contentPadding = PaddingValues(horizontal = if (tv) 48.dp else 20.dp, vertical = if (tv) 32.dp else 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    val channels = state.channels.filter {
+        (!favorites || it.userData.isFavorite) &&
+            (search.isBlank() || it.name.contains(search, true) || it.number.orEmpty().contains(search, true))
+    }
+    Column(
+        Modifier.fillMaxSize().background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
+            .testTag(if (tv) "live:tv" else "live:touch")
     ) {
-        item("heading") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiveText(title, tv, heading = true)
-                if (state.loading || state.writing) LiveText(if (state.writing) "Saving…" else "Refreshing Live TV…", tv)
-                state.error?.let { LiveText(it, tv, warning = true) }
-                state.notice?.let { LiveText(it, tv) }
-                if (detail) {
-                    LiveButton(
-                        if (recording != null || cancelling || draft != null) "Cancel" else "Back",
-                        tv,
-                        initial = true,
-                        enabled = !state.writing,
-                        onClick = ::closeDetail
-                    )
-                } else {
-                    LiveButton("Back", tv, onClick = onBack)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        listOf("Channels", "Guide", "Recordings", "Schedules").forEach { next ->
-                            LiveButton(next, tv, selected = tab == next, enabled = !state.writing) { tab = next }
-                        }
-                    }
+        if (tv) {
+            Row(
+                Modifier.fillMaxWidth().height(40.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LiveText(title, true, Modifier.weight(1f), heading = true, maxLines = 1)
+                if (!detail) {
                     state.fetchedAt?.let {
-                        LiveText("${if (state.offline) "Offline · last loaded" else "Updated"} ${liveTime(it)}", tv)
+                        LiveText("${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}", true, small = true)
                     }
-                    if (state.offline) LiveText("Saved guide is for reference. Reconnect before scheduling or tuning.", tv, warning = true)
-                    LiveButton("Refresh", tv, enabled = !state.loading && !state.writing) { vm.refresh() }
+                    if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", true) { showSearch = !showSearch }
+                    LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
                 }
             }
+        } else {
+            androidx.compose.material3.TopAppBar(
+                title = { LiveText(title, false, heading = true, maxLines = 1) },
+                navigationIcon = { LiveIcon("back", "Back", false) { if (detail) closeDetail() else onBack() } },
+                actions = {
+                    if (!detail) {
+                        if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", false) { showSearch = !showSearch }
+                        LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
+                    }
+                }
+            )
         }
-        if (draft != null) {
-            item("form") {
-                LiveScheduleEditor(draft, state.draftSeries, tv, state.writing, false) { vm.save(it, state.draftSeries, false) }
+        if (!detail) {
+            val tabs = listOf("Channels", "Guide", "Recordings", "Schedules")
+            fun select(next: String) {
+                tab = next
+                returnFocus = null
+                restoreFocus = false
             }
-        } else if (schedule != null) {
-            if (cancelling) {
-                item("cancel-scope") {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        LiveText(
-                            if (selectedSeries) {
-                                "Cancel this series rule and its future recordings: ${schedule.name}. Completed recordings are retained."
-                            } else {
-                                "Cancel only this occurrence: ${schedule.name}, ${liveDates(
-                                    schedule.startDate,
-                                    schedule.endDate
-                                )}. Completed recordings are retained."
-                            },
-                            tv
-                        )
-                        LiveButton(
-                            if (selectedSeries) "Confirm cancel series" else "Confirm cancel occurrence",
-                            tv,
-                            enabled = !state.writing
-                        ) {
-                            vm.cancel(schedule, selectedSeries)
+            if (tv) {
+                androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
+                    tabs.forEach { next ->
+                        TvTab(tab == next, onFocus = {
+                        }, onClick = { select(next) }, modifier = Modifier.testTag("live:tab:$next")) {
+                            androidx.tv.material3.Text(next, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
                         }
                     }
                 }
             } else {
-                item("schedule-form") {
-                    LiveScheduleEditor(schedule, selectedSeries, tv, state.writing, true) {
-                        vm.save(it, selectedSeries, true)
-                    }
-                }
-                item("status") {
-                    LiveText(
-                        "${recordingStatus(schedule.status)}${schedule.string("ErrorMessage")?.let {
-                            ": $it"
-                        }.orEmpty()}. Server status is authoritative; contact the administrator for tuner/storage errors.",
-                        tv
-                    )
-                }
-                item("cancel") {
-                    LiveButton(if (selectedSeries) "Cancel series…" else "Cancel occurrence…", tv, enabled = !state.writing) {
-                        cancelling =
-                            true
+                androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) {
+                    tabs.forEach { next ->
+                        androidx.compose.material3.Tab(tab == next, {
+                            select(next)
+                        }, text = { androidx.compose.material3.Text(next, maxLines = 1) }, modifier = Modifier.testTag("live:tab:$next"))
                     }
                 }
             }
-        } else if (program != null) {
-            item("program") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LiveText(liveDates(program.startDate, program.endDate), tv)
-                    program.overview?.takeIf { it.isNotBlank() }?.let { LiveText(it, tv) }
-                    val channel = state.channels.firstOrNull { it.id == program.channelId }
-                    channel?.let { LiveText("${it.number.orEmpty()} ${it.name}", tv) }
-                    LiveButton("Tune now", tv, enabled = canAct && channel != null && canTune(program, now)) {
-                        channel?.let { onPlay(it.mediaItem()) }
-                    }
-                    if (!canTune(program, now)) LiveText("Tune is available only while this program is on air.", tv)
-                    if (state.policy?.manage == true) {
-                        LiveButton("Record once…", tv, enabled = canAct && !state.writing && liveInstant(program.endDate) > now) {
-                            vm.defaults(program, false)
+            if (showSearch && tab in listOf("Channels", "Guide")) {
+                if (tv) {
+                    RemoteField("Search channels", search, {
+                        search = it
+                        returnFocus = null
+                    })
+                } else {
+                    androidx.compose.material3.OutlinedTextField(search, {
+                        search = it
+                        returnFocus = null
+                    }, Modifier.fillMaxWidth().padding(horizontal = 16.dp), label = {
+                        androidx.compose.material3.Text("Search channels")
+                    }, singleLine = true)
+                }
+            }
+            if (tab in listOf("Channels", "Guide")) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    item {
+                        LiveChip("Favorites", favorites, tv) {
+                            favorites = !favorites
+                            returnFocus = null
                         }
-                        LiveButton(
-                            "Record series…",
-                            tv,
-                            enabled =
-                            canAct && !state.writing && program.isSeries && liveInstant(program.endDate) > now
-                        ) {
-                            vm.defaults(program, true)
-                        }
-                        if (!program.isSeries) LiveText("This program has no server series identity.", tv)
-                    } else {
-                        LiveText("This viewer can watch Live TV. Recording management requires server permission.", tv)
                     }
-                }
-            }
-        } else if (recording != null) {
-            item("delete-scope") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LiveText("Permanently delete the recorded file “${recording.name}”. Its recording schedule is a separate action.", tv)
-                    LiveButton("Delete recorded file", tv, enabled = !state.writing) {
-                        vm.delete(recording)
-                    }
-                }
-            }
-        } else if (state.policy?.access != false) {
-            when (tab) {
-                "Channels", "Guide" -> {
-                    item("filters") {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LiveField("Search channels", search, tv) { search = it }
-                            LiveButton(if (favorites) "Show all channels" else "Favorites only", tv) { favorites = !favorites }
-                            if (tab == "Guide") {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    LiveButton("Earlier", tv, enabled = !state.loading) {
-                                        vm.refresh(
-                                            state.windowStart - LiveTvViewModel.WINDOW
-                                        )
-                                    }
-                                    LiveButton("Now", tv, enabled = !state.loading) { vm.refresh(System.currentTimeMillis()) }
-                                    LiveButton("Later", tv, enabled = !state.loading) {
-                                        vm.refresh(
-                                            state.windowStart + LiveTvViewModel.WINDOW
-                                        )
-                                    }
-                                    if (tv) {
-                                        LiveButton(if (linear) "Grid guide" else "Linear guide for screen readers", tv) {
-                                            linear =
-                                                !linear
-                                        }
-                                    }
-                                }
-                                LiveField("Guide date/time (ISO 8601 with UTC offset)", chosenTime, tv) { chosenTime = it }
-                                LiveButton("Show date/time", tv, enabled = !state.loading) {
-                                    val instant = runCatching { java.time.OffsetDateTime.parse(chosenTime).toInstant() }.getOrNull()
-                                    if (instant ==
-                                        null
-                                    ) {
-                                        timeError = "Enter a time such as 2026-11-10T20:00:00-05:00."
-                                    } else {
-                                        timeError = null
-                                        vm.refresh(instant.toEpochMilli())
-                                    }
-                                }
-                                timeError?.let { LiveText(it, tv, warning = true) }
-                                LiveText("${liveTime(state.windowStart)} – ${liveTime(state.windowStart + LiveTvViewModel.WINDOW)}", tv)
+                    if (tab == "Guide") {
+                        item {
+                            LiveChip(if (linear) "List" else "Grid", true, tv) {
+                                linear = !linear
+                                returnFocus = null
                             }
-                            if (!state.loading && state.channels.isEmpty() && state.error == null) {
+                        }
+                        item {
+                            LiveIcon("earlier", "Earlier", tv, !state.loading) { vm.refresh(state.windowStart - LiveTvViewModel.WINDOW) }
+                        }
+                        item { LiveChip("Now", false, tv, !state.loading) { vm.refresh(System.currentTimeMillis()) } }
+                        item { LiveIcon("later", "Later", tv, !state.loading) { vm.refresh(state.windowStart + LiveTvViewModel.WINDOW) } }
+                        items((0L..6L).toList()) { day ->
+                            val date = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().plusDays(day)
+                            val start = if (day == 0L) now else date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            val selected = Instant.ofEpochMilli(state.windowStart).atZone(ZoneId.systemDefault()).toLocalDate() == date
+                            LiveChip(time.day(start), selected, tv, !state.loading) { vm.refresh(start) }
+                        }
+                    } else if (!tv) {
+                        item {
+                            state.fetchedAt?.let {
                                 LiveText(
-                                    if (state.tunerEnabled ==
-                                        false
-                                    ) {
-                                        "No tuner configured. Ask your server administrator to add an M3U or HDHomeRun tuner in Jellyfin Dashboard → Live TV."
-                                    } else {
-                                        "No channels available. Ask your server administrator to configure a tuner in Jellyfin Dashboard → Live TV. No tuner hardware is needed on this device."
-                                    },
-                                    tv
+                                    "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
+                                    false,
+                                    small = true
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.loading || state.writing) {
+            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        }
+        state.error?.let {
+            LiveText(it, tv, Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp), warning = true, small = true)
+        }
+        state.notice?.let { LiveText(it, tv, Modifier.padding(8.dp), small = true) }
+        if (!detail &&
+            state.offline
+        ) {
+            LiveText(
+                "Saved guide is for reference. Reconnect before scheduling or tuning.",
+                tv,
+                Modifier.padding(8.dp),
+                warning = true,
+                small = true
+            )
+        }
+        val body: @Composable () -> Unit = {
+            if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
+                Column(Modifier.padding(horizontal = if (tv) 0.dp else 12.dp)) {
+                    if (state.programs.isEmpty() && !state.loading) LiveText(NO_LIVE_GUIDE, tv, small = true)
+                    LiveGuide(
+                        channels, state.programs, account, tv, state.windowStart, now, guideScroll, guideList,
+                        returnFocus, restoreFocus, ::focused
+                    ) {
+                        selectedProgram =
+                            it
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = if (detail) rememberLazyListState() else list,
+                    contentPadding = PaddingValues(horizontal = if (tv) 4.dp else 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (detail &&
+                        tv
+                    ) {
+                        item {
+                            LiveAction(
+                                if (recording != null ||
+                                    cancelling ||
+                                    draft != null
+                                ) {
+                                    "Cancel"
+                                } else {
+                                    "Back"
+                                },
+                                true,
+                                Modifier.liveFocus("detail:cancel", recording != null || cancelling),
+                                !state.writing,
+                                ::closeDetail
+                            )
+                        }
+                    }
+                    when {
+                        draft != null -> item {
+                            LiveScheduleEditor(draft, state.draftSeries, tv, state.writing, false) { vm.save(it, state.draftSeries, false) }
+                        }
+                        schedule != null -> {
+                            if (cancelling) {
+                                item {
+                                    LiveText(
+                                        if (selectedSeries) {
+                                            "Cancel this series rule and its future recordings: ${schedule.name}. " +
+                                                "Completed recordings are retained."
+                                        } else {
+                                            "Cancel only this occurrence: ${schedule.name}, ${time.range(
+                                                schedule.startDate,
+                                                schedule.endDate
+                                            )}. Completed recordings are retained."
+                                        },
+                                        tv
+                                    )
+                                    LiveAction(
+                                        if (selectedSeries) "Confirm cancel series" else "Confirm cancel occurrence",
+                                        tv,
+                                        enabled = !state.writing
+                                    ) {
+                                        vm.cancel(schedule, selectedSeries)
+                                    }
+                                }
+                            } else {
+                                item {
+                                    LiveScheduleEditor(schedule, selectedSeries, tv, state.writing, true) {
+                                        vm.save(it, selectedSeries, true)
+                                    }
+                                }
+                                item {
+                                    LiveStatus(recordingStatus(schedule.status), tv)
+                                    schedule.errorMessage?.let { LiveText(it, tv, warning = true) }
+                                }
+                                item {
+                                    LiveAction(
+                                        if (selectedSeries) "Cancel series…" else "Cancel occurrence…",
+                                        tv,
+                                        enabled = !state.writing
+                                    ) {
+                                        cancelling =
+                                            true
+                                    }
+                                }
+                            }
+                        }
+                        program != null -> item {
+                            LiveProgramDetail(program, state, account, tv, canAct, now, onPlay, {
+                                vm.defaults(program, false)
+                            }, { vm.defaults(program, true) }) { timer ->
+                                selectedSchedule =
+                                    timer
+                                selectedSeries = false
+                            }
+                        }
+                        recording != null -> item {
+                            LiveText(
+                                "Permanently delete the recorded file “${recording.name}”. Its recording schedule is a separate action.",
+                                tv
+                            )
+                            LiveAction("Delete recorded file", tv, enabled = !state.writing) { vm.delete(recording) }
+                        }
+                        state.policy?.access == false -> Unit
+                        tab in listOf("Channels", "Guide") -> {
+                            if (!state.loading && state.channels.isEmpty() && state.error == null) {
+                                item {
+                                    LiveText(
+                                        if (state.tunerEnabled ==
+                                            false
+                                        ) {
+                                            "No tuner configured. Ask your server administrator to add an M3U or HDHomeRun tuner " +
+                                                "in Jellyfin Dashboard → Live TV."
+                                        } else {
+                                            "No channels available. Ask your server administrator to configure a tuner " +
+                                                "in Jellyfin Dashboard → Live TV. " +
+                                                "No tuner hardware is needed on this device."
+                                        },
+                                        tv
+                                    )
+                                }
                             }
                             if (!state.loading &&
                                 state.channels.isNotEmpty() &&
                                 state.programs.isEmpty()
                             ) {
-                                LiveText(
-                                    "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV.",
-                                    tv
-                                )
+                                item { LiveText(NO_LIVE_GUIDE, tv) }
+                            }
+                            itemsIndexed(channels, key = { _, channel -> "channel:${channel.id}" }) { index, channel ->
+                                val key = "c:${channel.id}"
+                                if (tab ==
+                                    "Channels"
+                                ) {
+                                    LiveChannelRow(
+                                        channel, state.programs.filter { it.channelId == channel.id }, account, tv, now,
+                                        Modifier.liveFocus(
+                                            key,
+                                            tv &&
+                                                !state.loading &&
+                                                (returnFocus == key || returnFocus == null && index == 0)
+                                        ) {
+                                            focused(key)
+                                        },
+                                        canFavorite = state.policy?.userData == true && canAct && !state.writing,
+                                        onFavorite = { vm.favorite(channel) }, onTune = { if (canAct) onPlay(channel.mediaItem()) }
+                                    )
+                                } else {
+                                    LiveText("${channel.number.orEmpty()} ${channel.name}", tv, heading = true)
+                                    state.programs.filter { it.channelId == channel.id }.forEachIndexed { programIndex, show ->
+                                        val pkey = "p:${show.id}"
+                                        LiveProgramRow(
+                                            show,
+                                            tv,
+                                            Modifier.liveFocus(
+                                                pkey,
+                                                tv &&
+                                                    (
+                                                        restoreFocus &&
+                                                            returnFocus == pkey ||
+                                                            returnFocus == null &&
+                                                            index == 0 &&
+                                                            programIndex == 0
+                                                        )
+                                            ) { focused(pkey) }
+                                        ) {
+                                            selectedProgram =
+                                                show
+                                        }
+                                    }
+                                }
+                            }
+                            if (!state.loading &&
+                                state.channels.isNotEmpty() &&
+                                channels.isEmpty()
+                            ) {
+                                item { LiveText("No matching channels.", tv) }
                             }
                         }
-                    }
-                    val channels = state.channels.filter {
-                        (!favorites || it.userData.isFavorite) &&
-                            (search.isBlank() || it.name.contains(search, true) || it.number.orEmpty().contains(search, true))
-                    }
-                    items(channels, key = { "channel:${it.id}" }) { channel ->
-                        val programs = state.programs.filter { it.channelId == channel.id }
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                imageUrl(account.server, channel.mediaItem(), 96)?.let { url ->
-                                    AsyncImage(url, null, Modifier.size(48.dp))
-                                }
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    LiveButton(
-                                        "${channel.number.orEmpty()} ${channel.name}",
-                                        tv,
-                                        focusKey = "c:${channel.id}",
-                                        restore = restoreFocus && returnFocus == "c:${channel.id}",
-                                        onFocused = {
-                                            returnFocus = "c:${channel.id}"
-                                            restoreFocus = false
-                                        },
-                                        enabled = canAct
-                                    ) { onPlay(channel.mediaItem()) }
-                                    if (state.policy?.userData ==
-                                        true
-                                    ) {
-                                        LiveButton(
-                                            if (channel.userData.isFavorite) "Remove favorite" else "Add favorite",
-                                            tv,
-                                            enabled =
-                                            !state.writing && canAct
-                                        ) { vm.favorite(channel) }
+                        tab == "Recordings" -> {
+                            if (!state.loading && state.recordings.isEmpty()) item { LiveText("No recordings available.", tv) }
+                            state.recordings.groupBy { it.seriesName ?: "Recordings" }.forEach { (group, recordings) ->
+                                item("recording-heading:$group") { LiveText(group, tv, heading = true) }
+                                item("recording-cards:$group") {
+                                    LazyRow(contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                        itemsIndexed(recordings, key = { _, item -> item.id }) { index, item ->
+                                            val key = "r:${item.id}"
+                                            Column(
+                                                Modifier.width(if (tv) 240.dp else 244.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                val target = Modifier.liveFocus(
+                                                    key,
+                                                    tv &&
+                                                        !state.loading &&
+                                                        (
+                                                            restoreFocus &&
+                                                                returnFocus == key ||
+                                                                returnFocus == null &&
+                                                                index == 0 &&
+                                                                group ==
+                                                                state.recordings.firstOrNull()?.let {
+                                                                    it.seriesName ?: "Recordings"
+                                                                }
+                                                            )
+                                                ) { focused(key) }
+                                                if (tv) {
+                                                    CatalogCard(item, account, true, { onRecording(item) }, target)
+                                                } else {
+                                                    TouchCatalogCard(item, account, true, { onRecording(item) }, target)
+                                                }
+                                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                    LiveStatus(
+                                                        if (item.isInProgress) {
+                                                            "● Recording now"
+                                                        } else {
+                                                            item.recordingStatus?.let(::recordingStatus)
+                                                                ?: "Completed"
+                                                        },
+                                                        tv
+                                                    )
+                                                    Box(Modifier.weight(1f)) { }
+                                                    if (item.canDelete == true ||
+                                                        state.policy?.deleteContent == true &&
+                                                        item.canDelete != false
+                                                    ) {
+                                                        LiveIcon("more", "Recording options for ${item.name}", tv) {
+                                                            recordingMenu =
+                                                                item
+                                                        }
+                                                    }
+                                                }
+                                                LiveText(
+                                                    listOfNotNull(
+                                                        item.premiereDate?.let {
+                                                            time.day(liveInstant(it))
+                                                        },
+                                                        item.runTimeTicks?.let {
+                                                            "${it / 600_000_000} min"
+                                                        }
+                                                    ).joinToString(" · "),
+                                                    tv,
+                                                    small = true
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            if (tab == "Channels") {
-                                val current = programs.firstOrNull { canTune(it, now) }
-                                val next = programs.firstOrNull { liveInstant(it.startDate) > now }
-                                if (current ==
-                                    null
-                                ) {
-                                    LiveText("No guide data", tv)
-                                } else {
-                                    LiveButton(
-                                        "Now · ${current.name} · ${liveDates(current.startDate, current.endDate)}",
-                                        tv,
-                                        focusKey = "p:${current.id}",
-                                        restore = restoreFocus && returnFocus == "p:${current.id}",
-                                        onFocused = {
-                                            returnFocus = "p:${current.id}"
-                                            restoreFocus = false
-                                        }
-                                    ) { selectedProgram = current }
-                                }
-                                next?.let {
-                                    LiveButton("Next · ${it.name} · ${liveDates(it.startDate, it.endDate)}", tv) {
-                                        selectedProgram =
-                                            it
-                                    }
-                                }
-                            } else if (!tv || linear) {
-                                if (programs.isEmpty()) LiveText("No guide data", tv)
-                                programs.forEach { show ->
-                                    LiveButton(
-                                        "${show.name} · ${liveDates(show.startDate, show.endDate)}",
-                                        tv,
-                                        focusKey = "p:${show.id}",
-                                        restore = restoreFocus && returnFocus == "p:${show.id}",
-                                        onFocused = {
-                                            returnFocus = "p:${show.id}"
-                                            restoreFocus = false
-                                        }
-                                    ) { selectedProgram = show }
+                        }
+                        tab == "Schedules" -> {
+                            if (state.policy?.manage !=
+                                true
+                            ) {
+                                item {
+                                    LiveText(
+                                        "Recording schedules require Live TV management permission. Ask your server administrator.",
+                                        tv
+                                    )
                                 }
                             } else {
-                                val cells = liveGuideCells(programs, state.windowStart, state.windowStart + LiveTvViewModel.WINDOW)
-                                Column(
-                                    Modifier.horizontalScroll(guideScroll).width(1080.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                if (!state.loading &&
+                                    state.timers.isEmpty() &&
+                                    state.series.isEmpty()
                                 ) {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        (0..6).forEach { tick ->
-                                            LiveText(
-                                                java.time.format.DateTimeFormatter.ofPattern(
-                                                    "HH:mm xxx"
-                                                ).withZone(ZoneId.systemDefault()).format(
-                                                    Instant.ofEpochMilli(
-                                                        state.windowStart + tick * 30 * 60_000L
-                                                    )
-                                                ),
-                                                tv
-                                            )
-                                        }
-                                    }
-                                    if (cells.isEmpty()) LiveText("No guide data", tv)
-                                    (0..(cells.maxOfOrNull { it.lane } ?: -1)).forEach { lane ->
-                                        Box(Modifier.fillMaxWidth().heightIn(min = 100.dp)) {
-                                            cells.filter { it.lane == lane }.forEach { cell ->
-                                                val show = cell.program
-                                                LiveButton(
-                                                    "${liveClock(show.startDate)} – ${liveClock(show.endDate)}\n${show.name}",
-                                                    tv,
-                                                    compactGuide = true,
-                                                    readerLabel = "${show.name} · ${liveDates(show.startDate, show.endDate)}",
-                                                    modifier = Modifier.offset(x = (cell.startFraction * 1080).dp).width(
-                                                        (
-                                                            cell.widthFraction *
-                                                                1080
-                                                            ).dp
-                                                    ),
-                                                    focusKey = "p:${show.id}",
-                                                    restore = restoreFocus && returnFocus == "p:${show.id}",
-                                                    onFocused = {
-                                                        returnFocus = "p:${show.id}"
-                                                        restoreFocus = false
-                                                    }
-                                                ) {
-                                                    selectedProgram =
-                                                        show
-                                                }
+                                    item { LiveText("No scheduled recordings.", tv) }
+                                }
+                                listOf("Series rules" to state.series, "Upcoming" to state.timers).forEach { (group, schedules) ->
+                                    if (schedules.isNotEmpty()) item("schedule-heading:$group") { LiveText(group, tv, heading = true) }
+                                    itemsIndexed(schedules, key = { _, timer -> "$group:${timer.id}" }) { index, timer ->
+                                        val key = "s:$group:${timer.id}"
+                                        LiveScheduleRow(
+                                            timer,
+                                            tv,
+                                            Modifier.liveFocus(
+                                                key,
+                                                tv &&
+                                                    !state.loading &&
+                                                    (
+                                                        restoreFocus &&
+                                                            returnFocus == key ||
+                                                            returnFocus == null &&
+                                                            index == 0 &&
+                                                            (group == "Series rules" || state.series.isEmpty())
+                                                        )
+                                            ) { focused(key) }
+                                        ) {
+                                            if (canAct &&
+                                                !state.writing
+                                            ) {
+                                                selectedSchedule = timer
+                                                selectedSeries = group == "Series rules"
                                             }
                                         }
                                     }
@@ -455,305 +556,35 @@ internal fun LiveTvScreen(
                             }
                         }
                     }
-                    if (!state.loading && state.channels.isNotEmpty() && channels.isEmpty()) item { LiveText("No matching channels.", tv) }
                 }
-                "Recordings" -> {
-                    if (!state.loading && state.recordings.isEmpty()) item { LiveText("No recordings available.", tv) }
-                    items(state.recordings, key = { it.id }) { item ->
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            LiveText(
-                                if (item.isInProgress) {
-                                    "Recording now · seekable range depends on the stream"
-                                } else {
-                                    item.recordingStatus?.let(::recordingStatus)
-                                        ?: "Recorded media"
-                                },
-                                tv
-                            )
-                            LiveButton(item.name, tv, enabled = canAct) { onRecording(item) }
-                            LiveText("Open recording with normal playback, resume and track controls.", tv)
-                            if (item.canDelete == true ||
-                                state.policy?.deleteContent == true &&
-                                item.canDelete != false
-                            ) {
-                                LiveButton("Delete recorded file…", tv) {
-                                    deleteRecording =
-                                        item
-                                }
-                            }
-                        }
-                    }
-                }
-                "Schedules" -> {
-                    if (state.policy?.manage !=
-                        true
-                    ) {
-                        item {
-                            LiveText("Recording schedules require Live TV management permission. Ask your server administrator.", tv)
-                        }
-                    }
-                    if (!state.loading &&
-                        state.timers.isEmpty() &&
-                        state.series.isEmpty() &&
-                        state.policy?.manage == true
-                    ) {
-                        item { LiveText("No scheduled recordings.", tv) }
-                    }
-                    items(state.timers, key = { "timer:${it.id}" }) { timer ->
-                        LiveButton(
-                            "${timer.name} · ${recordingStatus(
-                                timer.status
-                            )}\n${liveDates(timer.startDate, timer.endDate)} · Channel ${timer.channelName ?: timer.channelId}",
-                            tv,
-                            enabled = canAct && !state.writing
-                        ) {
-                            selectedSchedule = timer
-                            selectedSeries = false
-                        }
-                    }
-                    items(state.series, key = { "series:${it.id}" }) { timer ->
-                        LiveButton(
-                            "Series · ${timer.name}\n${liveDates(timer.startDate, timer.endDate)} · ${recordingStatus(timer.status)}",
-                            tv,
-                            enabled = canAct && !state.writing
-                        ) {
-                            selectedSchedule = timer
-                            selectedSeries = true
-                        }
-                    }
-                }
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            if (!tv && !detail) {
+                androidx.compose.material3.pulltorefresh.PullToRefreshBox(state.loading, { vm.refresh() }) { body() }
+            } else {
+                body()
             }
         }
     }
-}
-
-@Composable
-internal fun LiveScheduleEditor(
-    original: LiveSchedule,
-    series: Boolean,
-    tv: Boolean,
-    busy: Boolean,
-    existing: Boolean,
-    onSave: (LiveSchedule) -> Unit
-) {
-    var edits by remember(original) { mutableStateOf<Map<String, JsonElement>>(emptyMap()) }
-    val merged = JsonObject(original.fields + edits)
-    var confirmed by remember(original) { mutableStateOf(false) }
-    var validationError by remember(original) { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        LiveText(
-            "${original.name} · ${liveDates(
-                original.startDate,
-                original.endDate
-            )} · Channel ${original.fields["ChannelName"]?.jsonPrimitive?.content ?: original.channelId}",
-            tv
-        )
-        LiveText(
-            if (series) {
-                "This schedules a server series rule. Completed recordings are retained when the rule is cancelled."
-            } else {
-                "This schedules one broadcast on the server. Closing Pictureshow does not cancel it."
-            },
-            tv
-        )
-        val numeric =
+    recordingMenu?.let { item ->
+        LiveMenu(
+            item.name,
+            tv,
+            { recordingMenu = null },
             listOf(
-                "PrePaddingSeconds" to "Start padding (seconds)",
-                "PostPaddingSeconds" to "End padding (seconds)",
-                "Priority" to "Priority"
-            ) +
-                if (series) listOf("KeepUpTo" to "Keep at most (0 = server default)") else emptyList()
-        numeric.forEach { (key, label) ->
-            if (key in original.fields) {
-                val value = merged[key]?.jsonPrimitive?.content.orEmpty()
-                LiveField(label, value, tv, enabled = !confirmed && !busy) { text ->
-                    text.toIntOrNull()?.takeIf { key == "Priority" || it >= 0 }?.let { edits = edits + (key to JsonPrimitive(it)) }
+                "Open recording" to {
+                    recordingMenu = null
+                    onRecording(item)
+                },
+                "Delete recorded file…" to {
+                    recordingMenu = null
+                    deleteRecording = item
                 }
-            } else {
-                LiveText("$label unavailable: the provider supplied no setting. Existing server values are preserved.", tv)
-            }
-        }
-        if (series) {
-            if ("KeepUntil" in original.fields) {
-                val retention = merged["KeepUntil"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                LiveText("Retention: $retention", tv)
-                listOf(
-                    "UntilDeleted" to "Keep until deleted",
-                    "UntilSpaceNeeded" to "Keep until space is needed",
-                    "UntilWatched" to "Keep until watched"
-                ).forEach { (value, label) ->
-                    LiveButton(label, tv, selected = retention == value, enabled = !confirmed && !busy) {
-                        edits =
-                            edits + ("KeepUntil" to JsonPrimitive(value))
-                    }
-                }
-                if (retention ==
-                    "UntilDate"
-                ) {
-                    LiveText(
-                        "The provider's existing keep-until date is preserved. " +
-                            "Date editing is unavailable on this client.",
-                        tv
-                    )
-                }
-            } else {
-                LiveText("Retention policy unavailable from this provider.", tv)
-            }
-            listOf(
-                "RecordNewOnly" to "New episodes only",
-                "RecordAnyTime" to "Any time",
-                "RecordAnyChannel" to "Any channel",
-                "SkipEpisodesInLibrary" to "Skip episodes already in library"
-            ).forEach { (key, label) ->
-                if (key in original.fields) {
-                    val enabled = merged[key]?.jsonPrimitive?.booleanOrNull == true
-                    LiveButton("$label: ${if (enabled) "On" else "Off"}", tv, enabled = !confirmed && !busy) {
-                        edits =
-                            edits + (key to JsonPrimitive(!enabled))
-                    }
-                } else {
-                    LiveText("$label unavailable from this provider.", tv)
-                }
-            }
-            if ("Days" in original.fields) {
-                val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday").forEach { day ->
-                        LiveButton("$day: ${if (day in days) "On" else "Off"}", tv, enabled = !confirmed && !busy) {
-                            val next = if (day in days) days - day else days + day
-                            edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
-                        }
-                    }
-                }
-            } else {
-                LiveText("Recording days unavailable from this provider.", tv)
-            }
-        }
-        LiveText(
-            "Padding ${merged["PrePaddingSeconds"] ?: "provider default"} / ${merged["PostPaddingSeconds"] ?: "provider default"} seconds · Priority ${merged["Priority"] ?: "provider default"}",
-            tv
-        )
-        if (confirmed) {
-            LiveText(
-                "Confirm ${if (series) "series rule" else "one recording"}: ${original.name}, ${liveDates(
-                    original.startDate,
-                    original.endDate
-                )}, channel ${original.fields["ChannelName"]?.jsonPrimitive?.content ?: original.channelId}. Recording availability depends on the server tuner and storage.",
-                tv
             )
-            validationError?.let { LiveText(it, tv, warning = true) }
-            LiveButton(if (existing) "Confirm save changes" else "Confirm recording", tv, enabled = !busy) {
-                runCatching { editSchedule(original, JsonObject(edits), series) }
-                    .onSuccess {
-                        validationError = null
-                        onSave(it)
-                    }
-                    .onFailure { validationError = it.message ?: "Review the recording options before saving." }
-            }
-            LiveButton("Review settings", tv, enabled = !busy) { confirmed = false }
-        } else {
-            LiveButton("Review ${if (existing) "changes" else "recording"}", tv, enabled = !busy) { confirmed = true }
-        }
-    }
-}
-
-@Composable
-private fun LiveText(text: String, tv: Boolean, heading: Boolean = false, warning: Boolean = false) {
-    val modifier = Modifier.then(if (heading) Modifier.semantics { heading() } else Modifier)
-    if (tv) {
-        androidx.tv.material3.Text(
-            text,
-            modifier,
-            color = if (warning) Color(0xFFFFCCB8) else LiveMuted,
-            style = if (heading) {
-                androidx.tv.material3.MaterialTheme.typography.headlineMedium
-            } else {
-                androidx.tv.material3.MaterialTheme.typography.bodyLarge
-            }
-        )
-    } else {
-        androidx.compose.material3.Text(
-            text,
-            modifier,
-            color = if (warning) Color(0xFFFFCCB8) else LiveMuted,
-            style = if (heading) {
-                androidx.compose.material3.MaterialTheme.typography.headlineMedium
-            } else {
-                androidx.compose.material3.MaterialTheme.typography.bodyLarge
-            }
         )
     }
 }
 
-@Composable
-private fun LiveButton(
-    label: String,
-    tv: Boolean,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    initial: Boolean = false,
-    selected: Boolean = false,
-    focusKey: String = label,
-    restore: Boolean = false,
-    onFocused: () -> Unit = {},
-    compactGuide: Boolean = false,
-    readerLabel: String? = null,
-    onClick: () -> Unit
-) {
-    val focus = remember(focusKey) { FocusRequester() }
-    LaunchedEffect(focus, initial, restore) {
-        if (tv && (initial || restore)) {
-            delay(40)
-            runCatching { focus.requestFocus() }
-        }
-    }
-    val sized = if (compactGuide) modifier.height(104.dp) else modifier
-    val target = sized.heightIn(min = 48.dp).focusRequester(focus).onFocusChanged { if (it.isFocused) onFocused() }
-        .semantics {
-            if (selected) stateDescription = "Selected"
-            readerLabel?.let { contentDescription = it }
-        }.testTag("live:$focusKey")
-    if (tv) {
-        androidx.tv.material3.Button(
-            onClick,
-            target,
-            enabled = enabled,
-            shape = if (compactGuide) {
-                androidx.tv.material3.ButtonDefaults.shape(shape = RoundedCornerShape(8.dp))
-            } else {
-                androidx.tv.material3.ButtonDefaults.shape()
-            },
-            contentPadding = if (compactGuide) PaddingValues(8.dp) else androidx.tv.material3.ButtonDefaults.ContentPadding
-        ) {
-            androidx.tv.material3.Text(label, maxLines = if (compactGuide) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
-        }
-    } else {
-        androidx.compose.material3.OutlinedButton(onClick, target, enabled = enabled) { androidx.compose.material3.Text(label) }
-    }
-}
-
-@Composable
-private fun LiveField(label: String, value: String, tv: Boolean, enabled: Boolean = true, onChange: (String) -> Unit) {
-    if (tv) {
-        RemoteField(label, value, onChange, enabled = enabled)
-    } else {
-        androidx.compose.material3.OutlinedTextField(value, onChange, Modifier.fillMaxWidth(), enabled = enabled, label = {
-            androidx.compose.material3.Text(label)
-        }, singleLine = true)
-    }
-}
-
-private fun LiveChannel.mediaItem() = MediaItem(id, name, type = "TvChannel", imageTags = imageTags, userData = userData)
-private fun liveInstant(value: String?): Long = runCatching { Instant.parse(value).toEpochMilli() }.getOrDefault(Long.MIN_VALUE)
-private fun liveClock(value: String?): String = runCatching {
-    DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.parse(value))
-}.getOrDefault("Time unavailable")
-private fun liveTime(value: Long): String =
-    DateTimeFormatter.ofPattern("EEE d MMM HH:mm xxx").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(value))
-private fun liveDates(start: String?, end: String?): String = if (start == null ||
-    end == null
-) {
-    "Time unavailable"
-} else {
-    runCatching { "${liveTime(liveInstant(start))} – ${liveTime(liveInstant(end))}" }.getOrDefault("Time unavailable")
-}
+internal const val NO_LIVE_GUIDE = "No guide data for this time. Channels can still be tuned. " +
+    "An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."

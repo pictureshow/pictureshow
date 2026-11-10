@@ -31,7 +31,11 @@ data class LiveProgram(
     @SerialName("IsRepeat") val isRepeat: Boolean? = null,
     @SerialName("TimerId") val timerId: String? = null,
     @SerialName("SeriesTimerId") val seriesTimerId: String? = null,
-    @SerialName("EpisodeTitle") val episodeTitle: String? = null
+    @SerialName("EpisodeTitle") val episodeTitle: String? = null,
+    @SerialName("IndexNumber") val episodeNumber: Int? = null,
+    @SerialName("ParentIndexNumber") val seasonNumber: Int? = null,
+    @SerialName("ImageTags") val imageTags: Map<String, String> = emptyMap(),
+    @SerialName("BackdropImageTags") val backdropImageTags: List<String> = emptyList()
 )
 
 @Serializable

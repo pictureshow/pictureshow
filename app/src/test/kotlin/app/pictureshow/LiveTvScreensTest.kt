@@ -7,9 +7,11 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -130,10 +132,56 @@ class LiveTvScreensTest {
         assertTrue(bounds.bottom - bounds.top <= 120.dp, "Long labels must not expand a guide lane")
         cell.assert(hasContentDescription(title, substring = true))
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        compose.onNodeWithText(title, substring = true, useUnmergedTree = true)
+        compose.onNodeWithTag("live:cell-title:p", useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1, layouts.size)
-        assertEquals(3, layouts.single().layoutInput.maxLines, "Guide rendering must keep its three-line text budget")
-        assertTrue(layouts.single().lineCount <= 3, "Long guide labels must remain within the rendered text budget")
+        assertEquals(2, layouts.single().layoutInput.maxLines, "Compact guide rows reserve two lines for the title")
+        assertTrue(layouts.single().lineCount <= 2, "Long guide labels must remain within the rendered text budget")
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-mdpi")
+    fun compactTvHeaderShowsContentAndRequestsRealInitialFocus() {
+        val vm = LiveTvViewModel(account, LiveFake())
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
+        val row = compose.onNodeWithTag("live:c:c").assertIsDisplayed().assertIsFocused().getUnclippedBoundsInRoot()
+        assertTrue(row.top <= 160.dp, "Initial channel must be visible below compact chrome: $row")
+        compose.onNodeWithText("Back").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun phoneTabsStayOnOneLineAndChannelIsVisibleWithoutScrolling() {
+        val vm = LiveTvViewModel(account, LiveFake())
+        compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, {}, {}, {}) } }
+        val first = compose.onNodeWithTag("live:tab:Channels").getUnclippedBoundsInRoot()
+        val last = compose.onNodeWithTag("live:tab:Schedules").getUnclippedBoundsInRoot()
+        assertEquals(first.top, last.top)
+        compose.onNodeWithTag("live:c:c").assertIsDisplayed()
+        compose.onNodeWithTag("live:tab:Guide").performClick().assertIsSelected()
+    }
+
+    @Test
+    fun narrowGuideCellRetainsReaderLabelAndFocusWithoutClippedGlyphs() {
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            show =
+                show.copy(
+                    name = "Short generated program",
+                    startDate = now.minusSeconds(10).toString(),
+                    endDate = now.plusSeconds(120).toString()
+                )
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:p:p").assertIsDisplayed().assert(hasContentDescription("Short generated program", substring = true))
+        compose.onNodeWithTag("live:cell-title:p", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("live:p:p").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithTag("live:p:p").assertIsFocused()
+        val left = compose.onNodeWithTag("live:tick:0").getUnclippedBoundsInRoot().left
+        val next = compose.onNodeWithTag("live:tick:1").getUnclippedBoundsInRoot().left
+        assertEquals(180.dp, next - left)
     }
 }

@@ -73,7 +73,8 @@ data class MediaItem(
     @SerialName("CanDownload") val canDownload: Boolean? = null,
     @SerialName("CanDelete") val canDelete: Boolean? = null,
     @SerialName("IsInProgress") val isInProgress: Boolean = false,
-    @SerialName("Status") val recordingStatus: String? = null
+    @SerialName("Status") val recordingStatus: String? = null,
+    @SerialName("PremiereDate") val premiereDate: String? = null
 )
 
 /** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */
