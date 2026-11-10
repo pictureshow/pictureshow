@@ -40,6 +40,36 @@ direct Intel VAAPI interop; that requires EGL plus the native display resource.
 readback for comparison, so it is diagnostic evidence, not the application's frame path.
 Xvfb is software X11 with no HDR compositor. A render-node result is not display output.
 
+## Observed failures and interpretation
+
+The original macOS ignored-fullscreen result reproduced in a window-only probe without
+mpv or JOGL while the console was locked. After unlocking the same console, the same
+Compose probe entered native fullscreen and restored its floating bounds. Packaging
+alone did not repair the locked-session failure. The native-layer probe also measured
+borderless window/video bounds equal to the screen and restored them. Screen recording
+and Accessibility permissions belong to the automated screenshot/input harness.
+
+Linux remains a FAILED surface experiment. `compose.layers.type=WINDOW` and Openbox
+made popup controls initially visible and clickable, but controls became black after
+resize. Recreating popup peers made labels visible, yet a real click after fullscreen
+triggered recomposition and reverted the owner to floating bounds. Updating Compose's
+placement state did not resolve it. The last two Linux popup/placement commits are
+retained diagnostic attempts, not verified repairs. The earlier stable geometry baseline
+also failed its visual control gate. Direct EGL samples rendered the codecs correctly on
+Intel; llvmpipe remained inconsistent. Neither result establishes Linux HDR output.
+
+The new separate-DLL Windows runtime shows video and both control layers in all five
+fullscreen captures. Whole-frame inspection initially missed bottom strips; exact pixel
+crops and independent review confirmed them. However, the BtbN FFmpeg shared avfilter
+build incorporates static libass/libplacebo filter dependencies; separate direct mpv
+DLL imports do not establish a fully dynamic transitive closure. This remains open.
+
+Measured two-minute playback retains material frame loss on the tested Mac and WARP
+runner. Zero application pixel readbacks is not enough if the decoder uses `vaapi-copy`,
+which downloads GPU-decoded frames to CPU. The separately measured Linux `hwdec=no`
+route has CPU decode plus native upload and must be described separately from direct
+EGL VAAPI diagnostic samples. Do not promote any of these experiments as launch-ready.
+
 ## Evidence and limits
 
 Each stage saves an 800-pixel JPEG, mpv properties and native geometry/API state.
@@ -57,9 +87,14 @@ PQ test metadata on an SDR test pattern is not a calibrated HDR reference.
 
 ## LGPL dependency builds
 
-Windows CI pins the official mpv v0.42.0 LGPL archive by SHA-256 and compiles only our
-adapter against its public headers. Fixture-generation FFmpeg is a tool, not a bundled
-runtime dependency. The workflow has cancellation, time limits and finite artifact retention.
+The original Windows workflow pins the official mpv v0.42.0 LGPL archive. That DLL
+statically incorporates its media dependencies and does not meet this experiment's
+stricter separate-DLL requirement. The separate-source workflow builds mpv with shared
+FFmpeg/libass/libplacebo and audits the recursive PE import closure and actual FFmpeg
+runtime license/configuration. Its observed results, recipes and compiler-runtime
+exception notices must be checked with the experiment report. Fixture-generation FFmpeg
+is a tool, excluded from the playback runtime PATH. Workflows have cancellation, time
+limits and finite artifact retention.
 
 The macOS qualification build uses shared FFmpeg 8.0 with `--disable-gpl --disable-nonfree`,
 libdav1d, VideoToolbox and normal x86 assembly; mpv v0.42.0 with `-Dgpl=false`, shared
