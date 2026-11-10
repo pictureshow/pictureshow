@@ -12,6 +12,14 @@
 #include <sstream>
 #include <cstdlib>
 #include <atomic>
+#include <chrono>
+#include <algorithm>
+using Clock = std::chrono::steady_clock;
+static double elapsedMs(Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now()-t).count(); }
+struct Timing {
+    std::atomic<double> total{0}, maximum{0};
+    void add(double v) { total.store(total.load()+v); maximum.store(std::max(maximum.load(),v)); }
+};
 struct Layer {
     HWND overlay=nullptr, video=nullptr;
     HMODULE lib=nullptr;
@@ -23,9 +31,14 @@ struct Layer {
     decltype(&mpv_render_context_render) draw;
     decltype(&mpv_render_context_free) destroy;
     decltype(&mpv_render_context_report_swap) report;
+    decltype(&mpv_render_context_update) update;
     int w=0,h=0; std::atomic<unsigned long> frames{0};
     UINT support=0; HRESULT color=E_FAIL,metadata=E_FAIL;
     bool warp=false;
+    bool paced=std::getenv("SPIKE_LEGACY_PACING")==nullptr;
+    UINT presentInterval=std::getenv("SPIKE_PRESENT_INTERVAL")?std::atoi(std::getenv("SPIKE_PRESENT_INTERVAL")):1;
+    std::atomic<unsigned long> polls{0}, updates{0};
+    Timing drawTime, presentTime, frameTime;
     std::string receipt;
 };
 #define API extern "C" __declspec(dllexport)
@@ -54,6 +67,8 @@ API Layer *ps_create(void *window,void *mpv) {
     s->draw=(decltype(s->draw))GetProcAddress(s->lib,"mpv_render_context_render");
     s->destroy=(decltype(s->destroy))GetProcAddress(s->lib,"mpv_render_context_free");
     s->report=(decltype(s->report))GetProcAddress(s->lib,"mpv_render_context_report_swap");
+    s->update=(decltype(s->update))GetProcAddress(s->lib,"mpv_render_context_update");
+    if(!s->create||!s->draw||!s->destroy||!s->report||!s->update){ps_destroy(s);return nullptr;}
     s->warp=std::getenv("SPIKE_SOFTWARE_GPU")!=nullptr;
     HRESULT hr=D3D11CreateDevice(nullptr,s->warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,&s->device,nullptr,&s->context);
     if(FAILED(hr)){ps_destroy(s);return nullptr;}
@@ -81,13 +96,22 @@ API Layer *ps_create(void *window,void *mpv) {
     s->w=960;s->h=640;return s;
 }
 API int ps_frame(Layer *s,int w,int h) {
+    const auto started=Clock::now();
     MSG msg;while(PeekMessage(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessage(&msg);}
-    if(w!=s->w||h!=s->h){s->context->ClearState();HRESULT hr=s->swap->ResizeBuffers(0,w,h,DXGI_FORMAT_UNKNOWN,0);if(FAILED(hr))return -1;s->w=w;s->h=h;}
+    const bool resized=w!=s->w||h!=s->h;
+    s->polls++;
+    const uint64_t flags=s->update(s->render);
+    if(flags & MPV_RENDER_UPDATE_FRAME) s->updates++;
+    if(s->paced && !(flags & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
+    if(resized){s->context->ClearState();HRESULT hr=s->swap->ResizeBuffers(0,w,h,DXGI_FORMAT_UNKNOWN,0);if(FAILED(hr))return -1;s->w=w;s->h=h;}
     ID3D11Texture2D *target=nullptr;if(FAILED(s->swap->GetBuffer(0,__uuidof(ID3D11Texture2D),(void**)&target)))return -2;
-    mpv_d3d11_fbo fbo={target};mpv_render_param p[]={{MPV_RENDER_PARAM_D3D11_FBO,&fbo},{MPV_RENDER_PARAM_INVALID,nullptr}};
-    int rc=s->draw(s->render,p);target->Release();if(rc<0)return rc;
-    if(FAILED(s->swap->Present(1,0)))return -3;
-    s->report(s->render);s->frames++;return 0;
+    int block=s->paced?0:1;
+    mpv_d3d11_fbo fbo={target};mpv_render_param p[]={{MPV_RENDER_PARAM_D3D11_FBO,&fbo},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
+    auto t=Clock::now();
+    int rc=s->draw(s->render,p);s->drawTime.add(elapsedMs(t));target->Release();if(rc<0)return rc;
+    t=Clock::now(); HRESULT hr=s->swap->Present(s->presentInterval,0);s->presentTime.add(elapsedMs(t));
+    if(FAILED(hr))return -3;
+    s->report(s->render);s->frames++;s->frameTime.add(elapsedMs(started));return 0;
 }
 API const char *ps_receipt(Layer *s) {
     RECT r,vr;GetWindowRect(s->overlay,&r);GetWindowRect(s->video,&vr);
@@ -95,7 +119,7 @@ API const char *ps_receipt(Layer *s) {
     IDXGIOutput *output=nullptr;DXGI_OUTPUT_DESC1 od={};
     if(SUCCEEDED(s->swap->GetContainingOutput(&output))){IDXGIOutput6 *o6=nullptr;if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){o6->GetDesc1(&od);o6->Release();}output->Release();}
     auto rect=[](RECT a){std::ostringstream t;t<<"["<<a.left<<","<<a.top<<","<<a.right<<","<<a.bottom<<"]";return t.str();};
-    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"perFrameCPUReadbacks\":0}";
+    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"updateDrivenNonblocking\":"<<(s->paced?"true":"false")<<",\"presentInterval\":"<<s->presentInterval<<",\"polls\":"<<s->polls.load()<<",\"updateFrames\":"<<s->updates.load()<<",\"drawMsTotal\":"<<s->drawTime.total.load()<<",\"drawMsMax\":"<<s->drawTime.maximum.load()<<",\"presentMsTotal\":"<<s->presentTime.total.load()<<",\"presentMsMax\":"<<s->presentTime.maximum.load()<<",\"frameMsTotal\":"<<s->frameTime.total.load()<<",\"frameMsMax\":"<<s->frameTime.maximum.load()<<",\"perFrameCPUReadbacks\":0}";
     s->receipt=o.str();return s->receipt.c_str();
 }
 API void ps_fullscreen(Layer *,int) {}

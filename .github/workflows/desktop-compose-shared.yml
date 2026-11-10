@@ -1,7 +1,7 @@
 name: Compose separate LGPL DLL runtime
 on:
   push:
-    branches: ["ci/128-shared-*"]
+    branches: ["ci/133-windows*", "ci/133-final*"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -66,6 +66,7 @@ jobs:
           $env:MPV_LIBRARY = $dll.FullName
           $env:PATH = "$(Resolve-Path native/runtime);C:\Windows\System32;$env:JAVA_HOME\bin"
           $env:SPIKE_NULL_AUDIO = '1'
+          $env:SPIKE_MPV_OPTIONS = 'video-timing-offset=0'
           $env:SPIKE_SOFTWARE_GPU = '1'
           $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
           $env:SKIKO_RENDER_API = 'SOFTWARE'
