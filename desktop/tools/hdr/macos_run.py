@@ -20,12 +20,17 @@ from analyze import analyze
 p=argparse.ArgumentParser(description=__doc__)
 for key in ['java','runtime','layer','window','mpv','capture','fixtures','output']:
     p.add_argument('--'+key,type=Path,required=True)
-p.add_argument('--gui-lock',type=Path,required=True,help='Shared with other test jobs; fails immediately if owned')
+p.add_argument('--gui-lock',type=Path,required=True,help='Shared with other test jobs')
+p.add_argument('--wait-gui-seconds',type=int,default=0,help='Finite wait for an existing GUI job; no app starts before lock')
 a=p.parse_args()
 a.output.mkdir(parents=True,exist_ok=False)
 lock=a.gui_lock.open('a')
-try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-except BlockingIOError:sys.exit('GUI owned by another job; no app started')
+deadline=time.monotonic()+a.wait_gui_seconds
+while True:
+    try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);break
+    except BlockingIOError:
+        if time.monotonic()>=deadline:sys.exit('GUI owned by another job; no app started')
+        time.sleep(.2)
 preflight=json.loads(subprocess.check_output([str(a.capture),'preflight'],text=True))
 (a.output/'preflight.json').write_text(json.dumps(preflight,indent=2)+'\n')
 if preflight['architecture']!='arm64' or not preflight['screenRecordingPreflight']:

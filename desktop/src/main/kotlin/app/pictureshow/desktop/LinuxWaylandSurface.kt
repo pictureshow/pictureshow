@@ -51,7 +51,7 @@ fun waylandMain(args:Array<String>) {
  val mpv=Mpv(out)
  mpv.option("vo","libmpv");mpv.option("loop-file","no");mpv.option("hwdec","auto-safe")
  mpv.option("video-timing-offset","0")
- if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","1000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
+ if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","10000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
  mpv.initialize()
  val context=native.ps_wayland_create(mpv.handle,File(out,"native.txt").absolutePath,if(hdr)1 else 0)
  var clicks by mutableStateOf(0)

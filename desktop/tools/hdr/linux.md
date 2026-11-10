@@ -2,6 +2,7 @@
 
 `desktop-hdr-linux.yml` builds stock Weston 16.0.2 and a dynamically linked LGPL
 mpv 0.41/FFmpeg 8 stack on a disposable Ubuntu 24.04 runner. It uses llvmpipe,
+preserves the full PQ domain (`target-peak=10000`) for the compositor to adapt,
 plays the generated CC0 PQ and SDR HEVC fixtures through Pictureshow's actual
 Compose/Wayland app, and captures Weston's composited framebuffer.
 

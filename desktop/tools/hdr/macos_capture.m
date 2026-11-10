@@ -65,6 +65,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 CGColorSpaceRef knownCS=CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearITUR_2020);
                 NSData *knownICC=CFBridgingRelease(CGColorSpaceCopyICCData(knownCS));
                 BOOL exactICC=actualICC && [actualICC isEqualToData:knownICC];
+                if(actualICC) [actualICC writeToFile:[out stringByAppendingString:@".icc"] atomically:YES];
                 CGColorSpaceRelease(knownCS);
                 NSString *csName=actualCS?(__bridge NSString*)CGColorSpaceGetName(actualCS):@"";
                 BOOL actualColorProven=(!prim || [prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020]) && (!transfer || [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) && (([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || exactICC || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020]);
