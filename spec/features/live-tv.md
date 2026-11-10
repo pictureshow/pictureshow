@@ -50,7 +50,7 @@ Finished recordings open the normal media-detail route on Android TV and touch. 
 
 Further compatibility and device coverage: `guide-window`: UTC bounds, overlap, gap, DST folds, timezone change, channel sorting, stale paged response; `live-source`: RequiresOpening/AutoOpen, failed open/close, JSON/query field consistency, Stopped auto-close then Close-404, expired paused range, rapid tune generation, shared live ID ownership, infinite duration, sliding ranges; `dvr-write`: timer defaults projection, one-off/series preservation, permissions, ambiguous create readback and duplicate suppression; `dvr-status`: all conflict/status enums, rule versus occurrence cancellation, recording deletion, growing→complete.
 
-The isolated demo 12.0.0 fixture uses two generated CC0 continuous channels, generated XMLTV and a one-stream tuner limit. Its API acquisition, scheduled recording execution and independently decoded completed file have been observed. Android TV and phone emulators have rendered the live source and completed recording and exercised one-off/series creation, cancellation, recording removal, Pause/Go live, offline cached descriptions and reader paths. Each device receipt must name its APK version; server API evidence alone does not establish an Android interaction.
+The isolated demo 12.0.0 fixture uses eight channels backed by two generated CC0 continuous signals, generated XMLTV and a one-stream tuner limit. Its API acquisition, scheduled recording execution and independently decoded completed file have been observed. Android TV and phone emulators have rendered the live source and completed recording and exercised one-off/series creation, cancellation, recording removal, Pause/Go live, offline cached descriptions and reader paths. Each device receipt must name its APK version; server API evidence alone does not establish an Android interaction.
 
 Natural buffer expiry, growing-file replacement during playback, commercial-marker media, vendor/Fire hardware and the supported-server-version matrix remain separate qualification. The fixture's stream limit does not establish conflict enforcement: display actual server conflict status and do not promise capacity. Finished-recording download uses the integrated downloads subsystem; the actual Android transfer/offline receipt remains separate evidence. Other platform UIs and vector runners remain ports to perform. A household server is never the target for tuner configuration or this fixture.
 
@@ -71,9 +71,10 @@ does not establish that its filters schedule this particular airing. The accessi
 scheduled state when the occurrence exists; visual color is never the only indicator.
 
 Round 2 native density contract: at the standard TV 960×540 viewport, the focused-program preview replaces the generic title header,
-and native tabs share a line with the horizontally scrollable guide filters/day strip. The fixed 200dp channel column and one pinned
-28dp ruler leave space for at least six complete 56dp channel lanes at font scale 1.0. Lanes and the preview grow with accessibility
-font scale; extra channels scroll vertically rather than shrinking text. Touch keeps 60dp minimum lanes and a 72dp fixed channel column.
+and native tabs share a line with Favorites and the Grid/List choice. Time navigation occupies the channel-column ruler header.
+The 200dp channel column and one pinned 36dp ruler leave space for at least six complete 56dp channel lanes at font scale 1.0.
+The channel column, lanes and preview grow with accessibility font scale; extra channels scroll vertically rather than shrinking text.
+Touch keeps 60dp minimum lanes, an 80dp channel column and a separate compact date bar above the ruler.
 
 Initial, Now and Today guide windows begin at the local calendar half-hour. Preserve the original UTC offset in a repeated DST hour;
 quarter-hour-offset zones align to local :00/:30 rather than UTC :00/:30. Earlier/Later move the selected bounded window without rounding
@@ -81,7 +82,7 @@ away an explicit date selection. A short on-air cell retains its exact time widt
 neighboring broadcast. The focused TV preview and touch program detail/List alternative expose full metadata instead.
 
 Full-width TV list rows keep a stable scale1 focus fill within the safe margin. Progress derives from the focused content colour.
-Touch guide channel labels include number and name even when artwork is present. Scheduled occurrence state is explicit text in the linear
+Touch guide channel names remain visible even when artwork is present; their full accessible label includes number and name. Scheduled occurrence state is explicit text in the linear
 reader view. Phone tabs fit at360dp standard scale and become scrollable at larger font scales. Live TV retains Home as its bottom-navigation parent.
 
 Entering a rounded guide window focuses the first channel with guide data's currently airing program, then its nearest future program in a gap,
@@ -108,3 +109,5 @@ inside each56dp lane. Focus-shift vectors include either edge, scrolling, the in
 TV wide list/settings rows use fill atscale1, preserving safe margins and stable label keylines. Touch program detail has
 one full-width Watch primary, with equally sized outlined recording actions below; without Watch, Record is the primary.
 TV program details use the program title as the heading and hardware Back; explicit Cancel remains on destructive dialogs.
+A focused channel with no current program previews its own channel name and No guide data. It never borrows another channel's
+current program. Program-grid focus has its own selected-program preview; tab switching preserves a stable header keyline.
