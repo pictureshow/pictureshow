@@ -184,7 +184,7 @@ class SyncTransportPlayerTest {
         }
         player.seekToDefaultPosition()
         player.seekToDefaultPosition(2)
-        assertEquals(listOf("seek" to 0L, "seek" to 0L), requests)
+        assertEquals(listOf<Pair<String, Long?>>("seek" to 0L, "seek" to 0L), requests)
         assertTrue(output.mutations.isEmpty())
         assertTrue(output.defaultPositionIndices.isEmpty())
     }

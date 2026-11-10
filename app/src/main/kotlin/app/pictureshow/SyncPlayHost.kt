@@ -76,6 +76,8 @@ internal interface SyncRenderer {
     fun apply(positionTicks: Long? = null, playing: Boolean? = null, rate: Double = 1.0)
 }
 
+internal data class SyncLocalSelection(val itemId: String, val startTicks: Long)
+
 internal data class SyncOpen(val generation: Long, val entryId: String, val itemId: String, val ticks: Long)
 
 /** One signed-in viewing scope. All methods and socket callbacks run on the main dispatcher. */
@@ -113,6 +115,9 @@ internal class SyncPlayHost(
     private var connected = false
     private var renderer: SyncRenderer? = null
     private var rendererToken: Any? = null
+    private data class PendingSource(val token: Any, val generation: Long, val selection: SyncLocalSelection)
+    private var pendingSource: PendingSource? = null
+    private var awaitingSource: PendingSource? = null
     private var calibration = SyncClockCalibration()
     private var anchor: SyncClockAnchor? = null
     private var clockJob: Job? = null
@@ -224,7 +229,7 @@ internal class SyncPlayHost(
         }
         if (event is SyncEvent.Joined && createQueue) {
             createQueue = false
-            renderer?.snapshot()?.takeIf { it.durationTicks > 0 }?.let {
+            renderer?.snapshot()?.takeIf { it.durationTicks > 0 && it.seekable }?.let {
                 send(syncNewQueue(listOf(it.itemId), startPositionTicks = it.positionTicks))
             }
         }
@@ -239,7 +244,25 @@ internal class SyncPlayHost(
             requestedOpen = null
         }
         val entryChanged = entry?.playlistItemId != before.queue?.current?.playlistItemId
-        val needsOpen = entry != null && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
+        val awaiting = awaitingSource
+        val reusePrepared = event is SyncEvent.Queue &&
+            entry != null &&
+            awaiting != null &&
+            awaiting.token === rendererToken &&
+            awaiting.generation == after.generation &&
+            awaiting.selection.itemId == entry.itemId &&
+            renderer?.snapshot()?.itemId == entry.itemId
+        if (reusePrepared && entry != null) {
+            awaitingSource = null
+            requestedOpen = entry.playlistItemId
+            val prepared = renderer?.snapshot()
+            val start = prepared?.takeIf { it.seekable && it.durationTicks > 0 }?.let {
+                requireNotNull(after.queue).startPositionTicks.coerceIn(0, it.durationTicks)
+            }
+            // This decoder already owns the paused selection. Keep its single viewing/report session.
+            renderer?.apply(start, playing = false)
+        }
+        val needsOpen = entry != null && !reusePrepared && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
         if (entry != null && needsOpen && requestedOpen != entry.playlistItemId) {
             renderer?.apply(playing = false)
             requestedOpen = entry.playlistItemId
@@ -377,9 +400,13 @@ internal class SyncPlayHost(
     fun background() {
         if (participating) leave()
     }
-    fun bindRenderer(token: Any, next: SyncRenderer) {
+    fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null) {
         rendererToken = token
         renderer = next
+        awaitingSource = null
+        pendingSource = localSelection?.takeIf {
+            participating && membership.group != null && it.itemId == next.snapshot().itemId
+        }?.let { PendingSource(token, membership.generation, it) }
         if (participating) {
             next.apply(playing = false)
             readyEntry = null
@@ -390,6 +417,8 @@ internal class SyncPlayHost(
         if (rendererToken !== token) return
         renderer = null
         rendererToken = null
+        pendingSource = null
+        awaitingSource = null
         readyEntry = null
         wasReady = null
     }
@@ -536,6 +565,24 @@ internal class SyncPlayHost(
             output.apply(playing = false)
             note("Watch together is unavailable for this source. Leave the group to play it separately.")
         }
+        pendingSource?.let { pending ->
+            if (pending.token !== rendererToken || pending.generation != membership.generation || !participating) {
+                pendingSource = null
+            } else if (membership.queue?.current?.itemId == pending.selection.itemId) {
+                // Another participant selected it first; the server's position and entry identity win.
+                pendingSource = null
+            } else if (r.itemId == pending.selection.itemId && r.ready && r.seekable && r.durationTicks > 0) {
+                val request = syncNewQueue(
+                    listOf(pending.selection.itemId),
+                    startPositionTicks = pending.selection.startTicks.coerceIn(0, r.durationTicks)
+                )
+                if (send(request) != null) {
+                    awaitingSource = pending
+                    pendingSource = null
+                    note("Waiting for the server to update the group queue.")
+                }
+            }
+        }
         val current = membership.queue?.current ?: return
         if (membership.phase == "Idle") return
         if (!membership.hasSnapshot || r.itemId != current.itemId) return
@@ -612,6 +659,8 @@ internal class SyncPlayHost(
     }
 
     private fun resetClock() {
+        pendingSource = null
+        awaitingSource = null
         waitRequest = null
         ticker?.cancel()
         ticker = null

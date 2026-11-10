@@ -792,4 +792,163 @@ class SyncPlayHostTest {
         assertTrue(rig.host.state.value.status.contains("Leave", ignoreCase = true))
         assertTrue(rig.host.state.value.status.contains("separately", ignoreCase = true))
     }
+
+    @Test fun aPreparingSelectionThatBecomesNonseekableNeverReplacesTheGroupQueue() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val selected = Renderer().apply {
+            value = value.copy(itemId = "selected-item", ready = false, seekable = true, playing = false)
+        }
+        rig.host.bindRenderer(selected, selected, SyncLocalSelection("selected-item", 200_000_000L))
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        selected.value = selected.value.copy(ready = true, seekable = false, playing = true)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        assertEquals("local-item", rig.host.membership.queue?.current?.itemId)
+        assertFalse(selected.value.playing)
+    }
+
+    @Test fun aFiniteReadySelectionRequestsOneBoundedQueueReplacementWithoutOptimisticOutput() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val selected = Renderer().apply {
+            value = value.copy(
+                itemId = "selected-item",
+                positionTicks = 33_000_000L,
+                durationTicks = 100_000_000L,
+                ready = false,
+                seekable = true,
+                playing = false
+            )
+        }
+        rig.host.bindRenderer(selected, selected, SyncLocalSelection("selected-item", 200_000_000L))
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        val queueBefore = rig.host.membership.queue
+        selected.value = selected.value.copy(ready = true)
+        val outputBefore = selected.value
+        selected.applied.clear()
+        rig.host.tick()
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        val replacement = rig.sent.single { it.second.operation == "SetNewQueue" }.second.body!!
+        assertEquals(JsonArray(listOf(JsonPrimitive("selected-item"))), replacement["PlayingQueue"])
+        assertEquals(100_000_000L, replacement.getValue("StartPositionTicks").jsonPrimitive.long)
+        assertEquals(queueBefore, rig.host.membership.queue)
+        assertEquals(outputBefore, selected.value)
+        assertFalse(selected.applied.any { it.playing == true || it.position != null })
+    }
+
+    @Test fun leaveAndRejoinInvalidateAPreparingLocalSelection() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val selected = Renderer().apply {
+            value = value.copy(itemId = "selected-item", ready = false, playing = false)
+        }
+        rig.host.bindRenderer(selected, selected, SyncLocalSelection("selected-item", 50_000_000L))
+        rig.host.tick()
+        runCurrent()
+        rig.host.leave()
+        runCurrent()
+        rig.join()
+        rig.snapshot()
+        selected.value = selected.value.copy(ready = true)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        assertEquals("local-item", rig.host.membership.queue?.current?.itemId)
+        assertFalse(selected.value.playing)
+    }
+
+    @Test fun theServerSelectingThePendingItemDiscardsTheStagedReplacement() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val selected = Renderer().apply {
+            value = value.copy(itemId = "selected-item", ready = false, playing = false)
+        }
+        rig.host.bindRenderer(selected, selected, SyncLocalSelection("selected-item", 50_000_000L))
+        rig.queue("selected-item", "server-selected-entry", 77_000_000L)
+        runCurrent()
+        selected.value = selected.value.copy(ready = true)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        assertEquals("server-selected-entry", rig.host.membership.queue?.current?.playlistItemId)
+        assertEquals(77_000_000L, rig.host.membership.queue?.startPositionTicks)
+        assertFalse(selected.value.playing)
+    }
+
+    @Test fun disposingTheSelectionRendererCannotLeakItsStagedRequestToAReplacementRenderer() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val preparing = Renderer().apply {
+            value = value.copy(itemId = "selected-item", ready = false, playing = false)
+        }
+        rig.host.bindRenderer(preparing, preparing, SyncLocalSelection("selected-item", 50_000_000L))
+        rig.host.clearRenderer(preparing)
+        val replacement = Renderer().apply {
+            value = value.copy(itemId = "selected-item", ready = true, playing = false)
+        }
+        rig.host.bindRenderer(replacement, replacement)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("SetNewQueue"))
+        assertEquals("local-item", rig.host.membership.queue?.current?.itemId)
+        assertFalse(replacement.value.playing)
+    }
+
+    @Test fun aStagedSelectionAcknowledgementReusesItsRendererButLaterDuplicateEntriesOpenNormally() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        val selected = Renderer().apply {
+            value = value.copy(
+                itemId = "selected-item",
+                positionTicks = 33_000_000L,
+                durationTicks = 100_000_000L,
+                ready = false,
+                seekable = true,
+                playing = false
+            )
+        }
+        rig.host.bindRenderer(selected, selected, SyncLocalSelection("selected-item", 50_000_000L))
+        selected.value = selected.value.copy(ready = true)
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "SetNewQueue" })
+        assertTrue(rig.opens.isEmpty())
+        rig.queue("selected-item", "acknowledged-entry", 88_000_000L)
+        runCurrent()
+        assertTrue(rig.opens.isEmpty(), "the queue acknowledgement must keep the already prepared viewing")
+        assertEquals("acknowledged-entry", rig.host.membership.queue?.current?.playlistItemId)
+        assertEquals("selected-item", rig.host.membership.queue?.current?.itemId)
+        assertEquals(88_000_000L, selected.value.positionTicks)
+        assertFalse(selected.value.playing)
+        rig.queue("selected-item", "later-duplicate-entry", 99_000_000L)
+        runCurrent()
+        val later = rig.opens.single()
+        assertEquals("later-duplicate-entry", later.entryId)
+        assertEquals("selected-item", later.itemId)
+        assertEquals(99_000_000L, later.ticks)
+        assertEquals(rig.host.membership.generation, later.generation)
+        assertEquals("later-duplicate-entry", rig.host.membership.queue?.current?.playlistItemId)
+    }
 }

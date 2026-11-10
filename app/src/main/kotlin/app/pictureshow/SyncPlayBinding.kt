@@ -138,7 +138,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
                     p?.isPlaying == true,
                     syncSourceEligible(
                         duration * 10_000,
-                        p?.isCurrentMediaItemSeekable == true,
+                        d?.mediaSource != null && p?.isCurrentMediaItemSeekable == true,
                         host.item.type == "TvChannel" || d?.mediaSource?.liveStreamId != null,
                         d?.mediaSource?.isInfiniteStream == true,
                         offline = false
@@ -164,13 +164,14 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     DisposableEffect(sync, host) {
         host.output.syncRequest = sync::transport
         host.output.syncParticipating = { sync.participating }
-        sync.bindRenderer(token, bridge)
         val expected = sync.membership.queue?.current
-        val source = host.state.decision?.mediaSource
-        val knownUnsupported = host.item.type == "TvChannel" || source?.liveStreamId != null || source?.isInfiniteStream == true
-        if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id && !knownUnsupported) {
-            sync.queueRequest(app.pictureshow.core.sync.syncNewQueue(listOf(host.item.id), startPositionTicks = host.startMs * 10_000))
+        val selection = if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
+            SyncLocalSelection(host.item.id, app.pictureshow.core.sync.millisecondsToSyncTicks(host.startMs) ?: 0)
+        } else {
+            null
         }
+        // Metadata can be unknown here. The host waits for a prepared eligible source before requesting the shared queue.
+        sync.bindRenderer(token, bridge, selection)
         onDispose {
             sync.clearRenderer(token)
             host.output.syncRequest = null

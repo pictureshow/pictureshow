@@ -1102,7 +1102,7 @@ internal class MusicHost(
                 playing = matches && running?.isPlaying == true,
                 seekable = syncSourceEligible(
                     duration,
-                    matches && running?.isCurrentMediaItemSeekable == true,
+                    matches && running?.isCurrentMediaItemSeekable == true && preparedTrack?.decision?.mediaSource != null,
                     preparedTrack?.decision?.mediaSource?.liveStreamId != null,
                     preparedTrack?.decision?.mediaSource?.isInfiniteStream == true,
                     offline = false
