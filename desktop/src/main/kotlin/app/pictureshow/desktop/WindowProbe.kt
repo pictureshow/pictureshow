@@ -18,7 +18,7 @@ interface WindowNative:Library {fun ps_window_find(title:String):Pointer?;fun ps
 /** Isolate Compose placement from mpv, JOGL and the prototype's direct JDK extension calls. */
 fun windowMain(args:Array<String>) {
  val method=args[0];val out=File(args[1]).apply{mkdirs()}
- val native=Native.load(System.getenv("SPIKE_WINDOW_BRIDGE"),WindowNative::class.java)
+ val native=Native.load(System.getenv("SPIKE_WINDOW_BRIDGE") ?: System.getProperty("spike.window.bridge"),WindowNative::class.java)
  application {
  val state=rememberWindowState(width=740.dp,height=500.dp)
  Window(onCloseRequest={exitApplication()},title="Pictureshow fullscreen isolation",state=state,undecorated=method=="borderless") {

@@ -49,7 +49,7 @@ class Mpv(val out: File) : AutoCloseable {
             Native.load(library, NumericLocale::class.java).setlocale(if (Platform.isLinux()) 1 else 4, "C")
         }
     }
-    val api = Native.load(System.getenv("MPV_LIBRARY") ?: "mpv", MpvApi::class.java)
+    val api = Native.load(System.getenv("MPV_LIBRARY") ?: System.getProperty("spike.mpv.library") ?: "mpv", MpvApi::class.java)
     val handle = requireNotNull(api.mpv_create()) { "mpv_create failed" }
     init {
         out.mkdirs()
@@ -71,7 +71,8 @@ class Mpv(val out: File) : AutoCloseable {
         val osc = api.mpv_set_option_string(handle, "osc", "no")
         if (osc != -5) check(osc) // MPV_ERROR_OPTION_NOT_FOUND
         option("osd-level", "0")
-        option("sub-margin-y", "80") // Keep SRT above the always-visible diagnostic controls.
+        option("sub-margin-y", "80")
+        option("sub-pos", "85") // Reserve the bottom 15% for the always-visible proof controls.
     }
     fun check(code: Int) { check(code >= 0) { api.mpv_error_string(code) } }
     fun option(name: String, value: String) {

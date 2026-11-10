@@ -44,7 +44,7 @@ fun layerMain(args: Array<String>) {
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
     val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
-    val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE")),NativeLayer::class.java)
+    val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")),NativeLayer::class.java)
     val mpv=Mpv(out)
     val executor=Executors.newSingleThreadScheduledExecutor { r -> Thread(r,"native-video") }
     val failure=AtomicReference<Throwable?>(null)
@@ -54,7 +54,8 @@ fun layerMain(args: Array<String>) {
     val pixels=AtomicReference(java.awt.Dimension(960,640))
     val worker=AtomicReference<Thread?>(null)
     var geometryListener:java.awt.event.ComponentListener?=null
-    var overlayBounds:androidx.compose.ui.geometry.Rect?=null
+    val overlayBounds=AtomicReference<androidx.compose.ui.geometry.Rect?>(null)
+    val controlBounds=AtomicReference<androidx.compose.ui.geometry.Rect?>(null)
     Thread { Thread.sleep((sustain+120L)*1000); Runtime.getRuntime().halt(3) }.apply {isDaemon=true}.start()
     application {
         val state=rememberWindowState(width=960.dp,height=640.dp)
@@ -95,9 +96,9 @@ fun layerMain(args: Array<String>) {
             MaterialTheme(colors=darkColors()) {
                 Box(Modifier.fillMaxSize()) {
                     Row(Modifier.align(Alignment.TopEnd).padding(18.dp).background(Color(0xE0174E72)).padding(8.dp)) {
-                        Button(modifier=Modifier.onGloballyPositioned { overlayBounds=it.boundsInWindow() },onClick={ clicks++; mpv.command("cycle","pause") }) { Text("COMPOSE OVER VIDEO · $clicks") }
+                        Button(modifier=Modifier.onGloballyPositioned { overlayBounds.set(it.boundsInWindow()) },onClick={ clicks++; mpv.command("cycle","pause") }) { Text("COMPOSE OVER VIDEO · $clicks") }
                     }
-                    Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xDD141820)).padding(8.dp)) {
+                    Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onGloballyPositioned { controlBounds.set(it.boundsInWindow()) }.background(Color(0xDD141820)).padding(8.dp)) {
                         Button(onClick={mpv.command("cycle","pause")}) {Text("Pause / play")}
                         Spacer(Modifier.width(8.dp))
                         Button(onClick={toggleFullscreen()}) {Text("Fullscreen")}
@@ -148,6 +149,14 @@ fun layerMain(args: Array<String>) {
                         Thread.sleep(4500)
                         fun stage(name:String) {
                             sync(); Thread.sleep(1000); failure.get()?.let {throw it}
+                            val deadline=System.nanoTime()+15_000_000_000L
+                            fun layoutReady():Boolean {
+                                val size=pixels.get(); val top=overlayBounds.get() ?: return false
+                                val bar=controlBounds.get() ?: return false
+                                return top.right<=size.width+2 && kotlin.math.abs(bar.width-size.width)<3 && kotlin.math.abs(bar.bottom-size.height)<3
+                            }
+                            while(!layoutReady() && System.nanoTime()<deadline) Thread.sleep(100)
+                            File(out,"$name-layout.txt").writeText("ready=${layoutReady()}; pixels=${pixels.get()}; overlay=${overlayBounds.get()}; controls=${controlBounds.get()}\n")
                             File(out,"$name-native.json").writeText(bridge.ps_receipt(surface!!))
                             SwingUtilities.invokeAndWait {
                                 val p=window.locationOnScreen; val b=window.bounds; val screen=window.graphicsConfiguration.bounds
@@ -156,18 +165,18 @@ fun layerMain(args: Array<String>) {
                             }
                         }
                         stage("01-window")
-                        SwingUtilities.invokeAndWait {overlayBounds?.let { b ->
+                        SwingUtilities.invokeAndWait {overlayBounds.get()?.let { b ->
                             val origin=window.contentPane.locationOnScreen; val d=window.graphicsConfiguration.defaultTransform
                             Robot().apply { mouseMove(origin.x+(b.center.x/d.scaleX).toInt(),origin.y+(b.center.y/d.scaleY).toInt()); mousePress(InputEvent.BUTTON1_DOWN_MASK); mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
                         }}
                         stage("02-global-click")
                         if(clicks==0 && Platform.isMac()) {
-                            overlayBounds?.let {b -> val d=window.graphicsConfiguration.defaultTransform
+                            overlayBounds.get()?.let {b -> val d=window.graphicsConfiguration.defaultTransform
                                 bridge.ps_click(surface!!,(b.center.x/d.scaleX).toInt(),(b.center.y/d.scaleY).toInt()) }
                             stage("02-appkit-click")
                         }
                         if(clicks==0) {
-                            SwingUtilities.invokeAndWait {overlayBounds?.let { b ->
+                            SwingUtilities.invokeAndWait {overlayBounds.get()?.let { b ->
                                 val d=window.graphicsConfiguration.defaultTransform; val x=(b.center.x/d.scaleX).toInt(); val y=(b.center.y/d.scaleY).toInt()
                                 val target=SwingUtilities.getDeepestComponentAt(window.contentPane,x,y)!!
                                 val p=SwingUtilities.convertPoint(window.contentPane,x,y,target)
