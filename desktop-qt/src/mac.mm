@@ -44,14 +44,14 @@ void macDraw(void *state,void *target,void *buffer,int w,int h){
   auto *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float width:w height:h mipmapped:NO];desc.storageMode=MTLStorageModeShared;desc.usage=MTLTextureUsageShaderRead;
   s->texture=[s->device newTextureWithDescriptor:desc iosurface:s->surface plane:0];if(!s->texture)qFatal("Metal IOSurface texture failed");s->w=w;s->h=h;
  }
- glBindFramebuffer(GL_FRAMEBUFFER,s->fbo);mpv_opengl_fbo fbo{int(s->fbo),w,h,GL_RGBA16F};int flip=0;
- mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
+ glBindFramebuffer(GL_FRAMEBUFFER,s->fbo);mpv_opengl_fbo fbo{int(s->fbo),w,h,GL_RGBA16F};int flip=0;int block=0;
+ mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
  int e=s->p->api.render_context_render(s->ctx,params);if(e<0)qFatal("CGL render %d",e);
  glFinish(); // completes GL writes before Metal consumes the shared IOSurface
  auto cb=(id<MTLCommandBuffer>)buffer;if(!cb)qFatal("Missing Qt Metal command buffer");
  id<MTLBlitCommandEncoder> blit=[cb blitCommandEncoder];
  [blit copyFromTexture:s->texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:(id<MTLTexture>)target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];s->pending=[cb retain];
- s->p->api.render_context_report_swap(s->ctx);
+
 }
 void macDestroy(void *state){auto*s=(Mac*)state;if(s->pending){[s->pending waitUntilCompleted];[s->pending release];}CGLSetCurrentContext(s->gl);s->p->api.render_context_free(s->ctx);glDeleteTextures(1,&s->tex);glDeleteFramebuffers(1,&s->fbo);if(s->texture)[s->texture release];if(s->surface)CFRelease(s->surface);CGLSetCurrentContext(nullptr);CGLDestroyContext(s->gl);[s->device release];delete s;}
 static QJsonArray rect(NSRect r){return {r.origin.x,r.origin.y,r.size.width,r.size.height};}
@@ -60,4 +60,6 @@ QJsonObject macReceipt(WId id){NSView *v=(NSView*)id;NSWindow*w=v.window;NSScree
 
 void macActivate(WId id){[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[NSApp activateIgnoringOtherApps:YES];NSWindow*w=((NSView*)id).window;[w makeKeyAndOrderFront:nil];}
 
-void macImmersive(WId id,bool enabled){NSWindow*w=((NSView*)id).window;[NSApp setPresentationOptions:enabled?(NSApplicationPresentationAutoHideDock|NSApplicationPresentationAutoHideMenuBar):NSApplicationPresentationDefault];if(enabled)[w setFrame:w.screen.frame display:YES];macActivate(id);}
+void macImmersive(WId id,bool enabled){NSWindow*w=((NSView*)id).window;[NSApp setPresentationOptions:enabled?(NSApplicationPresentationHideDock|NSApplicationPresentationHideMenuBar):NSApplicationPresentationDefault];w.level=enabled?NSMainMenuWindowLevel+1:NSNormalWindowLevel;if(enabled)[w setFrame:w.screen.frame display:YES];macActivate(id);}
+
+void macSwap(void *state){auto*s=(Mac*)state;s->p->api.render_context_report_swap(s->ctx);}

@@ -13,7 +13,18 @@
 #include <QTest>
 #include <QMutex>
 #include <QMutexLocker>
+#include <cstdio>
 #include <rhi/qrhi.h>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <QtGui/private/qrhid3d11_p.h>
+#endif
+static QString logPath;
+static QMutex logMutex;
+static void proofLog(QtMsgType, const QMessageLogContext &, const QString &message) {
+ QMutexLocker lock(&logMutex);auto bytes=message.toUtf8()+"\n";std::fwrite(bytes.constData(),1,size_t(bytes.size()),stderr);std::fflush(stderr);
+ if(!logPath.isEmpty()){QFile f(logPath);if(f.open(QFile::WriteOnly|QFile::Append))f.write(bytes);}
+}
 class Proof:public QObject {
  Q_OBJECT
  Player *p;
@@ -21,7 +32,7 @@ class Proof:public QObject {
 public:
  explicit Proof(Player *player):p(player){}
  void setWindow(QQuickWindow *w){window=w;}
- Q_INVOKABLE void fullscreen(){if(!window)return;if(!immersive){previous=window->geometry();previousFlags=window->flags();window->setFlags(previousFlags|Qt::FramelessWindowHint);window->setGeometry(window->screen()->geometry());window->show();immersive=true;}else{window->setFlags(previousFlags);window->setGeometry(previous);window->show();immersive=false;}
+ Q_INVOKABLE void fullscreen(){if(!window)return;if(!immersive){previous=window->geometry();previousFlags=window->flags();window->setFlags(previousFlags|Qt::FramelessWindowHint);window->setGeometry(window->screen()->geometry());window->show();immersive=true;}else{window->setFlags(previousFlags);window->show();window->setGeometry(previous);QTimer::singleShot(0,window,[this]{if(!immersive)window->setGeometry(previous);});immersive=false;}
 #ifdef Q_OS_MACOS
  macImmersive(window->winId(),immersive);
 #endif
@@ -31,8 +42,10 @@ public:
 };
 static QJsonArray rect(QRect r){return {r.x(),r.y(),r.width(),r.height()};}
 int main(int argc,char**argv){
+ qInstallMessageHandler(proofLog);
  QGuiApplication app(argc,argv);auto args=app.arguments();if(args.size()<4)qFatal("usage: qt-proof LIBMPV FIXTURE_DIR EVIDENCE_DIR [--sustain]");
  QString fixtures=QDir(args[2]).absolutePath(),out=QDir(args[3]).absolutePath();QDir().mkpath(out);
+ logPath=out+"/runtime.log";
  qmlRegisterType<Surface>("Pictureshow.Proof",1,0,"Surface");
  Player player(args[1]);Surface::player=&player;Proof proof(&player);
  QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("proof",&proof);engine.load(QUrl("qrc:/Main.qml"));
@@ -41,22 +54,30 @@ int main(int argc,char**argv){
  macActivate(w->winId());
 #endif
  QJsonObject graphics;QMutex graphicsMutex;
- QObject::connect(w,&QQuickWindow::afterRendering,w,[&]{QJsonObject g;if(auto *sc=w->swapChain()){g["swapchainFormat"]=int(sc->format());g["swapchainPixels"]=QJsonArray{sc->currentPixelSize().width(),sc->currentPixelSize().height()};auto h=sc->hdrInfo();g["hdrLuminanceBehavior"]=int(h.luminanceBehavior);g["hdrLimitsType"]=int(h.limitsType);if(h.limitsType==QRhiSwapChainHdrInfo::ColorComponentValue){g["hdrMaxColorComponent"]=h.limits.colorComponentValue.maxColorComponentValue;g["hdrPotentialMaxColorComponent"]=h.limits.colorComponentValue.maxPotentialColorComponentValue;}else{g["hdrMaxNits"]=h.limits.luminanceInNits.maxLuminance;g["hdrMinNits"]=h.limits.luminanceInNits.minLuminance;}}QMutexLocker lock(&graphicsMutex);graphics=g;},Qt::DirectConnection);
+ QObject::connect(w,&QQuickWindow::afterRendering,w,[&]{QJsonObject g;if(auto *sc=w->swapChain()){g["swapchainFormat"]=int(sc->format());
+#ifdef Q_OS_WIN
+ auto *nativeChain=static_cast<QD3D11SwapChain*>(sc);if(nativeChain->swapChain){DXGI_SWAP_CHAIN_DESC desc{};HRESULT status=nativeChain->swapChain->GetDesc(&desc);g["dxgiGetDescHresult"]=qint64(status);if(SUCCEEDED(status)){g["dxgiPresentFormat"]=int(desc.BufferDesc.Format);g["dxgiWindowed"]=bool(desc.Windowed);g["dxgiSwapEffect"]=int(desc.SwapEffect);}}
+#endif
+g["swapchainPixels"]=QJsonArray{sc->currentPixelSize().width(),sc->currentPixelSize().height()};auto h=sc->hdrInfo();g["hdrLuminanceBehavior"]=int(h.luminanceBehavior);g["hdrLimitsType"]=int(h.limitsType);if(h.limitsType==QRhiSwapChainHdrInfo::ColorComponentValue){g["hdrMaxColorComponent"]=h.limits.colorComponentValue.maxColorComponentValue;g["hdrPotentialMaxColorComponent"]=h.limits.colorComponentValue.maxPotentialColorComponentValue;}else{g["hdrMaxNits"]=h.limits.luminanceInNits.maxLuminance;g["hdrMinNits"]=h.limits.luminanceInNits.minLuminance;}}QMutexLocker lock(&graphicsMutex);graphics=g;},Qt::DirectConnection);
  bool failed=false;QElapsedTimer elapsed;elapsed.start();
+ auto saveImage=[&](const QImage &image,const QString &path){if(!image.save(path,"JPG",50)){qWarning()<<"CAPTURE_SAVE_FAILED"<<path;failed=true;}};
  auto capture=[&](QString name){
   auto r=player.receipt();r["stage"]=name;r["elapsedMs"]=elapsed.elapsed();r["qtVersion"]=qVersion();r["windowGeometry"]=rect(w->geometry());r["frameGeometry"]=rect(w->frameGeometry());r["screenGeometry"]=rect(w->screen()->geometry());r["devicePixelRatio"]=w->devicePixelRatio();r["qtVisibility"]=int(w->visibility());r["clicks"]=w->property("clicks").toInt();
   {QMutexLocker lock(&graphicsMutex);for(auto it=graphics.begin();it!=graphics.end();++it)r[it.key()]=it.value();}
 #ifdef Q_OS_MACOS
   r["native"]=macReceipt(w->winId());
 #endif
+#ifdef Q_OS_WIN
+  RECT wr{};MONITORINFO mi{};mi.cbSize=sizeof(mi);auto hwnd=reinterpret_cast<HWND>(w->winId());bool wb=GetWindowRect(hwnd,&wr);bool mb=GetMonitorInfo(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);auto rr=[](RECT v){return QJsonArray{v.left,v.top,v.right-v.left,v.bottom-v.top};};r["native"]=QJsonObject{{"getWindowRectSucceeded",wb},{"getMonitorInfoSucceeded",mb},{"windowRect",rr(wr)},{"monitorRect",rr(mi.rcMonitor)},{"windowStyle",qint64(GetWindowLongPtr(hwnd,GWL_STYLE))},{"hasCaption",bool(GetWindowLongPtr(hwnd,GWL_STYLE)&WS_CAPTION)}};
+#endif
   // Use native display capture for evidence; Qt6.12 grabWindow misinterprets FP16 readback on macOS.
   auto screen=w->screen()->grabWindow(0);
   if(!screen.isNull()) {
    auto image=screen.toImage();auto sg=w->screen()->geometry();qreal scale=qreal(image.width())/sg.width();
    QRect content=w->geometry().translated(-sg.topLeft());QRect px(qRound(content.x()*scale),qRound(content.y()*scale),qRound(content.width()*scale),qRound(content.height()*scale));
-   image.copy(px).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+".jpg","JPG",50);
-   image.scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+"-display.jpg","JPG",50);r["captureMethod"]="native whole-display and geometry crop";
-  } else {auto image=w->grabWindow();r["captureMethod"]="Qt grabWindow fallback; HDR capture requires independent review";r["captureImageFormat"]=int(image.format());if(image.isNull())failed=true;else image.convertToFormat(QImage::Format_RGB32).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation).save(out+"/"+name+".jpg","JPG",50);}
+   saveImage(image.copy(px).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation),out+"/"+name+".jpg");
+   saveImage(image.scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation),out+"/"+name+"-display.jpg");r["captureMethod"]="native whole-display and geometry crop";
+  } else {auto image=w->grabWindow();r["captureMethod"]="Qt grabWindow fallback; HDR capture requires independent review";r["captureImageFormat"]=int(image.format());if(image.isNull())failed=true;else saveImage(image.convertToFormat(QImage::Format_RGB32).scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation),out+"/"+name+".jpg");}
   QFile f(out+"/"+name+".json");f.open(QFile::WriteOnly);f.write(QJsonDocument(r).toJson());
   if(!player.error.isEmpty())failed=true;qInfo()<<"CAPTURE"<<name;
  };

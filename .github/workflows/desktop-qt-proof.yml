@@ -64,3 +64,4 @@ jobs:
             desktop-evidence/**
             qt-build/core/Testing/**
             desktop-fixtures/LICENSE.json
+            desktop-fixtures/SUSTAIN-LICENSE.json

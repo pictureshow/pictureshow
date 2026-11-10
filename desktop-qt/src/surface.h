@@ -14,6 +14,7 @@ public:
 void *macCreate(void *device, Player *player);
 void macDraw(void *state, void *target, void *commandBuffer, int width, int height);
 void macDestroy(void *state);
+void macSwap(void *state);
 QJsonObject macReceipt(WId view);
 void macActivate(WId view);
 void macImmersive(WId view,bool enabled);

@@ -22,7 +22,7 @@ static QJsonValue json(mpv_node &n) {
 }
 Player::Player(const QString &lib):api(lib) {
  std::setlocale(LC_NUMERIC,"C"); handle=api.create(); if(!handle)qFatal("mpv_create failed");
- const std::pair<const char*,const char*> opts[]={{"config","no"},{"terminal","no"},{"vo","libmpv"},{"hwdec","auto-safe"},{"mute","yes"},{"ao","null"},{"audio-channels","5.1"},{"keep-open","yes"},{"target-trc","linear"},{"target-prim","bt.709"},{"target-peak","1000"},{"tone-mapping","clip"},{"screenshot-format","jpg"}};
+ const std::pair<const char*,const char*> opts[]={{"config","no"},{"terminal","no"},{"vo","libmpv"},{"hwdec","auto-safe"},{"mute","yes"},{"ao","null"},{"audio-channels","5.1"},{"keep-open","yes"},{"sub-pos","80"},{"video-timing-offset","0"},{"target-trc","linear"},{"target-prim","bt.709"},{"target-peak","1000"},{"tone-mapping","clip"},{"screenshot-format","jpg"}};
  for(auto [k,v]:opts)if(api.set_option_string(handle,k,v)<0)qFatal("mpv option failed %s=%s",k,v);
  if(qEnvironmentVariableIsEmpty("QSG_RHI_HDR")){api.set_option_string(handle,"target-trc","srgb");api.set_option_string(handle,"target-peak","100");}
  if(api.initialize(handle)<0)qFatal("mpv initialize failed");

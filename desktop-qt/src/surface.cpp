@@ -3,6 +3,7 @@
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
 #include <QOpenGLContext>
+#include <QQuickWindow>
 #include <QOpenGLExtraFunctions>
 #include <mpv/render_gl.h>
 #ifdef Q_OS_WIN
@@ -15,7 +16,7 @@ class Renderer:public QQuickRhiItemRenderer {
  mpv_render_context *ctx=nullptr;
  unsigned int fbo=0;
  void *mac=nullptr;
- bool ready=false;
+ bool ready=false;QMetaObject::Connection swapConnection;
  static void *getProc(void*,const char*n){return reinterpret_cast<void*>(QOpenGLContext::currentContext()->getProcAddress(n));}
  void initialize(QRhiCommandBuffer*) override {
   if(ready)return;
@@ -36,9 +37,15 @@ class Renderer:public QQuickRhiItemRenderer {
 #endif
   qInfo()<<"RENDER_READY backend"<<rhi()->backend()<<"format"<<colorTexture()->format();
  }
- void synchronize(QQuickRhiItem*) override {}
+ void synchronize(QQuickRhiItem*item) override {if(!swapConnection)swapConnection=QObject::connect(item->window(),&QQuickWindow::frameSwapped,item->window(),[this]{
+#ifdef Q_OS_MACOS
+ if(mac)macSwap(mac);
+#else
+ if(ctx)p->api.render_context_report_swap(ctx);
+#endif
+ },Qt::DirectConnection);}
  void render(QRhiCommandBuffer *cb) override {
-  auto size=colorTexture()->pixelSize();
+  auto size=colorTexture()->pixelSize();int block=0;
   cb->beginExternal();
 #ifdef Q_OS_MACOS
   auto *h=static_cast<const QRhiMetalCommandBufferNativeHandles*>(cb->nativeHandles());
@@ -47,20 +54,21 @@ class Renderer:public QQuickRhiItemRenderer {
 #ifdef Q_OS_WIN
   auto *h=static_cast<const QRhiD3D11NativeHandles*>(rhi()->nativeHandles());static_cast<ID3D11DeviceContext*>(h->context)->ClearState();
   mpv_d3d11_fbo target{reinterpret_cast<void*>(colorTexture()->nativeTexture().object)};
-  mpv_render_param params[]={{MPV_RENDER_PARAM_D3D11_FBO,&target},{MPV_RENDER_PARAM_INVALID,nullptr}};
+  mpv_render_param params[]={{MPV_RENDER_PARAM_D3D11_FBO,&target},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
 #else
   auto *gl=QOpenGLContext::currentContext()->extraFunctions();
   gl->glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);gl->glBindBuffer(GL_PIXEL_PACK_BUFFER,0);gl->glPixelStorei(GL_UNPACK_ROW_LENGTH,0);gl->glPixelStorei(GL_UNPACK_SKIP_ROWS,0);gl->glPixelStorei(GL_UNPACK_SKIP_PIXELS,0);gl->glDisable(GL_BLEND);gl->glDisable(GL_SCISSOR_TEST);gl->glDisable(GL_DEPTH_TEST);gl->glDisable(GL_CULL_FACE);gl->glColorMask(true,true,true,true);for(int unit=0;unit<16;unit++)gl->glBindSampler(unit,0);gl->glActiveTexture(GL_TEXTURE0);
   gl->glBindFramebuffer(GL_FRAMEBUFFER,fbo);gl->glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,GLuint(colorTexture()->nativeTexture().object),0);
   mpv_opengl_fbo target{int(fbo),size.width(),size.height(),GL_RGBA16F};int flip=1;
-  mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&target},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
+  mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&target},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
 #endif
-  int e=p->api.render_context_render(ctx,params);if(e<0)qFatal("render failed %d",e);p->api.render_context_report_swap(ctx);
+  int e=p->api.render_context_render(ctx,params);if(e<0)qFatal("render failed %d",e);
 #endif
   cb->endExternal();update();
  }
 public:
  ~Renderer() override {
+ QObject::disconnect(swapConnection);
 #ifdef Q_OS_MACOS
   if(mac)macDestroy(mac);
 #else
