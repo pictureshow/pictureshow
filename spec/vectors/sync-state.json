@@ -1948,6 +1948,86 @@
           }
         }
       ]
+    },
+    {
+      "id": "sync-state.readiness-idle-new-queue-without-stop-reports-ready",
+      "operation": "readiness",
+      "phase": "Idle",
+      "currentEntryId": "entry-a",
+      "stoppedEntryId": null,
+      "expected": true
+    },
+    {
+      "id": "sync-state.readiness-idle-explicitly-stopped-entry-does-not-restart",
+      "operation": "readiness",
+      "phase": "Idle",
+      "currentEntryId": "entry-a",
+      "stoppedEntryId": "entry-a",
+      "expected": false
+    },
+    {
+      "id": "sync-state.readiness-idle-new-entry-after-stop-reports-ready",
+      "operation": "readiness",
+      "phase": "Idle",
+      "currentEntryId": "entry-b",
+      "stoppedEntryId": "entry-a",
+      "expected": true
+    },
+    {
+      "id": "sync-state.readiness-paused-entry-reports-readiness",
+      "operation": "readiness",
+      "phase": "Paused",
+      "currentEntryId": "entry-a",
+      "stoppedEntryId": "entry-a",
+      "expected": true
+    },
+    {
+      "id": "sync-state.readiness-waiting-entry-reports-readiness",
+      "operation": "readiness",
+      "phase": "Waiting",
+      "currentEntryId": "entry-a",
+      "stoppedEntryId": "entry-a",
+      "expected": true
+    },
+    {
+      "id": "sync-state.readiness-playing-entry-reports-readiness",
+      "operation": "readiness",
+      "phase": "Playing",
+      "currentEntryId": "entry-a",
+      "stoppedEntryId": "entry-a",
+      "expected": true
+    },
+    {
+      "id": "sync-state.renderer-readiness-no-pending-entry-needs-no-renderer-entry-id",
+      "operation": "renderer-readiness",
+      "pendingEntryId": null,
+      "renderedEntryId": null,
+      "currentEntryId": "entry-b",
+      "expected": true
+    },
+    {
+      "id": "sync-state.renderer-readiness-same-media-old-playlist-entry-still-waits",
+      "operation": "renderer-readiness",
+      "pendingEntryId": "entry-b",
+      "renderedEntryId": "entry-a",
+      "currentEntryId": "entry-b",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-readiness-pending-entry-without-renderer-acknowledgment-waits",
+      "operation": "renderer-readiness",
+      "pendingEntryId": "entry-b",
+      "renderedEntryId": null,
+      "currentEntryId": "entry-b",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-readiness-pending-entry-matches-actual-renderer-entry",
+      "operation": "renderer-readiness",
+      "pendingEntryId": "entry-b",
+      "renderedEntryId": "entry-b",
+      "currentEntryId": "entry-b",
+      "expected": true
     }
   ]
 }

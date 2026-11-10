@@ -9,6 +9,8 @@ import app.pictureshow.core.sync.beginSyncJoin
 import app.pictureshow.core.sync.leaveSync
 import app.pictureshow.core.sync.parseSyncMessage
 import app.pictureshow.core.sync.reduceSyncEvent
+import app.pictureshow.core.sync.syncRendererOwnsEntry
+import app.pictureshow.core.sync.syncReportsReadiness
 import app.pictureshow.core.sync.syncTimestampTicks
 import app.pictureshow.core.sync.syncUtcTimestamp
 import java.time.Instant
@@ -94,8 +96,16 @@ class SyncProtocolTest {
         assertEquals(cases.size, cases.map { it.jsonObject.getValue("id") }.toSet().size)
         cases.forEach { value ->
             val case = value.jsonObject
-            checkKeys(case, setOf("id", "operation", "state", "steps"))
             val id = case.getValue("id").jsonPrimitive.content
+            if (case.getValue("operation").jsonPrimitive.content == "readiness") {
+                runReadinessCase(case, id)
+                return@forEach
+            }
+            if (case.getValue("operation").jsonPrimitive.content == "renderer-readiness") {
+                runRendererReadinessCase(case, id)
+                return@forEach
+            }
+            checkKeys(case, setOf("id", "operation", "state", "steps"))
             assertEquals("membership", case.getValue("operation").jsonPrimitive.content, id)
             val initial = case.getValue("state").jsonObject
             checkKeys(initial, setOf("generation", "groupId", "phase"))
@@ -113,6 +123,26 @@ class SyncProtocolTest {
                 assertProjection(step.getValue("expected").jsonObject, state, "$id/$index")
             }
         }
+    }
+
+    private fun runReadinessCase(case: JsonObject, id: String) {
+        checkKeys(case, setOf("id", "operation", "phase", "currentEntryId", "stoppedEntryId", "expected"))
+        val actual = syncReportsReadiness(
+            case.getValue("phase").jsonPrimitive.content,
+            case.getValue("currentEntryId").jsonPrimitive.content,
+            case.getValue("stoppedEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content
+        )
+        assertEquals(case.getValue("expected"), JsonPrimitive(actual), id)
+    }
+
+    private fun runRendererReadinessCase(case: JsonObject, id: String) {
+        checkKeys(case, setOf("id", "operation", "pendingEntryId", "renderedEntryId", "currentEntryId", "expected"))
+        val actual = syncRendererOwnsEntry(
+            case.getValue("pendingEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content,
+            case.getValue("renderedEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content,
+            case.getValue("currentEntryId").jsonPrimitive.content
+        )
+        assertEquals(case.getValue("expected"), JsonPrimitive(actual), id)
     }
 
     private fun applyEvent(state: SyncMembership, event: JsonObject): SyncMembership = when (event.getValue("op").jsonPrimitive.content) {

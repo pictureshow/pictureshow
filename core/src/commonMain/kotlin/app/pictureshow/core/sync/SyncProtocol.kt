@@ -194,6 +194,17 @@ data class SyncMembership(
     val hasSnapshot: Boolean get() = group != null && queue != null
 }
 
+/**
+ * A new queue can arrive while the last observed group phase is Idle, before the server's wait barrier.
+ * Only the exact entry explicitly stopped in that Idle phase suppresses readiness; another entry must report.
+ */
+fun syncReportsReadiness(phase: String, currentEntryId: String, stoppedEntryId: String?): Boolean =
+    phase != "Idle" || currentEntryId != stoppedEntryId
+
+/** While an entry is opening, matching media alone is insufficient: the renderer must own the current playlist entry. */
+fun syncRendererOwnsEntry(pendingEntryId: String?, renderedEntryId: String?, currentEntryId: String): Boolean =
+    pendingEntryId == null || renderedEntryId == currentEntryId
+
 fun beginSyncJoin(state: SyncMembership, groupId: String? = null): SyncMembership =
     SyncMembership(generation = state.generation + 1, groupId = groupId, phase = "Joining")
 

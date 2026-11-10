@@ -499,7 +499,8 @@ internal fun PlayerItemScreen(
                         ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         ?.let { segment ->
                             {
-                                host.seekTo(segment.endMs)
+                                // Surface OK skips once without revealing the hidden controls.
+                                host.seekTo(segment.endMs, revealControls = false)
                                 position = segment.endMs
                                 interaction++
                             }

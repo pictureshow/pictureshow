@@ -212,12 +212,12 @@ internal class PlaybackHostState(
     }
 
     /** An absolute target: a scrub, a chapter or a controller's seek. */
-    fun seekTo(targetMs: Long) {
+    fun seekTo(targetMs: Long, revealControls: Boolean = true) {
         if (sync?.transport("seek", targetMs) == true) return
-        seekToLocal(targetMs)
+        seekToLocal(targetMs, revealControls)
     }
 
-    fun seekToLocal(targetMs: Long) {
+    fun seekToLocal(targetMs: Long, revealControls: Boolean = true) {
         val current = state.decision
         if (current != null &&
             app.pictureshow.core.playback.TranscodeSeek.required(current) &&
@@ -231,7 +231,7 @@ internal class PlaybackHostState(
             seekPreview = targetMs
             applyPendingSeek()
         }
-        onSeekShown()
+        if (revealControls) onSeekShown()
     }
 }
 

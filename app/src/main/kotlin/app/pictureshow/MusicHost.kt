@@ -1108,7 +1108,8 @@ internal class MusicHost(
                     offline = false
                 ),
                 // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
-                rateSupported = false
+                rateSupported = false,
+                playlistItemId = running?.currentMediaItem?.mediaId
             )
         }
 

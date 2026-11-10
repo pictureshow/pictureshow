@@ -103,14 +103,14 @@ class SyncPlayHostTest {
             host.join("g")
             scope.runCurrent()
         }
-        fun joined() {
+        fun joined(state: String = "Paused") {
             host.receive(
                 update(
                     "GroupJoined",
                     buildJsonObject {
                         put("GroupId", "g")
                         put("GroupName", "Evening")
-                        put("State", "Paused")
+                        put("State", state)
                         put("Participants", JsonArray(listOf(JsonPrimitive("Ana"), JsonPrimitive("Bea"))))
                         put("LastUpdatedAt", syncUtcTimestamp(epoch))
                     }
@@ -148,23 +148,28 @@ class SyncPlayHostTest {
             joined()
             queue()
             scope.runCurrent()
+            preparedEntry()
+        }
+        fun preparedEntry() {
+            renderer.value = renderer.value.copy(playlistItemId = host.membership.queue?.current?.playlistItemId)
         }
         fun operations() = sent.map { it.second.operation }
-        fun command(command: String, delayMs: Long = 0, ticks: Long = 90_000_000L, id: String? = null): String = buildJsonObject {
-            put("MessageType", "SyncPlayCommand")
-            id?.let { put("MessageId", it) }
-            put(
-                "Data",
-                buildJsonObject {
-                    put("GroupId", "g")
-                    put("PlaylistItemId", "entry-a")
-                    put("Command", command)
-                    put("PositionTicks", ticks)
-                    put("When", syncUtcTimestamp(wall() + delayMs))
-                    put("EmittedAt", syncUtcTimestamp(wall()))
-                }
-            )
-        }.toString()
+        fun command(command: String, delayMs: Long = 0, ticks: Long = 90_000_000L, id: String? = null, entry: String = "entry-a"): String =
+            buildJsonObject {
+                put("MessageType", "SyncPlayCommand")
+                id?.let { put("MessageId", it) }
+                put(
+                    "Data",
+                    buildJsonObject {
+                        put("GroupId", "g")
+                        put("PlaylistItemId", entry)
+                        put("Command", command)
+                        put("PositionTicks", ticks)
+                        put("When", syncUtcTimestamp(wall() + delayMs))
+                        put("EmittedAt", syncUtcTimestamp(wall()))
+                    }
+                )
+            }.toString()
         fun update(type: String, data: JsonObject? = null): String = buildJsonObject {
             put("MessageType", "SyncPlayGroupUpdate")
             put(
@@ -278,6 +283,98 @@ class SyncPlayHostTest {
         rig.host.tick()
         runCurrent()
         assertEquals(1, rig.sent.count { it.second.operation == "Ready" })
+    }
+
+    @Test fun aFirstQueueInAnIdleGroupReportsPreparedReadinessButStopDoesNotRestartIt() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Idle")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.sent.clear()
+        rig.host.tick()
+        runCurrent()
+        val ready = rig.sent.single { it.second.operation == "Ready" }.second.body!!
+        assertEquals(JsonPrimitive("entry-a"), ready["PlaylistItemId"])
+        assertFalse(rig.renderer.value.playing, "readiness must await the server's playback command")
+
+        rig.host.receive(rig.command("Stop"))
+        runCurrent()
+        rig.sent.clear()
+        rig.renderer.value = rig.renderer.value.copy(ready = false, buffering = true)
+        rig.host.tick()
+        runCurrent()
+        rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false)
+        rig.host.tick()
+        runCurrent()
+        assertTrue(rig.sent.isEmpty(), "a stopped entry must not re-enter the ready barrier")
+        assertFalse(rig.renderer.value.playing)
+
+        rig.queue(entry = "entry-b")
+        rig.preparedEntry()
+        rig.host.tick()
+        runCurrent()
+        val replacement = rig.sent.single { it.second.operation == "Ready" }.second.body!!
+        assertEquals(JsonPrimitive("entry-b"), replacement["PlaylistItemId"])
+    }
+
+    @Test fun aStopOlderThanTheNewQueueCannotSuppressItsInitialReady() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Idle")
+        val oldStop = rig.command("Stop")
+        advanceTimeBy(1)
+        rig.queue()
+        rig.preparedEntry()
+        runCurrent()
+        rig.sent.clear()
+        rig.host.receive(oldStop)
+        rig.host.tick()
+        runCurrent()
+        assertEquals("Idle", rig.host.membership.phase)
+        assertEquals(1, rig.operations().count { it == "Ready" })
+        assertFalse(rig.renderer.value.playing)
+    }
+
+    @Test fun aRepeatedMediaIdCannotReadyOrPlayItsNewEntryUntilTheReplacementRendererBinds() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        runCurrent()
+        rig.sent.clear()
+        rig.renderer.applied.clear()
+        rig.queue(entry = "entry-b", ticks = 77_000_000L)
+        runCurrent()
+        val open = rig.opens.last()
+        assertEquals("entry-b", open.entryId)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("Ready"), "the old same-media decoder still belongs to entry-a")
+        rig.host.receive(rig.command("Unpause", ticks = 77_000_000L, entry = "entry-b"))
+        runCurrent()
+        assertFalse(rig.renderer.value.playing, "a scheduled command cannot start the old entry")
+        assertTrue(rig.host.resolved(open, true), "catalogue lookup alone is not renderer preparation")
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("Ready"))
+        val replacement = Renderer().apply {
+            value = value.copy(positionTicks = 77_000_000L, ready = false, buffering = true, playing = false)
+        }
+        rig.host.bindRenderer(replacement, replacement)
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "Buffering" })
+        assertFalse(replacement.value.playing)
+        replacement.value = replacement.value.copy(ready = true, buffering = false)
+        rig.host.tick()
+        runCurrent()
+        val ready = rig.sent.single { it.second.operation == "Ready" }.second.body!!
+        assertEquals(JsonPrimitive("entry-b"), ready["PlaylistItemId"])
+        assertEquals(77_000_000L, ready.getValue("PositionTicks").jsonPrimitive.long)
+        assertTrue(replacement.value.playing)
+        assertFalse(rig.renderer.value.playing)
     }
 
     @Test fun leavePausesOnceAndNeverStopsTheGroupOrReplaysLateCommands() = runTest {

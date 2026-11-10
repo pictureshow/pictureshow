@@ -66,7 +66,8 @@ internal data class SyncRendererState(
     val buffering: Boolean,
     val playing: Boolean,
     val seekable: Boolean,
-    val rateSupported: Boolean = false
+    val rateSupported: Boolean = false,
+    val playlistItemId: String? = null
 )
 
 internal interface SyncRenderer {
@@ -126,8 +127,10 @@ internal class SyncPlayHost(
     private var timeline: SyncCommand? = null
     private var drift = SyncDriftState()
     private var readyEntry: String? = null
+    private var stoppedEntry: String? = null
     private var wasReady: Boolean? = null
     private var requestedOpen: String? = null
+    private var openingEntry: String? = null
     private var createQueue = false
     private var ignoreWait = false
     private var waitRequest: Job? = null
@@ -212,6 +215,7 @@ internal class SyncPlayHost(
         val after = reduceSyncEvent(before, event, generation)
         if (after === before || after == before) return
         membership = after
+        after.command?.takeIf { it.command == "Stop" }?.let { stoppedEntry = it.playlistItemId }
         if (after.generation != before.generation || !after.active) {
             renderer?.apply(playing = false)
             resetClock()
@@ -254,6 +258,8 @@ internal class SyncPlayHost(
             renderer?.snapshot()?.itemId == entry.itemId
         if (reusePrepared && entry != null) {
             awaitingSource = null
+            openingEntry = null
+            note("Group queue updated. Waiting for renderer readiness.")
             requestedOpen = entry.playlistItemId
             val prepared = renderer?.snapshot()
             val start = prepared?.takeIf { it.seekable && it.durationTicks > 0 }?.let {
@@ -266,6 +272,7 @@ internal class SyncPlayHost(
         if (entry != null && needsOpen && requestedOpen != entry.playlistItemId) {
             renderer?.apply(playing = false)
             requestedOpen = entry.playlistItemId
+            openingEntry = entry.playlistItemId
             opening.tryEmit(SyncOpen(after.generation, entry.playlistItemId, entry.itemId, requireNotNull(after.queue).startPositionTicks))
         }
         after.command?.let { command ->
@@ -401,8 +408,18 @@ internal class SyncPlayHost(
         if (participating) leave()
     }
     fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null) {
+        val replaced = renderer !== next
         rendererToken = token
         renderer = next
+        val current = membership.queue?.current
+        if (replaced &&
+            localSelection == null &&
+            current != null &&
+            current.playlistItemId == openingEntry &&
+            next.snapshot().itemId == current.itemId
+        ) {
+            openingEntry = null
+        }
         awaitingSource = null
         pendingSource = localSelection?.takeIf {
             participating && membership.group != null && it.itemId == next.snapshot().itemId
@@ -584,8 +601,10 @@ internal class SyncPlayHost(
             }
         }
         val current = membership.queue?.current ?: return
-        if (membership.phase == "Idle") return
-        if (!membership.hasSnapshot || r.itemId != current.itemId) return
+        // A first queue can arrive without StateUpdate while our cached phase is still Idle.
+        // Report actual readiness for that new entry, but do not restart an explicitly stopped entry.
+        if (!app.pictureshow.core.sync.syncReportsReadiness(membership.phase, current.playlistItemId, stoppedEntry)) return
+        if (!membership.hasSnapshot || r.itemId != current.itemId || !rendererOwnsEntry(r, current.playlistItemId)) return
         val now = anchor?.serverNowTicks(wall(), monotonic())
         if (now == null) {
             output.apply(playing = false)
@@ -627,6 +646,14 @@ internal class SyncPlayHost(
         )
     }
 
+    private fun rendererOwnsEntry(snapshot: SyncRendererState, entryId: String): Boolean {
+        if (openingEntry == null) return true
+        // Persistent music bridges expose Media3's actual current queue slot; matching ItemId alone is insufficient.
+        if (!app.pictureshow.core.sync.syncRendererOwnsEntry(openingEntry, snapshot.playlistItemId, entryId)) return false
+        openingEntry = null
+        return true
+    }
+
     private fun schedule(command: SyncCommand) {
         scheduled?.cancel()
         scheduled = scope.launch {
@@ -648,7 +675,14 @@ internal class SyncPlayHost(
             if (generation != membership.generation || command.playlistItemId != membership.queue?.current?.playlistItemId) return@launch
             timeline = command
             val r = renderer?.snapshot() ?: return@launch
-            if (!r.ready || r.buffering || !r.seekable || r.itemId != membership.queue?.current?.itemId) return@launch
+            if (!r.ready ||
+                r.buffering ||
+                !r.seekable ||
+                r.itemId != membership.queue?.current?.itemId ||
+                !rendererOwnsEntry(r, command.playlistItemId)
+            ) {
+                return@launch
+            }
             val at = anchor?.serverNowTicks(wall(), monotonic()) ?: return@launch
             val playing = command.command == "Unpause" || (command.command == "Seek" && membership.phase == "Playing")
             val execution =
@@ -673,8 +707,10 @@ internal class SyncPlayHost(
         timeline = null
         drift = stopSyncDrift()
         readyEntry = null
+        stoppedEntry = null
         wasReady = null
         requestedOpen = null
+        openingEntry = null
     }
     private fun current(target: Account, version: Long) =
         version == sequence && target.key == account?.key && target.accessToken == account?.accessToken

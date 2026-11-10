@@ -496,9 +496,22 @@ class MusicHostTest {
     @Test fun aTrackPutNextIsHeardNextEvenWhenTheFollowingOneWasPrepared() {
         val music = host()
         ready(music)
+        // Hold the 100ms source until Pause commits, so auto-advance cannot overtake this fixture's edit.
+        val prepared = kotlinx.coroutines.CompletableDeferred<Unit>().also { negotiateGate = it }
         music.request(album("a", "b"))
         music.pause()
-        until("the next track prepared") { lastPlayer?.mediaItemCount == 2 }
+        until("the first track's committed pause") {
+            music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true
+        }
+        prepared.complete(Unit)
+        until("the first track paused and the next track prepared") {
+            music.state.value.current?.track?.id == "a" &&
+                music.state.value.queue?.paused == true &&
+                lastPlayer?.mediaItemCount == 2 &&
+                lastPlayer?.playbackState == androidx.media3.common.Player.STATE_READY &&
+                lastPlayer?.playWhenReady == false
+        }
+        assertTrue(log.isEmpty(), "Preparing the paused fixture must not consume either original track")
         music.playNext(account, listOf(MusicTrack("c", "Title c")))
         until("the row") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
         music.play()
@@ -1010,6 +1023,41 @@ class MusicHostTest {
         assertEquals(30L, music.positionMs())
         assertFalse(lastPlayer!!.playWhenReady)
         assertTrue(log.isEmpty())
+    }
+
+    @Test fun aDuplicateAudioItemCannotReportTheNewServerEntryReadyBeforeItsActualSlotChanges() {
+        val (music, rig) = groupedMusic()
+        assertEquals("group-a", music.syncBridge.snapshot().playlistItemId)
+        assertTrue(music.syncBridge.snapshot().ready)
+        rig.sync.tick()
+        rig.sent.clear()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { itemsGate = it }
+        rig.queue(listOf("a" to "new-copy-of-a"))
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scopes += it }
+        val opening = scope.launch { assertTrue(music.openSync(account, "a", 300_000L)) }
+        assertTrue(opening.isActive, "The replacement lookup must remain gated while the old renderer is inspected")
+        assertEquals("a", music.syncBridge.snapshot().itemId)
+        assertEquals("group-a", music.syncBridge.snapshot().playlistItemId)
+        assertTrue(music.syncBridge.snapshot().ready, "The old copy really is ready, so media ID alone is insufficient")
+        repeat(3) { rig.sync.tick() }
+        assertFalse(
+            rig.sent.any { it.operation == "Ready" && it.body?.get("PlaylistItemId") == JsonPrimitive("new-copy-of-a") },
+            "The old ready copy cannot acknowledge the pending duplicate server entry"
+        )
+        gate.complete(Unit)
+        until("the duplicate audio entry to occupy the actual ready Media3 slot") {
+            opening.isCompleted &&
+                music.syncBridge.snapshot().playlistItemId == "new-copy-of-a" &&
+                music.syncBridge.snapshot().ready
+        }
+        assertEquals("new-copy-of-a", lastPlayer!!.currentMediaItem!!.mediaId)
+        assertEquals("a", music.syncBridge.snapshot().itemId)
+        rig.sync.tick()
+        until("Ready for the actual replacement audio slot") {
+            rig.sent.any { it.operation == "Ready" && it.body?.get("PlaylistItemId") == JsonPrimitive("new-copy-of-a") }
+        }
+        assertFalse(lastPlayer!!.playWhenReady)
+        assertTrue(log.isEmpty(), "Replacing a paused duplicate must not start a viewing")
     }
 
     @Test fun groupedMusicUiAndRemoteControlsOnlyRequestServerChanges() {
