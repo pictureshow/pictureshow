@@ -4,12 +4,21 @@
 import copy
 import unittest
 from analyze import analyze, transform, TO709
-from fixture import HDR,SDR,NAMES
+from fixture import HDR,SDR,NAMES,pq_encode,pq_decode
+import json
+from pathlib import Path
 
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.manifest={'sdrReferenceWhiteNits':203,'files':{key:{'primaries':prim,'patches':[{'name':n,'quantizedRgbNits':rgb} for n,rgb in zip(NAMES,colors)]} for key,prim,colors in [('pq','bt2020',HDR),('sdr','bt709',SDR)]}}
         self.capture={'encoding':'linear','primaries':'bt2020','referenceWhiteNits':203,'samples':[{'name':n,'rgb':[c/203 for c in rgb]} for n,rgb in zip(NAMES,HDR)]}
+    def test_shared_numeric_contract(self):
+        contract=json.loads((Path(__file__).resolve().parents[3]/'spec/vectors/desktop-hdr-output.json').read_text())
+        for anchor in contract['pqAnchors']:
+            self.assertAlmostEqual(pq_encode(anchor['nits']),anchor['code'],places=10)
+            self.assertAlmostEqual(pq_decode(anchor['code']),anchor['nits'],places=6)
+        actual=[x/contract['scRgbReferenceWhiteNits'] for x in transform(contract['rgb2020Nits'],TO709)]
+        for value,expected in zip(actual,contract['expectedScRgb']):self.assertAlmostEqual(value,expected,places=7)
     def test_correct_pq(self):
         self.assertTrue(analyze(self.manifest,'pq',self.capture)['pass'])
     def test_clipped_to_sdr_fails(self):

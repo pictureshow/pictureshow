@@ -34,6 +34,12 @@ static void mainCall(void (^block)(void)) {
     [call performSelectorOnMainThread:@selector(run) withObject:nil waitUntilDone:YES
         modes:@[NSRunLoopCommonModes, @"AWTRunLoopMode", NSDefaultRunLoopMode]];
 }
+static double referenceWhite(NSWindow *window) {
+    return window.screen.maximumExtendedDynamicRangeColorComponentValue>1.0 ? 100.0 : 203.0;
+}
+extern "C" double ps_edr_reference_white(void *window) {
+    __block double result=203; mainCall(^{ result=referenceWhite((__bridge NSWindow*)window); }); return result;
+}
 using Clock = std::chrono::steady_clock;
 static double ms(Clock::time_point a) { return std::chrono::duration<double,std::milli>(Clock::now()-a).count(); }
 struct Timing { std::atomic<double> total{0}, maximum{0}; void add(double v) { total.store(total.load()+v); maximum.store(std::max(maximum.load(),v)); } };
@@ -52,6 +58,7 @@ struct Surface {
     std::atomic<unsigned long> frames{0};
     std::string receipt;
     bool diagnosticCaptured=false;
+    double referenceWhiteNits=203;
     Timing renderTime, glWait, drawableWait, metalWait, frameTime, pollGap;
     Clock::time_point previousPollEnd=Clock::now();
     std::atomic<unsigned long> polls{0};
@@ -69,6 +76,7 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     s->qosResult=pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE,0);
     mainCall(^{
         s->overlay = (__bridge NSWindow*)viewPtr;
+        s->referenceWhiteNits=referenceWhite(s->overlay);
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [s->overlay makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
         s->device = MTLCreateSystemDefaultDevice(); s->queue = [s->device newCommandQueue];
@@ -175,7 +183,7 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
         for(int row=0;row<h;row++) raw.write((const char*)diagnostic.contents+row*diagnosticStride,w*8);
         raw.close(); if(!raw) return -9;
         std::ofstream meta(prefix+".json");
-        meta<<"{\"width\":"<<w<<",\"height\":"<<h<<",\"format\":\"RGBA16Float\",\"boundary\":\"actual CAMetalLayer drawable before WindowServer\",\"encoding\":\"linear\",\"primaries\":\"bt2020\",\"referenceWhiteNits\":203}\n";
+        meta<<"{\"width\":"<<w<<",\"height\":"<<h<<",\"format\":\"RGBA16Float\",\"boundary\":\"actual CAMetalLayer drawable before WindowServer\",\"encoding\":\"linear\",\"primaries\":\"bt2020\",\"referenceWhiteNits\":"<<s->referenceWhiteNits<<"}\n";
         meta.close();if(!meta) return -9;
         s->diagnosticCaptured=true;
     }

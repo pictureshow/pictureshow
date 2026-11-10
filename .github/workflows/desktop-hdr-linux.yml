@@ -1,7 +1,7 @@
 name: Desktop numeric HDR Linux
 on:
   push:
-    branches: ["ci/136-linux*"]
+    branches: ["ci/136-linux*", "ci/136-hdr*"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,6 +19,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
+      - name: Numeric contract and negative controls
+        run: python3 -m unittest discover -s desktop/tools/hdr -p test_analyze.py -v
       - name: Build prerequisites (runner only)
         run: |
           sudo apt-get update -qq

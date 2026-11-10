@@ -25,9 +25,11 @@ python desktop/tools/hdr/fixture.py desktop-fixtures/hdr
 ```
 
 The beta run uses hardware D3D rather than WARP. It does not install VDD. Enable
-HDR on the intended output before running; the test fails closed if the actual
-app lands on another SDR monitor. Keep a single intended test display active, or
-place the app on it before capture. The host needs an unlocked interactive
+HDR on the intended output before running. While the diagnostic is enabled, the
+native adapter chooses an enumerated, enabled HDR desktop and fits the complete
+app window within it; its normal placement remains unchanged otherwise. The test
+still fails closed if the actual app output receipt is SDR. If several HDR
+displays are active, disable the ones you do not intend to test. The host needs an unlocked interactive
 Windows desktop, capture support, the dependencies above and an HDR output.
 The script refuses existing per-media evidence directories, so a repeated local
 run cannot accidentally accept stale successful pixels. Preserve the previous

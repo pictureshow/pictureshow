@@ -16,7 +16,7 @@ Run analyzer controls with
 `analyze.py MANIFEST pq|sdr CAPTURE.json` compares all eight captured channel medians
 against source with6% relative/3-nit absolute tolerance, and demands HDR gray1000
 above twice SDR reference white. No fitted exposure, white balance, gamut or gamma
-normalization is allowed. Linear scRGB reference white is80nits, linear EDR uses203;
+normalization is allowed. Linear scRGB reference white is80nits, the Mac EDR reference path uses100;
 BT.2020→BT.709 comparison preserves negative scRGB channels. Clipped SDR, wrong
 white scale and wrong primary conversion are deliberate rejection controls.
 
@@ -35,9 +35,8 @@ report that useful capture result separately from active HDR output qualificatio
 Signal nits are decoded color values, not photometer measurements of the panel.
 
 Windows instructions: [windows.md](windows.md). Linux instructions:
-[linux.md](linux.md). Mac: build `:desktop:spikeRuntime` and native adapters from
-`desktop/NATIVE-SURFACES.md`, compile `macos_capture.m` per its runner docstring,
-then run `macos_run.py --help` for explicit paths and a shared GUI lock. HDR SCK
+[linux.md](linux.md). Mac instructions: [macos.md](macos.md), including the free virtual endpoint and
+independent PQ10-bit stream capture. HDR SCK
 requires macOS15+ on Apple Silicon and existing Screen Recording permission;
 the script does not reset permissions or request dialogs. Existing Intel SCK
 implementations ignore HDR mode, so that path cannot qualify Intel compositor HDR.

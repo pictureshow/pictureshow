@@ -27,6 +27,7 @@ import javax.swing.SwingUtilities
 
 interface NativeLayer : Library {
     fun ps_find_window(title: String): Pointer?
+    fun ps_edr_reference_white(view: Pointer): Double
     fun ps_create(view: Pointer, mpv: Pointer): Pointer?
     fun ps_frame(surface: Pointer, width: Int, height: Int): Int
     fun ps_receipt(surface: Pointer): String
@@ -44,6 +45,7 @@ fun layerMain(args: Array<String>) {
     require(args.size >= 2) { "Usage: layer MEDIA EVIDENCE [--sustain=125]" }
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
+    val numericPosition=System.getenv("SPIKE_HDR_WINDOW_X")?.let { x -> WindowPosition.Absolute(x.toInt().dp,(System.getenv("SPIKE_HDR_WINDOW_Y") ?: "40").toInt().dp) } ?: WindowPosition.PlatformDefault
     val hdrHold=System.getenv("SPIKE_HDR_HOLD_SECONDS")?.toInt()?.also { require(it in 1..60) } ?: 0
     val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
     val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")),NativeLayer::class.java)
@@ -60,7 +62,7 @@ fun layerMain(args: Array<String>) {
     val controlBounds=AtomicReference<androidx.compose.ui.geometry.Rect?>(null)
     Thread { Thread.sleep((sustain+120L)*1000); Runtime.getRuntime().halt(3) }.apply {isDaemon=true}.start()
     application {
-        val state=rememberWindowState(width=960.dp,height=640.dp)
+        val state=rememberWindowState(width=960.dp,height=640.dp,position=numericPosition)
         var clicks by remember { mutableStateOf(0) }
         var full by remember { mutableStateOf(false) }
         var restoreBounds by remember { mutableStateOf<java.awt.Rectangle?>(null) }
@@ -125,6 +127,17 @@ fun layerMain(args: Array<String>) {
                         mpv.option("target-prim","bt.2020"); mpv.option("target-trc","linear"); mpv.option("target-peak","10000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
                         mpv.option("dither-depth","no") // Float output must not be quantized as an 8-bit window framebuffer.
+                        if(Platform.isMac()) {
+                            // mpv linear light uses 203-nit units. HDR reference output uses 100; SDR keeps relative white.
+                            // Convert units in the actual app, never normalize captured observations.
+                            val edrWindow=requireNotNull(bridge.ps_find_window("Pictureshow native HDR surface"))
+                            val reference=bridge.ps_edr_reference_white(edrWindow)
+                            check(reference==100.0 || reference==203.0) { "Unknown EDR reference" }
+                            File(out,"edr-reference.json").writeText("{\"referenceWhiteNits\":$reference}\n")
+                            val shader=File(out,"edr-reference.glsl")
+                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / $reference), c.a); }\n")
+                            mpv.option("glsl-shaders",shader.absolutePath)
+                        }
                         if(Platform.isWindows()) {
                             // Convert AFTER mpv gamut handling; negative scRGB channels preserve wide gamut.
                             val shader=File(out,"scrgb-reference.glsl")

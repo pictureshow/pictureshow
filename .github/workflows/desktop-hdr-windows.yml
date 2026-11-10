@@ -18,6 +18,8 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Numeric contract and negative controls
+        run: python -m unittest discover -s desktop/tools/hdr -p test_analyze.py -v
       - name: Build independent DWM FP16 capture
         shell: pwsh
         run: |
