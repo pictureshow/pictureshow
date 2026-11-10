@@ -118,7 +118,7 @@ class LiveTvViewModelTest {
 internal class LiveFake : LiveTvService {
     var rights = LivePolicy(true, true, true, true)
     var channelRows = listOf(LiveChannel("c", "Generated", "2"))
-    val show = LiveProgram("p", "Generated program", "c", startDate = "1970-01-01T00:00:00Z", endDate = "1970-01-01T01:00:00Z")
+    var show = LiveProgram("p", "Generated program", "c", startDate = "1970-01-01T00:00:00Z", endDate = "1970-01-01T01:00:00Z")
     var failPrograms = false
     var created = 0
     var deleted = 0

@@ -77,6 +77,21 @@ class LiveVectorsTest {
                 input.text("end")
             ).map { JsonPrimitive(it.id) }
         )
+        "guide-metadata" -> JsonArray(
+            guidePrograms(
+                json.decodeFromJsonElement(input.getValue("programs")),
+                input.getValue("channels").jsonArray.map { it.jsonPrimitive.content }.toSet(),
+                input.text("start"),
+                input.text("end")
+            ).map { program ->
+                buildJsonObject {
+                    put("id", program.id)
+                    put("name", program.name)
+                    put("start", program.startDate)
+                    put("end", program.endDate)
+                }
+            }
+        )
         "sort" -> JsonArray(
             sortChannels(json.decodeFromJsonElement<List<LiveChannel>>(input.getValue("channels"))).map {
                 JsonPrimitive(it.id)

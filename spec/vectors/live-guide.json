@@ -444,6 +444,34 @@
         ],
         "actionAllowed": false
       }
+    },
+    {
+      "id": "live-guide.compact-cell-retains-full-program-metadata",
+      "operation": "guide-metadata",
+      "input": {
+        "start": "2030-11-03T05:00:00Z",
+        "end": "2030-11-03T06:00:00Z",
+        "channels": [
+          "c"
+        ],
+        "programs": [
+          {
+            "Id": "long",
+            "Name": "A generated program with a long title that must remain fully available to the screen reader",
+            "ChannelId": "c",
+            "StartDate": "2030-11-03T05:00:00Z",
+            "EndDate": "2030-11-03T05:30:00Z"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "id": "long",
+          "name": "A generated program with a long title that must remain fully available to the screen reader",
+          "start": "2030-11-03T05:00:00Z",
+          "end": "2030-11-03T05:30:00Z"
+        }
+      ]
     }
   ]
 }

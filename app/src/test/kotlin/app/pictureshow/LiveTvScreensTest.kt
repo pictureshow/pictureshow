@@ -6,9 +6,12 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -17,11 +20,13 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import app.pictureshow.core.livetv.LivePolicy
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,5 +112,21 @@ class LiveTvScreensTest {
         compose.onNodeWithText("Review recording").performScrollTo().performClick()
         compose.onNodeWithText("Confirm recording").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, writes) }
+    }
+
+    @Test fun longGuideTitleStaysInBoundedCellWithFullReaderDescription() {
+        val title = "A generated program with a long title that must remain fully available to the screen reader"
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            show = show.copy(name = title, startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1_800).toString())
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) }
+        }
+        compose.onNodeWithText("Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        val cell = compose.onNodeWithTag("live:p:p").performScrollTo()
+        assertTrue(cell.getUnclippedBoundsInRoot().height <= 120.dp, "Long labels must not expand a guide lane")
+        cell.assert(hasContentDescription(title, substring = true))
     }
 }

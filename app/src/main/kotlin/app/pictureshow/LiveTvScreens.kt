@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,9 +38,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -424,8 +428,10 @@ internal fun LiveTvScreen(
                                             cells.filter { it.lane == lane }.forEach { cell ->
                                                 val show = cell.program
                                                 LiveButton(
-                                                    "${liveDates(show.startDate, show.endDate)}\n${show.name}",
+                                                    "${liveClock(show.startDate)} – ${liveClock(show.endDate)}\n${show.name}",
                                                     tv,
+                                                    compactGuide = true,
+                                                    readerLabel = "${show.name} · ${liveDates(show.startDate, show.endDate)}",
                                                     modifier = Modifier.offset(x = (cell.startFraction * 1080).dp).width(
                                                         (
                                                             cell.widthFraction *
@@ -690,6 +696,8 @@ private fun LiveButton(
     focusKey: String = label,
     restore: Boolean = false,
     onFocused: () -> Unit = {},
+    compactGuide: Boolean = false,
+    readerLabel: String? = null,
     onClick: () -> Unit
 ) {
     val focus = remember(focusKey) { FocusRequester() }
@@ -699,10 +707,26 @@ private fun LiveButton(
             runCatching { focus.requestFocus() }
         }
     }
-    val target = modifier.heightIn(min = 48.dp).focusRequester(focus).onFocusChanged { if (it.isFocused) onFocused() }
-        .semantics { if (selected) stateDescription = "Selected" }.testTag("live:$focusKey")
+    val sized = if (compactGuide) modifier.height(104.dp) else modifier
+    val target = sized.heightIn(min = 48.dp).focusRequester(focus).onFocusChanged { if (it.isFocused) onFocused() }
+        .semantics {
+            if (selected) stateDescription = "Selected"
+            readerLabel?.let { contentDescription = it }
+        }.testTag("live:$focusKey")
     if (tv) {
-        androidx.tv.material3.Button(onClick, target, enabled = enabled) { androidx.tv.material3.Text(label) }
+        androidx.tv.material3.Button(
+            onClick,
+            target,
+            enabled = enabled,
+            shape = if (compactGuide) {
+                androidx.tv.material3.ButtonDefaults.shape(shape = RoundedCornerShape(8.dp))
+            } else {
+                androidx.tv.material3.ButtonDefaults.shape()
+            },
+            contentPadding = if (compactGuide) PaddingValues(8.dp) else androidx.tv.material3.ButtonDefaults.ContentPadding
+        ) {
+            androidx.tv.material3.Text(label, maxLines = if (compactGuide) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
+        }
     } else {
         androidx.compose.material3.OutlinedButton(onClick, target, enabled = enabled) { androidx.compose.material3.Text(label) }
     }
@@ -721,6 +745,9 @@ private fun LiveField(label: String, value: String, tv: Boolean, enabled: Boolea
 
 private fun LiveChannel.mediaItem() = MediaItem(id, name, type = "TvChannel", imageTags = imageTags, userData = userData)
 private fun liveInstant(value: String?): Long = runCatching { Instant.parse(value).toEpochMilli() }.getOrDefault(Long.MIN_VALUE)
+private fun liveClock(value: String?): String = runCatching {
+    DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.parse(value))
+}.getOrDefault("Time unavailable")
 private fun liveTime(value: Long): String =
     DateTimeFormatter.ofPattern("EEE d MMM HH:mm xxx").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(value))
 private fun liveDates(start: String?, end: String?): String = if (start == null ||
