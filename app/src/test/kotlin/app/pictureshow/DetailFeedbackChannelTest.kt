@@ -29,12 +29,15 @@ import org.robolectric.annotation.Config
 @Config(sdk = [30], application = Application::class)
 @Suppress("DEPRECATION")
 class DetailFeedbackChannelTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
     @Test fun aDepartedPageCannotSpeakOnTheNextPagesMatchingAction() {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         val host = View(compose.activity)
         fun node() = AccessibilityNodeInfo.obtain().apply {
             setSource(host, 1)

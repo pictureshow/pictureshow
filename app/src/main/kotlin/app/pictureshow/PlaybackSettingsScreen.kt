@@ -86,6 +86,7 @@ internal class PlaybackSettingsViewModel(
         viewModelScope.launch {
             when (val result = service.configuration(account)) {
                 is ClientResult.Success -> mutable.update { it.copy(configuration = result.value, loading = false) }
+
                 is ClientResult.Failure -> {
                     if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) accounts.expire(account.key, account.accessToken)
                     mutable.update { it.copy(loading = false, error = result.error.message) }
@@ -114,6 +115,7 @@ internal class PlaybackSettingsViewModel(
         viewModelScope.launch {
             when (val result = service.saveConfiguration(account, next)) {
                 is ClientResult.Success -> mutable.update { it.copy(configuration = next, saving = false) }
+
                 is ClientResult.Failure -> {
                     if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) accounts.expire(account.key, account.accessToken)
                     mutable.update { it.copy(saving = false, error = result.error.message) }
@@ -148,8 +150,9 @@ internal fun PlaybackSettingsScreen(
     var restoreEntry by rememberSaveable { mutableStateOf("") }
     val local = state.local
     val configuration = state.configuration
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+        Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
@@ -186,6 +189,51 @@ internal fun PlaybackSettingsScreen(
             Text("Audio passthrough: ${if (local.passthrough) "On" else "Off"}")
         }
         Text("This TV's audio output accepts: $acceptedAudio")
+        Button(
+            onClick = { onLocal { it.copy(conversionNotice = !it.conversionNotice) } },
+            modifier = Modifier.testTag("settings:conversion-notice").semantics {
+                toggleableState = ToggleableState(local.conversionNotice)
+                stateDescription = if (local.conversionNotice) "On" else "Off"
+            }
+        ) {
+            Text("Conversion notice: ${if (local.conversionNotice) "On" else "Off"}")
+        }
+        Text("Shows a short note when the server has to convert a video or a song for this TV.")
+        Button(
+            onClick = {
+                onLocal {
+                    val order = musicQualityOptions.map { option -> option.first }
+                    it.copy(musicQuality = order[(order.indexOf(it.musicQuality) + 1) % order.size])
+                }
+            },
+            modifier = Modifier.testTag("settings:music-quality").semantics {
+                stateDescription = musicQualityLabel(local.musicQuality)
+            }
+        ) {
+            Text("Music quality: ${musicQualityLabel(local.musicQuality)}")
+        }
+        val phoneRemote = when (local.remoteReceiver) {
+            "off" -> "Off"
+            "server-allowed" -> "Anyone this server allows"
+            else -> "Only you"
+        }
+        Button(
+            onClick = {
+                onLocal {
+                    it.copy(
+                        remoteReceiver = when (it.remoteReceiver) {
+                            "same-viewer" -> "server-allowed"
+                            "server-allowed" -> "off"
+                            else -> "same-viewer"
+                        }
+                    )
+                }
+            },
+            modifier = Modifier.testTag("settings:phone-remote").semantics { stateDescription = phoneRemote }
+        ) {
+            Text("Phone remote: $phoneRemote")
+        }
+        Text("Who can play and control things on this TV from their phone while Pictureshow is open.")
         Button(onClick = {
             onLocal { it.copy(subtitleSize = nextSetting(SubtitleSize.entries, it.subtitleSize)) }
         }, modifier = Modifier.testTag("settings:size").semantics { onClick(label = "Change value", action = null) }) {

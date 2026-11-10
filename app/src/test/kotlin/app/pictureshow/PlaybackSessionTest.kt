@@ -27,8 +27,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class PlaybackSessionTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Gateway : PlaybackGateway {
         val requests = mutableListOf<PlaybackRequest>()
         val events = mutableListOf<String>()

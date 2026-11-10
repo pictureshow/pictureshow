@@ -37,10 +37,14 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import org.junit.Rule
 
 /** Drives retained ViewModels; no navigation recreation can hide the stale-card regression. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CatalogFreshnessTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val dispatcher = StandardTestDispatcher()
     private val stores = mutableListOf<ViewModelStore>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "token")

@@ -17,6 +17,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -24,6 +25,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class PlaybackTransportReuseTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun reopenedSourcesReuseTheirConnectionWithoutReusingThePreviousAccountsHeaders() {
         val ports = CopyOnWriteArrayList<Int>()

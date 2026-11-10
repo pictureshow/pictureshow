@@ -42,6 +42,85 @@ class PlaybackExitFocusEventsTest {
     private fun event(type: Int = AccessibilityEvent.TYPE_VIEW_FOCUSED, klass: String = "android.view.ViewGroup") =
         AccessibilityEvent.obtain(type).apply { className = klass }
 
+    private fun paneEvent(type: Int) = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED).apply {
+        contentChangeTypes = type
+    }
+
+    @Test fun aClosingPaneNeverReachesTheReaderFromTheOwnedHost() {
+        val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { true }) { false }
+        assertFalse(
+            filtering.onRequestSendAccessibilityEvent(parent, child, paneEvent(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED))
+        )
+        assertTrue(forwarded.isEmpty())
+    }
+
+    @Test fun anOpeningPaneAndOtherWindowsKeepTheirEvents() {
+        val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { true }) { false }
+        assertTrue(
+            filtering.onRequestSendAccessibilityEvent(parent, child, paneEvent(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED))
+        )
+        assertTrue(
+            filtering.onRequestSendAccessibilityEvent(
+                parent,
+                View(context),
+                paneEvent(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED)
+            )
+        )
+        assertEquals(2, forwarded.size)
+    }
+
+    private fun descriptionEvent(description: String?, changes: Int = AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION) =
+        AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED).apply {
+            contentChangeTypes = changes
+            contentDescription = description
+        }
+
+    @Test fun aDescriptionTheFocusMoveWillSpeakIsHeldBackFromTheOwnedHostOnly() {
+        val filtering = PlaybackExitFocusDelegate(original, child, descriptionSpokenByFocus = { "Controls hidden" }) { false }
+        assertFalse(filtering.onRequestSendAccessibilityEvent(parent, child, descriptionEvent("Controls hidden")))
+        assertTrue(forwarded.isEmpty())
+        assertTrue(filtering.onRequestSendAccessibilityEvent(parent, View(context), descriptionEvent("Controls hidden")))
+        assertEquals(1, forwarded.size)
+    }
+
+    @Test fun otherContentChangesFromTheOwnedHostAreForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child, descriptionSpokenByFocus = { "Controls hidden" }) { false }
+        val others = listOf(
+            descriptionEvent("Playing"),
+            descriptionEvent(null),
+            descriptionEvent("Controls hidden", AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE),
+            descriptionEvent("Controls hidden", AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION),
+            AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED).apply { contentDescription = "Controls hidden" }
+        )
+        others.forEach { assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, it)) }
+        assertEquals(others.size, forwarded.size)
+    }
+
+    @Test fun withNoDescriptionToHoldBackTheChangeIsForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child) { false }
+        assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, descriptionEvent("Controls hidden")))
+        assertEquals(1, forwarded.size)
+    }
+
+    @Test fun anotherWindowStateEventFromTheOwnedHostIsForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { true }) { false }
+        val changes = listOf(
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED,
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_TITLE,
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED
+        )
+        changes.forEach { assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, paneEvent(it)), "changes=$it") }
+        assertEquals(changes.size, forwarded.size)
+    }
+
+    @Test fun withoutAReaderAClosingPaneIsForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { false }) { false }
+        assertTrue(
+            filtering.onRequestSendAccessibilityEvent(parent, child, paneEvent(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED))
+        )
+        assertEquals(1, forwarded.size)
+    }
+
     @Test fun anEmptyHostFocusCannotSendTheReaderToTheFirstTextNode() {
         assertFalse(delegate.onRequestSendAccessibilityEvent(parent, child, event()))
         assertTrue(forwarded.isEmpty())

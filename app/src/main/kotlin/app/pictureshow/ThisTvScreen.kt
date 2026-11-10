@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -79,9 +78,9 @@ internal suspend fun captureThisTv(context: Context, preferences: PlaybackPrefer
     )
 }
 
-internal fun thisTvShareIntent(report: ThisTvReport): Intent = Intent(Intent.ACTION_SEND).apply {
+internal fun thisTvShareIntent(report: ThisTvReport, deviceName: String = "This TV"): Intent = Intent(Intent.ACTION_SEND).apply {
     type = "text/plain"
-    putExtra(Intent.EXTRA_SUBJECT, "Pictureshow · This TV")
+    putExtra(Intent.EXTRA_SUBJECT, "Pictureshow · $deviceName")
     putExtra(Intent.EXTRA_TEXT, report.sharedText)
 }
 
@@ -181,8 +180,7 @@ internal fun ThisTvScreen(
                     showJson = !showJson
                     if (hiding) {
                         scope.launch {
-                            list.scrollToItem(0)
-                            withFrameNanos { }
+                            list.jumpTo(0)
                             toggle.requestFocus()
                         }
                     }

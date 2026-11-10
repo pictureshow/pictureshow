@@ -35,6 +35,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlaybackSettingsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
@@ -76,6 +79,16 @@ class PlaybackSettingsTest {
         down("settings:passthrough")
         center()
         assertEquals(false, state.local.passthrough)
+        down("settings:conversion-notice")
+        center()
+        assertEquals(false, state.local.conversionNotice)
+        down("settings:music-quality")
+        assertEquals("auto", state.local.musicQuality)
+        center()
+        assertEquals(musicQualityOptions[1].first, state.local.musicQuality)
+        down("settings:phone-remote")
+        center()
+        assertEquals("server-allowed", state.local.remoteReceiver)
         down("settings:size")
         center()
         assertEquals(SubtitleSize.Small, state.local.subtitleSize)

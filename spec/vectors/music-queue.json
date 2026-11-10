@@ -1,0 +1,827 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-queue",
+  "cases": [
+    {
+      "id": "music-queue.selected-track-keeps-its-context",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "song-a"
+              },
+              {
+                "id": "b",
+                "media": "song-b"
+              },
+              {
+                "id": "c",
+                "media": "song-c"
+              },
+              {
+                "id": "d",
+                "media": "song-d"
+              }
+            ],
+            "entry": "c"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "current": "c",
+              "visited": [
+                "a",
+                "b"
+              ],
+              "history": [],
+              "paused": false,
+              "shuffled": false
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "previous",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "b"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.no-selection-starts-at-the-top",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "song-a"
+              },
+              {
+                "id": "b",
+                "media": "song-b"
+              },
+              {
+                "id": "c",
+                "media": "song-c"
+              },
+              {
+                "id": "d",
+                "media": "song-d"
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "visited": []
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.selection-outside-the-block-is-refused",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "song-a"
+              },
+              {
+                "id": "b",
+                "media": "song-b"
+              },
+              {
+                "id": "c",
+                "media": "song-c"
+              },
+              {
+                "id": "d",
+                "media": "song-d"
+              }
+            ],
+            "entry": "z"
+          },
+          "expected": {
+            "outcome": "missing-entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.shuffle-plays-its-whole-order",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "song-a"
+              },
+              {
+                "id": "b",
+                "media": "song-b"
+              },
+              {
+                "id": "c",
+                "media": "song-c"
+              },
+              {
+                "id": "d",
+                "media": "song-d"
+              }
+            ],
+            "permutation": [
+              "c",
+              "a",
+              "d",
+              "b"
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "c",
+                "a",
+                "d",
+                "b"
+              ],
+              "current": "c",
+              "visited": [],
+              "shuffled": true
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.shuffle-order-must-be-the-block",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "song-a"
+              },
+              {
+                "id": "b",
+                "media": "song-b"
+              },
+              {
+                "id": "c",
+                "media": "song-c"
+              },
+              {
+                "id": "d",
+                "media": "song-d"
+              }
+            ],
+            "permutation": [
+              "c",
+              "a"
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-permutation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.queue-row-jumps-there",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a",
+        "positionTicks": "50"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "jump",
+            "revision": "0",
+            "entry": "c"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "history": [
+                "a"
+              ],
+              "visited": [
+                "a",
+                "b"
+              ],
+              "positionTicks": "0",
+              "paused": false,
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.queue-row-must-exist",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "jump",
+            "revision": "0",
+            "entry": "z"
+          },
+          "expected": {
+            "outcome": "missing-entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.unavailable-track-skips",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          }
+        ],
+        "order": [
+          "a",
+          "b"
+        ],
+        "current": "a"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "error",
+            "revision": "0",
+            "music": true
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "failed": [
+                "a"
+              ]
+            },
+            "outcome": "skipped-unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.same-song-twice-gets-two-entries",
+      "operation": "entries",
+      "input": {
+        "media": [
+          "x",
+          "x"
+        ],
+        "first": "7"
+      },
+      "expected": [
+        {
+          "id": "m7",
+          "media": "x"
+        },
+        {
+          "id": "m8",
+          "media": "x"
+        }
+      ]
+    },
+    {
+      "id": "music-queue.seeded-shuffle-is-the-same-everywhere",
+      "operation": "permutation",
+      "input": {
+        "ids": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        "seed": "42"
+      },
+      "expected": [
+        "a",
+        "e",
+        "c",
+        "b",
+        "d"
+      ]
+    },
+    {
+      "id": "music-queue.window-current-and-next",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "b"
+      },
+      "expected": {
+        "window": [
+          "b",
+          "c",
+          "d"
+        ],
+        "repeats": false
+      }
+    },
+    {
+      "id": "music-queue.window-ends-with-the-queue",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "d"
+      },
+      "expected": {
+        "window": [
+          "d"
+        ],
+        "repeats": false
+      }
+    },
+    {
+      "id": "music-queue.window-wraps-under-repeat-all",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "d",
+        "repeat": "all"
+      },
+      "expected": {
+        "window": [
+          "d",
+          "a",
+          "b"
+        ],
+        "repeats": false
+      }
+    },
+    {
+      "id": "music-queue.window-repeat-one-holds-one",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "b",
+        "repeat": "one"
+      },
+      "expected": {
+        "window": [
+          "b"
+        ],
+        "repeats": true
+      }
+    },
+    {
+      "id": "music-queue.window-single-entry-repeat-all-loops",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          }
+        ],
+        "order": [
+          "a"
+        ],
+        "current": "a",
+        "repeat": "all"
+      },
+      "expected": {
+        "window": [
+          "a"
+        ],
+        "repeats": true
+      }
+    },
+    {
+      "id": "music-queue.window-leaves-out-failed",
+      "operation": "window",
+      "input": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a",
+        "failed": [
+          "b"
+        ]
+      },
+      "expected": {
+        "window": [
+          "a",
+          "c",
+          "d"
+        ],
+        "repeats": false
+      }
+    },
+    {
+      "id": "music-queue.plan-empty-output-replaces",
+      "operation": "plan",
+      "input": {
+        "held": [],
+        "playing": null,
+        "target": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": {
+        "replace": true,
+        "add": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "music-queue.plan-advance-removes-what-played",
+      "operation": "plan",
+      "input": {
+        "held": [
+          "a",
+          "b",
+          "c"
+        ],
+        "playing": "b",
+        "target": [
+          "b",
+          "c",
+          "d"
+        ]
+      },
+      "expected": {
+        "replace": false,
+        "removeBefore": 1,
+        "removeAfter": 0,
+        "add": [
+          "d"
+        ]
+      }
+    },
+    {
+      "id": "music-queue.plan-edit-ahead-leaves-the-playing-item",
+      "operation": "plan",
+      "input": {
+        "held": [
+          "a",
+          "b",
+          "c"
+        ],
+        "playing": "a",
+        "target": [
+          "a",
+          "c",
+          "d"
+        ]
+      },
+      "expected": {
+        "replace": false,
+        "removeBefore": 0,
+        "removeAfter": 2,
+        "add": [
+          "c",
+          "d"
+        ]
+      }
+    },
+    {
+      "id": "music-queue.plan-jump-replaces",
+      "operation": "plan",
+      "input": {
+        "held": [
+          "a",
+          "b"
+        ],
+        "playing": "a",
+        "target": [
+          "c"
+        ]
+      },
+      "expected": {
+        "replace": true,
+        "add": [
+          "c"
+        ]
+      }
+    },
+    {
+      "id": "music-queue.plan-nothing-to-do",
+      "operation": "plan",
+      "input": {
+        "held": [
+          "a",
+          "b"
+        ],
+        "playing": "a",
+        "target": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": {
+        "replace": false,
+        "removeBefore": 0,
+        "removeAfter": 0,
+        "add": []
+      }
+    },
+    {
+      "id": "music-queue.play-with-empty-queue-plays",
+      "operation": "decision",
+      "input": {
+        "context": "album",
+        "queueEntries": 0,
+        "queueContext": null
+      },
+      "expected": "play"
+    },
+    {
+      "id": "music-queue.other-album-asks-before-replacing",
+      "operation": "decision",
+      "input": {
+        "context": "album2",
+        "queueEntries": 4,
+        "queueContext": "album1"
+      },
+      "expected": "confirm-replace"
+    },
+    {
+      "id": "music-queue.same-album-jumps-inside",
+      "operation": "decision",
+      "input": {
+        "context": "album1",
+        "queueEntries": 4,
+        "queueContext": "album1"
+      },
+      "expected": "jump"
+    },
+    {
+      "id": "music-queue.attached-remote-is-never-overwritten-silently",
+      "operation": "decision",
+      "input": {
+        "context": "album1",
+        "queueEntries": 0,
+        "queueContext": null,
+        "remoteAttached": true
+      },
+      "expected": "confirm-destination"
+    },
+    {
+      "id": "music-queue.attached-cast-asks-too",
+      "operation": "decision",
+      "input": {
+        "context": "album1",
+        "queueEntries": 4,
+        "queueContext": "album1",
+        "castAttached": true
+      },
+      "expected": "confirm-destination"
+    }
+  ]
+}

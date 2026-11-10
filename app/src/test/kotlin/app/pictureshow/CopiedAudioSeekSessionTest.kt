@@ -24,8 +24,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class CopiedAudioSeekSessionTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun copiedAudioTrackReplacementPreservesPauseTargetAndRateProfileEvaluation() = runTest {
         val gateway = Gateway()

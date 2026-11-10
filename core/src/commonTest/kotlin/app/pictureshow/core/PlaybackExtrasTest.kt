@@ -91,4 +91,23 @@ class PlaybackExtrasTest {
         assertNull(trickplayTile(info.copy(interval = 0), 10))
         assertNull(trickplayTile(info.copy(tileWidth = Int.MAX_VALUE), 10))
     }
+
+    @Test
+    fun nextCardNumberIsRealTimeAndOnlyWhileRunning() {
+        fun card(
+            wall: Long,
+            credits: Boolean,
+            left: Long,
+            speed: Double,
+            auto: Boolean = true,
+            ended: Boolean = false,
+            suspended: Boolean = false
+        ) = nextEpisodeCardSeconds(wall, credits, left, speed, auto, ended, suspended)
+        assertEquals(1, card(10, true, 2_000, 2.0))
+        assertEquals(5, card(10, false, 10_000, 2.0))
+        assertEquals(10, card(5, false, 5_000, 0.5))
+        assertNull(card(7, true, 60_000, 1.0, suspended = true))
+        assertNull(card(7, true, 60_000, 1.0, auto = false))
+        assertEquals(3, card(3, true, 0, 1.0, ended = true, suspended = true))
+    }
 }

@@ -35,6 +35,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class DetailRecoveryFollowup3Test {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented film", "Movie")
@@ -193,7 +196,6 @@ class DetailRecoveryFollowup3Test {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         compose.runOnUiThread {
-            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
             org.robolectric.Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
                 listOf(
                     android.accessibilityservice.AccessibilityServiceInfo().apply {
@@ -201,6 +203,7 @@ class DetailRecoveryFollowup3Test {
                     }
                 )
             )
+            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         }
         var readerOnText = false
         val announcements = mutableListOf<String>()

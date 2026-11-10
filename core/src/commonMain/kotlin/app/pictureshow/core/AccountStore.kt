@@ -27,6 +27,20 @@ data class AccountSnapshot(
     val rememberedServers: List<Server> get() = (listOfNotNull(lastServer) + accounts.map { it.server }).distinctBy { it.id to it.url }
 }
 
+/**
+ * What an entry for this server is called, against the others listed with it. Jellyfin's name is free text and defaults to
+ * the machine's hostname, so two entries can share it, and one server added by several addresses always does. The address
+ * then tells them apart. A server with no name is its address.
+ */
+fun serverLabel(server: Server, all: List<Server>): String {
+    val name = server.name.trim()
+    if (name.isEmpty()) return server.url
+    val repeats = all.distinctBy { it.id to it.url }.count { it.name.trim().equals(name, ignoreCase = true) } > 1
+    return if (repeats) "$name · ${server.url}" else name
+}
+
+fun AccountSnapshot.serverLabel(server: Server): String = serverLabel(server, rememberedServers)
+
 /** Writes commit before publishing state, so failed persistence never pretends a sign-in was saved. */
 class AccountStore(private val persistence: TextPersistence) {
     private val mutex = Mutex()

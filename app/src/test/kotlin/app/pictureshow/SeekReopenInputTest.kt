@@ -54,6 +54,9 @@ import org.robolectric.annotation.LooperMode
 @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class SeekReopenInputTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
@@ -177,6 +180,7 @@ class SeekReopenInputTest {
         startKoin {
             modules(
                 module {
+                    single { inertRemoteTarget() }
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }
@@ -203,7 +207,7 @@ class SeekReopenInputTest {
                 }
             }
         }
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             host = androidx.compose.ui.platform.LocalView.current
             PictureshowTheme { PlayerItemScreen(account, item, 80_000, catalog, {}, {}, providedOutput = output) }

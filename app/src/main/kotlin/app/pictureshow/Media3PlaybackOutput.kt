@@ -74,6 +74,16 @@ internal class Media3PlaybackOutput(
     private val mutablePauseIntent = MutableStateFlow(false)
     val pauseIntent = mutablePauseIntent.asStateFlow()
 
+    /** Whether the viewer had paused when the app, or another app taking the audio, last stopped this. The player's state can't tell them apart. */
+    private var pausedBeforeApp: Boolean? = null
+
+    /**
+     * The viewer's own pause, which the app going away, stopping for a failure or a handoff, or losing the audio to another app isn't.
+     * An unplugged headset counts as theirs: pulling it is the viewer's act.
+     */
+    fun viewerPaused(player: Player? = mutablePlayer.value): Boolean =
+        pausedBeforeApp ?: (mutablePauseIntent.value || player?.playWhenReady == false)
+
     var stopGeneration: Long = 0
         private set
 
@@ -81,14 +91,17 @@ internal class Media3PlaybackOutput(
     fun setForeground(value: Boolean) {
         if (!value && mutableForeground.value) stopGeneration++
         mutableForeground.value = value
-        if (!value) pause()
+        if (!value) pauseForApp()
         val snapshot = position()
         PlaybackDiagnostics.write("lifecycle foreground=$value paused=${snapshot.paused} positionMs=${snapshot.milliseconds}")
     }
 
-    private fun playIntent(requested: Boolean): Boolean {
+    internal fun playIntent(requested: Boolean): Boolean {
         if (requested && !mutableForeground.value) return false
-        if (requested) mutablePauseIntent.value = false
+        if (requested) {
+            mutablePauseIntent.value = false
+            pausedBeforeApp = null
+        }
         return requested
     }
     private var completedPosition: PlaybackPosition? = null
@@ -380,6 +393,8 @@ internal class Media3PlaybackOutput(
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (activePlayer === next) {
+                    // Another app took the audio for good and the player stopped itself. It was playing, so the viewer hadn't paused.
+                    if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS && !playWhenReady) pausedBeforeApp = false
                     onProgress(decision)
                     // Media3 may reach ENDED after a paused seek. Play completes the held item;
                     // the published wrapper prevents the usual Play-at-ENDED rewind.
@@ -551,7 +566,14 @@ internal class Media3PlaybackOutput(
         )
     }
 
+    override fun pauseForApp() {
+        val viewer = viewerPaused()
+        pause()
+        pausedBeforeApp = viewer
+    }
+
     override fun pause() {
+        pausedBeforeApp = null
         mutablePauseIntent.value = true
         saved = saved.copy(paused = true)
         completedPosition = completedPosition?.copy(paused = true)

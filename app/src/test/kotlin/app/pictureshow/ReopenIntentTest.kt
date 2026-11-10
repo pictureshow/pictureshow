@@ -20,8 +20,12 @@ import kotlin.test.assertEquals
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class ReopenIntentTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test fun pauseDuringTrackNegotiationReachesTheReplacementDecoder() = intent(initiallyPaused = false)
 
     @Test fun playDuringTrackNegotiationReachesTheReplacementDecoder() = intent(initiallyPaused = true)

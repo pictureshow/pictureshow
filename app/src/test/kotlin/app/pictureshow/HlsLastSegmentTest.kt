@@ -35,6 +35,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -48,6 +49,9 @@ import org.robolectric.shadows.ShadowLog
 @Config(sdk = [30], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class HlsLastSegmentTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun openInFinalSegmentWithAnEmptyDeclaredAudioTrackBecomesReadyAndEndsOnceAfterPlay() {
         for (target in listOf(3_000L, 3_020L, 3_021L)) checkStart(target)

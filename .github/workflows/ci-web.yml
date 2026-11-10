@@ -63,9 +63,24 @@ jobs:
       - name: Prepare reports and install Playwright browsers
         id: browsers
         if: steps.web-source.outputs.available == 'true'
+        timeout-minutes: 25
         run: |
           mkdir -p artifacts
-          npx playwright install --with-deps chromium webkit
+          # A stalled download used to hold the job until its 60-minute limit; give up early and try again.
+          # Killing npx can leave its apt running with the dpkg lock, which then fails every retry at once. Wait for a lock
+          # a moment (apt's timeout covers an apt the image started itself), and between attempts end whatever holds it.
+          echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/90-pictureshow-lock-timeout > /dev/null
+          for attempt in 1 2 3; do
+            timeout -k 15 420 npx playwright install --with-deps chromium webkit && exit 0
+            echo "Playwright install attempt $attempt failed or stalled"
+            if [[ $attempt -lt 3 ]]; then
+              sudo fuser -k -TERM /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock || true
+              sleep 5
+              sudo fuser -k -KILL /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock || true
+              sudo timeout 60 dpkg --configure -a || true
+            fi
+          done
+          exit 1
 
       - name: Unit tests
         if: always() && steps.web-source.outputs.available == 'true' && steps.npm-deps.outcome == 'success'

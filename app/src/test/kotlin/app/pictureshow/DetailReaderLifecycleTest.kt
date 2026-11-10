@@ -39,6 +39,9 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 @Suppress("DEPRECATION")
 class DetailReaderLifecycleTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented film", "Movie")
@@ -101,7 +104,6 @@ class DetailReaderLifecycleTest {
     private fun host(): Pair<View, RetainedFocusProvider> {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         org.robolectric.Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
             listOf(
                 android.accessibilityservice.AccessibilityServiceInfo().apply {
@@ -109,6 +111,7 @@ class DetailReaderLifecycleTest {
                 }
             )
         )
+        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         val host = View(compose.activity)
         val original = RetainedFocusProvider(host)
         ViewCompat.setAccessibilityDelegate(

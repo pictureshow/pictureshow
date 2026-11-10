@@ -39,7 +39,7 @@ internal fun AccessibilityNodeInfo?.isFocusedAction(): Boolean = this != null &&
 /** Keep an incoming catalog's opener as its first accessibility target, without hiding its pixels. */
 @Composable
 internal fun rememberCatalogFocusHandoff(returning: Boolean, target: String?, inputReady: Boolean, interacted: Boolean): Boolean {
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberAssistiveServiceInUse()
     val host = LocalView.current
     var acknowledged by remember { mutableStateOf(false) }
     LaunchedEffect(returning, target, inputReady, accessible, interacted) {

@@ -27,9 +27,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.Rule
 
 /** Independent report ordering and parent reads: a pre-acknowledgement result must never unlock details. */
 class PlaybackFollowupsTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
     private val series = MediaItem("series", type = "Series")
     private val season = MediaItem("season", type = "Season", seriesId = series.id)

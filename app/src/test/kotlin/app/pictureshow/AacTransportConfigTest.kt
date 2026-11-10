@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -27,6 +28,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class AacTransportConfigTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun hlsAndProgressiveCopiesAndReencodedSurroundHaveIdenticalAudioSpecificConfig() {
         for (fixture in listOf("copied-audio-preroll.ts", "aac-fdk-surround.ts", "aac-stereo.ts")) {

@@ -23,7 +23,7 @@ internal val LocalRestoringConfirmationFocus = staticCompositionLocalOf { false 
 /** Offer the intended action first, then reveal the rest once TV TalkBack acknowledges it. */
 @Composable
 internal fun ConfirmationFocus(target: String?, onRestored: () -> Unit = {}, content: @Composable () -> Unit) {
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberAssistiveServiceInUse()
     var ready by remember(target, accessible) { mutableStateOf(target == null || !accessible) }
     val host = LocalView.current
     LaunchedEffect(target, accessible) {

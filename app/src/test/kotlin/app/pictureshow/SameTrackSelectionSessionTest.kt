@@ -25,8 +25,12 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class SameTrackSelectionSessionTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun readyBurnInAudioOffAndDirectPicksPreservePlayerEncodePauseAndReportViewerIntent() = runTest {
         for ((type, index, transcode) in listOf(

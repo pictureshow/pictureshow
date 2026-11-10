@@ -194,6 +194,10 @@ test("About, all bundled license text, device JSON and unavailable support are r
     await page.keyboard.press("Escape");
     await expect(hls).toBeFocused();
     await page.keyboard.press("Escape");
+    // Back goes through the browser's history, which answers later, so wait for each step before the next press.
+    await expect(
+        page.getByRole("button", { name: "Open-source licenses", exact: true }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await page
         .getByRole("button", { name: "Troubleshooting · This browser" })
@@ -365,16 +369,21 @@ test("failed final report retries its exact viewing snapshot before fresh action
         exact: true,
     });
     await expect(retry).toBeVisible();
+    // A report error guards commands; a press is accepted as pending (CAT-13).
+    await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
+        "data-state",
+        "pending",
+    );
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
         "aria-disabled",
-        "true",
+        "false",
     );
     await retry.click();
     await expect.poll(() => attempts.length).toBe(2);
     expect(attempts[1]).toEqual(attempts[0]);
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
-        "aria-disabled",
-        "false",
+        "data-state",
+        "ready",
     );
 });
 

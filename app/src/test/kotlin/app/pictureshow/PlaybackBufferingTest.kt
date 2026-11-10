@@ -26,8 +26,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class PlaybackBufferingTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Output : PlaybackOutput {
         var released = false
         override fun position() = PlaybackPosition(127_000, false)

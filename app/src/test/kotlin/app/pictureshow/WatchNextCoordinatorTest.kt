@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +37,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class WatchNextCoordinatorTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val account = Account(Server("server", "Fixture", "https://media.example.test", "12"), User("a", "A"), "token")
     private val item = MediaItem("0123456789abcdef0123456789abcdef", "Fixture movie", "Movie")
     private class Provider : WatchProvider {

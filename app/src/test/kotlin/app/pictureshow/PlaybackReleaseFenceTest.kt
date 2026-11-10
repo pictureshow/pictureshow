@@ -32,6 +32,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -43,6 +44,9 @@ import org.robolectric.shadows.ShadowSystemClock
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class PlaybackReleaseFenceTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val ticking = AtomicBoolean(false)
     private lateinit var clock: Thread
 

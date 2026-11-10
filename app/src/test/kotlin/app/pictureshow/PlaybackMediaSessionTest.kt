@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -32,6 +33,9 @@ import org.robolectric.shadow.api.Shadow
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class, shadows = [PlaybackMediaSessionTest.RecordingMediaController::class])
 class PlaybackMediaSessionTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val context: Context get() = RuntimeEnvironment.getApplication()
 
     @Test

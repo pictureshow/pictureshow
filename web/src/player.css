@@ -35,8 +35,8 @@
     background: linear-gradient(
         var(--color-app-playerControls),
         transparent 28%,
-        transparent 52%,
-        var(--color-app-playerPanel) 72%,
+        transparent calc(var(--controls-top, 72%) - 8px),
+        var(--color-app-playerPanel) var(--controls-top, 72%),
         var(--color-app-playerPanel)
     );
     pointer-events: none;
@@ -139,17 +139,42 @@
     display: none;
 }
 
+/* Every player status message uses the conversion notice's card, so the player has
+   one floating-message style that stays readable over any frame. It sits centred
+   just above the controls (or above the caption area while they are hidden), clear
+   of the notice at the top start, and steps aside while a panel is open. */
 .player-overlay .playback-feedback {
     position: absolute;
-    top: 22%;
-    left: 8%;
-    right: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(100% - min(var(--controls-top, 100%), 82%) + 16px);
+    z-index: 3;
+    width: max-content;
+    max-width: min(560px, calc(100% - 32px));
+    box-sizing: border-box;
+    padding: 0.6rem 1rem;
+    border-radius: 1rem;
+    background: var(--color-app-playerStatus);
+    border: 1px solid var(--color-app-field);
+    color: #fff;
     text-align: center;
-    font-size: 1.05rem;
-    text-shadow: 0 2px 4px #000;
+    font-size: 16px;
+    line-height: 1.4;
     pointer-events: none;
 }
-.player-overlay .playback-feedback:empty {
+.player-overlay .playback-feedback[data-anchor="error"] {
+    bottom: calc(60% + 12px);
+}
+.player-overlay .playback-feedback[data-anchor="report"] {
+    bottom: calc(70% + 12px);
+}
+@media (min-width: 1400px) {
+    .player-overlay .playback-feedback {
+        max-width: min(760px, calc(100% - 32px));
+    }
+}
+.player-overlay .playback-feedback:empty,
+.player-overlay .playback-feedback[data-covered] {
     display: none;
 }
 .player-overlay .player-error {
@@ -201,6 +226,56 @@
     padding: 2rem;
     overflow: auto;
     overscroll-behavior: contain;
+}
+/* Done is pinned: the title and Done stay put and only the body scrolls (R4). */
+.player-overlay .player-panel[open] {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.player-overlay .player-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    /* Room for focus rings at the scroll edge. */
+    padding: 4px;
+    margin: -4px;
+}
+/* A fade above the pinned Done shows that cut content scrolls. It is sticky, so
+   at the end of the scroll it sits below the last line instead of over it. */
+.player-overlay .player-panel-body::after {
+    content: "";
+    position: sticky;
+    bottom: -4px;
+    display: block;
+    height: 1.5rem;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        var(--color-app-playerPanel)
+    );
+}
+.player-overlay .player-panel > h2,
+.player-overlay .player-panel-status,
+.player-overlay .player-panel-done {
+    flex: none;
+}
+.player-overlay .player-panel-status {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.8rem;
+    border-left: 3px solid var(--accent);
+    border-radius: 0.4rem;
+    background: var(--color-app-playerStatus);
+    line-height: 1.4;
+}
+.player-overlay .player-panel-status:empty {
+    display: none;
+}
+.player-overlay .player-panel-done {
+    margin-top: 1rem;
+    align-self: flex-start;
 }
 .player-overlay .player-panel::backdrop {
     background: #000b;
@@ -344,7 +419,13 @@
     .player-overlay .player-controls {
         padding: 1rem;
         padding-bottom: max(1rem, env(safe-area-inset-bottom));
-        background: linear-gradient(var(--color-app-playerControls), transparent 28%, transparent 55%, var(--color-app-playerPanel) 65%, var(--color-app-playerPanel));
+        background: linear-gradient(
+            var(--color-app-playerControls),
+            transparent 28%,
+            transparent calc(var(--controls-top, 65%) - 8px),
+            var(--color-app-playerPanel) var(--controls-top, 65%),
+            var(--color-app-playerPanel)
+        );
     }
     .player-overlay .player-heading {
         top: max(1rem, env(safe-area-inset-top));
@@ -395,9 +476,6 @@
     .player-overlay .current-position {
         font-size: 0.85rem;
         padding: 0.35rem;
-    }
-    .player-overlay .orientation-control {
-        display: block;
     }
     .player-overlay .player-panel::before {
         content: "";
@@ -483,9 +561,23 @@
 }
 
 @media (max-width: 1000px) and (max-height: 480px) {
-    .player-overlay .seek-long { display: none; }
-    .player-overlay .seek-short { display: inline; }
-    .player-overlay .orientation-control { display: block; }
+    .player-overlay .seek-long {
+        display: none;
+    }
+    .player-overlay .seek-short {
+        display: inline;
+    }
+    .player-overlay .orientation-control {
+        display: block;
+    }
+}
+
+/* TOUCH-10: a window whose smallest side reaches 600px follows the device, so a
+   600 to 650px portrait tablet gets the narrow layout above without the toggle. */
+@media (max-width: 599.98px) {
+    .player-overlay .orientation-control {
+        display: block;
+    }
 }
 
 /* Change both focus colors together. An animated dark-to-light fill with an
@@ -498,12 +590,121 @@
     color: var(--color-tv-buttonFocusedContent);
 }
 .player-overlay .player-panel [role="radio"]:is(:focus, :focus-visible)::before,
-.player-overlay .player-panel [role="radio"]:is(:focus, :focus-visible) :is(span, small, strong, em) {
+.player-overlay
+    .player-panel
+    [role="radio"]:is(:focus, :focus-visible)
+    :is(span, small, strong, em) {
     color: inherit;
 }
 @media (min-width: 1400px) {
     .player-overlay .current-position,
     .player-overlay .track-controls label {
         font-size: 28px;
+    }
+}
+/* PLAY-27: top start of the frame, inside the safe area, away from bottom cues and controls. */
+.player-overlay .conversion-notice {
+    position: absolute;
+    top: max(36px, env(safe-area-inset-top));
+    left: max(48px, env(safe-area-inset-left));
+    z-index: 3;
+    width: min(560px, calc(100% - 96px));
+    padding: 0.9rem 1.2rem;
+    border-radius: 1rem;
+    background: var(--color-app-playerStatus);
+    border: 1px solid var(--color-app-field);
+    color: #fff;
+    cursor: pointer;
+}
+.player-overlay .conversion-notice p {
+    margin: 0;
+}
+.player-overlay .conversion-notice-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 0.3rem !important;
+    /* No one-word last line at narrow widths. */
+    text-wrap: balance;
+}
+.player-overlay .conversion-notice-line {
+    font-size: 16px;
+    line-height: 1.4;
+}
+.player-overlay .playback-info {
+    max-height: calc(85dvh - 10rem);
+    overflow: auto;
+    margin-bottom: 1rem;
+    border-radius: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+.player-overlay .playback-info:focus-visible {
+    outline: 3px solid var(--color-tv-primary);
+}
+.player-overlay .playback-info h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1.05rem;
+}
+.player-overlay .playback-info dl {
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+.player-overlay .playback-info dl > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 40%) 1fr;
+    gap: 1rem;
+}
+.player-overlay .playback-info dt {
+    color: var(--color-app-muted);
+}
+.player-overlay .playback-info dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+/* One reading rhythm for every paragraph, list item and value in the panel. */
+.player-overlay .playback-info,
+.player-overlay .playback-info p,
+.player-overlay .playback-info li,
+.player-overlay .playback-info dd,
+.player-overlay .playback-info dt {
+    line-height: 1.45;
+}
+.player-overlay .playback-info p {
+    margin: 0 0 0.6rem;
+}
+.player-overlay .playback-info li {
+    margin-bottom: 0.4rem;
+}
+.player-overlay .playback-info-summary {
+    font-size: 1.1rem;
+    margin-top: 0.25rem !important;
+}
+.player-overlay .playback-info details {
+    margin-top: 1rem;
+    border-top: 1px solid var(--color-app-field);
+    padding-top: 0.5rem;
+}
+.player-overlay .playback-info summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0.5rem 0.25rem;
+    border-radius: 0.5rem;
+}
+.player-overlay .playback-info summary:focus-visible {
+    outline: 3px solid var(--color-tv-primary);
+}
+@media (max-width: 650px) {
+    .player-overlay .conversion-notice {
+        left: max(16px, env(safe-area-inset-left));
+        width: calc(100% - 32px);
+        top: max(16px, env(safe-area-inset-top));
+    }
+    .player-overlay .playback-info dl > div {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+    .player-overlay .conversion-notice-title {
+        font-size: 1.125rem;
     }
 }

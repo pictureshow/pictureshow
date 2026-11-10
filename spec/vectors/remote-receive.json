@@ -1,0 +1,2966 @@
+{
+  "schemaVersion": 1,
+  "suite": "remote-receive",
+  "cases": [
+    {
+      "id": "remote-receive-play-now-opens-as-target",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc",
+                "dddddddddddddddddddddddddddddddd"
+              ],
+              "ticks": "50",
+              "index": 1
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true,
+            "effects": [
+              {
+                "op": "open",
+                "items": [
+                  "cccccccccccccccccccccccccccccccc",
+                  "dddddddddddddddddddddddddddddddd"
+                ],
+                "index": 1,
+                "ticks": "50",
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ],
+            "rejection": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-play-now-without-position-uses-own-resume",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "open",
+                "items": [
+                  "cccccccccccccccccccccccccccccccc"
+                ],
+                "index": 0,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-play-next-while-watching",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNext",
+              "items": [
+                "dddddddddddddddddddddddddddddddd"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "queue-next",
+                "items": [
+                  "dddddddddddddddddddddddddddddddd"
+                ],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-add-to-queue-while-watching",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayLast",
+              "items": [
+                "dddddddddddddddddddddddddddddddd"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "queue-add",
+                "items": [
+                  "dddddddddddddddddddddddddddddddd"
+                ],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-queue-edit-without-viewing-never-starts",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNext",
+              "items": [
+                "dddddddddddddddddddddddddddddddd"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "no-active-viewing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-unknown-play-command",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayShuffle",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-duplicate-message-once",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "pause",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "duplicate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-seen-list-is-bounded",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "seen": [
+          "x0",
+          "x1",
+          "x2",
+          "x3",
+          "x4",
+          "x5",
+          "x6",
+          "x7",
+          "x8",
+          "x9",
+          "x10",
+          "x11",
+          "x12",
+          "x13",
+          "x14",
+          "x15",
+          "x16",
+          "x17",
+          "x18",
+          "x19",
+          "x20",
+          "x21",
+          "x22",
+          "x23",
+          "x24",
+          "x25",
+          "x26",
+          "x27",
+          "x28",
+          "x29",
+          "x30",
+          "x31",
+          "x32",
+          "x33",
+          "x34",
+          "x35",
+          "x36",
+          "x37",
+          "x38",
+          "x39",
+          "x40",
+          "x41",
+          "x42",
+          "x43",
+          "x44",
+          "x45",
+          "x46",
+          "x47",
+          "x48",
+          "x49",
+          "x50",
+          "x51",
+          "x52",
+          "x53",
+          "x54",
+          "x55",
+          "x56",
+          "x57",
+          "x58",
+          "x59",
+          "x60",
+          "x61",
+          "x62",
+          "x63"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "seen": [
+              "x1",
+              "x2",
+              "x3",
+              "x4",
+              "x5",
+              "x6",
+              "x7",
+              "x8",
+              "x9",
+              "x10",
+              "x11",
+              "x12",
+              "x13",
+              "x14",
+              "x15",
+              "x16",
+              "x17",
+              "x18",
+              "x19",
+              "x20",
+              "x21",
+              "x22",
+              "x23",
+              "x24",
+              "x25",
+              "x26",
+              "x27",
+              "x28",
+              "x29",
+              "x30",
+              "x31",
+              "x32",
+              "x33",
+              "x34",
+              "x35",
+              "x36",
+              "x37",
+              "x38",
+              "x39",
+              "x40",
+              "x41",
+              "x42",
+              "x43",
+              "x44",
+              "x45",
+              "x46",
+              "x47",
+              "x48",
+              "x49",
+              "x50",
+              "x51",
+              "x52",
+              "x53",
+              "x54",
+              "x55",
+              "x56",
+              "x57",
+              "x58",
+              "x59",
+              "x60",
+              "x61",
+              "x62",
+              "x63",
+              "m1"
+            ],
+            "rejection": "no-active-viewing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-no-message-id-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "malformed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-malformed-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "malformed",
+              "reason": "not-json"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "malformed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-keepalive-is-not-input",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "keepalive",
+              "keepAliveSeconds": 60
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-repeated-pause-stays-paused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": true,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "report",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-repeated-unpause-stays-playing",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Unpause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "report",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-playpause-from-observed-state",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": true,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayPause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "unpause",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-seek-clamped-to-duration",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Seek",
+              "ticks": "5000"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "seek",
+                "items": [],
+                "index": null,
+                "ticks": "1000",
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-seek-not-seekable",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Seek",
+              "ticks": "5"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "not-seekable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-seek-without-ticks",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Seek"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "invalid-ticks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-rewind-is-bounded",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Rewind"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "seek",
+                "items": [],
+                "index": null,
+                "ticks": "0",
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-fast-forward-is-bounded",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "FastForward"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "seek",
+                "items": [],
+                "index": null,
+                "ticks": "1000",
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-stop-next-previous",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "NextTrack"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "next",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "b",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PreviousTrack"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "previous",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "c",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "stop",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-transport-without-viewing-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "no-active-viewing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-unknown-transport-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Eject"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-other-viewer-refused-by-default",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "other-viewer"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-no-controller-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": null,
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "no-controller"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-server-allowed-where-enforced",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        },
+        "policy": "server-allowed",
+        "relayEnforcesRights": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "stop",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-server-allowed-refused-where-relay-does-not-enforce",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        },
+        "policy": "server-allowed"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "other-viewer"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-off-refuses-everything",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        },
+        "policy": "off"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "disabled"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-late-play-after-account-change",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "account",
+            "server": "srv",
+            "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expected": {
+            "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "generation": "1",
+            "seen": []
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "opening": false,
+            "rejection": "other-viewer"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-late-resolve-after-account-change",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "account",
+            "server": "srv",
+            "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expected": {
+            "generation": "1",
+            "opening": false
+          }
+        },
+        {
+          "event": {
+            "op": "resolved",
+            "generation": "0",
+            "ok": true
+          },
+          "expected": {
+            "rejection": "stale-generation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-inaccessible-title-refused-by-own-lookup",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "resolved",
+            "generation": "0",
+            "ok": false
+          },
+          "expected": {
+            "opening": false,
+            "rejection": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-preparing-holds-then-applies-in-order",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "100"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": null,
+            "held": [
+              {
+                "message": {
+                  "kind": "playstate",
+                  "id": "a",
+                  "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "command": "Pause",
+                  "items": [],
+                  "ticks": null,
+                  "index": null,
+                  "arguments": {},
+                  "keepAliveSeconds": null,
+                  "reason": null
+                },
+                "receivedAtMs": "100"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "b",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Seek",
+              "ticks": "5"
+            },
+            "nowMs": "200"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "viewing",
+            "nowMs": "4000",
+            "viewing": {
+              "item": "cccccccccccccccccccccccccccccccc",
+              "ready": true,
+              "durationTicks": "1000",
+              "ticks": "0",
+              "paused": false,
+              "canSeek": true
+            }
+          },
+          "expected": {
+            "opening": false,
+            "held": [],
+            "effects": [
+              {
+                "op": "pause",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              },
+              {
+                "op": "seek",
+                "items": [],
+                "index": null,
+                "ticks": "5",
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ],
+            "viewing": {
+              "paused": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-held-input-expires-after-5s",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "100"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "viewing",
+            "nowMs": "5100",
+            "viewing": {
+              "item": "cccccccccccccccccccccccccccccccc",
+              "ready": true,
+              "durationTicks": "1000",
+              "ticks": "100",
+              "paused": false,
+              "canSeek": true
+            }
+          },
+          "expected": {
+            "effects": [],
+            "held": [],
+            "viewing": {
+              "paused": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-held-input-tick-expiry",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "100"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5099"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5100"
+          },
+          "expected": {
+            "held": []
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "30000"
+          },
+          "expected": {
+            "opening": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-held-input-capacity",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "opening": true,
+        "held": [
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h0",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h2",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h3",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h4",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h5",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h6",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          },
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "h7",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "rejection": "busy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-old-player-ready-does-not-end-preparation",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "dddddddddddddddddddddddddddddddd"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true,
+            "openingItem": "dddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "10"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "viewing",
+            "nowMs": "20",
+            "viewing": {
+              "item": "cccccccccccccccccccccccccccccccc",
+              "ready": true,
+              "durationTicks": "1000",
+              "ticks": "100",
+              "paused": false,
+              "canSeek": true
+            }
+          },
+          "expected": {
+            "opening": true,
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "viewing",
+            "nowMs": "30",
+            "viewing": {
+              "item": "dddddddddddddddddddddddddddddddd",
+              "ready": true,
+              "durationTicks": "1000",
+              "ticks": "100",
+              "paused": false,
+              "canSeek": true
+            }
+          },
+          "expected": {
+            "opening": false,
+            "effects": [
+              {
+                "op": "pause",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-stop-during-preparation-cancels",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "s",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Stop"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": false,
+            "effects": [
+              {
+                "op": "stop",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-reconnect-never-replays",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "play",
+              "id": "p",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "PlayNow",
+              "items": [
+                "cccccccccccccccccccccccccccccccc"
+              ]
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "opening": true
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "100"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "reconnect"
+          },
+          "expected": {
+            "generation": "1",
+            "held": [],
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "viewing",
+            "nowMs": "200",
+            "viewing": {
+              "item": "cccccccccccccccccccccccccccccccc",
+              "ready": true,
+              "durationTicks": "1000",
+              "ticks": "100",
+              "paused": false,
+              "canSeek": true
+            }
+          },
+          "expected": {
+            "effects": [],
+            "viewing": {
+              "paused": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-disconnect-drops-held-and-nav-window",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "navCount": 5,
+        "navWindowMs": "0",
+        "opening": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "disconnect"
+          },
+          "expected": {
+            "connected": false,
+            "held": [],
+            "navCount": 0
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "rejection": "disconnected"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-sendstring-search-field",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "field": "search"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SendString",
+              "arguments": {
+                "String": "alien"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "text",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": "alien",
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-sendstring-secret-field-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "field": "secret"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SendString",
+              "arguments": {
+                "String": "hunter2"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "secret-field"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-sendstring-no-field-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SendString",
+              "arguments": {
+                "String": "x"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "no-active-field"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-sendstring-control-char-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "field": "search"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SendString",
+              "arguments": {
+                "String": "a\tb"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "invalid-text"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-sendstring-too-long-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "field": "search"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SendString",
+              "arguments": {
+                "String": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "text-too-long"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-field-change",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "field",
+            "field": "secret"
+          },
+          "expected": {
+            "field": "secret"
+          }
+        },
+        {
+          "event": {
+            "op": "field",
+            "field": "bogus"
+          },
+          "expected": {
+            "field": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-unadvertised-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": []
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "MoveUp"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-non-remote-general-refused",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "DisplayMessage"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-audio-needs-ready-viewing",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetAudioStreamIndex",
+              "arguments": {
+                "Index": "1"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "no-active-viewing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-audio-and-subtitle",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "viewing": {
+          "item": "cccccccccccccccccccccccccccccccc",
+          "ready": true,
+          "durationTicks": "1000",
+          "ticks": "100",
+          "paused": false,
+          "canSeek": true
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetAudioStreamIndex",
+              "arguments": {
+                "Index": "1"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "audio",
+                "items": [],
+                "index": 1,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "b",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetSubtitleStreamIndex",
+              "arguments": {
+                "Index": "-1"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "subtitle",
+                "items": [],
+                "index": -1,
+                "ticks": null,
+                "level": null,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "c",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetAudioStreamIndex",
+              "arguments": {
+                "Index": "-1"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "rejection": "invalid-index"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-volume-bounded",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetVolume",
+              "arguments": {
+                "Volume": "35"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "volume",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": 35,
+                "name": null,
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "b",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "SetVolume",
+              "arguments": {
+                "Volume": "101"
+              }
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "rejection": "invalid-volume"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "c",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Mute"
+            },
+            "nowMs": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "volume-key",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": "Mute",
+                "text": null,
+                "generation": "0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-nav-rate-bounded",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "navCount": 12,
+        "navWindowMs": "500"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "a",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "MoveUp"
+            },
+            "nowMs": "1000"
+          },
+          "expected": {
+            "effects": [],
+            "rejection": "rate-limited"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "message": {
+              "kind": "general",
+              "id": "b",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "MoveUp"
+            },
+            "nowMs": "1500"
+          },
+          "expected": {
+            "effects": [
+              {
+                "op": "nav",
+                "items": [],
+                "index": null,
+                "ticks": null,
+                "level": null,
+                "name": "MoveUp",
+                "text": null,
+                "generation": "0"
+              }
+            ],
+            "navCount": 1,
+            "navWindowMs": "1500"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-receive-policy-off-clears-held",
+      "operation": "receive",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "advertised": [
+          "MoveUp",
+          "Select",
+          "SendString",
+          "SetAudioStreamIndex",
+          "SetSubtitleStreamIndex",
+          "SetVolume",
+          "Mute"
+        ],
+        "opening": true,
+        "held": [
+          {
+            "message": {
+              "kind": "playstate",
+              "id": "m1",
+              "controller": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command": "Pause"
+            },
+            "receivedAtMs": "0"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "policy",
+            "policy": "off",
+            "advertised": []
+          },
+          "expected": {
+            "policy": "off",
+            "held": [],
+            "advertised": []
+          }
+        }
+      ]
+    }
+  ]
+}

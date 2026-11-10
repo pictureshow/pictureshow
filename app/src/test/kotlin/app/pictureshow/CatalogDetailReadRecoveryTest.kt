@@ -63,6 +63,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class CatalogDetailReadRecoveryTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
 
@@ -379,7 +382,7 @@ class CatalogDetailReadRecoveryTest {
 
     @Test fun anEnabledNonReaderServiceDoesNotRetainTheOldErrorForTheReaderTimeout() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        compose.runOnUiThread { shadowOf(manager).setEnabled(true) }
+        compose.runOnUiThread { shadowOf(manager).setScreenReader(true) }
         val item = MediaItem("film", "Invented film", "Movie")
         val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
         compose.setContent {
@@ -407,7 +410,6 @@ class CatalogDetailReadRecoveryTest {
     private fun readerAcknowledgement(acknowledge: Boolean, secondRead: Boolean = false) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         compose.runOnUiThread {
-            shadowOf(manager).setEnabled(true)
             shadowOf(manager).setEnabledAccessibilityServiceList(
                 listOf(
                     AccessibilityServiceInfo().apply {
@@ -415,6 +417,7 @@ class CatalogDetailReadRecoveryTest {
                     }
                 )
             )
+            shadowOf(manager).setEnabled(true)
         }
         var readerOnAction = false
         val host = object : View(compose.activity) {

@@ -34,9 +34,13 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import org.junit.Rule
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CatalogModelsTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val dispatcher = StandardTestDispatcher()
     private val stores = mutableListOf<ViewModelStore>()
     private val account = Account(Server("s", "Screen room", "https://media.example.test/base", "12.0.0"), User("u", "Jamie"), "fake-token")

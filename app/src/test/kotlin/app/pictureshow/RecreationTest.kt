@@ -65,6 +65,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class RecreationTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
     private var searchEntry by mutableStateOf<String?>(null)
@@ -118,6 +121,10 @@ class RecreationTest {
         startKoin {
             modules(
                 module {
+                    single { inertRemoteTarget() }
+                    single { inertMusicHost(get()) }
+                    single { inertRemoteController() }
+                    single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { search }

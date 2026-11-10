@@ -62,8 +62,11 @@ test("keyboard path: password, resume, real video, reports, tracks, Back restore
         );
         throw e;
     }
+    // The same 20 s the video polls above get: a loaded runner reports late, and a report that never comes still fails.
     await expect
-        .poll(() => f.reports.some((r) => r.path === "/Sessions/Playing"))
+        .poll(() => f.reports.some((r) => r.path === "/Sessions/Playing"), {
+            timeout: 20000,
+        })
         .toBe(true);
     await page.getByRole("button", { name: "Pause", exact: true }).focus();
     await page.keyboard.press("Enter");

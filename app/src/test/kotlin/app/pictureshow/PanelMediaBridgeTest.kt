@@ -44,6 +44,9 @@ import org.robolectric.shadow.api.Shadow
 )
 @LooperMode(LooperMode.Mode.PAUSED)
 class PanelMediaBridgeTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun focusWindow(host: View, focused: Boolean = true) {

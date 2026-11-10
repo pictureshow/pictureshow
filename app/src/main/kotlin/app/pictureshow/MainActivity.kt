@@ -6,9 +6,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,12 +31,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -48,7 +52,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -88,8 +94,10 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -120,6 +128,7 @@ class MainActivity : ComponentActivity() {
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
     private var searchEntry by mutableStateOf<String?>(null)
     private var entrySequence by mutableStateOf(0L)
+    private val remoteTarget: RemoteTargetHost by lazy { org.koin.core.context.GlobalContext.get().get() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -145,15 +154,34 @@ class MainActivity : ComponentActivity() {
                 else -> null
             }
         }
+        val touch = !usesTvInterface(this)
+        if (touch) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            )
+        }
         setContent {
-            PictureshowTheme {
-                Pictureshow(
-                    searchEntry = searchEntry,
-                    consumeSearchEntry = { searchEntry = null },
-                    playbackEntry = playbackEntry,
-                    entrySequence = entrySequence,
-                    consumePlaybackEntry = { playbackEntry = null }
-                )
+            if (touch) {
+                TouchTheme {
+                    TouchPictureshow(
+                        searchEntry = searchEntry,
+                        consumeSearchEntry = { searchEntry = null },
+                        playbackEntry = playbackEntry,
+                        entrySequence = entrySequence,
+                        consumePlaybackEntry = { playbackEntry = null }
+                    )
+                }
+            } else {
+                PictureshowTheme {
+                    Pictureshow(
+                        searchEntry = searchEntry,
+                        consumeSearchEntry = { searchEntry = null },
+                        playbackEntry = playbackEntry,
+                        entrySequence = entrySequence,
+                        consumePlaybackEntry = { playbackEntry = null }
+                    )
+                }
             }
         }
     }
@@ -161,6 +189,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         lifecycleScope.launch { (application as PictureshowApplication).supporter.refresh() }
+        remoteTarget.setForeground(true)
+    }
+
+    override fun onStop() {
+        // No background receiver: a TV that is asleep or left this app is simply not a target.
+        remoteTarget.setForeground(false)
+        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -197,12 +232,39 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
+internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
 
-private fun playerRoute(item: MediaItem, resume: Boolean) =
+internal fun playerRoute(item: MediaItem, resume: Boolean) =
     playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
 
 internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+
+/** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
+internal fun remoteKeyCode(name: String): Int? = when (name) {
+    "MoveUp" -> android.view.KeyEvent.KEYCODE_DPAD_UP
+    "MoveDown" -> android.view.KeyEvent.KEYCODE_DPAD_DOWN
+    "MoveLeft" -> android.view.KeyEvent.KEYCODE_DPAD_LEFT
+    "MoveRight" -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+    "Select" -> android.view.KeyEvent.KEYCODE_DPAD_CENTER
+    "Back" -> android.view.KeyEvent.KEYCODE_BACK
+    else -> null
+}
+
+/** Text from a phone reaches this composable's sink only while it is composed: leaving by any path withdraws it. */
+@Composable
+internal fun RemoteTextDestination(register: (((String) -> Unit)?) -> Unit, sink: (String) -> Unit) {
+    val current by androidx.compose.runtime.rememberUpdatedState(sink)
+    DisposableEffect(register) {
+        register { current(it) }
+        onDispose { register(null) }
+    }
+}
+
+/** A phone's press takes the same route as the TV remote's, one key down and one key up, to this activity only. */
+internal fun android.app.Activity.pressRemoteKey(code: Int) {
+    dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+    dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+}
 
 internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlaybackEntry.Open) {
     nav.navigate("home") {
@@ -230,7 +292,7 @@ internal fun recoverPlaybackEntry(nav: NavHostController, item: MediaItem) {
 }
 
 /** Expired sessions start directly on login; their Back still needs an account-management exit. */
-private fun leaveLogin(nav: NavHostController) {
+internal fun leaveLogin(nav: NavHostController) {
     if (!nav.popBackStack()) {
         nav.navigate("accounts") {
             popUpTo(nav.graph.id) { inclusive = true }
@@ -239,7 +301,7 @@ private fun leaveLogin(nav: NavHostController) {
     }
 }
 
-private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
+internal fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
 internal fun accountDestination(snapshot: AccountSnapshot): String {
     val account = snapshot.currentAccount
@@ -255,7 +317,7 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
  * Identity/expiry changes still bootstrap the graph; this also handles unchanged identities.
  */
 @Composable
-private fun SignInCompletion(
+internal fun SignInCompletion(
     completed: Boolean,
     entryId: String,
     nav: NavHostController,
@@ -367,7 +429,56 @@ internal fun Pictureshow(
         if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
     }
-    val accessibleNavigation = rememberAccessibilityEnabled()
+    val remoteTarget: RemoteTargetHost = koinInject()
+    val music: MusicHost = koinInject()
+    val playbackPreferences: PlaybackPreferencesStore = koinInject()
+    val remotePolicy by remember(playbackPreferences) {
+        playbackPreferences.values.map<PlaybackPreferences, String?> { it.remoteReceiver }
+    }.collectAsStateWithLifecycle(null)
+    LaunchedEffect(state.snapshot.currentAccount, remotePolicy) {
+        remotePolicy?.let { remoteTarget.bind(state.snapshot.currentAccount, it) }
+    }
+    val remoteAccount by rememberUpdatedState(state.snapshot.currentAccount)
+    val remoteCatalog by rememberUpdatedState(catalog)
+    LaunchedEffect(remoteTarget) {
+        launch {
+            remoteTarget.opens.collect { effect ->
+                val account = remoteAccount?.takeUnless { it.expired }
+                val item = effect.items.getOrNull(effect.index ?: 0)
+                if (account != null && item != null && music.openFromRemote(account, effect.items, effect.index ?: 0)) {
+                    remoteTarget.resolved(effect.generation, true)
+                    return@collect
+                }
+                val resolved = if (account != null && item != null) {
+                    resolvePlaybackEntry(PlaybackEntry(item, effect.ticks?.div(10_000)), account, remoteCatalog)
+                } else {
+                    ResolvedPlaybackEntry.Unavailable
+                }
+                val open = resolved as? ResolvedPlaybackEntry.Open
+                if (remoteTarget.resolved(effect.generation, open != null)) {
+                    navigatePlaybackEntry(nav, requireNotNull(open))
+                } else if (open == null) {
+                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        remoteTarget.navigation.collect { name ->
+            val code = remoteKeyCode(name)
+            if (code != null) {
+                (context as? android.app.Activity)?.pressRemoteKey(code)
+            } else if (name == "GoHome" && remoteAccount?.expired == false) {
+                nav.navigate("home") {
+                    popUpTo(nav.graph.id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
+    val accessibleNavigation = rememberAssistiveServiceInUse()
+    val musicState by music.state.collectAsStateWithLifecycle()
+    val tvRoute = backStackEntry?.destination?.route
+    val musicBarShown = musicState.visible && tvRoute?.startsWith("player?") != true && tvRoute != MUSIC_NOW_ROUTE
+    var musicBarHeight by remember { mutableIntStateOf(0) }
     NavHost(
         navController = nav,
         startDestination = "waiting",
@@ -384,7 +495,16 @@ internal fun Pictureshow(
         popExitTransition = {
             catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route, returning = true)
         },
-        modifier = Modifier.fillMaxSize().catalogSearchKey(
+        // The bar sits below the screens rather than over them, so it never covers a focused row.
+        modifier = Modifier.fillMaxSize().padding(
+            bottom = if (musicBarShown) {
+                with(LocalDensity.current) {
+                    musicBarHeight.toDp()
+                }
+            } else {
+                0.dp
+            }
+        ).catalogSearchKey(
             enabled = state.snapshot.currentAccount?.expired == false && isCatalogSearchRoute(backStackEntry?.destination?.route),
             onSearch = {
                 if (backStackEntry?.destination?.route?.startsWith("search?") == true) {
@@ -413,7 +533,8 @@ internal fun Pictureshow(
             ServerDiscoveryPage(modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
                 remembered.forEachIndexed { index, server ->
-                    val label = if (server == state.snapshot.lastServer) "Sign in to ${server.name}" else "${server.name} · remembered"
+                    val named = state.snapshot.serverLabel(server)
+                    val label = if (server == state.snapshot.lastServer) "Sign in to $named" else "$named · remembered"
                     Action(label, initial = index == 0 && state.snapshot.lastServer != null) {
                         nav.navigate(serverRoute("login", server)) {
                             launchSingleTop =
@@ -503,16 +624,17 @@ internal fun Pictureshow(
                         // While committing, hardware Back must not expose controls from the parent page.
                         BackHandler(enabled = screen.busy) { }
                         val description = if (removingAccount != null) {
-                            "This removes ${removingAccount.user.name} on ${removingAccount.server.name} from this TV."
+                            "This removes ${removingAccount.user.name} on " +
+                                "${state.snapshot.serverLabel(removingAccount.server)} from this TV."
                         } else {
                             requireNotNull(removingServer)
                             val count = state.snapshot.accounts.count {
                                 it.server.id == removingServer.id && it.server.url == removingServer.url
                             }
                             if (count == 0) {
-                                "This removes ${removingServer.name} from this TV."
+                                "This removes ${state.snapshot.serverLabel(removingServer)} from this TV."
                             } else {
-                                "This removes ${removingServer.name} and $count remembered " +
+                                "This removes ${state.snapshot.serverLabel(removingServer)} and $count remembered " +
                                     "${if (count == 1) "account" else "accounts"} from this TV."
                             }
                         }
@@ -561,7 +683,7 @@ internal fun Pictureshow(
                             val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
                             state.snapshot.accounts.forEach { account ->
                                 Action(
-                                    "${account.user.name} on ${account.server.name}",
+                                    "${account.user.name} on ${state.snapshot.serverLabel(account.server)}",
                                     initial = returnFocus == account.key ||
                                         (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
                                     enabled = !screen.busy
@@ -576,12 +698,12 @@ internal fun Pictureshow(
                                     }
                                 }
                                 Action(
-                                    "Remove ${account.user.name} on ${account.server.name}",
+                                    "Remove ${account.user.name} on ${state.snapshot.serverLabel(account.server)}",
                                     initial = returnFocus == "remove:${account.key}",
                                     enabled = !screen.busy
                                 ) {
                                     returnFocus = "remove:${account.key}"
-                                    removalOpenerLabel = "Remove ${account.user.name} on ${account.server.name}"
+                                    removalOpenerLabel = "Remove ${account.user.name} on ${state.snapshot.serverLabel(account.server)}"
                                     removeKey = account.key
                                 }
                             }
@@ -589,7 +711,7 @@ internal fun Pictureshow(
                             state.snapshot.rememberedServers.forEachIndexed { index, server ->
                                 val identity = "server:${server.id}:${server.url}"
                                 Action(
-                                    "Sign in another user on ${server.name}",
+                                    "Sign in another user on ${state.snapshot.serverLabel(server)}",
                                     initial = returnFocus == identity || (returnFocus == null && offerSignedOutServer && index == 0),
                                     enabled = !screen.busy
                                 ) {
@@ -597,12 +719,12 @@ internal fun Pictureshow(
                                     nav.navigate(serverRoute("login", server)) { launchSingleTop = true }
                                 }
                                 Action(
-                                    "Remove server ${server.name}",
+                                    "Remove server ${state.snapshot.serverLabel(server)}",
                                     initial = returnFocus == "remove:$identity",
                                     enabled = !screen.busy
                                 ) {
                                     returnFocus = "remove:$identity"
-                                    removalOpenerLabel = "Remove server ${server.name}"
+                                    removalOpenerLabel = "Remove server ${state.snapshot.serverLabel(server)}"
                                     removeServerId = server.id
                                     removeServerUrl = server.url
                                 }
@@ -650,7 +772,7 @@ internal fun Pictureshow(
                     it.user.name == entry.arguments?.getString("username")
             } == true
             BackHandler(enabled = nav.previousBackStackEntry == null) { leaveLogin(nav) }
-            Page("Sign in to ${server.name}") {
+            Page("Sign in to ${state.snapshot.serverLabel(server)}") {
                 RemoteField(
                     "Username",
                     screen.username,
@@ -695,7 +817,7 @@ internal fun Pictureshow(
             // Leaving the sign-in flow clears the owner and cancels polling.
             LaunchedEffect(vm) { vm.start() }
             SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-            Page("Quick Connect · ${server.name}") {
+            Page("Quick Connect · ${state.snapshot.serverLabel(server)}") {
                 Text(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
                         "and enter this code"
@@ -723,6 +845,7 @@ internal fun Pictureshow(
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                     profileState.account.copy(server = account.server),
+                    serverLabel = state.snapshot.serverLabel(account.server),
                     onOpen = { nav.navigate(itemRoute(it)) },
                     onRetry = {
                         profile.verify()
@@ -788,6 +911,8 @@ internal fun Pictureshow(
                 LaunchedEffect(entry) {
                     vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty())
                 }
+                // Search is the only field a controller can type into; sign-in and Quick Connect never register.
+                RemoteTextDestination(remoteTarget::setSearchField) { vm.query(it, immediate = true) }
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,
                     vm::query, vm::submit, { vm.query(it, immediate = true) }, vm::clearRecent, vm::retry,
@@ -811,6 +936,8 @@ internal fun Pictureshow(
         ) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                // Video and music never share the speakers: the queue stays saved for a deliberate return (MUS-11).
+                LaunchedEffect(entry) { music.beforeVideo() }
                 // Recover to detail rather than replaying the route's original start offset.
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
@@ -819,6 +946,34 @@ internal fun Pictureshow(
                 }
             }
         }
+        composable(
+            MUSIC_ROUTE_PATTERN,
+            arguments = listOf(
+                navArgument("item") { type = NavType.StringType },
+                navArgument("role") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("library") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { entry ->
+            state.snapshot.currentAccount?.let { account ->
+                val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                val library = entry.arguments?.getString("library").orEmpty()
+                if (item.collectionType == "music") {
+                    val vm: MusicLibraryViewModel = koinViewModel(parameters = { parametersOf(account, item) })
+                    TvMusicLibrary(vm, music) { next, role -> nav.navigate(musicRoute(next, role, item.id)) }
+                } else {
+                    val role = entry.arguments?.getString("role").orEmpty()
+                    val vm: MusicDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, role, library, catalog) })
+                    TvMusicDetail(vm, music) { next, nextRole -> nav.navigate(musicRoute(next, nextRole, library)) }
+                }
+            }
+        }
+        composable(MUSIC_NOW_ROUTE) { TvMusicNow(music) { nav.popBackStack() } }
         composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
@@ -865,6 +1020,15 @@ internal fun Pictureshow(
             }
         }
     }
+    if (musicBarShown) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Box(Modifier.onSizeChanged { musicBarHeight = it.height }) {
+                TvMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
+            }
+        }
+    }
+    val tvRemote: RemoteControllerHost = koinInject()
+    TvMusicPrompts(music) { play -> tvRemote.playNow(play.tracks.drop(play.start ?: 0).map(MusicTrack::id)) }
 }
 
 /** Keep the Add-server heading visible while large-text statuses and actions scroll below it. */
@@ -936,7 +1100,7 @@ private fun Message(message: String?) {
 
 @Composable
 internal fun QuickConnectCode(code: String, announce: ((String) -> Unit)? = null) {
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberAssistiveServiceInUse()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val host = LocalView.current
     val announcer by rememberUpdatedState(announce)

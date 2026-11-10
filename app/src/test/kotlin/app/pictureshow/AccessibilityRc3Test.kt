@@ -42,12 +42,15 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class AccessibilityRc3Test {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Screen room", "https://media.example.test", "12"), User("u", "Viewer"), "fake")
 
     @Test fun positionCanTakeFocusAndOffersSeekEvenWithoutAKnownTotal() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         compose.setContent { PictureshowTheme { PlayerTimeline(30_000, 30_000, 0) {} } }
         val position = compose.onNodeWithContentDescription("Playback position")
         position.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }

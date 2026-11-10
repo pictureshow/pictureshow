@@ -7,8 +7,13 @@ import android.app.Application
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -38,6 +43,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class AccessibilityPlayerTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
@@ -70,6 +78,66 @@ class AccessibilityPlayerTest {
         compose.runOnIdle { assertEquals(1, plays) }
     }
 
+    /** rc30: "Paused" at a natural end, made as the player stopped and cut off by the detail page's button. */
+    @Test
+    fun theEndOfTheVideoDoesNotChangeTheFocusedToggleUntilFocusMoves() {
+        val paused = mutableStateOf(false)
+        val ended = mutableStateOf(false)
+        val toggle = FocusRequester()
+        val other = FocusRequester()
+        compose.setContent {
+            PictureshowTheme {
+                androidx.compose.foundation.layout.Column {
+                    PlaybackToggle(paused.value, paused.value, Modifier.focusRequester(toggle).testTag("toggle"), ended.value) {}
+                    PlaybackToggle(false, false, Modifier.focusRequester(other)) {}
+                }
+            }
+        }
+        compose.runOnIdle { toggle.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle {
+            ended.value = true
+            paused.value = true
+        }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle { other.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+    }
+
+    /** The real order: `ended` is set in the turn that releases the player, and what the release changes arrives after it. */
+    @Test
+    fun aStateThatArrivesAfterTheEndDoesNotChangeTheFocusedToggle() {
+        val (paused, ended) = focusedToggle()
+        compose.runOnIdle { ended.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle { paused.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+    }
+
+    /** A pause composed before the end is the viewer's, or the system's, and was already read. It isn't rewritten at the end. */
+    @Test
+    fun aPauseBeforeTheEndStaysARealPause() {
+        val (paused, ended) = focusedToggle()
+        compose.runOnIdle { paused.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+        compose.runOnIdle { ended.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+    }
+
+    private fun focusedToggle(): Pair<MutableState<Boolean>, MutableState<Boolean>> {
+        val paused = mutableStateOf(false)
+        val ended = mutableStateOf(false)
+        val toggle = FocusRequester()
+        compose.setContent {
+            PictureshowTheme {
+                PlaybackToggle(paused.value, paused.value, Modifier.focusRequester(toggle).testTag("toggle"), ended.value) {}
+            }
+        }
+        compose.runOnIdle { toggle.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        return paused to ended
+    }
+
     @Test
     fun playPauseButtonAnnouncesItsCurrentStateAsWellAsItsAction() {
         val paused = mutableStateOf(true)
@@ -87,9 +155,16 @@ class AccessibilityPlayerTest {
     @Test
     fun tvAccessibilityDetectionDoesNotRequireTouchExploration() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
+            listOf(
+                android.accessibilityservice.AccessibilityServiceInfo().apply {
+                    feedbackType = android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_SPOKEN
+                }
+            )
+        )
         Shadows.shadowOf(manager).setEnabled(true)
         var enabled = false
-        compose.setContent { enabled = rememberAccessibilityEnabled() }
+        compose.setContent { enabled = rememberAssistiveServiceInUse() }
         compose.runOnIdle { assertTrue(enabled) }
         assertEquals(false, manager.isTouchExplorationEnabled)
     }

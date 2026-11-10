@@ -16,30 +16,45 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityEventCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.accessibility.AccessibilityNodeProviderCompat
+import java.util.WeakHashMap
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Keep the host's empty focus record from preceding the actual virtual control's focus. */
 @Composable
-internal fun PlaybackExitFocusEvents(active: Boolean) {
+internal fun PlaybackExitFocusEvents(
+    active: Boolean,
+    suppressClosingPane: Boolean = false,
+    descriptionSpokenByFocus: () -> String? = { null }
+) {
     val host = LocalView.current
     val enabled by rememberUpdatedState(active)
+    val closingPane by rememberUpdatedState(suppressClosingPane)
+    val spokenByFocus by rememberUpdatedState(descriptionSpokenByFocus)
     val expiresAt by rememberUpdatedState(
         remember(active) {
             android.os.SystemClock.uptimeMillis() + app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS
         }
     )
     DisposableEffect(host) {
-        val restore = installPlaybackExitFocusEvents(host) { enabled && android.os.SystemClock.uptimeMillis() < expiresAt }
+        val restore = installPlaybackExitFocusEvents(host, closingPane = { closingPane }, descriptionSpokenByFocus = { spokenByFocus() }) {
+            enabled && android.os.SystemClock.uptimeMillis() < expiresAt
+        }
         onDispose(restore)
     }
 }
 
-internal fun installPlaybackExitFocusEvents(child: View, active: () -> Boolean): () -> Unit {
+internal fun installPlaybackExitFocusEvents(
+    child: View,
+    closingPane: () -> Boolean = { false },
+    descriptionSpokenByFocus: () -> String? = { null },
+    active: () -> Boolean
+): () -> Unit {
     val parent = child.parent as? ViewGroup ?: return {}
     val original = ViewCompat.getAccessibilityDelegate(parent)
-    val delegate = PlaybackExitFocusDelegate(original, child, active)
+    val delegate = PlaybackExitFocusDelegate(original, child, closingPane, descriptionSpokenByFocus, active)
     ViewCompat.setAccessibilityDelegate(parent, delegate)
     return {
         delegate.disposed = true
@@ -53,6 +68,8 @@ internal fun installPlaybackExitFocusEvents(child: View, active: () -> Boolean):
 internal class PlaybackExitFocusDelegate(
     private var previous: AccessibilityDelegateCompat?,
     private val ownedChild: View,
+    private val closingPane: () -> Boolean = { false },
+    private val descriptionSpokenByFocus: () -> String? = { null },
     private val active: () -> Boolean
 ) : AccessibilityDelegateCompat() {
     internal var disposed = false
@@ -68,6 +85,14 @@ internal class PlaybackExitFocusDelegate(
     override fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: AccessibilityEvent): Boolean {
         if (!disposed && child === ownedChild && active() && emptyHostFocus(event)) {
             if (BuildConfig.DEBUG) PlaybackDiagnostics.write("exit-focus phase=host-suppressed")
+            return false
+        }
+        if (!disposed && child === ownedChild && closingPane() && paneDisappeared(event)) {
+            PlaybackDiagnostics.write("panel-close pane-event suppressed")
+            return false
+        }
+        if (!disposed && child === ownedChild && descriptionChangedTo(event, descriptionSpokenByFocus())) {
+            PlaybackDiagnostics.write("controls-hidden description-event suppressed")
             return false
         }
         return original.onRequestSendAccessibilityEvent(host, child, event)
@@ -99,6 +124,44 @@ internal class PlaybackExitFocusDelegate(
         event.text.all { it.isNullOrBlank() } &&
         event.contentDescription.isNullOrBlank()
 }
+
+/**
+ * A panel in the player's own window closing is not a new screen. TalkBack treats its pane-disappeared
+ * event as one: the window title changes back, it drops focus events for 200 ms, waits about 550 ms and
+ * speaks the app's name before it moves focus. Without the event, the opener's focus event is simply read.
+ */
+private fun paneDisappeared(event: AccessibilityEvent): Boolean = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+    event.contentChangeTypes and AccessibilityEventCompat.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED != 0
+
+/**
+ * Read when the event is sent, not through composition: a semantics block re-reads its state without
+ * recomposing, so this event can leave before the composable that passed the value runs again.
+ *
+ * TalkBack reads a focused node's description change only if the node has accessibility focus by the
+ * time its event queue reaches the change, and that focus is arriving at the same moment. When it wins,
+ * the same words are read twice: at once if the focus event flushes the queue, a full phrase later if
+ * the focus counts as initial and queues. A focus move already reads the new description, so the change
+ * adds nothing.
+ */
+private fun descriptionChangedTo(event: AccessibilityEvent, description: String?): Boolean = description != null &&
+    event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+    event.contentChangeTypes == AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION &&
+    event.contentDescription?.toString() == description
+
+private val inWindowPaneTitles = WeakHashMap<View, String>()
+
+/**
+ * TalkBack still holds the last in-window pane's title, because its close was never reported. It reads a
+ * new pane through a change of window title; the same title again would be a pane with no focus handoff,
+ * so a reopened panel differs from the last one by a character that is neither shown nor spoken.
+ */
+internal fun nextInWindowPaneTitle(host: View, title: String): String {
+    val next = if (inWindowPaneTitles[host] == title) "$title$UNSPOKEN_PANE_TITLE_MARK" else title
+    inWindowPaneTitles[host] = next
+    return next
+}
+
+private const val UNSPOKEN_PANE_TITLE_MARK = "\u200B"
 
 /** Reader text selection is independent of Compose's input-focused action. */
 internal enum class PlaybackReaderTarget { NONE, ACTION, OTHER_ACTION, TEXT }

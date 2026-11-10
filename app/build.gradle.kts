@@ -1,12 +1,14 @@
 import app.pictureshow.buildlogic.Media3ControllerIdentityFix
 import com.android.build.api.instrumentation.FramesComputationMode
 import com.android.build.api.instrumentation.InstrumentationScope
+import java.time.Duration
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
     id("pictureshow.media3-controller-identity")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
     id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
@@ -19,8 +21,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 31
-        versionName = "0.3.0-rc29"
+        versionCode = 35
+        versionName = "0.3.0-rc33"
     }
     buildTypes {
         getByName("release") {
@@ -51,7 +53,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric API 36 initializes ApplicationSharedMemory through the JDK file-descriptor bridge.
-        unitTests.all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
+        unitTests.all {
+            it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            // Backstop for what PerTestTimeLimit can't stop: code spinning with no looper and no interrupt.
+            it.timeout.set(Duration.ofMinutes(25))
+        }
     }
     lint {
         warningsAsErrors = true
@@ -75,6 +81,8 @@ androidComponents.onVariants { variant ->
 dependencies {
     implementation(project(":core"))
     implementation(libs.play.billing)
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.mediarouter)
     implementation(libs.tvprovider)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
@@ -87,6 +95,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(project(":media3-ffmpeg"))
     implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
     implementation(libs.tv.material)
@@ -103,6 +112,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
+    implementation(libs.profileinstaller)
     coreLibraryDesugaring(libs.desugar)
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.compose.ui.test)

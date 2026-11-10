@@ -15,6 +15,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
@@ -110,13 +111,19 @@ internal class TrickplayCache(
 }
 
 @Composable
-internal fun TrickplayPreview(cache: TrickplayCache, sourceId: String, tile: TrickplayTile, positionMs: Long) {
+internal fun TrickplayPreview(
+    cache: TrickplayCache,
+    sourceId: String,
+    tile: TrickplayTile,
+    positionMs: Long,
+    thumbnailHeight: Dp = 135.dp
+) {
     val bitmap by produceState<Bitmap?>(null, cache, sourceId, tile) {
         value = null
         value = cache.thumbnail(sourceId, tile)
     }
     Column {
-        bitmap?.let { Image(it.asImageBitmap(), null, Modifier.size(240.dp, 135.dp)) }
+        bitmap?.let { Image(it.asImageBitmap(), null, Modifier.size(thumbnailHeight * 16 / 9, thumbnailHeight)) }
         Text(playerTime(positionMs), color = Color.White)
     }
 }

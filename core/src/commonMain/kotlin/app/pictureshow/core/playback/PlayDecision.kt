@@ -59,7 +59,8 @@ object PlayDecisions {
         response: PlaybackInfoResponse,
         identity: ClientIdentity,
         token: String,
-        mediaSourceId: String? = null
+        mediaSourceId: String? = null,
+        audio: Boolean = false
     ): PlayOutcome {
         response.errorCode?.let { code ->
             return PlayOutcome.Unplayable(UnplayableReason.SERVER_REFUSED, "The server refused playback ($code).")
@@ -72,7 +73,10 @@ object PlayDecisions {
             response.mediaSources
         }
         val source = candidates.firstOrNull(::playable)
-            ?: return PlayOutcome.Unplayable(UnplayableReason.NO_COMPATIBLE_SOURCE, "This video cannot be played on this device.")
+            ?: return PlayOutcome.Unplayable(
+                UnplayableReason.NO_COMPATIBLE_SOURCE,
+                if (audio) "This track cannot be played on this device." else "This video cannot be played on this device."
+            )
         val headers = buildMap {
             source.requiredHttpHeaders.forEach { (name, value) ->
                 if (value != null &&
@@ -90,7 +94,7 @@ object PlayDecisions {
                 itemId = itemId,
                 mediaSource = source,
                 method = if (source.supportsDirectPlay) PlayMethod.DirectPlay else PlayMethod.DirectStream,
-                url = staticStreamUrl(server, itemId, source, playSessionId),
+                url = staticStreamUrl(server, itemId, source, playSessionId, audio),
                 headers = headers,
                 playSessionId = playSessionId
             )
@@ -121,15 +125,22 @@ object PlayDecisions {
     private fun playable(source: MediaSourceInfo): Boolean =
         source.supportsDirectPlay || source.supportsDirectStream || !source.transcodingUrl.isNullOrBlank()
 
-    /** `GET /Videos/{itemId}/stream?static=true`: the original file, byte-range seekable. */
-    internal fun staticStreamUrl(server: Server, itemId: String, source: MediaSourceInfo, playSessionId: String?): String {
+    /** `GET /Videos/{itemId}/stream?static=true` (`/Audio/` for a track): the original file, byte-range seekable. */
+    internal fun staticStreamUrl(
+        server: Server,
+        itemId: String,
+        source: MediaSourceInfo,
+        playSessionId: String?,
+        audio: Boolean = false
+    ): String {
         val query = buildList {
             add("static" to "true")
             source.id?.let { add("mediaSourceId" to it) }
             playSessionId?.let { add("playSessionId" to it) }
             source.eTag?.let { add("tag" to it) }
         }
-        return base(server) + "/Videos/" + encode(itemId) + "/stream?" + query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
+        return base(server) + (if (audio) "/Audio/" else "/Videos/") + encode(itemId) + "/stream?" +
+            query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
     }
 
     /**

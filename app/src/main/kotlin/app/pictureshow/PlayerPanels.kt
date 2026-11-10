@@ -186,11 +186,13 @@ internal fun PlayerPanel(
                 it()
             }
         }
+        val paneHost = LocalView.current
         PlayerPanelContent(
             title,
             scrollable,
             firstLayout.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
-            announcePane = title != "Seek"
+            announcePane = title != "Seek",
+            paneTitleText = remember(paneHost, title) { nextInWindowPaneTitle(paneHost, title) }
         ) { panelScope.content() }
         return
     }
@@ -239,6 +241,7 @@ internal fun PlayerPanelContent(
     scrollable: Boolean,
     modifier: Modifier = Modifier,
     announcePane: Boolean = true,
+    paneTitleText: String = title,
     content: @Composable () -> Unit
 ) {
     val scroll = rememberScrollState()
@@ -270,7 +273,7 @@ internal fun PlayerPanelContent(
                 )
                 .semantics {
                     isTraversalGroup = true
-                    if (announcePane) paneTitle = title
+                    if (announcePane) paneTitle = paneTitleText
                     testTagsAsResourceId = true
                 },
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -357,6 +360,7 @@ internal fun TrackChoices(
     onSelect: (Int) -> Unit,
     title: String? = null,
     touchEnabled: Boolean = false,
+    rowDescription: (Int, String) -> String? = { _, _ -> null },
     footer: (@Composable () -> Unit)? = null
 ) {
     val entry = remember { PlayerPanelEntryFocus() }
@@ -364,7 +368,7 @@ internal fun TrackChoices(
     val speedRowHeight = if (windowWidth >= 600.dp) 40.dp else 48.dp
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberAssistiveServiceInUse()
     var initialFocusReady by remember(accessible) { mutableStateOf(!accessible) }
     val initialOffset = choices.indexOfFirst { it.first == selectedIndex }.coerceAtLeast(0)
     val initialIndex = choices.getOrNull(initialOffset)?.first
@@ -446,6 +450,8 @@ internal fun TrackChoices(
                         ).testTag("track:$index").semantics {
                         selected = index == selectedIndex
                         traversalIndex = if (index == initialIndex) -1f else 0f
+                        // A row may be the panel's only focus stop; it then carries what the footer explains.
+                        rowDescription(index, label)?.let { contentDescription = it }
                     }.then(with(entry) { Modifier.row(index) })
                         .then(
                             if (!initialFocusReady && index != initialIndex) {

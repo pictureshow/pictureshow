@@ -49,6 +49,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
     JellyfinService,
     CatalogService by CatalogClient(client, identity),
     SearchService by SearchClient(client, identity),
+    app.pictureshow.core.music.MusicService by app.pictureshow.core.music.MusicClient(client, identity),
     UserConfigurationService by UserConfigurationClient(client, identity) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -306,9 +307,9 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                 } else if (response.status.value == 401) {
                     failure(ErrorKind.INVALID_CREDENTIALS, "Sign-in was refused. Check your username and password or sign in again.")
                 } else {
-                    failure(ErrorKind.SERVER, "The server could not complete the request (404).")
+                    statusFailure(response.status.value)
                 }
-                else -> failure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
+                else -> statusFailure(response.status.value)
             }
         } ?: failure(ErrorKind.NETWORK, "The server took too long to respond. Check your connection and try again.")
     } catch (cancelled: CancellationException) {
@@ -326,6 +327,9 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
     } catch (_: Exception) {
         failure(ErrorKind.NETWORK, "Could not reach the server. Check your connection and try again.")
     }
+
+    private fun statusFailure(status: Int): ClientResult.Failure =
+        ClientResult.Failure(ClientError(ErrorKind.SERVER, "The server could not complete the request ($status).", status))
 
     private class ProtocolFailure(val kind: ErrorKind, message: String) : Exception(message)
 }

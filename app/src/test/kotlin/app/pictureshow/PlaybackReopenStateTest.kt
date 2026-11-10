@@ -14,6 +14,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
+import androidx.media3.session.legacy.PlaybackStateCompat
 import app.pictureshow.core.Server
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.MediaStream
@@ -24,6 +25,7 @@ import app.pictureshow.core.playback.PlayMethod
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -34,6 +36,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class PlaybackReopenStateTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test fun pausedTrackReopenKeepsBufferingAndPauseIntent() = reopen(paused = true)
 
     @Test fun playingTrackReopenKeepsBufferingAndPlayIntent() = reopen(paused = false)
@@ -97,8 +102,14 @@ class PlaybackReopenStateTest {
             } else {
                 output.beginSeek()
             }
-            assertEquals(Player.STATE_BUFFERING, session.player.playbackState, "An active viewing must remain buffering during negotiation")
+            // A viewing that has not played yet presents preparation with play intent as PLAYING at speed 0
+            // (PlaybackMediaSession), so the TV Now Playing card is not posted again as audio starts.
+            val preparing = if (paused) Player.STATE_BUFFERING else Player.STATE_READY
+            assertEquals(preparing, session.player.playbackState, "An active viewing must keep its preparation state during negotiation")
+            assertEquals(false, session.player.isPlaying)
             assertEquals(!paused, session.player.playWhenReady)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertLegacy(handle(), if (paused) PlaybackStateCompat.STATE_PAUSED else PlaybackStateCompat.STATE_PLAYING)
             if (paused) Util.handlePlayButtonAction(controller) else controller.pause()
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals(paused, output.player.value!!.playWhenReady)
@@ -107,16 +118,48 @@ class PlaybackReopenStateTest {
             assertEquals(Player.STATE_IDLE, decoder.playbackState, "Play must not re-prepare the retired stream")
             output.open(decision("replacement"), 50_000, -1, -1, output.position().paused)
             assertEquals(token, handle().session.platformToken)
-            assertEquals(Player.STATE_BUFFERING, session.player.playbackState)
+            // The viewer toggled play intent inside the first preparation. Its grace survives both the toggle and
+            // the replacement, so the session stays READY: legacy PLAYING with play intent, PAUSED without.
+            assertEquals(Player.STATE_READY, session.player.playbackState)
+            assertEquals(false, session.player.isPlaying)
             assertEquals(paused, session.player.playWhenReady)
             shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(Player.STATE_BUFFERING, controller.playbackState)
+            assertEquals(Player.STATE_READY, controller.playbackState)
             assertEquals(paused, controller.playWhenReady)
+            assertEquals(false, controller.isPlaying)
+            assertLegacy(handle(), if (paused) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED)
             assertEquals(false, Player.STATE_IDLE in observed, "Controllers must never observe no media between decoders")
             controller.release()
         } finally {
             output.release()
         }
+    }
+
+    /** The legacy state external controllers and the TV launcher read: state, speed zero, and a frozen position. */
+    private fun assertLegacy(handle: PlaybackMediaSession.Handle, expected: Int) {
+        val first = legacy(handle)
+        assertEquals(expected, first.state)
+        assertEquals(0f, first.playbackSpeed)
+        shadowOf(Looper.getMainLooper()).idleFor(2_000, TimeUnit.MILLISECONDS)
+        val later = legacy(handle)
+        assertEquals(expected, later.state)
+        assertEquals(first.position, later.position, "A preparing viewing must not extrapolate position")
+        assertEquals(handle.session.player.currentPosition, later.position)
+    }
+
+    // Robolectric's platform controller shadow does not mirror MediaSession's state; read pinned Media3's own copy.
+    private fun legacy(handle: PlaybackMediaSession.Handle): PlaybackStateCompat {
+        var value: Any = handle.session
+        for (name in listOf("impl", "sessionLegacyStub", "sessionCompat", "impl", "playbackState")) {
+            var type: Class<*>? = value.javaClass
+            var field: java.lang.reflect.Field? = null
+            while (type != null && field == null) {
+                field = runCatching { type!!.getDeclaredField(name) }.getOrNull()
+                type = type.superclass
+            }
+            value = checkNotNull(checkNotNull(field).apply { isAccessible = true }.get(value))
+        }
+        return value as PlaybackStateCompat
     }
 
     private class WaitingSource : DataSource {

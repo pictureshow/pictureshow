@@ -36,6 +36,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -50,6 +51,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class IndependentSubtitlePlaybackTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(600)
+
     @Test
     fun releaseDiagnosticsReportAutomaticSelectionRetriesAndViewReceiptsAcrossChoices() {
         org.robolectric.shadows.ShadowLog.clear()

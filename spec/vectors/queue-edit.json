@@ -2240,6 +2240,824 @@
           }
         }
       ]
+    },
+    {
+      "id": "queue-edit.play-now-splits-named-from-automatic",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "entries": [
+              {
+                "id": "a",
+                "media": "a",
+                "downloaded": false
+              }
+            ],
+            "automatic": [
+              {
+                "id": "b",
+                "media": "b",
+                "downloaded": false
+              },
+              {
+                "id": "c",
+                "media": "c",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "automatic": [
+                "b",
+                "c"
+              ],
+              "revision": "1"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.play-now-needs-a-named-entry",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "automatic": [
+              {
+                "id": "b",
+                "media": "b",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [],
+              "revision": "0"
+            },
+            "outcome": "invalid-entries"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.append-goes-ahead-of-automatic-in-order-added",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b",
+          "c"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "b",
+                "c"
+              ],
+              "automatic": [
+                "b",
+                "c"
+              ],
+              "revision": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "revision": "1",
+            "entries": [
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "automatic": [
+                "b",
+                "c"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.play-next-beats-earlier-additions-and-automatic",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "b"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "1",
+            "entries": [
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "y",
+                "x",
+                "b"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "revision": "2",
+            "entries": [
+              {
+                "id": "z",
+                "media": "z",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "y",
+                "x",
+                "z",
+                "b"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.named-title-replaces-its-automatic-copy",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "r1",
+            "media": "e1",
+            "downloaded": false
+          },
+          {
+            "id": "r2",
+            "media": "e2",
+            "downloaded": false
+          },
+          {
+            "id": "r3",
+            "media": "e3",
+            "downloaded": false
+          },
+          {
+            "id": "r4",
+            "media": "e4",
+            "downloaded": false
+          }
+        ],
+        "current": "r1",
+        "paused": false,
+        "automatic": [
+          "r2",
+          "r3",
+          "r4"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "r5",
+                "media": "e3",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "entries": [
+                {
+                  "id": "r1",
+                  "media": "e1",
+                  "downloaded": false
+                },
+                {
+                  "id": "r5",
+                  "media": "e3",
+                  "downloaded": false
+                },
+                {
+                  "id": "r2",
+                  "media": "e2",
+                  "downloaded": false
+                },
+                {
+                  "id": "r4",
+                  "media": "e4",
+                  "downloaded": false
+                }
+              ],
+              "order": [
+                "r1",
+                "r5",
+                "r2",
+                "r4"
+              ],
+              "automatic": [
+                "r2",
+                "r4"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.named-title-keeps-a-copy-the-viewer-added-or-already-saw",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "r1",
+            "media": "e1",
+            "downloaded": false
+          },
+          {
+            "id": "r2",
+            "media": "e2",
+            "downloaded": false
+          },
+          {
+            "id": "r3",
+            "media": "x",
+            "downloaded": false
+          },
+          {
+            "id": "r4",
+            "media": "e3",
+            "downloaded": false
+          }
+        ],
+        "current": "r2",
+        "history": [
+          "r1"
+        ],
+        "paused": false,
+        "automatic": [
+          "r1",
+          "r2",
+          "r4"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "r5",
+                "media": "x",
+                "downloaded": false
+              },
+              {
+                "id": "r6",
+                "media": "e1",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "r1",
+                "r2",
+                "r3",
+                "r5",
+                "r6",
+                "r4"
+              ],
+              "history": [
+                "r1"
+              ],
+              "automatic": [
+                "r1",
+                "r2",
+                "r4"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.continuation-goes-last-and-adds-only-what-is-missing",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "r1",
+            "media": "m",
+            "downloaded": false
+          },
+          {
+            "id": "r2",
+            "media": "e4",
+            "downloaded": false
+          }
+        ],
+        "current": "r1",
+        "paused": false,
+        "automatic": [
+          "r2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "r3",
+                "media": "e3",
+                "downloaded": false
+              }
+            ],
+            "automatic": [
+              {
+                "id": "r4",
+                "media": "e4",
+                "downloaded": false
+              },
+              {
+                "id": "r5",
+                "media": "e5",
+                "downloaded": false
+              },
+              {
+                "id": "r6",
+                "media": "e5",
+                "downloaded": false
+              },
+              {
+                "id": "r7",
+                "media": "m",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "r1",
+                "r3",
+                "r2",
+                "r5"
+              ],
+              "automatic": [
+                "r2",
+                "r5"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.continuation-alone-is-a-valid-edit",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": []
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "automatic": [
+              {
+                "id": "b",
+                "media": "b",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b"
+              ],
+              "automatic": [
+                "b"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.continuation-ids-are-validated-with-the-block",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": []
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ],
+            "automatic": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-entries"
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "automatic": [
+              {
+                "id": "a",
+                "media": "a",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-entries"
+          }
+        },
+        {
+          "event": {
+            "op": "append"
+          },
+          "expected": {
+            "outcome": "invalid-entries"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.edits-keep-automatic-consistent",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": false
+          },
+          {
+            "id": "d",
+            "media": "d",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b",
+          "c",
+          "d"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "entry": "b"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "c",
+                "d"
+              ],
+              "automatic": [
+                "c",
+                "d"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "clear-upcoming",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a"
+              ],
+              "automatic": []
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "revision": "2",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "clear-all",
+            "revision": "3"
+          },
+          "expected": {
+            "queue": {
+              "order": [],
+              "automatic": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.restore-keeps-automatic-for-entries-that-remain",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "restore",
+            "saved": {
+              "server": "s",
+              "viewer": "v",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "a",
+                  "downloaded": false
+                },
+                {
+                  "id": "x",
+                  "media": "x",
+                  "downloaded": false
+                },
+                {
+                  "id": "b",
+                  "media": "b",
+                  "downloaded": false
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": false
+                }
+              ],
+              "order": [
+                "a",
+                "x",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "paused": false,
+              "automatic": [
+                "b",
+                "c"
+              ]
+            },
+            "accessible": [
+              "a",
+              "x",
+              "c"
+            ]
+          },
+          "expected": {
+            "pending": {
+              "order": [
+                "a",
+                "x",
+                "c"
+              ],
+              "automatic": [
+                "c"
+              ]
+            },
+            "removed": [
+              "b"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

@@ -211,7 +211,9 @@ it("rc26 seek steps accumulate on pending target and Ready consumes only its hel
     expect(pending).toBe(40000);
     expect(seekStepTarget(10000, pending, -10000, 120000)).toBe(30000);
     const feedback = new DetailReadyFeedback();
-    expect(feedback.update(true, "primary", true)).toBe(null);
+    expect(
+        feedback.update(true, "primary", true, true, { presented: true }),
+    ).toBe(null);
     expect(feedback.update(false, "primary", true, false)).toBe(null);
     expect(feedback.update(false, "primary", true, true)).toBe("Ready");
     expect(feedback.update(false, "primary", true, true)).toBe(null);

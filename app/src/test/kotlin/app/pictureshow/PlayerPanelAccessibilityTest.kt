@@ -67,6 +67,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlayerPanelAccessibilityTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun explicitSeekActionsMoveTenSecondsAndRefreshTheirSpokenPosition() {
@@ -197,7 +200,7 @@ class PlayerPanelAccessibilityTest {
 
     private fun verifyInitialTrackAccessibilityGate(acknowledge: Boolean) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         var focused by mutableStateOf(false)
         var acknowledged = false
         val provider = object : AccessibilityNodeProvider() {
@@ -252,7 +255,7 @@ class PlayerPanelAccessibilityTest {
 
     @Test fun chapterArrivalUsesOneTargetAcrossABoundaryUntilFocusIsAcknowledged() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         var focused by mutableStateOf(false)
         var position by mutableLongStateOf(30_000)
         val view = object : View(compose.activity) {
@@ -320,7 +323,7 @@ class PlayerPanelAccessibilityTest {
         var enabledSeen = false
         compose.setContent {
             compositionManager = LocalContext.current.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-            enabledSeen = rememberAccessibilityEnabled()
+            enabledSeen = rememberAssistiveServiceInUse()
             val parent = LocalWindowInfo.current
             val window = object : WindowInfo by parent {
                 override val isWindowFocused: Boolean get() = true
@@ -344,7 +347,7 @@ class PlayerPanelAccessibilityTest {
             val listener = AccessibilityManager.AccessibilityStateChangeListener { notified = it }
             compositionManager.addAccessibilityStateChangeListener(listener)
             try {
-                Shadows.shadowOf(compositionManager).setEnabled(true)
+                Shadows.shadowOf(compositionManager).setScreenReader(true)
                 assertTrue(compositionManager.isEnabled, "The Compose-local manager must be enabled")
                 assertTrue(notified, "The platform state callback must be delivered")
                 androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
@@ -404,5 +407,43 @@ class PlayerPanelAccessibilityTest {
         val movie = playbackMetadata(MediaItem("m", "A Film", "Movie"))
         assertEquals("A Film", movie.title.toString())
         assertEquals("Movie", movie.artist.toString())
+    }
+
+    @Test fun encodedAudioSpeedLimitIsPartOfThePanelsOnlyReaderStop() {
+        val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
+        compose.setContent { PictureshowTheme { SpeedChoices(limited, transcode = false) {} } }
+        // 1× is the only speed offered, so a D-pad reader never reaches the footer; the row says why.
+        compose.onNodeWithTag("track:125", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("track:100").assertIsSelected().assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf("1×. ${app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO}")
+            )
+        )
+    }
+
+    @Test fun theSelectedSpeedRowFollowsTheOutputWhileThePanelIsOpen() {
+        val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
+        var speed by androidx.compose.runtime.mutableStateOf(PlaybackSpeedState())
+        compose.setContent { PictureshowTheme { SpeedChoices(speed, transcode = false) {} } }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        // The output switches to passthrough audio with the panel still open.
+        compose.runOnIdle { speed = limited }
+        compose.onNodeWithTag("track:100").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf("1×. ${app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO}")
+            )
+        )
+        compose.runOnIdle { speed = PlaybackSpeedState() }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+    }
+
+    @Test fun anUnlimitedSpeedRowKeepsItsPlainLabel() {
+        compose.setContent { PictureshowTheme { SpeedChoices(PlaybackSpeedState(), transcode = false) {} } }
+        compose.onNodeWithTag("track:100").assertIsSelected()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        compose.onNodeWithTag("track:125", useUnmergedTree = true)
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
     }
 }

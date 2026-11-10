@@ -29,6 +29,8 @@ export type Stream = {
 export type Source = {
     Id: string;
     Container?: string;
+    Bitrate?: number;
+    TranscodingContainer?: string;
     MediaStreams?: Stream[];
     SupportsDirectPlay?: boolean;
     SupportsDirectStream?: boolean;
@@ -421,6 +423,23 @@ export function canDirect(source: Source, probe: Probe, audioIndex?: number) {
         `${mime}; codecs="${[videoCodecs[v.Codec], a?.Codec ? audioCodecs[a.Codec] : undefined].filter(Boolean).join(",")}"`,
     );
 }
+/**
+ * PLAY-27 per-file gate: whether this browser's own probes say it can decode the
+ * source's picture. A notice must never blame the browser for video it could play.
+ */
+export function canDecodeVideo(source: Source | undefined, probe: Probe) {
+    const v = source?.MediaStreams?.find((s) => s.Type === "Video");
+    if (
+        !v?.Codec ||
+        !videoCodecs[v.Codec] ||
+        (v.BitDepth ?? 8) > 8 ||
+        (v.Width ?? 0) > 3840 ||
+        (v.Height ?? 0) > 2160 ||
+        (v.RealFrameRate ?? 0) > 60
+    )
+        return false;
+    return probe(`video/mp4; codecs="${videoCodecs[v.Codec]}"`);
+}
 export function browserProfile(probe: Probe, bitrate = 200_000_000) {
     const video = Object.entries(videoCodecs)
         .filter(([, v]) => probe(`video/mp4; codecs="${v}"`))
@@ -690,16 +709,21 @@ export class Jellyfin {
                 "NO_COMPATIBLE_SOURCE",
                 "This media source is no longer available. Retry.",
             );
-        const chosenSubtitle = subtitle ?? metadata?.DefaultSubtitleStreamIndex;
-        const subtitleStream = metadata?.MediaStreams?.find(
-            (s) => s.Type === "Subtitle" && s.Index === chosenSubtitle,
-        );
-        const encodedSubtitle =
-            !!subtitleStream &&
-            (subtitleStream.DeliveryMethod?.toLowerCase() === "encode" ||
-                !["srt", "subrip", "vtt", "webvtt"].includes(
-                    subtitleStream.Codec?.toLowerCase() ?? "",
-                ));
+        const requiresEncodedSubtitle = (source?: Source) => {
+            const chosen = subtitle ?? source?.DefaultSubtitleStreamIndex;
+            const stream = source?.MediaStreams?.find(
+                (candidate) =>
+                    candidate.Type === "Subtitle" && candidate.Index === chosen,
+            );
+            return (
+                !!stream &&
+                (stream.DeliveryMethod?.toLowerCase() === "encode" ||
+                    !["srt", "subrip", "vtt", "webvtt"].includes(
+                        stream.Codec?.toLowerCase() ?? "",
+                    ))
+            );
+        };
+        const encodedSubtitle = requiresEncodedSubtitle(metadata);
         const direct =
             !forceHls &&
             !encodedSubtitle &&
@@ -771,7 +795,7 @@ export class Jellyfin {
                     );
             }
         }
-        const source = info.MediaSources?.find(
+        let source = info.MediaSources?.find(
             (s) =>
                 (boundSourceId == null || s.Id === boundSourceId) &&
                 ((direct &&
@@ -784,6 +808,43 @@ export class Jellyfin {
                 "NO_COMPATIBLE_SOURCE",
                 "This video cannot be played in this browser.",
             );
+        // A user-scoped PlaybackInfo may return a newer remembered choice than
+        // item metadata. Evaluate the negotiated subtitle before opening direct
+        // media, and let the server decide its own default again if burn-in is needed.
+        if (
+            direct &&
+            requiresEncodedSubtitle(source) &&
+            !source.TranscodingUrl
+        ) {
+            const selectedSourceId = source.Id;
+            info = await this.request<typeof info>(
+                "Items/" + encode(item.Id) + "/PlaybackInfo",
+                {
+                    ...body,
+                    MediaSourceId: selectedSourceId,
+                    EnableDirectPlay: false,
+                    DeviceProfile: {
+                        ...body.DeviceProfile,
+                        DirectPlayProfiles: [],
+                    },
+                },
+            );
+            if (info.ErrorCode)
+                throw new ClientError(
+                    "SERVER_REFUSED",
+                    "The server refused playback.",
+                );
+            source = info.MediaSources?.find(
+                (candidate) =>
+                    candidate.Id === selectedSourceId &&
+                    !!candidate.TranscodingUrl,
+            );
+            if (!source)
+                throw new ClientError(
+                    "NO_COMPATIBLE_SOURCE",
+                    "This video cannot be played in this browser.",
+                );
+        }
         if (
             Object.keys(source.RequiredHttpHeaders ?? {}).some(
                 (k) =>
@@ -801,6 +862,7 @@ export class Jellyfin {
             );
         const useDirect =
             direct &&
+            !requiresEncodedSubtitle(source) &&
             source.SupportsDirectPlay &&
             canDirect(source, probe, audio);
         const path = useDirect

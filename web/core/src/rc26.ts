@@ -51,22 +51,46 @@ export type PlaybackHttpOutcome = {
         "Http" | "Timeout" | "Network" | "InvalidResponse" | "Cancelled" | null;
     elapsedMs: number;
 };
+/** It may be the only cue heard, so it names the action. */
+export const detailReadyCue = (actionLabel: string) => `Ready. ${actionLabel}`;
+
 /** Ready is a transition on the same held control, never a later focus visit. */
 export class DetailReadyFeedback {
-    private wasHeld = false;
+    private wasPresented = false;
     private previousFocus: string | null = null;
     update(
         held: boolean,
         focused: string | null,
         resumed: boolean,
         usable = true,
+        options: {
+            presented?: boolean;
+            cancelled?: boolean;
+            submitted?: boolean;
+            nativePresented?: string | null;
+        } = {},
     ): string | null {
         const sameFocus = focused !== null && focused === this.previousFocus;
+        if (!resumed || options.cancelled || !sameFocus)
+            this.wasPresented = false;
+        if (
+            resumed &&
+            !options.cancelled &&
+            focused !== null &&
+            ((held && options.presented === true) ||
+                options.nativePresented === focused)
+        )
+            this.wasPresented = true;
         const cue =
-            this.wasHeld && !held && usable && sameFocus && resumed
+            this.wasPresented &&
+            !held &&
+            usable &&
+            sameFocus &&
+            resumed &&
+            !options.cancelled
                 ? "Ready"
                 : null;
-        this.wasHeld = held || (this.wasHeld && !usable && sameFocus);
+        if (cue && options.submitted !== false) this.wasPresented = false;
         this.previousFocus = focused;
         return cue;
     }
@@ -127,7 +151,11 @@ export const catalogArrivalUsesAnimation = (
     accessibilityEnabled: boolean,
     sourceIsPlayback: boolean,
     destinationIsCatalog: boolean,
-) => !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog;
+    returning = false,
+) =>
+    returning
+        ? !(sourceIsPlayback && destinationIsCatalog)
+        : !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog;
 export const detailArrivalAwaitsAction = (
     loading: boolean,
     contentRevealed: boolean,
@@ -199,7 +227,8 @@ export const detailRequestCueRemainsActive = (
     active: boolean,
     readerLeftAction: boolean,
     requested = true,
-) => active && requested && !readerLeftAction;
+    presented = true,
+) => active && requested && (!presented || !readerLeftAction);
 export const detailHasConfirmedLeafRead = (
     readSucceeded: boolean,
     sameUserData: boolean,

@@ -38,9 +38,13 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import org.junit.Rule
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchModelsTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val dispatcher = StandardTestDispatcher()
     private val stores = mutableListOf<ViewModelStore>()
     private val account = Account(Server("s", "Test", "https://media.example.test", "12"), User("u", "Viewer"), "token")
@@ -141,7 +145,7 @@ class SearchModelsTest {
         gate.complete(Unit)
         advanceUntilIdle()
         assertFalse(vm.state.value.loading)
-        assertEquals(5, vm.state.value.rows.size)
+        assertEquals(SearchKind.entries.size, vm.state.value.rows.size)
     }
 
     @Test
@@ -195,7 +199,12 @@ class SearchModelsTest {
         }
         vm.query("cloud")
         advanceUntilIdle()
-        assertEquals(listOf("Movies", "Episodes", "People"), vm.state.value.rows.map { it.title })
+        assertEquals(
+            listOf("Movies", "Episodes", "People", "Albums", "Artists", "Songs", "Playlists"),
+            vm.state.value.rows.map {
+                it.title
+            }
+        )
         assertTrue(vm.state.value.rows.all { it.items.size == 24 })
         assertFalse(vm.state.value.allFailed)
         fake.searchBlock = { _, _ -> ClientResult.Success(ItemPage()) }

@@ -15,7 +15,13 @@ data class PlaybackPreferences(
     val passthrough: Boolean = true,
     val subtitleSize: SubtitleSize = SubtitleSize.System,
     val subtitleBackground: SubtitleBackground = SubtitleBackground.System,
-    val segmentModes: Map<SegmentType, SegmentMode> = emptyMap()
+    val segmentModes: Map<SegmentType, SegmentMode> = emptyMap(),
+    /** PLAY-27: tell the viewer when the server converts video for this device. */
+    val conversionNotice: Boolean = true,
+    /** REM-09: off, same-viewer or server-allowed. Server policy stays the ceiling. */
+    val remoteReceiver: String = "same-viewer",
+    /** MUS-06: auto, original, 256 or 128. */
+    val musicQuality: String = "auto"
 ) {
     fun deviceSettings() = PlaybackSettings(
         maxStreamingBitrate = bitrateMbps?.times(1_000_000) ?: PlaybackSettings.DEFAULT_MAX_STREAMING_BITRATE,
@@ -29,7 +35,10 @@ data class PlaybackPreferences(
             passthrough: Boolean? = null,
             subtitleSize: String? = null,
             subtitleBackground: String? = null,
-            segmentModes: Map<SegmentType, String?> = emptyMap()
+            segmentModes: Map<SegmentType, String?> = emptyMap(),
+            conversionNotice: Boolean? = null,
+            remoteReceiver: String? = null,
+            musicQuality: String? = null
         ) = PlaybackPreferences(
             bitrateMbps = bitrateMbps?.takeIf { it in BITRATES },
             passthrough = passthrough ?: true,
@@ -37,7 +46,10 @@ data class PlaybackPreferences(
             subtitleBackground = SubtitleBackground.entries.firstOrNull { it.name == subtitleBackground } ?: SubtitleBackground.System,
             segmentModes = SegmentType.entries.filter { it != SegmentType.Unknown }.associateWith { type ->
                 SegmentMode.entries.firstOrNull { it.name == segmentModes[type] } ?: SegmentMode.Ask
-            }
+            },
+            conversionNotice = conversionNotice ?: true,
+            remoteReceiver = remoteReceiver?.takeIf { it in listOf("off", "same-viewer", "server-allowed") } ?: "same-viewer",
+            musicQuality = musicQuality?.takeIf { it in listOf("auto", "original", "256", "128") } ?: "auto"
         )
 
         fun validateBitrate(bitrateMbps: Int?) {

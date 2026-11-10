@@ -1,0 +1,1052 @@
+{
+  "schemaVersion": 1,
+  "suite": "remote-queue",
+  "cases": [
+    {
+      "id": "remote-queue.movie-added-to-an-episode-plays-before-the-series",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "n"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "n",
+              "e2",
+              "e3"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.episode-from-the-tail-plays-once-at-the-added-place",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3",
+              "e4"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "e3",
+              "e4"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e3",
+              "e2",
+              "e4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.play-next-episode-from-the-tail-plays-once",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3",
+              "e4"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "e3",
+              "e4"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e3",
+              "e2",
+              "e4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.play-next-is-last-in-first-next-add-keeps-order",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "a"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "a",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "b"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "b",
+              "a",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "c"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "c",
+              "b",
+              "a",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "d"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "c",
+              "b",
+              "a",
+              "d",
+              "e2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.movie-then-episode-keeps-the-episodes-series-behind-later-additions",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "m"
+            ]
+          },
+          "expected": {
+            "current": "m",
+            "upNext": []
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "e3",
+              "e4",
+              "e5"
+            ],
+            "watching": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "e3",
+              "e4",
+              "e5"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "n"
+            ],
+            "watching": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "e3",
+              "n",
+              "e4",
+              "e5"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.additions-keep-going-ahead-of-the-tail-as-playback-advances",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "n"
+            ],
+            "watching": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "n",
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "n"
+          },
+          "expected": {
+            "current": "n",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "k"
+            ],
+            "watching": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "k",
+              "e3"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.continuation-does-not-bring-back-what-was-watched",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ],
+            "watching": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e1",
+              "e3"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.same-title-twice-in-a-row-collapses",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "e1",
+              "e2"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "e1",
+              "e2"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "x"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "x",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "x",
+              "m",
+              "e2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.a-separated-copy-advances-through-both",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "a"
+            ]
+          },
+          "expected": {
+            "current": "a",
+            "upNext": []
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "a"
+          },
+          "expected": {
+            "current": "a",
+            "upNext": [
+              "m"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "x"
+            ],
+            "watching": "a"
+          },
+          "expected": {
+            "current": "a",
+            "upNext": [
+              "m",
+              "x"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "a"
+          },
+          "expected": {
+            "current": "a",
+            "upNext": [
+              "m",
+              "x",
+              "m"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "x",
+              "m"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "x"
+          },
+          "expected": {
+            "current": "x",
+            "upNext": [
+              "m"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.viewing-started-by-hand-is-adopted-without-a-tail",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "h"
+          },
+          "expected": {
+            "current": "h",
+            "upNext": [
+              "m"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "e3",
+              "e4"
+            ],
+            "watching": "h"
+          },
+          "expected": {
+            "current": "h",
+            "upNext": [
+              "m",
+              "e3",
+              "e4"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "n"
+            ],
+            "watching": "h"
+          },
+          "expected": {
+            "current": "h",
+            "upNext": [
+              "m",
+              "e3",
+              "n",
+              "e4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.a-title-opened-by-hand-ends-the-queue",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "other"
+          },
+          "expected": {
+            "current": null,
+            "upNext": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.previous-keeps-what-was-added",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "e2"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "previous"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.empty-commands-change-nothing",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": []
+          },
+          "expected": {
+            "current": null,
+            "upNext": []
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [],
+            "watching": "h"
+          },
+          "expected": {
+            "current": null,
+            "upNext": []
+          }
+        },
+        {
+          "event": {
+            "op": "previous"
+          },
+          "expected": {
+            "current": null,
+            "upNext": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.automatic-titles-already-watched-stay-gone",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "x",
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ],
+            "watching": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "x",
+              "e3",
+              "e4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.open-collapses-the-same-title-twice-in-a-row",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "a",
+              "a",
+              "b",
+              "a"
+            ]
+          },
+          "expected": {
+            "current": "a",
+            "upNext": [
+              "b",
+              "a"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
