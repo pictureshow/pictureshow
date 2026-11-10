@@ -11,10 +11,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.tv.material3.MaterialTheme
 import app.pictureshow.core.Account
@@ -129,9 +132,12 @@ class CatalogCustomizationTest {
         }
         compose.setContent { MaterialTheme { LibraryFilterEditor(CatalogGridState(account, parent), service, {}, {}) } }
         compose.runOnIdle { parent = library.copy(id = "new") }
-        compose.waitForIdle()
+        // The replacement result is below the lazy viewport: find it through the list, then
+        // release the old noncancellable failure only after the new choices are displayed.
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("New library genre"))
+        compose.onNodeWithText("New library genre").assertIsDisplayed()
         compose.runOnIdle { old.complete(ClientResult.Failure(ClientError(ErrorKind.SERVER, "Old facets failed"))) }
-        compose.onNodeWithText("New library genre").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("New library genre").assertIsDisplayed()
         compose.onNodeWithText("Old facets failed").assertDoesNotExist()
     }
 }
