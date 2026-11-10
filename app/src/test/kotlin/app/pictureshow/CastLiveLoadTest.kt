@@ -41,7 +41,7 @@ class CastLiveLoadTest {
         val data = castLoadData(CastLoadRequest(listOf(item(false), item(true)), 1, 0, true))
         assertEquals(1, data.queueData!!.startIndex)
         assertEquals(MediaQueueData.Builder().build().startTime, data.queueData!!.startTime)
-        assertEquals(MediaInfo.STREAM_TYPE_LIVE, data.queueData!!.items!![1].media.streamType)
+        assertEquals(MediaInfo.STREAM_TYPE_LIVE, data.queueData!!.items!![1].media?.streamType)
     }
 
     @Test fun onDemandStillLoadsRequestedPosition() {
