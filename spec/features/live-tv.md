@@ -111,3 +111,11 @@ one full-width Watch primary, with equally sized outlined recording actions belo
 TV program details use the program title as the heading and hardware Back; explicit Cancel remains on destructive dialogs.
 A focused channel with no current program previews its own channel name and No guide data. It never borrows another channel's
 current program. Program-grid focus has its own selected-program preview; tab switching preserves a stable header keyline.
+
+Status presentation follows the server enum, independently of localized labels. InProgress uses the live tone and a drawn
+recording dot; Error and ConflictedNotOk use an error container/on-container pair plus a warning icon; Cancelled is muted;
+New, Completed and ConflictedOk are neutral. Every badge owns both colours so a focused TV row cannot invert its text onto
+a fixed dark badge. Short labels are Recording, Failed, Overlaps and Won’t record; none promises tuner capacity. Unknown
+server statuses remain explicitly distinguishable with the supplied value, as required by LIVE-08, rather than being
+silently mapped to a known state. Phone schedule badges occupy their own line, leaving headline and localized time readable.
+Completed recordings need no exceptional-state badge. Phone refresh uses one pull indicator; writes have their own progress.

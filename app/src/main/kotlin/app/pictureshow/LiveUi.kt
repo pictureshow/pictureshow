@@ -155,6 +155,38 @@ internal fun liveIcon(kind: String): ImageVector {
                     lineTo(if (right) 6f else 18f, 6f)
                     close()
                 }
+                "trash" -> {
+                    moveTo(5f, 6f)
+                    lineTo(19f, 6f)
+                    lineTo(18f, 22f)
+                    lineTo(6f, 22f)
+                    close()
+                    moveTo(3f, 3f)
+                    lineTo(9f, 3f)
+                    lineTo(9f, 1f)
+                    lineTo(15f, 1f)
+                    lineTo(15f, 3f)
+                    lineTo(21f, 3f)
+                    lineTo(21f, 5f)
+                    lineTo(3f, 5f)
+                    close()
+                }
+                "warning" -> {
+                    moveTo(12f, 2f)
+                    lineTo(23f, 22f)
+                    lineTo(1f, 22f)
+                    close()
+                    moveTo(11f, 8f)
+                    lineTo(13f, 8f)
+                    lineTo(13f, 15f)
+                    lineTo(11f, 15f)
+                    close()
+                    moveTo(11f, 17f)
+                    lineTo(13f, 17f)
+                    lineTo(13f, 19f)
+                    lineTo(11f, 19f)
+                    close()
+                }
                 "more" -> {
                     listOf(5f, 12f, 19f).forEach { x ->
                         moveTo(x, 10f)

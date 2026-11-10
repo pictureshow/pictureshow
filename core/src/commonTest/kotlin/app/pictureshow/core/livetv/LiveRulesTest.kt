@@ -104,4 +104,17 @@ class LiveRulesTest {
         assertEquals(statuses.size, statuses.map(::recordingStatus).distinct().size)
         assertTrue(recordingStatus("NewServerStatus").contains("NewServerStatus"))
     }
+
+    @Test fun statusTonesFollowServerFactsRatherThanTheLocalizedCopy() {
+        assertEquals(RecordingTone.Live, recordingTone("InProgress"))
+        assertEquals(RecordingTone.Error, recordingTone("Error"))
+        assertEquals(RecordingTone.Error, recordingTone("ConflictedNotOk"))
+        assertEquals(RecordingTone.Neutral, recordingTone("ConflictedOk"))
+        assertEquals(RecordingTone.Neutral, recordingTone("Completed"))
+        assertEquals(RecordingTone.Muted, recordingTone("Cancelled"))
+        assertEquals(RecordingTone.Neutral, recordingTone("RecordingFaultFromFutureProvider"))
+        assertEquals("Overlaps", recordingStatus("ConflictedOk"))
+        assertEquals("Won’t record", recordingStatus("ConflictedNotOk"))
+        assertEquals("Failed", recordingStatus("Error"))
+    }
 }

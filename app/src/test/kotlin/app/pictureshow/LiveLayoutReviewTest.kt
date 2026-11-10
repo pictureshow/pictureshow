@@ -53,6 +53,30 @@ class LiveLayoutReviewTest {
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
 
     @Test
+    fun errorStatusOwnsItsTextColorInsideAnActuallyFocusedTvRow() {
+        var expected = androidx.compose.ui.graphics.Color.Unspecified
+        val schedule = app.pictureshow.core.livetv.LiveSchedule(
+            kotlinx.serialization.json.buildJsonObject {
+                put("Id", kotlinx.serialization.json.JsonPrimitive("failed"))
+                put("Name", kotlinx.serialization.json.JsonPrimitive("Generated recording"))
+                put("Status", kotlinx.serialization.json.JsonPrimitive("Error"))
+            }
+        )
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme {
+                expected = androidx.tv.material3.MaterialTheme.colorScheme.onErrorContainer
+                LiveScheduleRow(schedule, true, Modifier.liveFocus("test-error", true)) { }
+            }
+        }
+        compose.onNodeWithTag("live:test-error").assertIsFocused()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Failed", useUnmergedTree = true).performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult
+        ) { it(layouts) }
+        assertEquals(expected, layouts.single().layoutInput.style.color, "Focused rows must not replace status on-container color")
+    }
+
+    @Test
     fun channelWithoutGuideDoesNotPreviewAnotherChannelsProgramAndTabsStayOnTheirKeyline() {
         val now = Instant.now()
         val fake = LiveFake().apply {

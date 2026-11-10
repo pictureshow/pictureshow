@@ -428,7 +428,7 @@
           "Status": "InProgress"
         }
       },
-      "expected": "Recording now"
+      "expected": "Recording"
     },
     {
       "id": "live-presentation.unknown-provided-status",

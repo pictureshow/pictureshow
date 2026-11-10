@@ -45,6 +45,8 @@ import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import app.pictureshow.core.livetv.recordingStatus
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /** Platform components share one destination and the same policy/write owner. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -323,7 +325,7 @@ internal fun LiveTvScreen(
                 filters()
             }
         }
-        if (state.loading || state.writing) {
+        if (tv && state.loading || state.writing) {
             androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
         }
         state.error?.let {
@@ -415,7 +417,11 @@ internal fun LiveTvScreen(
                                     }
                                 }
                                 item {
-                                    LiveStatus(liveScheduleStatus(schedule, selectedSeries), tv)
+                                    LiveStatus(
+                                        liveScheduleStatus(schedule, selectedSeries),
+                                        tv,
+                                        schedule.fields["Status"]?.jsonPrimitive?.contentOrNull
+                                    )
                                     schedule.errorMessage?.let { LiveText(it, tv, warning = true) }
                                 }
                                 item {
@@ -662,15 +668,12 @@ internal fun LiveTvScreen(
             tv,
             { recordingMenu = null },
             listOf(
-                "Open recording" to {
-                    recordingMenu = null
-                    onRecording(item)
-                },
                 "Delete recorded file…" to {
                     recordingMenu = null
                     deleteRecording = item
                 }
-            )
+            ),
+            destructiveLabels = setOf("Delete recorded file…")
         )
     }
 }

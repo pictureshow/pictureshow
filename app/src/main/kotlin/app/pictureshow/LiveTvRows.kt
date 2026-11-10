@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -30,8 +31,10 @@ import app.pictureshow.core.imageUrl
 import app.pictureshow.core.livetv.LiveChannel
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
+import app.pictureshow.core.livetv.RecordingTone
 import app.pictureshow.core.livetv.canTune
 import app.pictureshow.core.livetv.recordingStatus
+import app.pictureshow.core.livetv.recordingTone
 import coil3.compose.AsyncImage
 import java.time.Instant
 import kotlinx.serialization.json.contentOrNull
@@ -169,13 +172,13 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
         )
     }
     val badge: @Composable () -> Unit = {
-        LiveStatus(liveScheduleStatus(schedule, seriesRule), tv)
+        LiveStatus(liveScheduleStatus(schedule, seriesRule), tv, schedule.fields["Status"]?.jsonPrimitive?.contentOrNull)
     }
     if (tv) {
         androidx.tv.material3.ListItem(
             selected = false,
             onClick = onClick,
-            headlineContent = { LiveText(schedule.name, tv) },
+            headlineContent = { LiveText(schedule.name, tv, maxLines = 1) },
             modifier = modifier.fillMaxWidth(),
             supportingContent = supporting,
             trailingContent = badge,
@@ -184,10 +187,20 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
         )
     } else {
         androidx.compose.material3.ListItem(
-            headlineContent = { LiveText(schedule.name, tv) },
+            headlineContent = { LiveText(schedule.name, tv, maxLines = 1) },
             modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
-            supportingContent = supporting,
-            trailingContent = badge
+            supportingContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LiveText(
+                        "${schedule.channelName ?: "Channel ${schedule.channelId}"} · " +
+                            time.range(schedule.startDate, schedule.endDate).replace(" – ", "\u00a0–\u00a0"),
+                        false,
+                        small = true,
+                        maxLines = 1
+                    )
+                    badge()
+                }
+            }
         )
     }
 }
@@ -198,19 +211,71 @@ internal fun liveScheduleStatus(schedule: LiveSchedule, seriesRule: Boolean): St
         ?: if (seriesRule) "Series rule" else "Status unavailable"
 
 @Composable
-internal fun LiveStatus(label: String, tv: Boolean) {
-    LiveText(
-        label,
-        tv,
-        Modifier.clip(RoundedCornerShape(4.dp)).background(
-            if (label.contains("Recording", true)) androidx.compose.ui.graphics.Color(0xFF813939) else LiveAccent.copy(alpha = .14f)
-        ).padding(horizontal = 6.dp, vertical = 3.dp),
-        small = true
-    )
+internal fun LiveStatus(label: String, tv: Boolean, status: String? = null) {
+    val tone = recordingTone(status)
+    val container: androidx.compose.ui.graphics.Color
+    val content: androidx.compose.ui.graphics.Color
+    if (tv) {
+        val colors = androidx.tv.material3.MaterialTheme.colorScheme
+        container = when (tone) {
+            RecordingTone.Error -> colors.errorContainer
+            RecordingTone.Live -> colors.primaryContainer
+            RecordingTone.Muted -> colors.surface
+            else -> colors.surfaceVariant
+        }
+        content = when (tone) {
+            RecordingTone.Error -> colors.onErrorContainer
+            RecordingTone.Live -> colors.onPrimaryContainer
+            else -> colors.onSurfaceVariant
+        }
+    } else {
+        val colors = androidx.compose.material3.MaterialTheme.colorScheme
+        container = when (tone) {
+            RecordingTone.Error -> colors.errorContainer
+            RecordingTone.Live -> colors.primaryContainer
+            RecordingTone.Muted -> colors.surface
+            else -> colors.surfaceVariant
+        }
+        content = when (tone) {
+            RecordingTone.Error -> colors.onErrorContainer
+            RecordingTone.Live -> colors.onPrimaryContainer
+            else -> colors.onSurfaceVariant
+        }
+    }
+    Row(
+        Modifier.clip(RoundedCornerShape(4.dp)).background(container).padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (tone == RecordingTone.Error) {
+            if (tv) {
+                androidx.tv.material3.Icon(liveIcon("warning"), null, Modifier.size(16.dp), tint = content)
+            } else {
+                androidx.compose.material3.Icon(liveIcon("warning"), null, Modifier.size(16.dp), tint = content)
+            }
+        } else if (tone == RecordingTone.Live) {
+            Box(
+                Modifier.size(
+                    6.dp
+                ).clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Color(0xFFFF6B6B))
+            )
+        }
+        if (tv) {
+            androidx.tv.material3.Text(label, color = content, style = androidx.tv.material3.MaterialTheme.typography.bodySmall)
+        } else {
+            androidx.compose.material3.Text(label, color = content, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable
-internal fun LiveMenu(title: String, tv: Boolean, onDismiss: () -> Unit, actions: List<Pair<String, () -> Unit>>) {
+internal fun LiveMenu(
+    title: String,
+    tv: Boolean,
+    onDismiss: () -> Unit,
+    actions: List<Pair<String, () -> Unit>>,
+    destructiveLabels: Set<String> = emptySet()
+) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.heightIn(max = if (tv) 460.dp else 640.dp).clip(RoundedCornerShape(12.dp)).background(LiveBackground)
@@ -219,20 +284,66 @@ internal fun LiveMenu(title: String, tv: Boolean, onDismiss: () -> Unit, actions
         ) {
             LiveText(title, tv, heading = true)
             actions.forEachIndexed { index, action ->
+                val destructive = action.first in destructiveLabels
                 if (tv) {
                     androidx.tv.material3.ListItem(
                         selected = false,
                         onClick = action.second,
-                        headlineContent = { LiveText(action.first, true) },
+                        headlineContent = {
+                            androidx.tv.material3.Text(
+                                action.first,
+                                color = if (destructive) {
+                                    androidx.tv.material3.MaterialTheme.colorScheme.error
+                                } else {
+                                    androidx.tv.material3.LocalContentColor.current
+                                }
+                            )
+                        },
+                        leadingContent = if (destructive) {
+                            {
+                                androidx.tv.material3.Icon(
+                                    liveIcon("trash"),
+                                    null,
+                                    tint = androidx.tv.material3.MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         modifier = Modifier.fillMaxWidth().liveFocus("menu:$index", index == 0),
                         colors = androidx.tv.material3.ListItemDefaults.colors(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                            focusedContainerColor = if (destructive) {
+                                androidx.tv.material3.MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                androidx.tv.material3.MaterialTheme.colorScheme.inverseSurface
+                            }
                         ),
                         scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
                     )
                 } else {
                     androidx.compose.material3.ListItem(
-                        headlineContent = { LiveText(action.first, false) },
+                        headlineContent = {
+                            androidx.compose.material3.Text(
+                                action.first,
+                                color = if (destructive) {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.error
+                                } else {
+                                    androidx.compose.material3.LocalContentColor.current
+                                }
+                            )
+                        },
+                        leadingContent = if (destructive) {
+                            {
+                                androidx.compose.material3.Icon(
+                                    liveIcon("trash"),
+                                    null,
+                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         modifier = Modifier.fillMaxWidth().clickable(onClick = action.second)
                     )
                 }

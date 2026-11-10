@@ -288,12 +288,12 @@
       },
       "expected": [
         "Scheduled",
-        "Recording now",
+        "Recording",
         "Completed",
         "Cancelled",
-        "Conflict accepted by server",
-        "Conflict rejected by server",
-        "Recording error",
+        "Overlaps",
+        "Won\u2019t record",
+        "Failed",
         "Unknown status (FutureState)"
       ]
     },
@@ -784,6 +784,32 @@
         "firstRuleId": null,
         "secondRuleId": null
       }
+    },
+    {
+      "id": "live-dvr.semantic-status-tones",
+      "operation": "status-tones",
+      "input": {
+        "statuses": [
+          "New",
+          "InProgress",
+          "Completed",
+          "Cancelled",
+          "ConflictedOk",
+          "ConflictedNotOk",
+          "Error",
+          "FutureState"
+        ]
+      },
+      "expected": [
+        "Neutral",
+        "Live",
+        "Neutral",
+        "Muted",
+        "Neutral",
+        "Error",
+        "Error",
+        "Neutral"
+      ]
     }
   ]
 }

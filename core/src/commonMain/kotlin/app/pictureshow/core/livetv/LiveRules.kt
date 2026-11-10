@@ -120,12 +120,12 @@ fun editSchedule(original: LiveSchedule, edits: JsonObject, series: Boolean): Li
 
 fun recordingStatus(status: String): String = when (status) {
     "New" -> "Scheduled"
-    "InProgress" -> "Recording now"
+    "InProgress" -> "Recording"
     "Completed" -> "Completed"
     "Cancelled" -> "Cancelled"
-    "ConflictedOk" -> "Conflict accepted by server"
-    "ConflictedNotOk" -> "Conflict rejected by server"
-    "Error" -> "Recording error"
+    "ConflictedOk" -> "Overlaps"
+    "ConflictedNotOk" -> "Won’t record"
+    "Error" -> "Failed"
     else -> "Unknown status ($status)"
 }
 
@@ -159,4 +159,14 @@ data class LiveGuideCache(
     fun actionAllowed(program: LiveProgram, now: Long): Boolean = snapshotFresh(now) &&
         program.channelId in channelIds &&
         (liveInstant(program.endDate)?.let { it > now } == true)
+}
+
+/** Semantic presentation follows server facts, independently of localized wording. */
+enum class RecordingTone { Neutral, Live, Error, Muted }
+
+fun recordingTone(status: String?): RecordingTone = when (status) {
+    "InProgress" -> RecordingTone.Live
+    "Error", "ConflictedNotOk" -> RecordingTone.Error
+    "Cancelled" -> RecordingTone.Muted
+    else -> RecordingTone.Neutral
 }

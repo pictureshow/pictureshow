@@ -79,6 +79,11 @@ class LiveVectorsTest {
                 input.text("end")
             ).map { JsonPrimitive(it.id) }
         )
+        "status-tones" -> JsonArray(
+            input.getValue("statuses").jsonArray.map {
+                JsonPrimitive(app.pictureshow.core.livetv.recordingTone(it.jsonPrimitive.content).name)
+            }
+        )
         "program-query" -> programQuery(input)
         "delete-trace" -> deleteTrace(input)
         "guide-metadata" -> JsonArray(
