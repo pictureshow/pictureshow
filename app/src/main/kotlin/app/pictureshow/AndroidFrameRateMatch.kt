@@ -54,7 +54,7 @@ private fun Display.Mode.frameRateMode() = FrameRateDisplayMode(
     physicalHeight,
     refreshRate,
     if (Build.VERSION.SDK_INT >= 34) {
-        supportedHdrTypes.mapNotNull { type ->
+        supportedHdrTypes.map { type ->
             when (type) {
                 Display.HdrCapabilities.HDR_TYPE_HDR10 -> HdrFormat.HDR10
                 Display.HdrCapabilities.HDR_TYPE_HLG -> HdrFormat.HLG
@@ -62,7 +62,7 @@ private fun Display.Mode.frameRateMode() = FrameRateDisplayMode(
                 Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS -> HdrFormat.HDR10_PLUS
                 else -> null
             }
-        }.toSet()
+        }.filterNotNull().toSet()
     } else {
         emptySet()
     }
