@@ -129,5 +129,11 @@ class LiveTvScreensTest {
         val bounds = cell.getUnclippedBoundsInRoot()
         assertTrue(bounds.bottom - bounds.top <= 120.dp, "Long labels must not expand a guide lane")
         cell.assert(hasContentDescription(title, substring = true))
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText(title, substring = true, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.size)
+        assertEquals(3, layouts.single().layoutInput.maxLines, "Guide rendering must keep its three-line text budget")
+        assertTrue(layouts.single().lineCount <= 3, "Long guide labels must remain within the rendered text budget")
     }
 }
