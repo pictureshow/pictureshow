@@ -59,7 +59,7 @@ jobs:
           (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
           cl /nologo /EHsc /LD /std:c++17 /I native/install/include desktop/src/native/windows_layer.cpp /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
           if ($LASTEXITCODE -ne 0) { throw 'Adapter build failed' }
-      - name: Native LayerProbe five-case matrix including 125 seconds at 1080p60
+      - name: Instrumented legacy soak and final five-case native matrix
         shell: pwsh
         run: |
           $dll = Get-ChildItem native/runtime -Filter '*mpv*.dll' | Select-Object -First 1
@@ -71,6 +71,14 @@ jobs:
           $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
           $env:SKIKO_RENDER_API = 'SOFTWARE'
           $failed = $false
+          # Same runner, same media and native adapter: retain target-time blocking
+          # and render-on-every-poll only for this explicit comparison.
+          $env:SPIKE_LEGACY_PACING = '1'
+          Remove-Item Env:SPIKE_MPV_OPTIONS -ErrorAction SilentlyContinue
+          java --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt layer 'desktop-fixtures/hevc-main10-1080p60.mkv' 'desktop-evidence/windows-legacy-1080p60' --sustain=125
+          if ($LASTEXITCODE -ne 0) { $failed = $true }
+          Remove-Item Env:SPIKE_LEGACY_PACING
+          $env:SPIKE_MPV_OPTIONS = 'video-timing-offset=0'
           foreach ($media in @('hevc-main', 'hevc-main10', 'av1', 'hevc-pq-metadata', 'hevc-main10-1080p60')) {
             $extra = @()
             if ($media -eq 'hevc-main10-1080p60') { $extra = @('--sustain=125') }
