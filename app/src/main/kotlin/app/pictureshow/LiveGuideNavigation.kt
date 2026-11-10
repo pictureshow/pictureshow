@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SegmentedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +55,7 @@ internal fun LiveGuideViewMode(linear: Boolean, tv: Boolean, onChange: (Boolean)
     } else {
         androidx.compose.material3.SingleChoiceSegmentedButtonRow {
             listOf("Grid", "List").forEachIndexed { index, label ->
-                androidx.compose.material3.SegmentedButton(
+                SegmentedButton(
                     selected = linear == (index == 1),
                     onClick = { onChange(index == 1) },
                     shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(index, 2)

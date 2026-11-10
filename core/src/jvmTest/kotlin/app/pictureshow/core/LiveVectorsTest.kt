@@ -145,24 +145,29 @@ class LiveVectorsTest {
     private suspend fun TestScope.programQuery(input: JsonObject): JsonObject {
         var query = JsonObject(emptyMap())
         val transport = HttpClient(
-            MockEngine { request ->
-                query = buildJsonObject {
-                    put("path", request.url.encodedPath)
-                    request.url.parameters.entries().forEach { (key, values) -> put(key, values.single()) }
+            MockEngine(
+                MockEngineConfig().apply {
+                    dispatcher = StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        query = buildJsonObject {
+                            put("path", request.url.encodedPath)
+                            request.url.parameters.entries().forEach { (key, values) -> put(key, values.single()) }
+                        }
+                        val metadata = buildJsonObject {
+                            put("Id", "p")
+                            put("Name", "Generated programme")
+                            if (request.url.parameters["fields"] == "Overview") put("Overview", input.text("overview"))
+                        }
+                        respond(
+                            buildJsonObject {
+                                put("Items", JsonArray(listOf(metadata)))
+                                put("TotalRecordCount", 1)
+                            }.toString(),
+                            headers = headersOf(HttpHeaders.ContentType, "application/json")
+                        )
+                    }
                 }
-                val metadata = buildJsonObject {
-                    put("Id", "p")
-                    put("Name", "Generated programme")
-                    if (request.url.parameters["fields"] == "Overview") put("Overview", input.text("overview"))
-                }
-                respond(
-                    buildJsonObject {
-                        put("Items", JsonArray(listOf(metadata)))
-                        put("TotalRecordCount", 1)
-                    }.toString(),
-                    headers = headersOf(HttpHeaders.ContentType, "application/json")
-                )
-            }
+            )
         )
         try {
             val account = Account(Server("s", "Fixture", "https://media.example.test", "12"), User("viewer", "Viewer"), "fixture-token")
@@ -174,7 +179,7 @@ class LiveVectorsTest {
                 input.getValue("startIndex").jsonPrimitive.int,
                 input.getValue("limit").jsonPrimitive.int
             )
-            val page = assertIs<ClientResult.Success<LivePage<LiveProgram>>>(result).value
+            val page = assertIs<ClientResult.Success<LivePage<LiveProgram>>>(result, "Program query must succeed: $result").value
             return buildJsonObject {
                 put("query", query)
                 put("overview", page.items.single().overview)
