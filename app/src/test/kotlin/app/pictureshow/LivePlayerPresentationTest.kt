@@ -5,8 +5,14 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -15,7 +21,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import app.pictureshow.core.playback.ObservedLiveWindow
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -61,14 +69,16 @@ class LivePlayerPresentationTest {
     fun liveMarkerUsesMeasuredDefaultPositionRatherThanGuideOrWindowEnd() {
         compose.setContent {
             PictureshowTheme {
-                PlayerTimeline(
-                    10_000,
-                    10_000,
-                    3_600_000,
-                    live = true,
-                    liveCanTimeShift = true,
-                    liveWindow = ObservedLiveWindow(100_000, 30_000, 27_000, true)
-                )
+                Box(Modifier.background(Color.Black)) {
+                    PlayerTimeline(
+                        10_000,
+                        10_000,
+                        3_600_000,
+                        live = true,
+                        liveCanTimeShift = true,
+                        liveWindow = ObservedLiveWindow(100_000, 30_000, 27_000, true)
+                    )
+                }
             }
         }
         val pixels = compose.onNodeWithTag("player:live-track").captureToImage().toPixelMap()
@@ -92,9 +102,15 @@ class LivePlayerPresentationTest {
         compose.onNodeWithText("LIVE").assertIsDisplayed()
         compose.onNodeWithTag("player:go-live").assertIsNotEnabled()
         compose.runOnIdle { paused.value = true }
-        compose.onNodeWithTag("player:go-live").assertIsEnabled().performClick()
+        val chip = compose.onNodeWithTag("player:go-live").assertIsEnabled()
+        chip.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }
+        chip.performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle {
             assertEquals(1, requests)
+        }
+        chip.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        compose.runOnIdle {
+            assertEquals(2, requests)
             position.longValue = 10_000
         }
         compose.onNodeWithText("Go live").assertIsDisplayed()
