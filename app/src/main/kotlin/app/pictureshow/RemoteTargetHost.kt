@@ -157,6 +157,10 @@ internal class RemoteTargetHost(
         syncSocket = value
         reconcile()
     }
+    fun renewSyncSocket() {
+        stop()
+        reconcile()
+    }
     private val commands = remoteAdvertisedCommands(fixedVolume = true)
     private var account: Account? = null
     private var policy = "same-viewer"
@@ -297,6 +301,8 @@ internal class RemoteTargetHost(
                 }
             }
             val header = authorization(target)
+            // Immutable per socket; a queued callback cannot take a later membership's handler.
+            val groupReceiver = syncMessages
             opened = sockets.open(
                 url,
                 header,
@@ -325,7 +331,7 @@ internal class RemoteTargetHost(
                     override fun message(text: String) {
                         scope.launch {
                             if (!live) return@launch
-                            syncMessages(text)
+                            groupReceiver(text)
                             val inbound = parseRemoteMessage(text)
                             inbound.keepAliveSeconds?.let(::beat)
                             receive(inbound)

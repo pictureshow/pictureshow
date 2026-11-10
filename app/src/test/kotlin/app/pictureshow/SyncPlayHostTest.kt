@@ -489,4 +489,112 @@ class SyncPlayHostTest {
         assertTrue(rig.host.state.value.status.contains("not confirmed Leave"))
         assertEquals(null, rig.host.pendingExternalRoute)
     }
+
+    @Test fun oldSocketCallbacksCannotChangeAnActiveRejoinToTheSameGroup() = runTest {
+        for (kind in listOf("GroupLeft", "PlayQueue", "Command")) {
+            val rig = Rig(this)
+            rig.join()
+            rig.snapshot()
+            val oldGeneration = rig.host.membership.generation
+            val oldSocket: (String) -> Unit = { text -> rig.host.receive(text, oldGeneration) }
+            rig.host.leave()
+            runCurrent()
+            rig.join()
+            rig.snapshot()
+            assertTrue(rig.host.membership.generation > oldGeneration)
+            val membership = rig.host.membership
+            val renderer = rig.renderer.value
+            val applied = rig.renderer.applied.toList()
+            val message = when (kind) {
+                "GroupLeft" -> rig.update("GroupLeft")
+
+                "PlayQueue" -> rig.update(
+                    "PlayQueue",
+                    buildJsonObject {
+                        put("Reason", "NewPlaylist")
+                        put("LastUpdate", syncUtcTimestamp(rig.wall()))
+                        put(
+                            "Playlist",
+                            JsonArray(
+                                listOf(
+                                    buildJsonObject {
+                                        put("ItemId", "stale-item")
+                                        put("PlaylistItemId", "stale-entry")
+                                    }
+                                )
+                            )
+                        )
+                        put("PlayingItemIndex", 0)
+                        put("StartPositionTicks", 900_000_000L)
+                        put("IsPlaying", true)
+                        put("RepeatMode", "RepeatAll")
+                        put("ShuffleMode", "Shuffle")
+                    }
+                )
+
+                else -> rig.command("Unpause")
+            }
+            oldSocket(message)
+            runCurrent()
+            assertEquals(membership, rig.host.membership, kind)
+            assertEquals(renderer, rig.renderer.value, kind)
+            assertEquals(applied, rig.renderer.applied, kind)
+            assertTrue(rig.opens.isEmpty(), kind)
+        }
+    }
+
+    @Test fun joinWaitsForTheRotatedMembershipSocketBeforePosting() = runTest {
+        val rig = Rig(this)
+        rig.refresh()
+        val socketRequests = mutableListOf<Pair<Long, Boolean>>()
+        rig.host.membershipSocket = { epoch, joining -> socketRequests += epoch to joining }
+        rig.host.join("g")
+        runCurrent()
+        assertEquals(listOf(rig.host.membership.generation to true), socketRequests)
+        assertFalse(rig.operations().contains("Join"))
+        rig.host.socket(false)
+        advanceTimeBy(100)
+        runCurrent()
+        assertFalse(rig.operations().contains("Join"))
+        rig.host.socket(true)
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "Join" })
+        assertFalse(rig.renderer.value.playing)
+    }
+
+    @Test fun aDefiniteJoinDenialReleasesLocalMembershipInterception() = runTest {
+        val rig = Rig(this)
+        rig.refresh()
+        rig.httpStatus = 403
+        rig.host.join("g")
+        runCurrent()
+        assertEquals(listOf("Join"), rig.operations())
+        assertFalse(rig.host.participating)
+        assertFalse(rig.host.transport("play"))
+        assertFalse(rig.renderer.value.playing)
+        assertEquals(null, rig.host.membership.groupId)
+        assertTrue(rig.host.state.value.status.contains("denied", ignoreCase = true))
+    }
+
+    @Test fun anUnknownJoinOutcomeRemainsPausedAndInterceptedUntilExplicitLeave() = runTest {
+        for (status in listOf(0, 503)) {
+            val rig = Rig(this)
+            rig.refresh()
+            rig.httpStatus = status
+            rig.host.join("g")
+            runCurrent()
+            assertEquals(listOf("Join"), rig.operations(), "status=$status")
+            assertTrue(rig.host.participating, "status=$status")
+            assertEquals("Reconnecting", rig.host.membership.phase, "status=$status")
+            assertFalse(rig.renderer.value.playing, "status=$status")
+            assertTrue(rig.host.transport("play"), "status=$status")
+            runCurrent()
+            assertFalse(rig.operations().contains("Unpause"), "status=$status")
+            rig.httpStatus = 204
+            rig.host.leave()
+            runCurrent()
+            assertFalse(rig.host.participating, "status=$status")
+            assertFalse(rig.host.transport("play"), "status=$status")
+        }
+    }
 }

@@ -155,7 +155,7 @@ class SyncClientTest {
     @Test fun emptyListAndDeniedListAreDistinctAndEachRequestRunsOnce() = runTest {
         val sync = client()
         body = "[]"
-        assertEquals(emptyList(), assertIs<ClientResult.Success<List<*>>>(sync.groups(account)).value)
+        assertEquals(emptyList<Any>(), assertIs<ClientResult.Success<List<*>>>(sync.groups(account)).value)
         status = HttpStatusCode.Forbidden
         val denied = assertIs<ClientResult.Failure>(sync.groups(account))
         assertEquals(403, denied.error.status)

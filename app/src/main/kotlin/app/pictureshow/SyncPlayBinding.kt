@@ -48,7 +48,12 @@ internal fun SyncPlayCoordinator(
         remote.requireSyncSocket(account?.expired == false)
     }
     DisposableEffect(sync, remote, lifecycle) {
-        remote.syncMessages = sync::receive
+        fun subscription(generation: Long, rotate: Boolean) {
+            remote.syncMessages = { text -> sync.receive(text, generation) }
+            if (rotate) remote.renewSyncSocket()
+        }
+        sync.membershipSocket = ::subscription
+        subscription(sync.membership.generation, false)
         remote.syncQueueRequest = { effect ->
             when (effect.op) {
                 "open" -> sync.queueRequest(app.pictureshow.core.sync.syncNewQueue(effect.items, effect.index ?: 0, effect.ticks ?: 0))
@@ -69,6 +74,7 @@ internal fun SyncPlayCoordinator(
         onDispose {
             lifecycle.removeObserver(observer)
             sync.background()
+            sync.membershipSocket = null
             remote.syncMessages = {}
             remote.syncQueueRequest = { false }
             remote.syncConnection = {}
@@ -152,6 +158,10 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
         host.output.syncRequest = sync::transport
         host.output.syncParticipating = { sync.participating }
         sync.bindRenderer(token, bridge)
+        val expected = sync.membership.queue?.current
+        if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
+            sync.queueRequest(app.pictureshow.core.sync.syncNewQueue(listOf(host.item.id), startPositionTicks = host.startMs * 10_000))
+        }
         onDispose {
             sync.clearRenderer(token)
             host.output.syncRequest = null

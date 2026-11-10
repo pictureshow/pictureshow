@@ -1118,20 +1118,33 @@ internal class MusicHost(
                 running.playWhenReady = false
                 return
             }
-            if (positionTicks != null && kotlin.math.abs(running.currentPosition - positionTicks / Ticks.PER_MILLISECOND) > 1) {
-                running.seekTo((positionTicks / Ticks.PER_MILLISECOND).coerceAtLeast(0))
+            val positionChanged = positionTicks != null &&
+                kotlin.math.abs(running.currentPosition - positionTicks / Ticks.PER_MILLISECOND) > 1
+            if (positionChanged) {
+                running.seekTo((requireNotNull(positionTicks) / Ticks.PER_MILLISECOND).coerceAtLeast(0))
             }
             if (running.playbackParameters.speed != rate.toFloat()) running.setPlaybackSpeed(rate.toFloat())
             if (playing != null) {
                 applySession(if (playing) "viewer-play" else "viewer-pause")
                 if (running.playWhenReady != playing) running.playWhenReady = playing
-                if (!playing && group() == null && !queue.committed.paused) {
-                    val entry = queue.committed.current
-                    enqueue {
-                        if (group() == null && queue.committed.current == entry) {
-                            savePosition()
-                            commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
-                        }
+            }
+            val localPause = playing == false && group() == null
+            if (positionChanged || localPause) {
+                val entry = queue.committed.current
+                val generation = queue.committed.generation
+                val at = running.currentPosition.coerceAtLeast(0).let(::millisecondsToSyncTicks) ?: return
+                enqueue {
+                    if (player !== running || queue.committed.current != entry ||
+                        queue.committed.generation != generation || (localPause && group() != null)
+                    ) {
+                        return@enqueue
+                    }
+                    val owner = account ?: return@enqueue
+                    // A paused seek emits no onIsPlayingChanged callback. Persist its actual masked
+                    // renderer position, and always refresh it on Leave even if the slot was paused.
+                    store.savePosition(owner, MusicPosition(entry, at))
+                    if (localPause && !queue.committed.paused) {
+                        commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
                     }
                 }
             }

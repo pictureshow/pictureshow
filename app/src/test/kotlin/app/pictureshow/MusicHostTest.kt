@@ -26,6 +26,10 @@ import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackPreferences
 import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackStopInfo
+import app.pictureshow.core.sync.SyncGroup
+import app.pictureshow.core.sync.SyncRequest
+import app.pictureshow.core.sync.SyncUtcTime
+import app.pictureshow.core.sync.syncUtcTimestamp
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -41,6 +45,19 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -869,6 +886,341 @@ class MusicHostTest {
             assertFalse(player.playWhenReady, "Headphones out pauses")
         } finally {
             player.release()
+        }
+    }
+
+    /** A real music host/renderer connected to the real SyncPlay coordinator; only the server is a request recorder. */
+    private inner class MusicSyncRig(val music: MusicHost) : SyncPlayGateway {
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scopes += it }
+        private val epoch = 1_762_776_000_000L
+        val sent = mutableListOf<SyncRequest>()
+        val sync = SyncPlayHost(scope, this, { epoch }, { 0L })
+
+        init {
+            music.syncHost = { sync }
+            sync.bind(account)
+            sync.socket(true)
+            sync.refresh()
+        }
+
+        override suspend fun groups(account: Account) =
+            ClientResult.Success(listOf(SyncGroup("music-group", "Music", "Paused", listOf("Viewer"), epoch * 10_000)))
+
+        override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
+
+        override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
+
+        override suspend fun send(account: Account, request: SyncRequest): Int {
+            assertEquals(this@MusicHostTest.account.key, account.key, "Group requests use this participant's viewer")
+            sent += request
+            return 204
+        }
+
+        fun join(entries: List<Pair<String, String>> = listOf("a" to "group-a", "b" to "group-b"), repeat: String = "RepeatNone") {
+            until("the group access policy") { sync.state.value.policy == "CreateAndJoinGroups" }
+            sync.join("music-group")
+            joined()
+            queue(entries, repeat = repeat)
+            assertTrue(sync.participating)
+        }
+
+        fun joined() = sync.receive(
+            update(
+                "GroupJoined",
+                buildJsonObject {
+                    put("GroupId", "music-group")
+                    put("GroupName", "Music")
+                    put("State", "Paused")
+                    put("Participants", JsonArray(listOf(JsonPrimitive("Viewer"))))
+                    put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                }
+            )
+        )
+
+        fun queue(entries: List<Pair<String, String>>, index: Int = 0, ticks: Long = 200_000L, repeat: String = "RepeatNone") =
+            sync.receive(
+                update(
+                    "PlayQueue",
+                    buildJsonObject {
+                        put("Reason", "NewPlaylist")
+                        put("LastUpdate", syncUtcTimestamp(epoch))
+                        put(
+                            "Playlist",
+                            JsonArray(
+                                entries.map { (media, entry) ->
+                                    buildJsonObject {
+                                        put("ItemId", media)
+                                        put("PlaylistItemId", entry)
+                                    }
+                                }
+                            )
+                        )
+                        put("PlayingItemIndex", index)
+                        put("StartPositionTicks", ticks)
+                        put("IsPlaying", false)
+                        put("RepeatMode", repeat)
+                        put("ShuffleMode", "Sorted")
+                    }
+                )
+            )
+
+        private fun update(type: String, data: JsonObject): String = buildJsonObject {
+            put("MessageType", "SyncPlayGroupUpdate")
+            put(
+                "Data",
+                buildJsonObject {
+                    put("GroupId", "music-group")
+                    put("Type", type)
+                    put("Data", data)
+                }
+            )
+        }.toString()
+
+        fun controls() = sent.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }
+    }
+
+    private fun groupedMusic(repeat: String = "RepeatNone"): Pair<MusicHost, MusicSyncRig> {
+        val music = host()
+        ready(music)
+        val rig = MusicSyncRig(music)
+        rig.join(repeat = repeat)
+        assertTrue(runBlocking { music.openSync(account, "a", 200_000L) })
+        until("the server-selected audio entry to be prepared paused") {
+            music.state.value.current?.entry == "group-a" && music.syncBridge.snapshot().ready
+        }
+        return music to rig
+    }
+
+    @Test fun aSyncAudioEntryUsesTheServerPlaylistIdentityAndPreparesWithoutPlayingOrReporting() {
+        val (music, rig) = groupedMusic()
+        assertEquals(listOf("group-a"), music.state.value.queue!!.entries.map { it.id })
+        assertEquals("a", music.state.value.current!!.track.id)
+        assertEquals("group-a", lastPlayer!!.currentMediaItem!!.mediaId)
+        assertEquals(20L, music.positionMs())
+        assertTrue(music.state.value.queue!!.paused)
+        assertFalse(lastPlayer!!.playWhenReady)
+        assertTrue(log.isEmpty(), "A prepared but unheard group entry is not a started viewing")
+
+        rig.queue(listOf("a" to "another-copy-of-a", "b" to "group-b"))
+        assertTrue(runBlocking { music.openSync(account, "a", 300_000L) })
+        until("a repeated media ID to render under its new server entry") {
+            lastPlayer?.currentMediaItem?.mediaId == "another-copy-of-a" && music.syncBridge.snapshot().ready
+        }
+        assertEquals("another-copy-of-a", music.state.value.queue!!.current)
+        assertEquals(30L, music.positionMs())
+        assertFalse(lastPlayer!!.playWhenReady)
+        assertTrue(log.isEmpty())
+    }
+
+    @Test fun groupedMusicUiAndRemoteControlsOnlyRequestServerChanges() {
+        val (music, rig) = groupedMusic()
+        val before = music.state.value.queue!!
+        val at = music.positionMs()
+        rig.sent.clear()
+        music.play()
+        music.pause()
+        music.seekTo(70)
+        music.next()
+        music.previous()
+        music.request(album("b", "c", context = "another-album"))
+        music.playNext(account, tracks("c"))
+        music.append(account, tracks("d"))
+        music.move("group-b", 0)
+        music.remove("group-b")
+        music.jump("group-b")
+        music.clearUpcoming()
+        music.setRepeat("one")
+        music.setShuffle(true)
+        music.clear()
+        music.remoteBridge.pause()
+        music.remoteBridge.seekTo(60)
+        music.remoteBridge.next(null)
+        music.stop()
+        until("all group UI and remote requests") { rig.controls().size >= 19 }
+        assertEquals(before, music.state.value.queue, "Server dispatch does not replace, reorder or clear the local rendering slot")
+        assertEquals(at, music.positionMs(), "A requested group seek has not yet been scheduled by the server")
+        assertFalse(lastPlayer!!.playWhenReady, "Unpause is a request until the server commands it")
+        assertTrue(music.state.value.outputActive, "A group Stop request does not locally tear down ahead of the server")
+        assertEquals(
+            listOf(
+                "Unpause", "Pause", "Seek", "NextItem", "PreviousItem", "SetNewQueue", "Queue", "Queue",
+                "MovePlaylistItem", "RemoveFromPlaylist", "SetPlaylistItem", "RemoveFromPlaylist", "SetRepeatMode",
+                "SetShuffleMode", "RemoveFromPlaylist", "Pause", "Seek", "NextItem", "Stop"
+            ),
+            rig.controls().map { it.operation }
+        )
+        assertEquals(JsonPrimitive("group-a"), rig.sent.first { it.operation == "NextItem" }.body!!["PlaylistItemId"])
+        assertTrue(log.isEmpty())
+    }
+
+    @Test fun groupedMusicOsControlsCannotBypassTheServerOrChangePlaybackRate() {
+        val (music, rig) = groupedMusic()
+        val before = music.state.value.queue!!
+        val at = music.positionMs()
+        val (os, session) = sessionPlayer(music)
+        try {
+            rig.sent.clear()
+            os.playWhenReady = true
+            os.pause()
+            os.seekTo(80)
+            os.seekToDefaultPosition()
+            os.seekBack()
+            os.seekForward()
+            os.seekToNextMediaItem()
+            os.seekToPreviousMediaItem()
+            os.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+            os.shuffleModeEnabled = true
+            os.setPlaybackSpeed(1.5f)
+            os.playbackParameters = androidx.media3.common.PlaybackParameters(0.5f)
+            os.stop()
+            until("the OS commands to dispatch to SyncPlay") { rig.controls().size >= 11 }
+            assertEquals(
+                listOf("Unpause", "Pause", "Seek", "Seek", "Seek", "Seek", "NextItem", "PreviousItem", "SetRepeatMode", "SetShuffleMode", "Stop"),
+                rig.controls().map { it.operation }
+            )
+            assertEquals(before, music.state.value.queue)
+            assertEquals(at, music.positionMs())
+            assertFalse(lastPlayer!!.playWhenReady)
+            assertEquals(1f, lastPlayer!!.playbackParameters.speed)
+            assertFalse(os.isCommandAvailable(androidx.media3.common.Player.COMMAND_SET_SPEED_AND_PITCH))
+            assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, lastPlayer!!.repeatMode)
+            assertFalse(lastPlayer!!.shuffleModeEnabled)
+        } finally {
+            session.release()
+        }
+    }
+
+    @Test fun incomingMusicCorrectionDoesNotEchoAndReadyReportsItsActualEntryAndPosition() {
+        val (music, rig) = groupedMusic()
+        rig.sent.clear()
+        music.syncBridge.apply(300_000L, false, 1.0)
+        until("the incoming seek to settle") { music.positionMs() == 30L && music.syncBridge.snapshot().ready }
+        rig.sync.bindRenderer(music, music.syncBridge)
+        rig.sync.tick()
+        until("the actual music renderer readiness report") { rig.sent.any { it.operation == "Ready" } }
+        val body = rig.sent.last { it.operation == "Ready" }.body!!
+        assertEquals(JsonPrimitive("group-a"), body["PlaylistItemId"])
+        assertEquals(300_000L, body.getValue("PositionTicks").jsonPrimitive.long)
+        assertFalse(body.getValue("IsPlaying").jsonPrimitive.boolean)
+        assertTrue(rig.controls().isEmpty(), "Applying the server's correction does not send Pause, Seek or Unpause back")
+        assertEquals(1, lastPlayer!!.mediaItemCount)
+        assertFalse(lastPlayer!!.playWhenReady)
+    }
+
+    @Test fun groupedMusicEosRequestsNextOnceAndDoesNotRepeatOrAutoAdvanceItsLocalQueue() {
+        val (music, rig) = groupedMusic(repeat = "RepeatOne")
+        rig.sent.clear()
+        music.syncBridge.apply(0L, true, 1.0)
+        until("one group Next at actual audio EOS") { rig.sent.any { it.operation == "NextItem" } }
+        pump(400)
+        assertEquals(1, rig.sent.count { it.operation == "NextItem" }, "One rendering completion produces one request")
+        assertEquals(JsonPrimitive("group-a"), rig.sent.single { it.operation == "NextItem" }.body!!["PlaylistItemId"])
+        assertEquals("group-a", music.state.value.queue!!.current)
+        assertEquals(listOf("a"), negotiated.toList(), "The server has not yet chosen the following entry")
+        assertFalse("start b" in log)
+        assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, lastPlayer!!.repeatMode)
+        assertEquals(1, lastPlayer!!.mediaItemCount)
+    }
+
+    @Test fun leavingAfterAPausedGroupSeekPersistsTheObservedPausedResume() {
+        val (music, rig) = groupedMusic()
+        music.syncBridge.apply(400_000L, false, 1.0)
+        until("the paused group seek") { music.positionMs() == 40L && music.syncBridge.snapshot().ready }
+        rig.sent.clear()
+        rig.sync.leave()
+        until("the group Leave request") { rig.sent.any { it.operation == "Leave" } }
+        var restored: MusicSnapshot? = null
+        until("the observed paused group position to be saved for process death") {
+            restored = runBlocking { MusicStore(context).load(account) }
+            restored?.queue?.positionTicks == 400_000L && restored?.queue?.paused == true
+        }
+        val saved = assertNotNull(restored)
+        assertEquals("group-a", saved.queue.current)
+        assertTrue(saved.queue.paused)
+        assertEquals(
+            400_000L,
+            saved.queue.positionTicks,
+            "Process death after Leave resumes at the observed group seek, not the original join position"
+        )
+        assertFalse(lastPlayer!!.playWhenReady)
+        assertTrue(music.state.value.outputActive)
+        assertFalse(rig.sent.any { it.operation == "Stop" }, "Leaving this participant never stops the group")
+    }
+
+    @Test fun anAudioLookupThatCompletesAfterLeaveCannotStartOrReplaceLocalMusic() {
+        val music = host()
+        ready(music)
+        val rig = MusicSyncRig(music)
+        rig.join()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { itemsGate = it }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scopes += it }
+        val opening = scope.launch { music.openSync(account, "a", 200_000L) }
+        pump(30)
+        rig.sync.leave()
+        gate.complete(Unit)
+        until("the late audio lookup") { opening.isCompleted }
+        pump(100)
+        assertTrue(music.state.value.queue!!.entries.isEmpty())
+        assertFalse(music.state.value.outputActive)
+        assertTrue(negotiated.isEmpty())
+        assertTrue(log.isEmpty())
+    }
+
+    @Test fun aSlowAudioOpenCannotStealANewerServerEntryInTheSameMembership() {
+        val music = host()
+        ready(music)
+        val rig = MusicSyncRig(music)
+        rig.join()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { itemsGate = it }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scopes += it }
+        val old = scope.launch { music.openSync(account, "a", 200_000L) }
+        pump(30)
+        itemsGate = null
+        rig.queue(listOf("b" to "new-entry-b"))
+        assertTrue(runBlocking { music.openSync(account, "b", 300_000L) })
+        until("the newer paused audio entry") {
+            music.state.value.queue?.current == "new-entry-b" && music.syncBridge.snapshot().ready
+        }
+        gate.complete(Unit)
+        until("the old item lookup") { old.isCompleted }
+        pump(100)
+        assertEquals("new-entry-b", music.state.value.queue!!.current)
+        assertEquals("b", music.state.value.current!!.track.id)
+        assertEquals(listOf("b"), negotiated.toList())
+        assertFalse(lastPlayer!!.playWhenReady)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun musicActionsQueuedDuringMembershipAreDiscardedAfterLeave() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val music = host()
+            runCurrent()
+            assertNotNull(music.state.value.account)
+            val rig = MusicSyncRig(music)
+            runCurrent()
+            rig.sync.join("music-group")
+            runCurrent()
+            rig.joined()
+            rig.queue(listOf("a" to "group-a", "b" to "group-b"))
+            rig.sent.clear()
+            music.request(album("b", "c"))
+            music.append(account, tracks("d"))
+            music.play()
+            music.seekTo(50)
+            music.next()
+            // The test dispatcher has not run the music actor: Leave invalidates these requests first.
+            rig.sync.leave()
+            runCurrent()
+            assertEquals(listOf("Leave"), rig.controls().map { it.operation })
+            assertTrue(music.state.value.queue!!.entries.isEmpty())
+            assertFalse(music.state.value.outputActive)
+            assertTrue(negotiated.isEmpty())
+        } finally {
+            scopes.forEach { it.cancel() }
+            runCurrent()
+            Dispatchers.resetMain()
         }
     }
 }

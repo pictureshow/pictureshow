@@ -39,6 +39,7 @@ import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
 import app.pictureshow.core.sync.syncTarget
 import app.pictureshow.core.sync.syncTransport
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal interface SyncPlayGateway {
     suspend fun groups(account: Account): ClientResult<List<SyncGroup>>
@@ -91,7 +93,8 @@ internal class SyncPlayHost(
     private var account: Account? = null
     internal var membership = SyncMembership()
         private set
-    val participating: Boolean get() = membership.active || membership.groupId != null
+    private var leavePending = false
+    val participating: Boolean get() = membership.active || membership.groupId != null || leavePending
     var pendingExternalRoute by mutableStateOf<(() -> Unit)?>(null)
         private set
     fun confirmExternalRoute(then: () -> Unit): Boolean {
@@ -125,6 +128,10 @@ internal class SyncPlayHost(
     private var operation: Job? = null
     private var sequence = 0L
 
+    /** Rotate before Join so frames queued by the old membership cannot enter the new one. */
+    var membershipSocket: ((Long, Boolean) -> Unit)? = null
+    private var joiningSocket: CompletableDeferred<Unit>? = null
+
     fun bind(next: Account?) {
         val usable = next?.takeUnless { it.expired }
         if (usable?.key == account?.key && usable?.accessToken == account?.accessToken) return
@@ -134,6 +141,7 @@ internal class SyncPlayHost(
         sequence++
         operation?.cancel()
         membership = SyncMembership(generation = membership.generation + 1)
+        leavePending = false
         resetClock()
         mutable.value = SyncPlayPresentation(server = usable?.server?.name.orEmpty(), viewer = usable?.user?.name.orEmpty())
     }
@@ -174,6 +182,11 @@ internal class SyncPlayHost(
     fun socket(value: Boolean) {
         if (connected == value) return
         connected = value
+        val waiting = joiningSocket
+        if (waiting != null) {
+            if (value) waiting.complete(Unit)
+            return
+        }
         if (!value && participating) {
             scheduled?.cancel()
             renderer?.apply(playing = false)
@@ -187,10 +200,10 @@ internal class SyncPlayHost(
         }
     }
 
-    fun receive(text: String) {
+    fun receive(text: String, generation: Long = membership.generation) {
         val event = parseSyncMessage(text) ?: return
         val before = membership
-        val after = reduceSyncEvent(before, event, before.generation)
+        val after = reduceSyncEvent(before, event, generation)
         if (after === before || after == before) return
         membership = after
         if (after.generation != before.generation || !after.active) {
@@ -230,7 +243,7 @@ internal class SyncPlayHost(
         ) {
             renderer?.apply(playing = false)
             requestedOpen = entry.playlistItemId
-            opening.tryEmit(SyncOpen(after.generation, entry.playlistItemId, entry.itemId, after.queue.startPositionTicks))
+            opening.tryEmit(SyncOpen(after.generation, entry.playlistItemId, entry.itemId, requireNotNull(after.queue).startPositionTicks))
         }
         after.command?.let { command ->
             if (command !== before.command) schedule(command)
@@ -274,10 +287,38 @@ internal class SyncPlayHost(
         resetClock()
         publish()
         val version = sequence
+        val waitForSocket = membershipSocket?.let { reset ->
+            CompletableDeferred<Unit>().also {
+                joiningSocket = it
+                connected = false
+                reset(membership.generation, true)
+            }
+        }
         operation = scope.launch {
+            if (waitForSocket != null) {
+                val opened = withTimeoutOrNull(10_000) {
+                    waitForSocket.await()
+                    true
+                } == true
+                if (joiningSocket === waitForSocket) joiningSocket = null
+                if (!current(target, version)) return@launch
+                if (!opened) {
+                    membership = membership.copy(phase = "Reconnecting")
+                    publish()
+                    note("Could not refresh the group connection. Leave and try joining again.")
+                    return@launch
+                }
+            }
             val status = gateway.send(target, request)
             if (!current(target, version)) return@launch
             if (status !in 200..299) {
+                membership = if (status in setOf(400, 401, 403, 404)) {
+                    leaveSync(membership)
+                } else {
+                    membership.copy(phase = "Reconnecting")
+                }
+                membershipSocket?.invoke(membership.generation, false)
+                publish()
                 note(
                     if (status == 401 ||
                         status == 403
@@ -308,17 +349,25 @@ internal class SyncPlayHost(
         sequence++
         operation?.cancel()
         membership = leaveSync(membership)
+        leavePending = false
+        joiningSocket?.cancel()
+        joiningSocket = null
+        membershipSocket?.invoke(membership.generation, false)
         renderer?.apply(playing = false)
         resetClock()
         createQueue = false
         ignoreWait = false
         publish()
         note("Left Watch together. This device is paused; the group can keep playing.")
+        val version = sequence
         if (target != null && hadMembership) {
             scope.launch {
                 val status = gateway.send(target, SyncRequest("Leave"))
-                if (status in 200..299 && account?.key == target.key && !participating) after?.invoke()
-                if (status !in 200..299 && account?.key == target.key && !participating) {
+                if (!current(target, version)) return@launch
+                if (status in 200..299 && !participating) after?.invoke()
+                if (status !in 200..299 && !participating) {
+                    leavePending = true
+                    mutable.value = mutable.value.copy(phase = "Reconnecting")
                     note("This device is paused. The server has not confirmed Leave; reconnect and leave again.")
                 }
             }

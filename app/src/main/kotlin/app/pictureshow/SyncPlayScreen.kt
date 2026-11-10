@@ -128,7 +128,10 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
                                 modifier = Modifier.fillMaxWidth().testTag("sync:status").semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
-                        if (state.groupId == null) {
+                        if (state.groupId == null && state.phase == "Reconnecting") {
+                            Text("The group request is not confirmed. Leave before trying another group.")
+                            SyncPlayAction("Leave uncertain group", { onAction("leave", null) })
+                        } else if (state.groupId == null) {
                             SyncPlayGroups(state, onAction)
                         } else {
                             SyncPlayJoined(state, onAction)
