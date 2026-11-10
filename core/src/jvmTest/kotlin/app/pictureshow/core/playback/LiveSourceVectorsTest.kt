@@ -3,6 +3,9 @@
  */
 package app.pictureshow.core.playback
 
+import app.pictureshow.core.livetv.LiveChannel
+import app.pictureshow.core.livetv.LiveProgram
+import app.pictureshow.core.livetv.liveInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
@@ -18,7 +21,8 @@ class LiveSourceVectorsTest {
         val text = requireNotNull(javaClass.classLoader.getResourceAsStream("live-vectors/live-source.json")).bufferedReader().use {
             it.readText()
         }
-        for (entry in Json.parseToJsonElement(text).jsonObject.getValue("cases").jsonArray) {
+        val vectors = Json.parseToJsonElement(text).jsonObject
+        for (entry in vectors.getValue("cases").jsonArray) {
             val case = entry.jsonObject
             val input = case.getValue("window").jsonObject
             val window = ObservedLiveWindow(
@@ -41,6 +45,34 @@ class LiveSourceVectorsTest {
                 id
             )
             assertEquals(expected.getValue("goLiveMs").jsonPrimitive.longOrNull, window.goLivePosition(), id)
+            assertEquals(
+                expected.getValue("behindLiveMs").jsonPrimitive.longOrNull,
+                window.behindLiveMs(case.getValue("positionMs").jsonPrimitive.long),
+                id
+            )
+            assertEquals(
+                expected.getValue("atLiveEdge").jsonPrimitive.boolean,
+                window.atLiveEdge(case.getValue("positionMs").jsonPrimitive.long, expected.getValue("expired").jsonPrimitive.boolean),
+                id
+            )
+        }
+        for (entry in vectors.getValue("metadataCases").jsonArray) {
+            val case = entry.jsonObject
+            fun value(key: String) = case.getValue(key).jsonPrimitive.content
+            val channel = LiveChannel(
+                value("channelId"),
+                currentProgram = LiveProgram(
+                    "program",
+                    channelId = value("programChannelId"),
+                    startDate = value("start"),
+                    endDate = value("end")
+                )
+            )
+            assertEquals(
+                case.getValue("show").jsonPrimitive.boolean,
+                livePlayerProgram(channel, requireNotNull(liveInstant(value("now")))) != null,
+                value("id")
+            )
         }
     }
 }

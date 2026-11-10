@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.pictureshow.core.displayRuntimeMillis
+import app.pictureshow.core.playback.ObservedLiveWindow
 
 /** Only deliberate interactions update the spoken position, so a focused timeline never chatters on every tick. */
 @Composable
@@ -50,17 +51,35 @@ internal fun PlayerTimeline(
     liveCanTimeShift: Boolean = false,
     liveExpired: Boolean = false,
     liveEdgeAvailable: Boolean = false,
+    liveWindow: ObservedLiveWindow? = null,
     onGoLive: () -> Unit = {},
     onOpenSeek: () -> Unit = {}
 ) {
     if (live) {
+        val behind = liveWindow?.behindLiveMs(positionMs)
+        val spoken = remember(paused, announcedPositionMs, liveExpired) {
+            liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(announcedPositionMs))
+        }
+        CurrentPositionAccessibility(setOf("player:position")) {
+            liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(positionMs))
+        }
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(liveTimelineLabel(paused, liveCanTimeShift, liveExpired))
-            androidx.tv.material3.Button(
-                onClick = onGoLive,
-                enabled = liveEdgeAvailable,
-                modifier = Modifier.testTag("player:position").semantics { contentDescription = "Go live" }
-            ) { Text("Go live") }
+            LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    liveTimelineLabel(paused, liveCanTimeShift, liveExpired, behind),
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+                Text(
+                    behindLiveClock(behind),
+                    modifier = Modifier.testTag("player:position")
+                        .clickable(enabled = liveCanTimeShift && !liveExpired, onClickLabel = "Seek in live buffer", onClick = onOpenSeek)
+                        .semantics {
+                            contentDescription = "Live playback position"
+                            stateDescription = spoken
+                        }
+                )
+            }
         }
         return
     }
@@ -138,9 +157,11 @@ internal fun PlaybackStatus(label: String, modifier: Modifier = Modifier) {
     Text(label, modifier = modifier.background(Color(0xEE10131C)).padding(16.dp))
 }
 
-internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: Boolean): String = when {
-    expired -> "Live · Buffer expired. Play or Go live to resume at the live edge."
-    !canTimeShift -> "Live · Time shift is unavailable for this stream."
-    paused -> "Live · Paused within the available buffer"
-    else -> "Live · Seeking is limited to the available buffer"
+internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: Boolean, behindMs: Long? = null): String = when {
+    expired -> "Paused · Buffer expired. Go live to resume."
+    !canTimeShift -> "Live · Time shift unavailable"
+    paused && behindMs != null && behindMs > 2_000 -> "Paused · ${liveBehindDescription(behindMs)}"
+    paused -> "Paused · At live edge"
+    behindMs != null && behindMs > 2_000 -> liveBehindDescription(behindMs)
+    else -> "Live"
 }

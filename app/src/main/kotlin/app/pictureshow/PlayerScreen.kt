@@ -659,7 +659,7 @@ internal fun PlayerItemScreen(
                         TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
                     }
                     Text(
-                        item.name,
+                        if (host.isLive) host.liveProgram?.name ?: item.name else item.name,
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = if (restoringSeekFocus || openerReturnTag != null) {
                             Modifier.clearAndSetSemantics { hideFromAccessibility() }
@@ -667,6 +667,17 @@ internal fun PlayerItemScreen(
                             Modifier
                         }
                     )
+                    if (host.isLive) {
+                        val program = host.liveProgram
+                        val time = liveTime()
+                        Text(
+                            listOfNotNull(
+                                host.liveChannel?.name ?: item.name,
+                                program?.let { time.range(it.startDate, it.endDate) }
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
                     val announcedPosition = rememberAnnouncedPosition(
@@ -689,6 +700,7 @@ internal fun PlayerItemScreen(
                         liveCanTimeShift = host.liveCanTimeShift,
                         liveExpired = host.liveBufferExpired,
                         liveEdgeAvailable = host.liveWindow?.goLivePosition() != null,
+                        liveWindow = host.liveWindow,
                         onGoLive = host::goLive,
                         onOpenSeek = {
                             seekOpen = true
@@ -713,6 +725,17 @@ internal fun PlayerItemScreen(
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()
                             interaction++
+                        }
+                        if (host.isLive) {
+                            val atLive = host.liveWindow?.atLiveEdge(position, host.liveBufferExpired) == true
+                            Button(
+                                onClick = host::goLive,
+                                scale = playerButtonScale(),
+                                enabled = host.liveWindow?.goLivePosition() != null && (!atLive || paused),
+                                modifier = Modifier.testTag("player:go-live").semantics {
+                                    contentDescription = if (atLive) "Live" else "Go live"
+                                }
+                            ) { Text(if (atLive) "LIVE" else "Go live") }
                         }
                         Button(scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
@@ -945,7 +968,7 @@ internal fun PlayerItemScreen(
                 restoringSeekFocus = true
                 returnFocus = timelineFocus
             }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
-                SeekPanel(position, duration, ::seek) {
+                SeekPanel(position, if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration, ::seek) {
                     close {
                         seekOpen = false
                         restoringSeekFocus = true

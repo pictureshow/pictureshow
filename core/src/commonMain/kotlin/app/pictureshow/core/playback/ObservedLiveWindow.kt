@@ -10,5 +10,10 @@ data class ObservedLiveWindow(val offsetMs: Long, val durationMs: Long, val defa
     fun pausedPositionExpired(absolutePositionMs: Long?): Boolean = absolutePositionMs != null &&
         canTimeShift &&
         (absolutePositionMs < offsetMs || absolutePositionMs - offsetMs > durationMs)
+
+    /** The decoder's default live position is the target; scheduled program times never enter this calculation. */
+    fun behindLiveMs(positionMs: Long): Long? = goLivePosition()?.takeIf { positionMs in 0..durationMs }
+        ?.let { (it - positionMs).coerceAtLeast(0) }
+    fun atLiveEdge(positionMs: Long, expired: Boolean = false): Boolean = !expired && behindLiveMs(positionMs)?.let { it <= 2_000 } == true
     fun goLivePosition(): Long? = defaultPositionMs.takeIf { durationMs > 0 && it in 0..durationMs }
 }

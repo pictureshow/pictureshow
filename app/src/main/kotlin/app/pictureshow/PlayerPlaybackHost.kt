@@ -76,6 +76,9 @@ internal class PlaybackHostState(
     var duration by mutableLongStateOf(0)
     val isLive get() = item.type == "TvChannel" || state.decision?.isLive == true
     var liveWindow by mutableStateOf<app.pictureshow.core.playback.ObservedLiveWindow?>(null)
+    var liveChannel by mutableStateOf<app.pictureshow.core.livetv.LiveChannel?>(null)
+    var liveNowMillis by mutableLongStateOf(System.currentTimeMillis())
+    val liveProgram get() = app.pictureshow.core.playback.livePlayerProgram(liveChannel, liveNowMillis)
     var liveBufferExpired by mutableStateOf(false)
     val liveCanTimeShift get() = liveWindow?.canTimeShift == true
     fun goLive() {
@@ -393,6 +396,22 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
     host.remote?.let { RemoteTargetBinding(host, it, account, catalog, paused) }
+    if (host.item.type == "TvChannel" && offline == null) {
+        LaunchedEffect(host, account, foreground) {
+            if (!foreground) return@LaunchedEffect
+            val client = app.pictureshow.core.livetv.LiveTvClient(
+                http,
+                ClientIdentity(deviceDisplayName(context), account.deviceId ?: identity.getOrCreate(), BuildConfig.VERSION_NAME)
+            )
+            while (true) {
+                host.liveChannel = loadPlayerLiveChannel(client, account, host.item.id, System.currentTimeMillis())
+                val end = app.pictureshow.core.livetv.liveInstant(host.liveChannel?.currentProgram?.endDate)
+                val untilBoundary = end?.minus(System.currentTimeMillis())?.plus(25)?.coerceAtLeast(1_000) ?: 60_000
+                delay(minOf(60_000, untilBoundary))
+            }
+        }
+    }
+
     with(host) {
         DisposableEffect(player) {
             val active = player
@@ -543,6 +562,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
             while (true) {
                 player?.let {
                     output.observeLiveWindow()
+                    liveNowMillis = System.currentTimeMillis()
                     liveWindow = output.liveWindow
                     liveBufferExpired = output.liveBufferExpired
                     position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)

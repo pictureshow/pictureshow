@@ -34,4 +34,16 @@ class LiveTimelineTest {
         assertNull(ObservedLiveWindow(0, 0, 0, true).goLivePosition())
         assertNull(ObservedLiveWindow(0, 30_000, 30_001, true).goLivePosition())
     }
+
+    @Test fun distanceAndLiveEdgeUseDefaultPositionNotWindowEnd() {
+        val window = ObservedLiveWindow(100_000, 30_000, 27_000, true)
+        assertEquals(17_000L, window.behindLiveMs(10_000))
+        assertFalse(window.atLiveEdge(24_999))
+        assertTrue(window.atLiveEdge(25_000))
+        assertTrue(window.atLiveEdge(29_000))
+        assertFalse(window.atLiveEdge(27_000, expired = true))
+        assertNull(window.behindLiveMs(-1))
+        assertNull(window.behindLiveMs(30_001))
+        assertNull(window.copy(defaultPositionMs = 30_001).behindLiveMs(10_000))
+    }
 }

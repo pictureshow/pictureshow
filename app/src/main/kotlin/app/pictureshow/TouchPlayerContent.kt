@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,8 +36,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -88,6 +91,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -194,6 +198,7 @@ private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalO
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
+    var moreOpen by remember { mutableStateOf(false) }
     val entry = LocalTouchPlayerCast.current
     val castOutput = remember(host) { PlayerCastOutput(host) }
     // Null without a sender, so a player that has none reads nothing from it.
@@ -228,6 +233,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     SideEffect {
         host.onFinishing = {
             ui.sheet = null
+            moreOpen = false
             ui.scrubMs = null
             // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
             entry?.cast?.localLeaving(castOutput)
@@ -255,9 +261,15 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val actionsVisible = ui.sheet == null && host.error == null && !host.switching
     val latestControlsVisible by rememberUpdatedState(controlsVisible)
     BackHandler {
-        if (host.switching) host.finish(reason = "back-during-next") else ui.back { host.finish(reason = "back") }
+        if (moreOpen) {
+            moreOpen = false
+        } else if (host.switching) {
+            host.finish(reason = "back-during-next")
+        } else {
+            ui.back { host.finish(reason = "back") }
+        }
     }
-    ControlsAutoHide(ui.visible, accessible || paused || ui.sheet != null || ui.scrubMs != null, ui.interaction) {
+    ControlsAutoHide(ui.visible, accessible || paused || ui.sheet != null || moreOpen || ui.scrubMs != null, ui.interaction) {
         ui.visible = false
     }
     LaunchedEffect(accessible) { if (accessible) ui.visible = true }
@@ -266,6 +278,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     LaunchedEffect(host.error, host.switching) {
         if (host.error != null || host.switching) {
             ui.sheet = null
+            moreOpen = false
             ui.scrubMs = null
         }
     }
@@ -302,16 +315,20 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     true
                 }
                 // PLAY-03's reader actions: a screen reader reaches a seek without first showing the controls.
-                customActions = listOf(
-                    CustomAccessibilityAction("Back 10 seconds") {
-                        host.seek(-TOUCH_SEEK_STEP_MS)
-                        true
-                    },
-                    CustomAccessibilityAction("Forward 10 seconds") {
-                        host.seek(TOUCH_SEEK_STEP_MS)
-                        true
-                    }
-                )
+                customActions = if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
+                    listOf(
+                        CustomAccessibilityAction("Back 10 seconds") {
+                            host.seek(-TOUCH_SEEK_STEP_MS)
+                            true
+                        },
+                        CustomAccessibilityAction("Forward 10 seconds") {
+                            host.seek(TOUCH_SEEK_STEP_MS)
+                            true
+                        }
+                    )
+                } else {
+                    emptyList()
+                }
             }
         )
         // PLAY-27: top of the frame, clear of subtitles and controls. A tap opens the Playback info it points to.
@@ -395,6 +412,45 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
 
         if (controlsVisible) {
+            val frame = subtitleVideoFrame(
+                constraints.maxWidth,
+                constraints.maxHeight,
+                host.player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
+            )
+            val availableBottom = minOf(frame.bottom, constraints.maxHeight - controlsHeight)
+            val transportCenter = (frame.top + availableBottom.coerceAtLeast(frame.top)) / 2
+            Row(
+                Modifier.align(Alignment.TopCenter).offset {
+                    IntOffset(0, (transportCenter - with(density) { 32.dp.roundToPx() }).coerceAtLeast(0))
+                }
+                    .testTag("touch:transport"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                val canSeek = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
+                PlayerIconButton("back10", "Back 10 seconds", Modifier.testTag("touch:back10"), enabled = canSeek) {
+                    host.seek(-TOUCH_SEEK_STEP_MS)
+                }
+                FilledIconButton(
+                    onClick = {
+                        val pending = host.deferredNext
+                        if (pending != null) host.finish(pending) else host.player?.togglePlayback()
+                        ui.interact()
+                    },
+                    enabled = !host.isLive || host.liveCanTimeShift,
+                    modifier = Modifier.size(64.dp).testTag("touch:toggle").semantics {
+                        contentDescription = if (playback.showPlayButton) "Play" else "Pause"
+                        stateDescription = playbackToggleState(paused, playback.showPlayButton)
+                    }
+                ) {
+                    Icon(playerActionIcon(if (playback.showPlayButton) "play" else "pause"), null, Modifier.size(32.dp))
+                }
+                PlayerIconButton("forward10", "Forward 10 seconds", Modifier.testTag("touch:forward10"), enabled = canSeek) {
+                    host.seek(TOUCH_SEEK_STEP_MS)
+                }
+            }
+        }
+        if (controlsVisible) {
             Column(
                 // The scrim reaches the screen's edges behind a cutout; only its content keeps to the safe area (TOUCH-10).
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -408,7 +464,22 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(host.item.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                if (host.isLive) {
+                    val time = liveTime()
+                    Text(
+                        listOfNotNull(
+                            host.liveChannel?.name ?: host.item.name,
+                            host.liveProgram?.let { time.range(it.startDate, it.endDate) }
+                        ).joinToString(" · "),
+                        color = Color.White.copy(alpha = .74f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 val spoken = rememberAnnouncedPosition(
                     paused,
                     seekRequest = ui.scrubMs ?: host.seekPreview ?: host.state.seekTargetMs,
@@ -417,12 +488,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     positionMs = host.position
                 )
                 if (host.isLive) {
-                    Text(liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired), color = Color.White)
-                    Button(
-                        onClick = host::goLive,
-                        enabled = host.liveWindow?.goLivePosition() != null,
-                        modifier = Modifier.testTag("touch:go-live")
-                    ) { Text("Go live") }
+                    TouchLivePlayerTimeline(host, ui, paused)
                 } else {
                     TouchPlayerScrubber(host.position, host.duration, ui.scrubMs, ended = host.ended, spokenMs = spoken, onPreview = {
                         ui.scrubMs = it
@@ -432,128 +498,88 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         ui.scrubMs = null
                     })
                 }
-                val toggle: @Composable () -> Unit = {
-                    Button(
-                        onClick = {
-                            val pending = host.deferredNext
-                            if (pending != null) host.finish(pending) else host.player?.togglePlayback()
-                            ui.interact()
-                        },
-                        Modifier.testTag("touch:toggle").semantics {
-                            stateDescription = playbackToggleState(paused, playback.showPlayButton)
-                        },
-                        enabled = !host.isLive || host.liveCanTimeShift
-                    ) { TouchReservedLabel(if (playback.showPlayButton) "Play" else "Pause", "Pause") }
-                }
-                val back: @Composable () -> Unit = {
-                    TouchBarButton(
-                        { host.seek(-TOUCH_SEEK_STEP_MS) },
-                        Modifier.testTag("touch:back10").semantics { contentDescription = "Back 10 seconds" }
-                    ) { Text("−10 s") }
-                }
-                val forward: @Composable () -> Unit = {
-                    TouchBarButton(
-                        { host.seek(TOUCH_SEEK_STEP_MS) },
-                        Modifier.testTag("touch:forward10").semantics { contentDescription = "Forward 10 seconds" }
-                    ) { Text("+10 s") }
-                }
-                val stop: @Composable () -> Unit = {
-                    // Its text ends where the scrubber does; the target hangs into the panel's margin.
-                    TouchBarButton(
-                        { host.finish(reason = "stop-button") },
-                        Modifier.offset(x = TOUCH_BAR_TEXT_INSET).testTag("touch:stop")
-                    ) {
-                        Text("Stop")
-                    }
-                }
-                val options = buildList<@Composable (Modifier) -> Unit> {
-                    TouchPlayerSheet.entries.forEach { sheet ->
-                        if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
-                            add { placement ->
-                                TouchBarButton({
-                                    ui.sheet = sheet
-                                    ui.interact()
-                                }, placement.testTag("touch:open:$sheet")) {
-                                    if (sheet == TouchPlayerSheet.Speed) {
-                                        TouchReservedLabel(
-                                            "Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speed.speed)}",
-                                            "Speed · 1.75×",
-                                            // Its word starts on the column's edge whichever rate is showing.
-                                            Alignment.CenterStart
-                                        )
-                                    } else {
-                                        Text(sheet.title, maxLines = 1)
-                                    }
-                                }
+                Row(
+                    Modifier.fillMaxWidth().testTag("touch:secondary"),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(TouchPlayerSheet.Audio, TouchPlayerSheet.Subtitles, TouchPlayerSheet.Speed).forEach { sheet ->
+                        PlayerIconButton(
+                            if (sheet == TouchPlayerSheet.Subtitles) "cc" else sheet.name.lowercase(),
+                            sheet.title,
+                            Modifier.testTag("touch:open:$sheet"),
+                            state = if (sheet ==
+                                TouchPlayerSheet.Speed
+                            ) {
+                                app.pictureshow.core.playback.PlaybackSpeeds.label(speed.speed)
+                            } else {
+                                null
                             }
+                        ) {
+                            ui.sheet = sheet
+                            ui.interact()
+                        }
+                    }
+                    if (entry != null) {
+                        TouchPlayOnMark(castStatus, filled = castUi?.let(::castIsCasting) == true, enabled = !atEnd) {
+                            entry.cast.openChooser(
+                                CastPlayRequest(
+                                    listOf(castPlayItem(account.server, host.item)),
+                                    startMs = host.output.position().milliseconds,
+                                    mediaSourceId = host.state.decision?.mediaSourceId,
+                                    local = castOutput,
+                                    onJellyfinPick = {
+                                        entry.remote.playNow(listOf(host.item.id), host.output.position().milliseconds * MS_TO_TICKS)
+                                        host.finish(reason = "remote")
+                                    }
+                                )
+                            )
+                            ui.interact()
                         }
                     }
                     if (locksOrientation) {
-                        add { placement ->
-                            TouchBarButton({
-                                activity?.requestedOrientation = if (landscape) {
-                                    ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-                                } else {
-                                    ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                                }
-                                ui.interact()
-                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape", maxLines = 1) }
+                        PlayerIconButton(
+                            if (landscape) "portrait" else "fullscreen",
+                            if (landscape) "Portrait" else "Landscape",
+                            Modifier.testTag("touch:orientation")
+                        ) {
+                            activity?.requestedOrientation = if (landscape) {
+                                ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+                            }
+                            ui.interact()
                         }
                     }
-                }
-                // Stop and the mark stay together, so a very large font moves them as one instead of parting them.
-                val exit: @Composable (Modifier) -> Unit = { placement ->
-                    Row(placement, horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                        if (entry != null) {
-                            TouchPlayOnMark(castStatus, filled = castUi?.let(::castIsCasting) == true, enabled = !atEnd) {
-                                entry.cast.openChooser(
-                                    CastPlayRequest(
-                                        listOf(castPlayItem(account.server, host.item)),
-                                        startMs = host.output.position().milliseconds,
-                                        mediaSourceId = host.state.decision?.mediaSourceId,
-                                        local = castOutput,
-                                        onJellyfinPick = {
-                                            // The player keeps playing under the chooser, so where it is now, not at the tap.
-                                            entry.remote.playNow(listOf(host.item.id), host.output.position().milliseconds * MS_TO_TICKS)
-                                            host.finish(reason = "remote")
+                    Box {
+                        PlayerIconButton("more", "More playback options", Modifier.testTag("touch:more")) {
+                            moreOpen = true
+                            ui.interact()
+                        }
+                        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                            listOf(TouchPlayerSheet.Info, TouchPlayerSheet.Chapters).forEach { sheet ->
+                                if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text(sheet.title) },
+                                        modifier = Modifier.testTag("touch:open:$sheet"),
+                                        onClick = {
+                                            moreOpen = false
+                                            ui.sheet = sheet
+                                            ui.interact()
                                         }
                                     )
-                                )
-                                ui.interact()
-                            }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        stop()
-                    }
-                }
-                if (this@BoxWithConstraints.maxWidth < 600.dp) {
-                    // Transport and exit on one line, then fixed columns: a break never falls where the width runs out.
-                    // A very large font moves the exit to its own line, still at the far end, instead of squeezing it.
-                    FlowRow(Modifier.fillMaxWidth()) {
-                        toggle()
-                        Spacer(Modifier.width(8.dp))
-                        if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
-                            back()
-                            forward()
-                        }
-                        exit(Modifier.weight(1f))
-                    }
-                    TouchOptionGrid(options)
-                } else {
-                    TouchWideControls(
-                        transport = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                toggle()
-                                Spacer(Modifier.width(8.dp))
-                                if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
-                                    back()
-                                    forward()
                                 }
                             }
-                        },
-                        options = options,
-                        stop = { exit(Modifier) }
-                    )
+                            DropdownMenuItem(
+                                text = { Text("Stop") },
+                                modifier = Modifier.testTag("touch:stop"),
+                                onClick = {
+                                    moreOpen = false
+                                    host.finish(reason = "stop-button")
+                                }
+                            )
+                        }
+                    }
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
             }
@@ -592,7 +618,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
                         val suspended =
-                            paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
+                            paused ||
+                                playback.buffering ||
+                                host.state.preparing ||
+                                !actionsVisible ||
+                                ui.scrubMs != null ||
+                                choosing ||
+                                moreOpen
                         val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
                         val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
@@ -722,9 +754,9 @@ private fun TouchOptionGrid(options: List<@Composable (Modifier) -> Unit>) {
  */
 @Composable
 internal fun TouchPlayOnMark(status: String?, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    TouchBarButton(
+    IconButton(
         onClick,
-        Modifier.testTag("touch:play-on").semantics {
+        Modifier.size(48.dp).testTag("touch:play-on").semantics {
             contentDescription = "Play on"
             status?.let { stateDescription = it }
         },

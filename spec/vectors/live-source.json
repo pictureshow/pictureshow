@@ -17,7 +17,9 @@
         "canTimeShift": true,
         "contains": true,
         "expired": false,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": 0,
+        "atLiveEdge": true
       }
     },
     {
@@ -34,7 +36,9 @@
         "canTimeShift": true,
         "contains": false,
         "expired": false,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": null,
+        "atLiveEdge": false
       }
     },
     {
@@ -51,7 +55,9 @@
         "canTimeShift": true,
         "contains": true,
         "expired": true,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": 27000,
+        "atLiveEdge": false
       }
     },
     {
@@ -68,7 +74,9 @@
         "canTimeShift": true,
         "contains": true,
         "expired": false,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": 27000,
+        "atLiveEdge": false
       }
     },
     {
@@ -85,7 +93,9 @@
         "canTimeShift": true,
         "contains": true,
         "expired": false,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": 0,
+        "atLiveEdge": true
       }
     },
     {
@@ -102,7 +112,9 @@
         "canTimeShift": true,
         "contains": false,
         "expired": true,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": null,
+        "atLiveEdge": false
       }
     },
     {
@@ -119,7 +131,9 @@
         "canTimeShift": false,
         "contains": false,
         "expired": false,
-        "goLiveMs": 27000
+        "goLiveMs": 27000,
+        "behindLiveMs": 26000,
+        "atLiveEdge": false
       }
     },
     {
@@ -136,7 +150,9 @@
         "canTimeShift": false,
         "contains": false,
         "expired": false,
-        "goLiveMs": null
+        "goLiveMs": null,
+        "behindLiveMs": null,
+        "atLiveEdge": false
       }
     },
     {
@@ -153,8 +169,86 @@
         "canTimeShift": true,
         "contains": true,
         "expired": false,
-        "goLiveMs": null
+        "goLiveMs": null,
+        "behindLiveMs": null,
+        "atLiveEdge": false
       }
+    },
+    {
+      "id": "edge-tolerance-inclusive",
+      "window": {
+        "offsetMs": 100000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 25000,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000,
+        "behindLiveMs": 2000,
+        "atLiveEdge": true
+      }
+    },
+    {
+      "id": "behind-edge-tolerance",
+      "window": {
+        "offsetMs": 100000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 24999,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000,
+        "behindLiveMs": 2001,
+        "atLiveEdge": false
+      }
+    }
+  ],
+  "metadataCases": [
+    {
+      "id": "current-channel-program",
+      "channelId": "one",
+      "programChannelId": "one",
+      "start": "2026-11-10T12:00:00Z",
+      "end": "2026-11-10T13:00:00Z",
+      "now": "2026-11-10T12:30:00Z",
+      "show": true
+    },
+    {
+      "id": "implicit-current-channel",
+      "channelId": "one",
+      "programChannelId": "",
+      "start": "2026-11-10T12:00:00Z",
+      "end": "2026-11-10T13:00:00Z",
+      "now": "2026-11-10T12:30:00Z",
+      "show": true
+    },
+    {
+      "id": "wrong-channel-program",
+      "channelId": "one",
+      "programChannelId": "two",
+      "start": "2026-11-10T12:00:00Z",
+      "end": "2026-11-10T13:00:00Z",
+      "now": "2026-11-10T12:30:00Z",
+      "show": false
+    },
+    {
+      "id": "program-ended-boundary",
+      "channelId": "one",
+      "programChannelId": "one",
+      "start": "2026-11-10T12:00:00Z",
+      "end": "2026-11-10T13:00:00Z",
+      "now": "2026-11-10T13:00:00Z",
+      "show": false
     }
   ]
 }
