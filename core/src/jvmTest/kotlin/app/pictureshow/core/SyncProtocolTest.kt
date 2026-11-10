@@ -9,6 +9,7 @@ import app.pictureshow.core.sync.beginSyncJoin
 import app.pictureshow.core.sync.leaveSync
 import app.pictureshow.core.sync.parseSyncMessage
 import app.pictureshow.core.sync.reduceSyncEvent
+import app.pictureshow.core.sync.syncOpenMatches
 import app.pictureshow.core.sync.syncRendererOwnsEntry
 import app.pictureshow.core.sync.syncReportsReadiness
 import app.pictureshow.core.sync.syncTimestampTicks
@@ -105,6 +106,10 @@ class SyncProtocolTest {
                 runRendererReadinessCase(case, id)
                 return@forEach
             }
+            if (case.getValue("operation").jsonPrimitive.content == "renderer-bind") {
+                runRendererBindCase(case, id)
+                return@forEach
+            }
             checkKeys(case, setOf("id", "operation", "state", "steps"))
             assertEquals("membership", case.getValue("operation").jsonPrimitive.content, id)
             val initial = case.getValue("state").jsonObject
@@ -141,6 +146,32 @@ class SyncProtocolTest {
             case.getValue("pendingEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content,
             case.getValue("renderedEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content,
             case.getValue("currentEntryId").jsonPrimitive.content
+        )
+        assertEquals(case.getValue("expected"), JsonPrimitive(actual), id)
+    }
+
+    private fun runRendererBindCase(case: JsonObject, id: String) {
+        checkKeys(
+            case,
+            setOf(
+                "id",
+                "operation",
+                "openGeneration",
+                "currentGeneration",
+                "openEntryId",
+                "currentEntryId",
+                "openItemId",
+                "currentItemId",
+                "expected"
+            )
+        )
+        val actual = syncOpenMatches(
+            case.getValue("openGeneration").jsonPrimitive.long,
+            case.getValue("currentGeneration").jsonPrimitive.long,
+            case.getValue("openEntryId").jsonPrimitive.content,
+            case.getValue("currentEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content,
+            case.getValue("openItemId").jsonPrimitive.content,
+            case.getValue("currentItemId").takeUnless { it == JsonNull }?.jsonPrimitive?.content
         )
         assertEquals(case.getValue("expected"), JsonPrimitive(actual), id)
     }

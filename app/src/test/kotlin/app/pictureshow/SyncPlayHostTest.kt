@@ -362,7 +362,7 @@ class SyncPlayHostTest {
         val replacement = Renderer().apply {
             value = value.copy(positionTicks = 77_000_000L, ready = false, buffering = true, playing = false)
         }
-        rig.host.bindRenderer(replacement, replacement)
+        assertTrue(rig.host.bindRenderer(replacement, replacement, opening = open))
         rig.host.tick()
         runCurrent()
         assertEquals(1, rig.operations().count { it == "Buffering" })
@@ -375,6 +375,41 @@ class SyncPlayHostTest {
         assertEquals(77_000_000L, ready.getValue("PositionTicks").jsonPrimitive.long)
         assertTrue(replacement.value.playing)
         assertFalse(rig.renderer.value.playing)
+    }
+
+    @Test fun aStaleSameMediaReplacementCannotAcknowledgeOrReplaceTheLatestOpen() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.queue(entry = "entry-b", ticks = 66_000_000L)
+        runCurrent()
+        val earlier = rig.opens.last()
+        assertTrue(rig.host.resolved(earlier, true))
+        rig.queue(entry = "entry-c", ticks = 77_000_000L)
+        runCurrent()
+        val latest = rig.opens.last()
+        val staleRenderer = Renderer().apply { value = value.copy(positionTicks = earlier.ticks) }
+        assertFalse(rig.host.bindRenderer(staleRenderer, staleRenderer, opening = earlier))
+        assertFalse(staleRenderer.value.playing)
+        rig.sent.clear()
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.operations().contains("Ready"))
+        val replacement = Renderer().apply { value = value.copy(positionTicks = latest.ticks, playing = false) }
+        assertFalse(rig.host.bindRenderer(replacement, replacement, opening = latest.copy(generation = latest.generation - 1)))
+        assertTrue(rig.host.bindRenderer(replacement, replacement, opening = latest))
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "Ready" })
+        assertFalse(
+            rig.host.bindRenderer(staleRenderer, staleRenderer, opening = earlier),
+            "a stale bind stays invalid after acknowledgement"
+        )
+        rig.host.receive(rig.command("Unpause", ticks = latest.ticks, entry = "entry-c"))
+        runCurrent()
+        assertTrue(replacement.value.playing)
+        assertEquals(latest.ticks, replacement.value.positionTicks)
+        assertFalse(staleRenderer.value.playing)
     }
 
     @Test fun leavePausesOnceAndNeverStopsTheGroupOrReplaysLateCommands() = runTest {

@@ -407,19 +407,27 @@ internal class SyncPlayHost(
     fun background() {
         if (participating) leave()
     }
-    fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null) {
-        val replaced = renderer !== next
+    fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null, opening: SyncOpen? = null): Boolean {
+        val current = membership.queue?.current
+        if (opening != null &&
+            (
+                next.snapshot().itemId != opening.itemId ||
+                    !app.pictureshow.core.sync.syncOpenMatches(
+                        opening.generation,
+                        membership.generation,
+                        opening.entryId,
+                        current?.playlistItemId,
+                        opening.itemId,
+                        current?.itemId
+                    )
+                )
+        ) {
+            next.apply(playing = false)
+            return false
+        }
         rendererToken = token
         renderer = next
-        val current = membership.queue?.current
-        if (replaced &&
-            localSelection == null &&
-            current != null &&
-            current.playlistItemId == openingEntry &&
-            next.snapshot().itemId == current.itemId
-        ) {
-            openingEntry = null
-        }
+        if (opening != null && opening.entryId == openingEntry) openingEntry = null
         awaitingSource = null
         pendingSource = localSelection?.takeIf {
             participating && membership.group != null && it.itemId == next.snapshot().itemId
@@ -429,6 +437,7 @@ internal class SyncPlayHost(
             readyEntry = null
             wasReady = null
         }
+        return true
     }
     fun clearRenderer(token: Any) {
         if (rendererToken !== token) return

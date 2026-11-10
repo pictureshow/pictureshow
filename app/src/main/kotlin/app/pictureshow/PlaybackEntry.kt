@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.content.Intent
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
@@ -82,7 +83,32 @@ private fun validatedEntry(id: String, positionMs: Long?): ParsedPlaybackEntry =
 internal sealed interface ResolvedPlaybackEntry {
     data object NormalStartup : ResolvedPlaybackEntry
     data object Unavailable : ResolvedPlaybackEntry
-    data class Open(val item: MediaItem, val positionMs: Long) : ResolvedPlaybackEntry
+    data class Open(val item: MediaItem, val positionMs: Long, val syncOpen: SyncOpen? = null) : ResolvedPlaybackEntry
+}
+
+private const val SYNC_OPEN_GENERATION = "sync.open.generation"
+private const val SYNC_OPEN_ENTRY = "sync.open.entry"
+private const val SYNC_OPEN_ITEM = "sync.open.item"
+private const val SYNC_OPEN_TICKS = "sync.open.ticks"
+
+/** Internal destination state preserves the server entry without exposing a new external route parameter. */
+internal fun SavedStateHandle.saveSyncOpen(opening: SyncOpen?) {
+    if (opening == null) {
+        for (key in listOf(SYNC_OPEN_GENERATION, SYNC_OPEN_ENTRY, SYNC_OPEN_ITEM, SYNC_OPEN_TICKS)) remove<Any>(key)
+        return
+    }
+    this[SYNC_OPEN_GENERATION] = opening.generation
+    this[SYNC_OPEN_ENTRY] = opening.entryId
+    this[SYNC_OPEN_ITEM] = opening.itemId
+    this[SYNC_OPEN_TICKS] = opening.ticks
+}
+
+internal fun SavedStateHandle.syncOpen(): SyncOpen? {
+    val generation = (get<Any>(SYNC_OPEN_GENERATION) as? Long)?.takeIf { it >= 0 } ?: return null
+    val entry = (get<Any>(SYNC_OPEN_ENTRY) as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val item = (get<Any>(SYNC_OPEN_ITEM) as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val ticks = (get<Any>(SYNC_OPEN_TICKS) as? Long)?.takeIf { it >= 0 } ?: return null
+    return SyncOpen(generation, entry, item, ticks)
 }
 
 /** Resolve with the selected account's authenticated catalog before constructing any player destination. */

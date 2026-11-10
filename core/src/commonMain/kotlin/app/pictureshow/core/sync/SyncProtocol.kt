@@ -205,6 +205,16 @@ fun syncReportsReadiness(phase: String, currentEntryId: String, stoppedEntryId: 
 fun syncRendererOwnsEntry(pendingEntryId: String?, renderedEntryId: String?, currentEntryId: String): Boolean =
     pendingEntryId == null || renderedEntryId == currentEntryId
 
+/** A delayed renderer can bind only to the exact membership, playlist entry and media that requested it. */
+fun syncOpenMatches(
+    openGeneration: Long,
+    currentGeneration: Long,
+    openEntryId: String,
+    currentEntryId: String?,
+    openItemId: String,
+    currentItemId: String?
+): Boolean = openGeneration == currentGeneration && openEntryId == currentEntryId && openItemId == currentItemId
+
 fun beginSyncJoin(state: SyncMembership, groupId: String? = null): SyncMembership =
     SyncMembership(generation = state.generation + 1, groupId = groupId, phase = "Joining")
 

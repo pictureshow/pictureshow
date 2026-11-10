@@ -2028,6 +2028,72 @@
       "renderedEntryId": "entry-b",
       "currentEntryId": "entry-b",
       "expected": true
+    },
+    {
+      "id": "sync-state.renderer-bind-exact-open-matches-current-membership-entry-and-media",
+      "operation": "renderer-bind",
+      "openGeneration": 7,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-a",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": true
+    },
+    {
+      "id": "sync-state.renderer-bind-stale-generation-cannot-bind",
+      "operation": "renderer-bind",
+      "openGeneration": 6,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-a",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-bind-newer-wrong-generation-cannot-bind",
+      "operation": "renderer-bind",
+      "openGeneration": 8,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-a",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-bind-same-media-wrong-playlist-entry-cannot-bind",
+      "operation": "renderer-bind",
+      "openGeneration": 7,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-b",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-bind-same-entry-wrong-media-cannot-bind",
+      "operation": "renderer-bind",
+      "openGeneration": 7,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-a",
+      "openItemId": "media-a",
+      "currentItemId": "media-b",
+      "expected": false
+    },
+    {
+      "id": "sync-state.renderer-bind-missing-current-entry-cannot-bind",
+      "operation": "renderer-bind",
+      "openGeneration": 7,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": null,
+      "openItemId": "media-a",
+      "currentItemId": null,
+      "expected": false
     }
   ]
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -22,6 +23,8 @@ import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
 import app.pictureshow.core.sync.syncSourceEligible
 import org.koin.compose.koinInject
+
+internal val LocalSyncOpen = staticCompositionLocalOf<SyncOpen?> { null }
 
 /** Scope and navigation are shared by the phone and TV shells; item lookup always uses the participant's viewer. */
 @Composable
@@ -90,7 +93,7 @@ internal fun SyncPlayCoordinator(
             }
             val result = resolvePlaybackEntry(PlaybackEntry(request.itemId, request.ticks / 10_000), viewer, catalog)
             val entry = result as? ResolvedPlaybackEntry.Open
-            if (sync.resolved(request, entry != null) && entry != null) latestOpen(entry)
+            if (sync.resolved(request, entry != null) && entry != null) latestOpen(entry.copy(syncOpen = request))
         }
     }
     val presentation by sync.state.collectAsState()
@@ -121,6 +124,7 @@ internal fun SyncPlayCoordinator(
 @Composable
 internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     val sync: SyncPlayHost = koinInject()
+    val opening = LocalSyncOpen.current
     val token = remember { Any() }
     host.sync = sync
     val bridge = remember(host, sync) {
@@ -161,17 +165,20 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             }
         }
     }
-    DisposableEffect(sync, host) {
+    DisposableEffect(sync, host, opening) {
         host.output.syncRequest = sync::transport
         host.output.syncParticipating = { sync.participating }
         val expected = sync.membership.queue?.current
-        val selection = if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
+        val selection = if (opening == null && sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
             SyncLocalSelection(host.item.id, app.pictureshow.core.sync.millisecondsToSyncTicks(host.startMs) ?: 0)
         } else {
             null
         }
         // Metadata can be unknown here. The host waits for a prepared eligible source before requesting the shared queue.
-        sync.bindRenderer(token, bridge, selection)
+        if (!sync.bindRenderer(token, bridge, selection, opening = opening)) {
+            // A stale server destination must retain pause intent even if its decoder is created later.
+            host.output.applySync { host.output.pause() }
+        }
         onDispose {
             sync.clearRenderer(token)
             host.output.syncRequest = null

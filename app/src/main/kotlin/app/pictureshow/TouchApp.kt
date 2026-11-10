@@ -394,7 +394,10 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        CompositionLocalProvider(LocalTouchPlayerCast provides TouchPlayerCast(cast, remote)) {
+                        CompositionLocalProvider(
+                            LocalTouchPlayerCast provides TouchPlayerCast(cast, remote),
+                            LocalSyncOpen provides entry.savedStateHandle.syncOpen()
+                        ) {
                             TouchPlayerScreen(
                                 account,
                                 item,

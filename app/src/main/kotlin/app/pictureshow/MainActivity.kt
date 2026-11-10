@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -277,6 +278,7 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
     }
     nav.navigate(itemRoute(entry.item))
     nav.navigate(playerRoute(entry.item, entry.positionMs))
+    nav.currentBackStackEntry?.savedStateHandle?.saveSyncOpen(entry.syncOpen)
 }
 
 /** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
@@ -958,7 +960,9 @@ internal fun Pictureshow(
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                 }) { onCurrentItem ->
-                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    CompositionLocalProvider(LocalSyncOpen provides entry.savedStateHandle.syncOpen()) {
+                        PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    }
                 }
             }
         }
