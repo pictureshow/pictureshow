@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -192,18 +193,27 @@ internal fun LiveTvScreen(
                         }
                     }
                 } else {
-                    androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) {
+                    val touchTabs: @Composable () -> Unit = {
                         tabs.forEach { next ->
-                            androidx.compose.material3.Tab(tab == next, {
-                                select(next)
-                            }, text = {
+                            androidx.compose.material3.Tab(
+                                selected = tab == next,
+                                onClick = { select(next) },
+                                modifier = Modifier.height(48.dp).testTag("live:tab:$next")
+                            ) {
                                 androidx.compose.material3.Text(
                                     next,
+                                    Modifier.padding(horizontal = 8.dp),
                                     maxLines = 1,
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge
                                 )
-                            }, modifier = Modifier.testTag("live:tab:$next"))
+                            }
                         }
+                    }
+                    if (LocalDensity.current.fontScale > 1.1f) {
+                        androidx.compose.material3.PrimaryScrollableTabRow(tabs.indexOf(tab), edgePadding = 8.dp) { touchTabs() }
+                    } else {
+                        androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) { touchTabs() }
                     }
                 }
             }
@@ -253,13 +263,21 @@ internal fun LiveTvScreen(
                                     vm.refresh(state.windowStart - LiveTvViewModel.WINDOW)
                                 }
                             }
-                            item { LiveChip("Now", false, tv, !state.loading) { vm.refresh(System.currentTimeMillis()) } }
+                            item {
+                                LiveChip("Now", false, tv, !state.loading) { vm.refresh(liveGuideWindowStart(System.currentTimeMillis())) }
+                            }
                             item {
                                 LiveIcon("later", "Later", tv, !state.loading) { vm.refresh(state.windowStart + LiveTvViewModel.WINDOW) }
                             }
                             items((0L..6L).toList()) { day ->
                                 val date = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().plusDays(day)
-                                val start = if (day == 0L) now else date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                val start = if (day ==
+                                    0L
+                                ) {
+                                    liveGuideWindowStart(now)
+                                } else {
+                                    date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                }
                                 val selected = Instant.ofEpochMilli(state.windowStart).atZone(ZoneId.systemDefault()).toLocalDate() == date
                                 LiveChip(time.day(start), selected, tv, !state.loading) { vm.refresh(start) }
                             }
@@ -283,7 +301,7 @@ internal fun LiveTvScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(Modifier.width(360.dp)) { navigation() }
+                    Box(Modifier.width(410.dp)) { navigation() }
                     Box(Modifier.weight(1f)) { filters() }
                 }
             } else {
@@ -454,7 +472,8 @@ internal fun LiveTvScreen(
                                         ) {
                                             focused(key)
                                         },
-                                        canFavorite = state.policy?.userData == true && canAct && !state.writing,
+                                        canFavorite = state.policy?.userData == true,
+                                        favoriteEnabled = canAct && !state.writing,
                                         tuneEnabled = canAct,
                                         onFavorite = { vm.favorite(channel) }, onTune = { if (canAct) onPlay(channel.mediaItem()) }
                                     )

@@ -22,7 +22,7 @@ class LiveTimeTest {
 
     @Test fun clockFollowsDeviceChoiceAndConciseRangesKeepPeriodTransitions() {
         val twelve = LiveTime(false, Locale.US, zone, today)
-        val full = twelve.range("2026-11-10T20:14:00Z", "2026-11-10T20:42:00Z")
+        val full = twelve.range("2026-11-10T20:14:00Z", "2026-11-10T20:42:00Z").replace('\u202f', ' ').replace('\u00a0', ' ')
         assertTrue(full.startsWith("3:14"), full)
         assertTrue(full.endsWith("3:42 PM"), full)
         assertEquals(1, Regex("PM").findAll(full).count())

@@ -52,7 +52,7 @@ internal class LiveTvViewModel(
     private val api: LiveTvService,
     private val now: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
-    private val mutable = MutableStateFlow(LiveTvState(windowStart = now()))
+    private val mutable = MutableStateFlow(LiveTvState(windowStart = liveGuideWindowStart(now())))
     val state = mutable.asStateFlow()
     private var load: Job? = null
     private var generation = 0L

@@ -65,6 +65,7 @@ internal fun LiveChannelRow(
     now: Long,
     modifier: Modifier,
     canFavorite: Boolean,
+    favoriteEnabled: Boolean = true,
     tuneEnabled: Boolean,
     onFavorite: () -> Unit,
     onTune: () -> Unit
@@ -100,7 +101,7 @@ internal fun LiveChannelRow(
             enabled = tuneEnabled,
             leadingContent = { LiveChannelMark(channel, account, true) }, supportingContent = support,
             trailingContent = { if (channel.userData.isFavorite) LiveText("★", true) },
-            onLongClick = if (canFavorite) {
+            onLongClick = if (canFavorite && favoriteEnabled) {
                 { menu = true }
             } else {
                 null
@@ -115,7 +116,7 @@ internal fun LiveChannelRow(
             leadingContent = { LiveChannelMark(channel, account, false) },
             supportingContent = support,
             trailingContent = if (canFavorite) {
-                { LiveFavorite(channel.userData.isFavorite, onFavorite) }
+                { LiveFavorite(channel.userData.isFavorite, onFavorite, favoriteEnabled) }
             } else {
                 null
             },

@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -13,12 +14,14 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -150,7 +153,8 @@ class LiveTvScreensTest {
         compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
         val row = compose.onNodeWithTag("live:c:c").assertIsDisplayed().assertIsFocused().getUnclippedBoundsInRoot()
-        assertTrue(row.top <= 160.dp, "Initial channel must be visible below compact chrome: $row")
+        val viewport = compose.onNodeWithTag("live:tv").getUnclippedBoundsInRoot()
+        assertTrue(row.top - viewport.top <= 160.dp, "Initial channel must be visible below compact chrome: $row")
         compose.onNodeWithText("Back").assertDoesNotExist()
     }
 
@@ -260,7 +264,11 @@ class LiveTvScreensTest {
         compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, { tuned++ }, {}, {}) } }
         compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithContentDescription("Add favorite").performClick()
-        compose.waitUntil(5_000) { !vm.state.value.loading && vm.state.value.channels.single().userData.isFavorite }
+        compose.waitUntil(5_000) {
+            !vm.state.value.loading &&
+                !vm.state.value.writing &&
+                vm.state.value.channels.single().userData.isFavorite
+        }
         compose.onNodeWithContentDescription("Remove favorite").assertIsOn()
         compose.runOnIdle {
             assertEquals(1, fake.favoriteWrites)
@@ -297,5 +305,43 @@ class LiveTvScreensTest {
         compose.onNodeWithText("Recording schedule").assertIsDisplayed()
         compose.onNodeWithText("Existing series").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, fake.created) }
+    }
+
+    @Test
+    fun linearGuideNamesScheduledOccurrencesAndKeepsSeriesOnlyProgramsUnmarked() {
+        val occurrence = androidx.compose.runtime.mutableStateOf(true)
+        compose.setContent {
+            TouchTheme {
+                LiveProgramRow(
+                    LiveFake().show.copy(timerId = if (occurrence.value) "timer" else null, seriesTimerId = "rule"),
+                    false,
+                    androidx.compose.ui.Modifier
+                ) {}
+            }
+        }
+        compose.onNodeWithText("Recording scheduled", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Generated program").assertIsDisplayed()
+        compose.runOnIdle { occurrence.value = false }
+        compose.onNodeWithText("Recording scheduled", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-mdpi")
+    fun fullWidthFocusedChannelRetainsTheTvSafeMargin() {
+        val vm = LiveTvViewModel(account, LiveFake())
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
+        val row = compose.onNodeWithTag("live:c:c").assertIsFocused().getUnclippedBoundsInRoot()
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val center = ((row.top.value + row.bottom.value) / 2 - root.top.value).toInt()
+        assertEquals(LiveBackground, pixels[20, center], "Full-width focus must not scale into the32dp safe margin")
+    }
+
+    @Test
+    fun liveTvKeepsItsHomeNavigationParentSelected() {
+        assertEquals("home", touchTabFor("live-tv"))
+        assertEquals("search", touchTabFor("search?query={query}&keyboard={keyboard}"))
+        assertEquals("settings", touchTabFor("settings"))
     }
 }

@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -28,8 +30,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
+import app.pictureshow.core.imageUrl
 import app.pictureshow.core.livetv.LiveChannel
 import app.pictureshow.core.livetv.LiveProgram
+import coil3.compose.AsyncImage
 
 internal const val LIVE_GUIDE_WIDTH = 1080f
 internal const val LIVE_GUIDE_TEXT_MIN = 72f
@@ -81,11 +85,24 @@ internal fun LiveGuide(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    LiveChannelMark(channel, account, tv, compact = true)
                     if (tv) {
+                        LiveChannelMark(channel, account, true, compact = true)
                         Column(Modifier.weight(1f)) {
                             LiveText(channel.name, true, maxLines = 1)
                             if (channel.userData.isFavorite) LiveText("★ Favorite", true, small = true)
+                        }
+                    } else {
+                        Column(
+                            Modifier.fillMaxWidth().semantics {
+                                contentDescription = "Channel ${channel.number.orEmpty()}, ${channel.name}"
+                            },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(Modifier.size(28.dp).background(LiveAccent.copy(alpha = .12f)), Alignment.Center) {
+                                val art = imageUrl(account.server, channel.mediaItem(), 96)
+                                if (art != null) AsyncImage(art, null, Modifier.size(28.dp)) else LiveText(channel.name.take(1), false)
+                            }
+                            LiveText("${channel.number.orEmpty()} ${channel.name}".trim(), false, small = true, maxLines = 1)
                         }
                     }
                 }
@@ -104,12 +121,12 @@ internal fun LiveGuide(
                                 }.semantics { contentDescription = label }
                             val content: @Composable () -> Unit = {
                                 Column(
-                                    Modifier.padding(if (liveGuideShowsText(width)) 8.dp else 0.dp),
-                                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                                    Modifier.fillMaxHeight().padding(if (liveGuideShowsText(width)) 8.dp else 0.dp),
+                                    verticalArrangement = Arrangement.Center
                                 ) {
                                     if (liveGuideShowsText(width)) {
-                                        LiveText(show.name, tv, Modifier.testTag("live:cell-title:${show.id}"), maxLines = 2)
-                                        if (rowHeight >= 70.dp) LiveText(time.clock(show.startDate), tv, small = true, maxLines = 1)
+                                        LiveText(show.name, tv, Modifier.testTag("live:cell-title:${show.id}"), maxLines = if (tv) 2 else 1)
+                                        if (!tv || rowHeight >= 70.dp) LiveText(time.clock(show.startDate), tv, small = true, maxLines = 1)
                                     }
                                     if (show.hasRecordingTimer()) LiveRecordingDot(tv)
                                 }
@@ -117,7 +134,7 @@ internal fun LiveGuide(
                             if (tv) {
                                 androidx.tv.material3.Surface(
                                     onClick = { onOpen(show) },
-                                    modifier = target,
+                                    modifier = target.padding(horizontal = 1.dp),
                                     shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(5.dp)),
                                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
                                         containerColor = androidx.compose.ui.graphics.Color(0xFF252B39)
@@ -129,7 +146,7 @@ internal fun LiveGuide(
                                     onClick = {
                                         onOpen(show)
                                     },
-                                    modifier = target,
+                                    modifier = target.padding(horizontal = 1.dp),
                                     shape = RoundedCornerShape(
                                         5.dp
                                     ),

@@ -73,3 +73,9 @@ internal fun liveTime(): LiveTime {
         androidx.core.os.ConfigurationCompat.getLocales(configuration)[0] ?: Locale.getDefault()
     )
 }
+
+/** Calendar half-hour with the original overlap offset retained, including quarter-hour zones and DST folds. */
+internal fun liveGuideWindowStart(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long {
+    val local = Instant.ofEpochMilli(now).atZone(zone)
+    return local.withMinute(local.minute / 30 * 30).withSecond(0).withNano(0).toInstant().toEpochMilli()
+}

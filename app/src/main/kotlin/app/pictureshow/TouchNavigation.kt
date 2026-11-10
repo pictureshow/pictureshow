@@ -28,7 +28,7 @@ import androidx.navigation.NavHostController
 internal val touchTabs = listOf("home" to "Home", "libraries" to "Libraries", "search" to "Search", "settings" to "Settings")
 
 internal fun touchTabFor(route: String?): String? = when {
-    route == "home" -> "home"
+    route in listOf("home", "live-tv") -> "home"
     route == "libraries" -> "libraries"
     route?.startsWith("search?") == true -> "search"
     route in listOf("settings", "accounts", "about", "licenses", "supporter") || route?.startsWith("license/") == true -> "settings"

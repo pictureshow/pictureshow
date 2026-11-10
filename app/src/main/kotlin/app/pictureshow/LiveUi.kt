@@ -195,8 +195,8 @@ private fun liveIcon(kind: String): ImageVector {
 }
 
 @Composable
-internal fun LiveFavorite(checked: Boolean, onClick: () -> Unit) {
-    androidx.compose.material3.IconToggleButton(checked, { onClick() }) {
+internal fun LiveFavorite(checked: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
+    androidx.compose.material3.IconToggleButton(checked, { onClick() }, enabled = enabled) {
         androidx.compose.material3.Icon(
             remember(checked) { liveIcon(if (checked) "star" else "star-outline") },
             if (checked) "Remove favorite" else "Add favorite",
