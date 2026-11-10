@@ -23,7 +23,7 @@ class PlayerOverlayLayoutVectorsTest {
         assertEquals(1, envelope.getValue("schemaVersion").jsonPrimitive.int)
         assertEquals("player-overlay-layout", envelope.getValue("suite").jsonPrimitive.content)
         val cases = envelope.getValue("cases").jsonArray
-        assertEquals(6, cases.size)
+        assertEquals(8, cases.size)
         fun rect(element: JsonElement): Rect {
             val p = element.jsonArray.map { it.jsonPrimitive.float }
             return Rect(p[0], p[1], p[2], p[3])
@@ -40,7 +40,8 @@ class PlayerOverlayLayoutVectorsTest {
                 rect(c.getValue("video")),
                 c.getValue("blockers").jsonArray.map(::rect),
                 value("transportWidth"),
-                value("transportHeight")
+                value("transportHeight"),
+                c["safeArea"]?.let(::rect) ?: Rect(0f, 0f, value("width").toFloat(), value("height").toFloat())
             )
             val expected = case.getValue("expected").jsonObject
             val id = case.getValue("id").jsonPrimitive.content

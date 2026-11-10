@@ -16,10 +16,14 @@ internal fun touchTransportPlacement(
     video: Rect,
     blockers: List<Rect>,
     transportWidth: Int,
-    transportHeight: Int
+    transportHeight: Int,
+    safeArea: Rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
 ): IntOffset {
     val bottom = (height - panelHeight).coerceAtLeast(0).toFloat()
-    val frame = Rect(video.left, video.top, video.right, minOf(video.bottom, bottom).coerceAtLeast(video.top))
+    val left = safeArea.left.coerceIn(0f, width.toFloat())
+    val top = safeArea.top.coerceIn(0f, bottom)
+    val viewport = Rect(left, top, safeArea.right.coerceIn(left, width.toFloat()), safeArea.bottom.coerceIn(top, bottom))
+    val frame = if (video.overlaps(viewport)) video.intersect(viewport) else viewport
     val preferred = frame.center
     val halfWidth = transportWidth / 2f
     val halfHeight = transportHeight / 2f
@@ -47,6 +51,6 @@ internal fun touchTransportPlacement(
             )
         }.minByOrNull { (it - preferred).getDistanceSquared() }
     }
-    val center = place(frame) ?: place(Rect(0f, 0f, width.toFloat(), bottom)) ?: preferred
+    val center = place(frame) ?: place(viewport) ?: preferred
     return IntOffset((center.x - width / 2f).roundToInt(), (center.y - halfHeight).roundToInt().coerceAtLeast(0))
 }

@@ -165,6 +165,69 @@
         "x": 0,
         "y": 540
       }
+    },
+    {
+      "id": "player-overlay-layout.side-cutout-keeps-whole-targets",
+      "operation": "transport-placement",
+      "input": {
+        "width": 640,
+        "height": 720,
+        "panelHeight": 360,
+        "video": [
+          0,
+          0,
+          640,
+          720
+        ],
+        "blockers": [],
+        "transportWidth": 416,
+        "transportHeight": 128,
+        "safeArea": [
+          180,
+          0,
+          640,
+          720
+        ]
+      },
+      "expected": {
+        "x": 90,
+        "y": 116
+      }
+    },
+    {
+      "id": "player-overlay-layout.letterbox-fallback-respects-safe-bottom",
+      "operation": "transport-placement",
+      "input": {
+        "width": 400,
+        "height": 800,
+        "panelHeight": 180,
+        "video": [
+          0,
+          300,
+          400,
+          500
+        ],
+        "blockers": [
+          [
+            0,
+            250,
+            400,
+            540
+          ]
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "safeArea": [
+          0,
+          30,
+          400,
+          600
+        ]
+      },
+      "expected": {
+        "x": 0,
+        "y": 186
+      }
     }
   ]
 }

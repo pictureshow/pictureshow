@@ -428,7 +428,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     it.translate(-playerLeft.toFloat(), -playerTop.toFloat())
                 },
                 with(density) { 208.dp.roundToPx() },
-                with(density) { 64.dp.roundToPx() }
+                with(density) { 64.dp.roundToPx() },
+                safeArea = Rect(
+                    WindowInsets.safeDrawing.getLeft(density, layoutDirection).toFloat(),
+                    WindowInsets.safeDrawing.getTop(density).toFloat(),
+                    (constraints.maxWidth - WindowInsets.safeDrawing.getRight(density, layoutDirection)).toFloat(),
+                    (constraints.maxHeight - WindowInsets.safeDrawing.getBottom(density)).toFloat()
+                )
             )
             Row(
                 Modifier.align(Alignment.TopCenter).offset { transportOffset }
