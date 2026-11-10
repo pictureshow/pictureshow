@@ -35,7 +35,7 @@ import javax.imageio.ImageWriteParam
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
-interface MacActivation : Library { fun pictureshow_activate() }
+interface MacActivation : Library { fun pictureshow_activate(); fun pictureshow_fullscreen(enabled: Int) }
 
 fun main(args: Array<String>) {
     require(args.size >= 2) { "Usage: <render|wid> <media-file> [evidence-dir] [--auto]" }
@@ -45,8 +45,9 @@ fun main(args: Array<String>) {
     val out = File(args.getOrNull(2) ?: "desktop-evidence")
     val auto = args.contains("--auto")
     System.setProperty("compose.interop.blending", "true")
+    val mac = System.getenv("SPIKE_MAC_BRIDGE")?.let { Native.load(it, MacActivation::class.java) }
     val mpv = Mpv(out)
-    var gl: GlSurface? = null
+    var gl: VideoSurface? = null
     val frame = mutableStateOf<ImageBitmap?>(null)
     val failure = AtomicReference<Throwable?>(null)
     var started = false
@@ -75,7 +76,7 @@ fun main(args: Array<String>) {
                                 Thread {
                                     try {
                                         mpv.option("vo", "libmpv"); mpv.initialize()
-                                        gl = GlSurface(mpv, { frame.value = it }, { failure.set(it) })
+                                        gl = if (System.getenv("SPIKE_D3D_BRIDGE") != null) D3dSurface(mpv, { frame.value = it }, { failure.set(it) }) else GlSurface(mpv, { frame.value = it }, { failure.set(it) })
                                         mpv.command("loadfile", media)
                                         started = true
                                     } catch (e: Throwable) { failure.set(e); status = "FAILED: ${e.message}"; e.printStackTrace() }
@@ -110,7 +111,7 @@ fun main(args: Array<String>) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = { paused = !paused; mpv.set("pause", if (paused) "yes" else "no") }) { Text(if (paused) "Play" else "Pause") }
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick = { state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen }) { Text("Fullscreen") }
+                        Button(onClick = { val next = state.placement != WindowPlacement.Fullscreen; if (mac != null) mac.pictureshow_fullscreen(if (next) 1 else 0) else state.placement = if (next) WindowPlacement.Fullscreen else WindowPlacement.Floating }) { Text("Fullscreen") }
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = { mpv.command("cycle", "sub") }) { Text("Subtitle") }
                         Text(status, Modifier.padding(start = 12.dp), color = Color.White)
@@ -121,7 +122,7 @@ fun main(args: Array<String>) {
                 Thread {
                     try {
                     Thread.sleep(1000)
-                    System.getenv("SPIKE_MAC_BRIDGE")?.let { Native.load(it, MacActivation::class.java).pictureshow_activate() }
+                    mac?.pictureshow_activate()
                     fun stage(name: String) {
                         failure.get()?.let { throw it }
                         Thread.sleep(1200)
@@ -130,7 +131,7 @@ fun main(args: Array<String>) {
                             val location = window.locationOnScreen
                             val capture = Robot().createScreenCapture(java.awt.Rectangle(location.x, location.y, bounds.width, bounds.height))
                             jpeg(capture, File(out, "$name.jpg"))
-                            mpv.dump(name, "window=${bounds.width}x${bounds.height}; placement=${state.placement}; overlayClicks=$clicks")
+                            mpv.dump(name, "window=${bounds.width}x${bounds.height}; placement=${state.placement}; density=${window.graphicsConfiguration.defaultTransform.scaleX}; overlayClicks=$clicks")
                         }
                     }
                     Thread.sleep(5000)
@@ -140,8 +141,9 @@ fun main(args: Array<String>) {
                         SwingUtilities.invokeAndWait {
                             overlayBounds?.let { b ->
                                 val origin = window.contentPane.locationOnScreen
+                                val transform = window.graphicsConfiguration.defaultTransform
                                 Robot().apply {
-                                    mouseMove(origin.x + b.center.x.toInt(), origin.y + b.center.y.toInt())
+                                    mouseMove(origin.x + (b.center.x / transform.scaleX).toInt(), origin.y + (b.center.y / transform.scaleY).toInt())
                                     mousePress(InputEvent.BUTTON1_DOWN_MASK); mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
                                 }
                             }
@@ -151,9 +153,11 @@ fun main(args: Array<String>) {
                             // Same-window AWT event delivery also works without macOS global input permission.
                             SwingUtilities.invokeAndWait {
                                 overlayBounds?.let { b ->
-                                    val target = SwingUtilities.getDeepestComponentAt(window.contentPane, b.center.x.toInt(), b.center.y.toInt())
+                                    val transform = window.graphicsConfiguration.defaultTransform
+                                    val x = (b.center.x / transform.scaleX).toInt(); val y = (b.center.y / transform.scaleY).toInt()
+                                    val target = SwingUtilities.getDeepestComponentAt(window.contentPane, x, y)
                                     if (target != null) {
-                                        val point = SwingUtilities.convertPoint(window.contentPane, b.center.x.toInt(), b.center.y.toInt(), target)
+                                        val point = SwingUtilities.convertPoint(window.contentPane, x, y, target)
                                         for (id in listOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED)) {
                                             target.dispatchEvent(MouseEvent(target, id, System.currentTimeMillis(), 0, point.x, point.y, 1, false, MouseEvent.BUTTON1))
                                         }
@@ -167,10 +171,10 @@ fun main(args: Array<String>) {
                         mpv.set("pause", "no")
                         SwingUtilities.invokeAndWait { state.size = androidx.compose.ui.unit.DpSize(740.dp, 500.dp) }
                         stage("02-resize")
-                        SwingUtilities.invokeAndWait { state.placement = WindowPlacement.Fullscreen }
+                        SwingUtilities.invokeAndWait { if (mac != null) mac.pictureshow_fullscreen(1) else state.placement = WindowPlacement.Fullscreen }
                         Thread.sleep(2500)
                         stage("03-fullscreen")
-                        SwingUtilities.invokeAndWait { state.placement = WindowPlacement.Floating }
+                        SwingUtilities.invokeAndWait { if (mac != null) mac.pictureshow_fullscreen(0) else state.placement = WindowPlacement.Floating }; Thread.sleep(2000)
                         val count = mpv.get("track-list/count")?.toIntOrNull() ?: 0
                         val subtitles = (0 until count).filter { mpv.get("track-list/$it/type") == "sub" }
                         check(subtitles.size == 3) { "Expected SRT, ASS and PGS tracks" }

@@ -27,14 +27,20 @@ jobs:
           Invoke-WebRequest https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip -OutFile mpv.zip
           if ((Get-FileHash mpv.zip -Algorithm SHA256).Hash.ToLower() -ne '8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce') { throw 'libmpv digest mismatch' }
           Expand-Archive mpv.zip native
-          # Hosted runners have no GPU: provide an explicit software OpenGL implementation.
-          Invoke-WebRequest https://github.com/pal1000/mesa-dist-win/releases/download/26.2.6/mesa3d-26.2.6-release-msvc.7z -OutFile mesa.7z
-          if ((Get-FileHash mesa.7z -Algorithm SHA256).Hash.ToLower() -ne 'b2e00615feaba45942343c265cc8c5f576142ca682c1ac6661922d4b72492877') { throw 'Mesa digest mismatch' }
-          7z x mesa.7z -omesa -y
-          Copy-Item mesa/x64/*.dll "$env:JAVA_HOME/bin/"
           choco install ffmpeg --no-progress -y
           $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
           python desktop/tools/fixtures.py desktop-fixtures
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Mark the public header as a consumer import
+        shell: pwsh
+        run: |
+          $header = 'native/include/mpv/client.h'
+          (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
+      - name: Build D3D11 adapter against the public libmpv headers
+        shell: cmd
+        run: cl /nologo /EHsc /LD /std:c++17 /I native/include desktop/src/native/windows_d3d.cpp /link d3d11.lib /OUT:desktop/build/pictureshow-d3d.dll
       - name: Exercise both surfaces without claiming hardware decode
         shell: pwsh
         run: |
@@ -44,8 +50,8 @@ jobs:
           $env:PATH = "$($dll.DirectoryName);$env:PATH"
           $env:SPIKE_NULL_AUDIO = '1'
           $env:SPIKE_SOFTWARE_GPU = '1'
-          $env:GALLIUM_DRIVER = 'llvmpipe'
-          $env:LIBGL_ALWAYS_SOFTWARE = '1'
+          $env:SPIKE_D3D_BRIDGE = (Resolve-Path desktop/build/pictureshow-d3d.dll).Path
+          $env:SKIKO_RENDER_API = 'SOFTWARE'
           $failed = $false
           foreach ($shape in @('render', 'wid')) {
             foreach ($media in @('hevc-main', 'hevc-main10', 'av1', 'hevc-pq-metadata')) {

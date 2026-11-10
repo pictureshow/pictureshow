@@ -31,9 +31,9 @@ class GlFbo : Structure() {
  * This proves composition/controls, NOT zero-copy performance or HDR presentation.
  * All render API calls stay on one GL thread; client API calls stay off it.
  */
-class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit, private val onFailure: (Throwable) -> Unit) : AutoCloseable {
-    @Volatile var width = 640
-    @Volatile var height = 360
+class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit, private val onFailure: (Throwable) -> Unit) : VideoSurface {
+    @Volatile override var width = 640
+    @Volatile override var height = 360
     private var render: Pointer? = null
     private var fboId = 0
     private var textureId = 0

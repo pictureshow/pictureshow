@@ -55,7 +55,7 @@ class Mpv(val out: File) : AutoCloseable {
         out.mkdirs()
         option("config", "no")
         option("terminal", "yes")
-        option("msg-level", "all=warn,vd=debug,vo=debug")
+        option("msg-level", "all=warn,vd=info,vo=info")
         option("log-file", File(out, "mpv.log").absolutePath)
         option("hwdec", "auto-safe")
         if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") option("gpu-sw", "yes")
