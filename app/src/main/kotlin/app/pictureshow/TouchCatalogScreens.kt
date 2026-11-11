@@ -337,15 +337,7 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
 /** TV's playback choice, withholding a stale target until the report and every dependent read settle. */
 internal fun touchDetailPlayItem(state: CatalogDetailState): MediaItem? {
     if (state.playbackPending || state.loading || state.error != null && state.item == null) return null
-    return when (val item = state.item) {
-        null -> null
-        else -> when (item.type) {
-            "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-            "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-            "Movie", "Episode", "Video" -> item
-            else -> null
-        }
-    }
+    return app.pictureshow.core.detailPlayItem(state.item, state.nextUp, state.episodes)
 }
 
 @Composable

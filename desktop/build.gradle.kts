@@ -10,6 +10,12 @@ kotlin { jvmToolchain(21) }
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.serialization.json)
+    implementation(libs.coroutines.core)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.coroutines.test)
     implementation(compose.desktop.currentOs)
     implementation("net.java.dev.jna:jna:5.18.1")
     implementation("org.jogamp.jogl:jogl-all-main:2.6.0")
@@ -22,13 +28,17 @@ evaluationDependsOn(":core")
 val coreTests = project(":core").extensions.getByType<KotlinMultiplatformExtension>()
     .targets.getByName("jvm").compilations.getByName("test")
 val vectorTest = tasks.register<Test>("vectorTest") {
-    dependsOn(":core:jvmTestClasses")
-    testClassesDirs = coreTests.output.classesDirs
-    classpath = files(coreTests.output.allOutputs, coreTests.runtimeDependencyFiles, configurations.runtimeClasspath)
+    dependsOn(":core:jvmTestClasses", tasks.testClasses)
+    testClassesDirs = files(coreTests.output.classesDirs, sourceSets.test.get().output.classesDirs)
+    classpath = files(coreTests.output.allOutputs, coreTests.runtimeDependencyFiles, sourceSets.test.get().runtimeClasspath)
+    systemProperty("pictureshow.repository", rootProject.projectDir.absolutePath)
     include("**/*VectorsTest.class")
     testLogging { events("passed", "failed", "skipped") }
 }
-tasks.test { dependsOn(vectorTest) }
+tasks.test {
+    dependsOn(vectorTest)
+    exclude("**/*VectorsTest.class")
+}
 
 compose.desktop {
     application {

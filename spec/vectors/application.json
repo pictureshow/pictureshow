@@ -6810,6 +6810,151 @@
       },
       "expected": false,
       "source": "CAT-07; DetailHeaderTest"
-    }
+    },
+    {
+        "id": "detail-primary-next",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "series",
+            "Type": "Series"
+          },
+          "nextUp": [
+            {
+              "Id": "next",
+              "Type": "Episode"
+            }
+          ],
+          "episodes": [
+            {
+              "Id": "first",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": "next"
+      },
+      {
+        "id": "detail-primary-unplayed",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "played",
+              "Type": "Episode",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": "unplayed"
+      },
+      {
+        "id": "detail-primary-all-played",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "played",
+              "Type": "Episode",
+              "UserData": {
+                "Played": true
+              }
+            }
+          ]
+        },
+        "expected": "played"
+      },
+      {
+        "id": "detail-primary-empty",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": []
+        },
+        "expected": null
+      },
+      {
+        "id": "detail-primary-container",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "folder",
+            "Type": "Folder"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "episode",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": null
+      },
+      {
+        "id": "track-label-forced",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "en",
+              "Codec": "srt",
+              "IsForced": true,
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "expected": [
+          "English · SRT · Forced · SDH"
+        ]
+      },
+      {
+        "id": "track-label-distinct",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Language": "en",
+              "Codec": "aac",
+              "Channels": 2
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Language": "en",
+              "Codec": "aac",
+              "Channels": 2
+            }
+          ]
+        },
+        "expected": [
+          "English · AAC stereo · Track 1",
+          "English · AAC stereo · Track 2"
+        ]
+      }
   ]
 }

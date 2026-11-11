@@ -90,7 +90,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)
-        exclude("grid-navigation.json")
+        exclude("grid-navigation.json", "desktop-hdr-output.json")
         into("parity-vectors")
     }
     from(rootProject.file("spec/vectors")) {
@@ -108,5 +108,13 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
     from(rootProject.file("spec/vectors")) {
         include(controlSuites)
         into("control-vectors")
+    }
+}
+
+// Full corpus inventory supports a fail-closed test for additions without an executor.
+tasks.named<ProcessResources>("jvmTestProcessResources") {
+    from(rootProject.file("spec/vectors")) {
+        include("*.json")
+        into("vector-inventory")
     }
 }
