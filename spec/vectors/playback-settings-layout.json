@@ -21,7 +21,8 @@
         "secondRowTitleVisible": true,
         "previewLabelsCentered": true,
         "maximumDialogWidthDp": 600,
-        "choicePickerWindowCount": 1
+        "choicePickerWindowCount": 1,
+        "previewBesideChoices": true
       }
     },
     {

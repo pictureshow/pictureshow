@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlin.math.abs
@@ -64,6 +66,11 @@ class PhoneSettingsConstraintsTest {
         compose.setContent {
             androidx.compose.material3.MaterialTheme {
                 CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
+                    assertEquals(
+                        IntSize(input.getValue("widthDp").jsonPrimitive.int, input.getValue("heightDp").jsonPrimitive.int),
+                        LocalWindowInfo.current.containerSize,
+                        "The actual native window must match the portable viewport at mdpi"
+                    )
                     AdvancedPlaybackSettings(input.getValue("group").jsonPrimitive.content, PlaybackPreferences(), true, {}, {})
                 }
             }
@@ -71,6 +78,10 @@ class PhoneSettingsConstraintsTest {
         val first = compose.onNode(hasText("Font size") and hasClickAction())
         val row = first.getUnclippedBoundsInRoot()
         val viewport = compose.onNodeWithTag("settings:touch-list").getUnclippedBoundsInRoot()
+        val preview = compose.onNodeWithTag("settings:subtitle-preview").getUnclippedBoundsInRoot()
+        val besideChoices = preview.right <= viewport.left &&
+            minOf(preview.bottom, viewport.bottom) > maxOf(preview.top, viewport.top)
+        assertEquals(expected.getValue("previewBesideChoices").jsonPrimitive.boolean, besideChoices, "$preview / $viewport")
         val rowVisible = row.top >= viewport.top && row.bottom <= viewport.bottom && row.bottom > row.top
         assertEquals(expected.getValue("firstRowFullyVisible").jsonPrimitive.boolean, rowVisible, "$row / $viewport")
         val text = first.fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text }
