@@ -133,3 +133,7 @@ TV recording entry uses the normal item-detail and download owners with a record
 backdrop sits behind title/metadata/overview; the action group keeps Play and Download visible together at standard960×540.
 Compact stable action geometry survives playback/readback handoffs. The default catalog detail route,220dp hero and existing
 stable geometry remain unchanged. Growing/failed recordings retain their authoritative download restrictions in either layout.
+
+Inactive TV navigation labels use an opaque readable foreground while content owns focus. The reference muted token
+#C3C9D8 against window#10131C has calculated11.19:1contrast; the native library's default inactive0.4alpha is overridden
+for this destination. Native focused/selected colours remain distinct. A rendered text-layout assertion guards this role.

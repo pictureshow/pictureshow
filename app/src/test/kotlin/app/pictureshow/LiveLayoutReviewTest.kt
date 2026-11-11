@@ -88,6 +88,8 @@ class LiveLayoutReviewTest {
                 LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
             }
         }
+        // The UI's sampled action clock advances independently of asynchronous loading.
+        compose.mainClock.advanceTimeBy(1_100)
         val channels = compose.onNodeWithTag("live:tab:Channels").getUnclippedBoundsInRoot()
         compose.onNodeWithTag("live:c:empty").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
         listOf("No programme channel", "No guide data").forEach { label ->
@@ -96,6 +98,15 @@ class LiveLayoutReviewTest {
                     androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("live:guide-preview"))
             ).assertIsDisplayed()
         }
+        val inactive = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Guide", useUnmergedTree = true).performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult
+        ) { it(inactive) }
+        assertEquals(
+            LiveMuted,
+            inactive.single().layoutInput.style.color,
+            "Inactive TV tabs retain readable foreground while a channel owns focus"
+        )
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         assertEquals(channels.top, compose.onNodeWithTag("live:tab:Guide").getUnclippedBoundsInRoot().top)
     }
