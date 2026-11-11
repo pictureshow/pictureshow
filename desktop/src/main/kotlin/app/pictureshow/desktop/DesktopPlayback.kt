@@ -45,7 +45,12 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun selectAudio(index: Int): Boolean = false
     fun selectSubtitle(index: Int): Boolean = false
 }
-data class DesktopSelectedTracks(val audioId: Int?, val subtitleId: Int?, val subtitleText: String, val subtitleVisible: Boolean)
+data class DesktopSelectedTracks(
+    val audioId: Int?, val subtitleId: Int?, val subtitleText: String, val subtitleVisible: Boolean,
+    val nativeVersion: String? = null, val ffmpegVersion: String? = null, val subtitleCodec: String? = null,
+    val subtitleStartSeconds: Double? = null, val subtitleEndSeconds: Double? = null,
+    val positionSeconds: Double? = null, val initialSubtitleIndex: Int? = null
+)
 
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
     val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false)
@@ -143,6 +148,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var offset = 0.0
     private var sourceDecision: PlayDecision? = null
     private var sourceAccount: Account? = null
+    private var initialSubtitleIndex: Int? = null
     @Volatile private var pendingExternalSubtitle: String? = null
     override fun profile(settings: DesktopSettings): DeviceProfile {
         // decoder-list is a documented read-only native property; query the loaded bytes,
@@ -164,7 +170,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun attach(window: Window) { this.window = window }
     override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) {
         check(mpv == null)
-        sourceDecision = decision; sourceAccount = account
+        sourceDecision = decision; sourceAccount = account; initialSubtitleIndex = subtitle
         directory.mkdirs()
         val player = Mpv(directory, probe = false); mpv = player
         player.option("vo", "libmpv")
@@ -298,7 +304,13 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     }
     override fun selectedTracks(): DesktopSelectedTracks? {
         val player=mpv ?: return null
-        return DesktopSelectedTracks(player.get("aid")?.toIntOrNull(),player.get("sid")?.toIntOrNull(),player.get("sub-text").orEmpty(),player.get("sub-visibility")=="yes")
+        return DesktopSelectedTracks(
+            player.get("aid")?.toIntOrNull(), player.get("sid")?.toIntOrNull(),
+            player.get("sub-text").orEmpty(), player.get("sub-visibility") == "yes",
+            player.get("mpv-version"), player.get("ffmpeg-version"), player.get("sub-codec"),
+            player.get("sub-start")?.toDoubleOrNull(), player.get("sub-end")?.toDoubleOrNull(),
+            player.get("time-pos")?.toDoubleOrNull(), initialSubtitleIndex
+        )
     }
     override fun viewportReceipt(): String? {
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null
