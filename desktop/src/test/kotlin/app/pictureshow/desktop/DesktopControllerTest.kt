@@ -23,16 +23,17 @@ class DesktopControllerTest {
     }
     private class Engine : DesktopPlaybackEngine {
         var opened = false; var closed = false; var position = 12.0; var paused = false; var ready = true
+        var throwOpen = false; var throwSnapshot = false; var throwClose = false
         override fun attach(window: java.awt.Window) {}
-        override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; this.position = position }
-        override fun snapshot() = EngineSnapshot(position, 180.0, paused, opened && !closed && ready)
+        override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; this.position = position; if (throwOpen) error("startup failed after media opened") }
+        override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready) }
         override fun togglePause() { paused = !paused }
         override fun seek(seconds: Double) { position = seconds }
         override fun volume(value: Int) {}
         override fun selectAudio(index: Int) = true
         override fun selectSubtitle(index: Int) = true
         override fun fullscreen(enabled: Boolean) {}
-        override fun close() { closed = true }
+        override fun close() { closed = true; if (throwClose) error("GPU drain failed") }
     }
     private class Fixture : AutoCloseable {
         val requests = CopyOnWriteArrayList<Pair<String, String>>()
@@ -42,6 +43,7 @@ class DesktopControllerTest {
         var failLatest = false
         var slowMovie = false
         var unauthorized = false
+        var transcode = false
         @Volatile var holdStart = false
         val startEntered = java.util.concurrent.CountDownLatch(1)
         val startRelease = java.util.concurrent.CountDownLatch(1)
@@ -66,6 +68,7 @@ class DesktopControllerTest {
                     path == "/UserItems/Resume" || path == "/Shows/NextUp" -> """{"Items":[],"TotalRecordCount":0}"""
                     path == "/Items/Latest" -> if (failLatest) { status = 500; "" } else "[$movie]"
                     path == "/Users/viewer/Items/movie" || path == "/Items/movie" -> { if (slowMovie) Thread.sleep(350); movie }
+                    path.endsWith("/PlaybackInfo") && transcode -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","Container":"mkv","TranscodingUrl":"/Videos/movie/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported","SupportsTranscoding":true}]}"""
                     path.endsWith("/PlaybackInfo") -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","Container":"mkv","SupportsDirectPlay":true,"RunTimeTicks":1800000000,"DefaultAudioStreamIndex":1,"DefaultSubtitleStreamIndex":null,"MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"},{"Type":"Audio","Index":1,"Codec":"aac","Language":"eng"},{"Type":"Subtitle","Index":2,"Codec":"subrip","Language":"eng"}]}]}"""
                     path == "/Items" || path == "/Users/viewer/Items" -> """{"Items":[$movie],"TotalRecordCount":1}"""
                     path.contains("/FavoriteItems/") -> """{"IsFavorite":true}"""
@@ -204,7 +207,53 @@ class DesktopControllerTest {
             c.await { it.route == DesktopRoute.Player && it.error != null && !it.busy }
             assertNull(c.state.value.playback)
             c.back(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+            assertEquals("The first picture", c.state.value.detail?.name)
         } }
+    }
+    @Test fun nativeCleanupFailuresCannotSkipStopOrEncoderReleaseAndNextPlay(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.transcode = true
+            val first = Engine(); val second = Engine(); var creates = 0
+            DesktopController(directory(), playbackFactory = { if (creates++ == 0) first else second }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+                withTimeout(10000) { while (f.requests.none { it.first == "/Sessions/Playing" }) delay(20) }
+                first.throwSnapshot = true; first.throwClose = true
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertTrue(first.closed)
+                assertEquals(1, f.requests.count { it.first == "/Sessions/Playing/Stopped" })
+                assertEquals(1, f.requests.count { it.first == "/Videos/ActiveEncodings" })
+                c.play(MediaItem("movie", "The first picture", "Movie")); c.await { it.playback?.ready == true }
+                assertTrue(second.opened)
+            }
+        }
+    }
+    @Test fun partiallyOpenedTranscodeReleasesEncoderAndAllowsNextPlay(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.transcode = true
+            val first = Engine().apply { throwOpen = true }; val second = Engine(); var creates = 0
+            DesktopController(directory(), playbackFactory = { if (creates++ == 0) first else second }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.route == DesktopRoute.Player && it.error != null && !it.busy }
+                assertTrue(first.closed)
+                assertEquals(1, f.requests.count { it.first == "/Videos/ActiveEncodings" })
+                assertEquals(0, f.requests.count { it.first == "/Sessions/Playing" })
+                c.back(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                c.play(MediaItem("movie", "The first picture", "Movie")); c.await { it.playback?.ready == true }
+                assertTrue(second.opened)
+            }
+        }
+    }
+    @Test fun navigatingHomeEndsTheViewingBeforeLoadingCatalog(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+                withTimeout(10000) { while (f.requests.none { it.first == "/Sessions/Playing" }) delay(20) }
+                c.home(); c.await { it.route == DesktopRoute.Home && !it.busy }
+                assertTrue(engine.closed); assertNull(c.state.value.playback)
+                assertEquals(1, f.requests.count { it.first == "/Sessions/Playing/Stopped" })
+            }
+        }
     }
     @Test fun signingOutKeepsPublicServerButDeletesToken(): Unit = runBlocking {
         Fixture().use { f ->
@@ -252,8 +301,12 @@ class DesktopControllerTest {
     }
     @Test fun deviceProfileAdvertisesOnlyActualDecoderEnvelope() {
         val profile = desktopMpvProfile(DesktopSettings(), setOf("h264", "hevc", "aac", "subrip"))
-        assertEquals("h264,hevc", profile.directPlayProfiles.single().videoCodec)
-        assertEquals("aac", profile.directPlayProfiles.single().audioCodec)
+        assertEquals(setOf("h264", "hevc", "aac", "subrip"), profile.directPlayProfiles.single().videoCodec!!.split(',').toSet())
+        assertFalse(profile.directPlayProfiles.single().videoCodec!!.contains("av1"))
+        assertEquals(setOf("h264", "hevc", "aac", "subrip"), profile.directPlayProfiles.single().audioCodec!!.split(',').toSet())
+        val rich = desktopMpvProfile(DesktopSettings(), setOf("h264", "aac", "ffv1", "prores"))
+        assertTrue("ffv1" in rich.directPlayProfiles.single().videoCodec!!.split(','))
+        assertTrue("prores" in rich.directPlayProfiles.single().videoCodec!!.split(','))
         assertTrue(profile.subtitleProfiles.all { it.format in listOf("srt", "subrip") })
         assertEquals("aac", profile.transcodingProfiles.single().audioCodec)
     }

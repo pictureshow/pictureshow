@@ -315,6 +315,7 @@ private class LinuxPlayerWindow(
                 native.ps_wayland_title(context, "Pictureshow — player")
                 initialized.complete(Unit)
                 var width = 0; var height = 0
+                val paused = androidx.compose.runtime.mutableStateOf(false)
                 var dirty = true
                 var lastUpdate = System.nanoTime()
                 val fakeComponent = java.awt.Canvas()
@@ -334,7 +335,7 @@ private class LinuxPlayerWindow(
                                         androidx.compose.material.Text("Playback controls · Space pause · ←/→ seek · F fullscreen · Esc return", color = androidx.compose.ui.graphics.Color.White)
                                         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
                                             androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }) { androidx.compose.material.Text("Back to title") }
-                                            androidx.compose.material.Button(onClick = pause) { androidx.compose.material.Text(if (mpv.get("pause") == "yes") "Play" else "Pause") }
+                                            androidx.compose.material.Button(onClick = pause) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
                                             androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }) { androidx.compose.material.Text("Back 10s") }
                                             androidx.compose.material.OutlinedButton(onClick = { skip(10.0) }) { androidx.compose.material.Text("Forward 10s") }
                                             androidx.compose.material.OutlinedButton(onClick = { fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0) }) { androidx.compose.material.Text("Fullscreen") }
@@ -366,7 +367,7 @@ private class LinuxPlayerWindow(
                         }
                         dirty = true
                     }
-                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); dirty = true }
+                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); paused.value = mpv.get("pause") == "yes"; dirty = true }
                     val sc = scene!!
                     if (dirty || sc.hasInvalidations()) {
                         sc.render(System.nanoTime()).use { image ->

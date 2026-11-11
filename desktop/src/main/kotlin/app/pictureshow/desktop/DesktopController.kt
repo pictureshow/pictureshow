@@ -69,7 +69,13 @@ class DesktopController(
         if (route !in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect)) { pendingQuick = null; quickOwner = null }
         mutable.update { it.copy(route = route, busy = true, error = null) }
         pageJob = scope.launch {
-            try { block(g) }
+            try {
+                if (before.route == DesktopRoute.Player && route != DesktopRoute.Player) {
+                    finishViewing()
+                    publish(g) { it.copy(playback = null) }
+                }
+                block(g)
+            }
             catch (e: CancellationException) { throw e }
             catch (_: Exception) { publish(g) { it.copy(error = "Could not complete this action. Check the connection or local storage and try again.") } }
             finally { publish(g) { it.copy(busy = false) } }
@@ -312,6 +318,7 @@ class DesktopController(
         }
     }
     private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null) {
+        publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
         catch (_: LinkageError) { publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
         val profile = try { player.profile(mutable.value.settings) }
@@ -349,7 +356,11 @@ class DesktopController(
         catch (e: Throwable) {
             if (e is CancellationException) throw e
             if (e is VirtualMachineError || e is ThreadDeath) throw e
-            runCatching { player.close() }; if (viewing === v) viewing = null; if (engine === player) engine = null
+            runCatching { player.close() }
+            withContext(NonCancellable) { releaseEncoding(v) }
+            v.stopped = true
+            if (viewing === v) viewing = null
+            if (engine === player) engine = null
             publish(g) { it.copy(error = "The video player could not start. Check that the matching libmpv and native surface adapter are installed.") }
             return
         }
@@ -398,7 +409,10 @@ class DesktopController(
     private suspend fun sendProgress(v: Viewing) = v.reports.withLock {
         if (!v.startAttempted || v.stopped || v.closing || viewing !== v) return@withLock
         val p = mutable.value.playback ?: return@withLock
-        val observed = v.engine.snapshot()
+        val observed = runCatching { v.engine.snapshot() }.getOrElse {
+            mutable.update { state -> state.copy(error = "Progress could not be read from the player. Return to the title and try again.") }
+            return@withLock
+        }
         val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(observed.positionSeconds.seconds, observed.paused,
             p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }))
         if (r is ClientResult.Failure && viewing === v) mutable.update { it.copy(error = "Progress could not be saved. ${r.error.message}") }
@@ -406,8 +420,8 @@ class DesktopController(
     fun fullscreen(enabled: Boolean) { engine?.fullscreen(enabled) }
     fun pauseForBackground() {
         val active = engine ?: return
-        if (mutable.value.route == DesktopRoute.Player && !active.snapshot().paused) {
-            active.togglePause()
+        if (mutable.value.route == DesktopRoute.Player && runCatching { !active.snapshot().paused }.getOrDefault(false)) {
+            runCatching { active.togglePause() }
             viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } }
         }
     }
@@ -442,36 +456,52 @@ class DesktopController(
         page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, next, 0.0) }
     }
     fun stopPlayback() = page(DesktopRoute.Detail) { g ->
-        val old = mutable.value.playback?.item
+        val old = mutable.value.playback?.item ?: mutable.value.detail
         finishViewing()
         publish(g) { it.copy(playback = null) }
         if (old != null) loadDetail(g, old)
     }
+    private suspend fun releaseEncoding(v: Viewing): Boolean {
+        val session = v.decision.playSessionId ?: return true
+        if (v.decision.method != PlayMethod.Transcode) return true
+        return runCatching { playbackClient.stopEncoding(v.account, session) }.getOrNull() is ClientResult.Success
+    }
     private suspend fun finishViewing() = withContext(NonCancellable) {
-        viewingMutex.lock()
-        try {
-        val v = viewing ?: return@withContext
-        if (v.stopped) return@withContext
-        v.closing = true
-        if (!v.engine.snapshot().paused) v.engine.togglePause()
-        // Let an in-flight report finish its bounded core request before Stop. Waiting progress
-        // commands see closing under the report mutex and are discarded before opening transport.
-        reportJob?.join(); reportJob = null
-        val snap = runCatching { v.engine.snapshot() }.getOrNull()
-        // Render context is drained/destroyed before libmpv, then Stop, then this session's encode release.
-        val cleanup = runCatching { v.engine.close() }; if (engine === v.engine) engine = null
-        if (cleanup.isFailure) mutable.update { it.copy(error = "The player could not finish cleanup. Close and reopen Pictureshow before playing again.") }
-        v.reports.withLock {
-            if (v.startAttempted) {
-                val position = snap?.positionSeconds ?: mutable.value.playback?.positionSeconds ?: 0.0
-                val stopped = playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds))
-                if (stopped is ClientResult.Failure) mutable.update { it.copy(error = "Playback ended, but progress could not be saved. ${stopped.error.message}") }
+        viewingMutex.withLock {
+            val v = viewing ?: return@withLock
+            if (v.stopped) return@withLock
+            v.closing = true
+            var cleanupFailed = false
+            var observed: EngineSnapshot? = null
+            try {
+                // Each phase is independent: an unavailable property, failed GPU drain or
+                // rejected report must not prevent the other resources being released.
+                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailed = true }
+                if (observed?.paused == false) runCatching { v.engine.togglePause() }.onFailure { cleanupFailed = true }
+                runCatching { reportJob?.join() }.onFailure { cleanupFailed = true }
+                reportJob = null
+                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailed = true }
+                runCatching { v.engine.close() }.onFailure { cleanupFailed = true }
+                if (engine === v.engine) engine = null
+                v.reports.withLock {
+                    if (v.startAttempted) {
+                        val position = observed?.positionSeconds ?: mutable.value.playback?.positionSeconds ?: 0.0
+                        runCatching {
+                            playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds, failed = cleanupFailed))
+                        }.onSuccess { stopped ->
+                            if (stopped is ClientResult.Failure) mutable.update { it.copy(error = "Playback ended, but progress could not be saved. ${stopped.error.message}") }
+                        }.onFailure { cleanupFailed = true }
+                    }
+                }
+            } finally {
+                // The encoder may already exist even if native startup or Start failed.
+                if (!releaseEncoding(v)) cleanupFailed = true
+                v.stopped = true
+                if (engine === v.engine) engine = null
+                if (viewing === v) viewing = null
+                if (cleanupFailed) mutable.update { it.copy(error = "Playback ended, but the player could not finish every cleanup step. You can return to the title and try again.") }
             }
-            v.stopped = true
         }
-        v.decision.playSessionId?.let { if (v.decision.method == PlayMethod.Transcode) playbackClient.stopEncoding(v.account, it) }
-        if (viewing === v) viewing = null
-        } finally { viewingMutex.unlock() }
     }
     suspend fun shutdown() { closing = true; generation.incrementAndGet(); pageJob?.cancelAndJoin(); withContext(NonCancellable) { finishViewing() }; scope.cancel(); http.close() }
     override fun close() { runBlocking { shutdown() } }
@@ -480,8 +510,11 @@ class DesktopController(
 /** mpv's bundled FFmpeg demuxes these originals; output adaptation remains with the qualified native renderer. */
 fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? = null): DeviceProfile {
     val bitrate = settings.preferences().deviceSettings().maxStreamingBitrate
-    val video = listOf("h264", "hevc", "vp8", "vp9", "av1", "mpeg2video", "mpeg4", "vc1").filter { availableCodecs == null || it in availableCodecs }.joinToString(",")
-    val audio = listOf("aac", "ac3", "eac3", "truehd", "dts", "flac", "alac", "opus", "vorbis", "mp3", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le").filter { availableCodecs == null || it in availableCodecs }.joinToString(",")
+    // Decoder codec names are FFmpeg's names used by Jellyfin. Lists match the source's
+    // actual codec; a decoder of another media type cannot invent a missing codec.
+    // Keep every real decoder (including FFV1/ProRes), not an Android-shaped whitelist.
+    val video = (availableCodecs ?: setOf("h264", "hevc", "vp8", "vp9", "av1", "mpeg2video", "mpeg4", "vc1")).sorted().joinToString(",")
+    val audio = (availableCodecs ?: setOf("aac", "ac3", "eac3", "truehd", "dts", "flac", "alac", "opus", "vorbis", "mp3", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le")).sorted().joinToString(",")
     val subtitleCodecs = mapOf("srt" to "subrip", "subrip" to "subrip", "ass" to "ass", "ssa" to "ass", "vtt" to "webvtt", "webvtt" to "webvtt", "pgssub" to "hdmv_pgs_subtitle", "dvdsub" to "dvd_subtitle", "dvbsub" to "dvb_subtitle")
     return DeviceProfile(
         name = "Pictureshow Desktop libmpv", maxStreamingBitrate = bitrate, maxStaticBitrate = bitrate,
