@@ -20,6 +20,17 @@ import javax.swing.SwingUtilities
 import kotlin.math.roundToInt
 import kotlin.math.abs
 
+/** The owned fixture's delivered SRT is an independent clock witness for libmpv. */
+internal fun fixtureDeliveredCue(text: String, sourceStart: Double, sourceEnd: Double): Pair<Double, Double> {
+    val lines = text.removePrefix("\uFEFF").replace("\r\n", "\n").trim().lines()
+    require(lines.size == 3 && lines[0] == "1" && lines[2] == "Pictureshow original CC0 subtitle") { "Fixture delivery must contain exactly the original cue" }
+    val match = requireNotNull(Regex("(\\d{2}):([0-5]\\d):([0-5]\\d),(\\d{3}) --> (\\d{2}):([0-5]\\d):([0-5]\\d),(\\d{3})").matchEntire(lines[1])) { "Fixture delivery has invalid SRT timestamps" }
+    fun seconds(offset: Int) = match.groupValues[offset].toInt() * 3600.0 + match.groupValues[offset + 1].toInt() * 60.0 + match.groupValues[offset + 2].toInt() + match.groupValues[offset + 3].toInt() / 1000.0
+    val start = seconds(1); val end = seconds(5)
+    require(sourceStart.isFinite() && sourceEnd.isFinite() && start >= 0 && start <= 1.0 / 24 && abs(start - sourceStart) <= 1.0 / 24 && abs(end - start - 180.0) <= .001 && abs(end - start - (sourceEnd - sourceStart)) <= .001) { "Fixture delivery changed the original cue timeline" }
+    return start to end
+}
+
 /** Real window/control smoke. No network fixture, catalog or playback result is synthesized here. */
 fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowState,args:List<String>,close:()->Unit) {
     val (server,user,password,evidence)=args
@@ -243,11 +254,28 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val sameOrigin=app.pictureshow.core.playback.PlayDecisions.isSameOrigin(c.state.value.account!!.server, app.pictureshow.core.playback.PlayDecisions.resolve(c.state.value.account!!.server,deliveryUrl))
         check(sameOrigin) { "Fixture subtitle delivery left the server origin" }
         File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",deliveredSub.deliveryMethod!!.name);put("sourceFileIsExternal",deliveredSub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
+        val deliveredText = runCatching {
+            DesktopMediaProxy(c.state.value.account!!, c.state.value.playback!!.decision).use { proxy ->
+                val remote = app.pictureshow.core.playback.PlayDecisions.resolve(c.state.value.account!!.server, deliveryUrl)
+                val request = java.net.http.HttpRequest.newBuilder(java.net.URI(proxy.url(remote))).timeout(java.time.Duration.ofSeconds(20)).GET().build()
+                java.net.http.HttpClient.newHttpClient().use { client ->
+                    val response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8))
+                    check(response.statusCode() == 200 && response.body().length <= 1024)
+                    response.body()
+                }
+            }
+        }.getOrElse { error("Fixture subtitle delivery request failed") }
+        val (deliveredCueStart, deliveredCueEnd) = fixtureDeliveredCue(deliveredText, cueStart, cueEnd)
+        File(out,"subtitle-delivery-cue.json").writeText(buildJsonObject {
+            put("sourceStartSeconds", cueStart); put("sourceEndSeconds", cueEnd)
+            put("deliveredStartSeconds", deliveredCueStart); put("deliveredEndSeconds", deliveredCueEnd)
+            put("originalCueTextVerified", true); put("nativeComparisonToleranceSeconds", .001)
+        }.toString()+"\n")
         waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleExternal==true && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
                 it.subtitleCodec in setOf("srt", "subrip", "webvtt", "ass", "ssa") &&
-                it.subtitleStartSeconds?.let { start -> abs(start - cueStart) <= .001 }==true &&
-                it.subtitleEndSeconds?.let { end -> abs(end - cueEnd) <= .001 }==true &&
-                it.positionSeconds?.let { position -> position>=cueStart && position<cueEnd }==true &&
+                it.subtitleStartSeconds?.let { start -> abs(start - deliveredCueStart) <= .001 }==true &&
+                it.subtitleEndSeconds?.let { end -> abs(end - deliveredCueEnd) <= .001 }==true &&
+                it.positionSeconds?.let { position -> position>=deliveredCueStart && position<deliveredCueEnd }==true &&
                 it.initialSubtitleIndex in setOf(-1, sub.index) }==true }
         val firstSubtitleId=requireNotNull(trackReceipt("subtitle-selection")?.subtitleId)
         screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true }
