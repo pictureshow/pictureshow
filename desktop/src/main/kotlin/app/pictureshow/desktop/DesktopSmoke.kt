@@ -128,7 +128,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         ready(DesktopRoute.Servers)
         if(System.getenv("PICTURESHOW_SMOKE_DISCOVERY_PORT")!=null) {
             waitFor("owned loopback Jellyfin discovery") { c.state.value.discovered.any { it.address==server } }
-            File(out,"discovery-result.json").writeText("{\"foundOwnedServer\":true}\n")
+            File(out,"discovery-result.json").writeText("{\"found\":true}\n")
         }
         screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
