@@ -47,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Geometry of real controls, used by the finite Robot smoke driver, never by normal input handling. */
 private val LocalDesktopPage = staticCompositionLocalOf { "" }
+private val LocalModalOpen = staticCompositionLocalOf { false }
 object DesktopUiProbe {
     internal val owners = DesktopControlOwners()
     val bounds = ConcurrentHashMap<String, androidx.compose.ui.geometry.Rect>()
@@ -80,17 +81,19 @@ fun Modifier.probe(tag: String): Modifier = composed {
 @Composable
 private fun Modifier.focusOutline(): Modifier {
     var focused by remember { mutableStateOf(false) }
-    return onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
+    val drawRing = focused && !LocalModalOpen.current
+    return onFocusChanged { focused = it.hasFocus }.border(if (drawRing) 2.dp else 0.dp, if (drawRing) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
 /** A focus ring outside the control fill stays visible on primary and tonal controls. */
 @Composable
-internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50)): Modifier {
+internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50), allowInModal: Boolean = false): Modifier {
     var focused by remember { mutableStateOf(false) }
     val color = MaterialTheme.colorScheme.primary
+    val modalOpen = LocalModalOpen.current
     return onFocusChanged { focused = it.isFocused }.drawWithContent {
         drawContent()
-        if (focused) {
+        if (focused && (!modalOpen || allowInModal)) {
             val gap = 4.dp.toPx()
             inset(-gap, -gap, -gap, -gap) {
                 drawOutline(shape.createOutline(size, layoutDirection, this), color, style = Stroke(2.dp.toPx()))
@@ -164,6 +167,17 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     val focus = LocalFocusManager.current
     var help by remember { mutableStateOf(false) }
     var remove by remember { mutableStateOf<Account?>(null) }
+    var modalReturnFocus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(help, remove) {
+        delay(100)
+        val modal = when {
+            help -> "help-close"
+            remove != null -> "remove-cancel"
+            else -> null
+        }
+        if (modal != null) DesktopUiProbe.requestFocus[modal]?.requestFocus()
+        else modalReturnFocus?.let { DesktopUiProbe.requestFocus[it]?.requestFocus(); modalReturnFocus = null }
+    }
     PictureshowTheme {
         val density = LocalDensity.current
         CompositionLocalProvider(
@@ -196,6 +210,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         else -> false
                     }
             } }
+            CompositionLocalProvider(LocalModalOpen provides (help || remove != null)) {
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
                 chrome {
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -203,7 +218,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     Spacer(Modifier.width(20.dp))
                     if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
-                    DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { help = true }
+                    DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
                     windowControls()
                 }
@@ -217,13 +232,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
 
                                 Text(sidebarAccount.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = sidebarAccount.server.name })
                             }
-                            NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.controlFocus().probe("nav:home"))
+                            NavigationDrawerItem(label = { Text("Home", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.controlFocus().probe("nav:home"))
                             state.homeRows.filter { it.library }.flatMap { it.items }.forEach { library ->
                                 NavigationDrawerItem(label = { Text(library.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.library?.id == library.id && state.route == DesktopRoute.Library, onClick = { controller.browse(library) }, modifier = Modifier.controlFocus().probe("nav:library:${library.id}"))
                             }
                             Spacer(Modifier.weight(1f))
-                            NavigationDrawerItem(label = { Text("Settings") }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.controlFocus().probe("nav:settings"))
-                            NavigationDrawerItem(label = { Text("Switch account") }, selected = false, onClick = controller::accounts, modifier = Modifier.controlFocus().probe("nav:accounts"))
+                            NavigationDrawerItem(label = { Text("Settings", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.controlFocus().probe("nav:settings"))
+                            NavigationDrawerItem(label = { Text("Accounts", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = false, onClick = controller::accounts, modifier = Modifier.controlFocus().probe("nav:accounts"))
                         }
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -268,7 +283,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                                 Text(a.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                             DesktopTooltip("Remove account") {
-                                                IconButton(onClick = { remove = a }, modifier = Modifier.controlFocus().probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
+                                                IconButton(onClick = { modalReturnFocus = "remove:${a.key}"; remove = a }, modifier = Modifier.controlFocus().probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
                                                     Icon(DesktopGlyph.Remove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
@@ -300,11 +315,10 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 ShortcutRow("Space", "Pause or play")
                 ShortcutRow("← / →", "Seek 10 seconds")
                 Text("Playback actions are also available in the control bar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus().probe("help-close")) { Text("Close") } })
+            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
             remove?.let { a ->
-                val cancelFocus = remember(a.key) { FocusRequester() }
-                LaunchedEffect(a.key) { delay(100); cancelFocus.requestFocus() }
-                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus().focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove account") } }) }
+                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus(allowInModal = true).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { modalReturnFocus = null; remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus(allowInModal = true).probe("remove-confirm")) { Text("Remove account") } }) }
+            }
         }
     }
 }
@@ -354,7 +368,7 @@ private fun SignInPage(state: DesktopState, c: DesktopController) {
     FormPage("Sign in", state.server?.name ?: "Your Jellyfin server") {
         if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(modifier = Modifier.controlFocus(), onClick = { username = u.name; c.clearError() }, label = { Text(u.name) }) } }
         OutlinedTextField(username, { username = it; c.clearError() }, label = { Text("Username") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("username"))
-        OutlinedTextField(password, { password = it; c.clearError() }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }, modifier = Modifier.controlFocus()) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.controlFocus().fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
+        OutlinedTextField(password, { password = it; c.clearError() }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }, modifier = Modifier.controlFocus()) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
         Button(onClick = { c.signIn(username, password.text) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
         HorizontalDivider()
         OutlinedButton(onClick = c::quickConnect, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("quick-connect")) { Text("Use Quick Connect") }
@@ -389,10 +403,14 @@ private fun LibraryPage(state: DesktopState, c: DesktopController) {
     LaunchedEffect(state.library?.id, state.sortBy, state.descending) { grid.scrollToItem(0) }
     LaunchedEffect(grid, state.items.size) { snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
-            Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
-            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.controlFocus().probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
+            Box(Modifier.height(40.dp), contentAlignment = Alignment.Center) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
+                    OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.controlFocus().probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
+                }
+            }
         }
         Text("${state.total} items", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.items.isEmpty() && !state.busy) Text("This library is empty.")
@@ -426,7 +444,7 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
                         if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
-                        Row(Modifier.offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                         DesktopTooltip(if (item.isWatched) "Mark unwatched" else "Mark watched") {
                             IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.controlFocus().probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {
                                 Icon(if (item.isWatched) DesktopGlyph.Watched else DesktopGlyph.WatchedOutline, contentDescription = null, tint = if (item.isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -507,8 +525,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                         DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier = Modifier.controlFocus().probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
-                        Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
+                        Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, fixedWidth = true, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
+                        Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, fixedWidth = true, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
                         if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
                         DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier = Modifier.controlFocus().probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
@@ -525,30 +543,39 @@ private fun clock(seconds:Double):String { val s=seconds.toLong().coerceAtLeast(
 private fun SettingsPage(state:DesktopState,c:DesktopController) {
     val s=state.settings
     FormPage("Settings","Playback and viewing preferences for this desktop.") {
-        CatalogHeading("Account",section=true)
-        SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
-            OutlinedButton(onClick = c::signOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
-        }
-        CatalogHeading("Playback",section=true)
-        SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
-            Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
-        }
-        SettingSwitch("Explain video conversion","Tell me when this desktop needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
-        SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Volume", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                Text("${s.volume}%", style = MaterialTheme.typography.labelLarge)
+        SettingsSection("Account") {
+            SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
+                OutlinedButton(onClick = c::signOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
             }
-            Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).probe("volume").semantics { contentDescription="Volume" })
         }
-        HorizontalDivider()
-        CatalogHeading("Interface",section=true)
-        SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
-        HorizontalDivider()
-        CatalogHeading("About",section=true)
-        Text("Pictureshow · Free, open source Jellyfin client\nMPL-2.0 · Legitimate LLC\nVideo: dynamically loaded LGPL libmpv",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsSection("Playback") {
+            SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
+                Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+            }
+            SettingSwitch("Explain video conversion","Tell me when this desktop needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
+            SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Volume", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text("${s.volume}%", style = MaterialTheme.typography.labelLarge)
+                }
+                Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).probe("volume").semantics { contentDescription="Volume" })
+            }
+        }
+        SettingsSection("Interface") {
+            SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
+        }
+        SettingsSection("About") {
+            Text("Pictureshow · Free, open source Jellyfin client\nMPL-2.0 · Legitimate LLC\nVideo: dynamically loaded LGPL libmpv",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+@Composable
+private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CatalogHeading(title, section = true)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
     }
 }
 @Composable
@@ -566,13 +593,15 @@ private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,o
     SettingRow(title, caption) { Switch(value,onChange,Modifier.controlFocus().probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
-private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,onChoose:(T)->Unit) {
+private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,fixedWidth:Boolean=false,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick={expanded=true},modifier = Modifier.controlFocus().widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
-            if(icon!=null) Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp))
-            Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis)
-            if (trailingIcon != null) { Spacer(Modifier.width(4.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
+        OutlinedButton(onClick={expanded=true},modifier = Modifier.controlFocus().then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if(icon!=null) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+                Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",modifier=Modifier.weight(1f, fill=false),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=MaterialTheme.typography.labelLarge.fontWeight)
+                if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            }
         }
         DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key")) } }
     }

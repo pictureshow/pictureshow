@@ -98,6 +98,29 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             val bounds=window.bounds
             check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested ${w}x${h} window not visible; actual=$bounds display=${window.graphicsConfiguration.bounds}" }
             val original=robot.createScreenCapture(bounds)
+            if(name=="02b-sign-in-error" && w==1920) {
+                val username=DesktopUiProbe.bounds.getValue("username")
+                val passwordBounds=DesktopUiProbe.bounds.getValue("password")
+                val pad=24
+                val left=(minOf(username.left,passwordBounds.left).toInt()-pad).coerceAtLeast(0)
+                val top=(minOf(username.top,passwordBounds.top).toInt()-pad).coerceAtLeast(0)
+                val right=(maxOf(username.right,passwordBounds.right).toInt()+pad).coerceAtMost(original.width)
+                val bottom=(maxOf(username.bottom,passwordBounds.bottom).toInt()+pad).coerceAtMost(original.height)
+                val crop=original.getSubimage(left,top,(right-left).coerceAtLeast(1),(bottom-top).coerceAtLeast(1))
+                val cropScale=900.0/crop.width.coerceAtLeast(crop.height)
+                val cropSmall=BufferedImage((crop.width*cropScale).roundToInt().coerceAtLeast(1),(crop.height*cropScale).roundToInt().coerceAtLeast(1),BufferedImage.TYPE_INT_RGB)
+                cropSmall.createGraphics().let { g->g.drawImage(crop,0,0,cropSmall.width,cropSmall.height,null);g.dispose() }
+                val cropFile=File(screens,"$name-${w}x${h}-crop-auth-fields.jpg")
+                ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(cropFile).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(cropSmall,null,null),p)};writer.dispose() }
+                File(screens,"$name-${w}x${h}-crop-auth-fields.geometry.json").writeText(buildJsonObject {
+                    put("source", "Robot BufferedImage before full-window resize")
+                    put("originalWidth", original.width); put("originalHeight", original.height)
+                    put("usernameBounds", buildJsonObject { put("left",username.left);put("top",username.top);put("right",username.right);put("bottom",username.bottom) })
+                    put("passwordBounds", buildJsonObject { put("left",passwordBounds.left);put("top",passwordBounds.top);put("right",passwordBounds.right);put("bottom",passwordBounds.bottom) })
+                    put("crop", buildJsonObject { put("left",left);put("top",top);put("right",right);put("bottom",bottom);put("width",right-left);put("height",bottom-top) })
+                    put("outputWidth",cropSmall.width);put("outputHeight",cropSmall.height);put("scale",cropScale)
+                }.toString()+"\n")
+            }
             val scale=900.0/original.width.coerceAtLeast(original.height)
             val small=BufferedImage((original.width*scale).roundToInt(),(original.height*scale).roundToInt(),BufferedImage.TYPE_INT_RGB)
             small.createGraphics().let { g->g.drawImage(original,0,0,small.width,small.height,null);g.dispose() }
@@ -149,7 +172,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
         click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
-        check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
+        check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error");screenshot("02b-sign-in-error-minimum",listOf(800 to 600))
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
         waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("03c-home-4k",listOf(3840 to 2160))
@@ -170,7 +193,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         robot.keyPress(KeyEvent.VK_ALT);key(KeyEvent.VK_ENTER);robot.keyRelease(KeyEvent.VK_ALT);waitFor("fullscreen restore"){window.bounds==beforeFull}
         val first=c.state.value.playback!!.positionSeconds
         waitFor("advancing playback",30){(c.state.value.playback?.positionSeconds?:0.0)>first+3};checks["progress"]=true
-        screenshot("06-player");screenshot("06b-player-minimum",listOf(800 to 600))
+        screenshot("06-player");screenshot("06b-player-minimum",listOf(800 to 600));screenshot("06c-back-seek-tooltip",hoverTag="seek-back")
         fun trackReceipt(name:String): DesktopSelectedTracks? = c.nativeTrackSelection().also { selected ->
             selected?.let { File(out,"$name.json").writeText(buildJsonObject { put("audioId",it.audioId?.let(::JsonPrimitive) ?: JsonNull);put("subtitleId",it.subtitleId?.let(::JsonPrimitive) ?: JsonNull);put("subtitleText",it.subtitleText);put("subtitleVisible",it.subtitleVisible)
                 put("nativeVersion",it.nativeVersion?.let(::JsonPrimitive) ?: JsonNull)
@@ -183,9 +206,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             }.toString()+"\n") }
         }
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
-        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
+        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
         waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") }==true }
-        screenshot("08c-subtitles-on");click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
+        screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)
         click("nav:library:${library.id}");ready(DesktopRoute.Library)
@@ -214,7 +237,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("seasons"){c.state.value.seasons.isNotEmpty()};checks["seasons"]=true
         val season=c.state.value.seasons.first();click("season:${season.id}");ready(DesktopRoute.Detail);waitFor("episodes"){c.state.value.episodes.size>=2};checks["episodes"]=true;screenshot("09-series-detail")
         val episode=c.state.value.episodes.first();click("episode:${episode.id}");ready(DesktopRoute.Detail);screenshot("10-episode-detail");click("play");ready(DesktopRoute.Player);waitFor("episode ready",60){c.state.value.playback?.ready==true}
-        waitFor("next episode"){c.state.value.playback?.nextEpisode!=null};click("next-episode");ready(DesktopRoute.Player);waitFor("next episode playing",60){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["nextEpisode"]=true
+        waitFor("next episode"){c.state.value.playback?.nextEpisode!=null};screenshot("10c-next-episode-minimum",listOf(800 to 600));click("next-episode");ready(DesktopRoute.Player);waitFor("next episode playing",60){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["nextEpisode"]=true
         click("stop");ready(DesktopRoute.Detail)
         click("nav:home");ready(DesktopRoute.Home);click("nav:library:${shows.id}");ready(DesktopRoute.Library)
         click("grid:${series.id}");ready(DesktopRoute.Detail);click("season:${season.id}");ready(DesktopRoute.Detail)
@@ -231,8 +254,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key
-        click("remove:$removeKey");screenshot("12b-remove-confirmation");key(KeyEvent.VK_ESCAPE)
+        click("remove:$removeKey");waitFor("removal dialog initially focuses Cancel") { DesktopUiProbe.focus["remove-cancel"]==true };screenshot("12b-remove-confirmation");key(KeyEvent.VK_TAB);waitFor("Tab focuses remove confirmation") { DesktopUiProbe.focus["remove-confirm"]==true };screenshot("12c-remove-confirm-focused");key(KeyEvent.VK_ESCAPE)
         waitFor("Escape dismisses removal without changing accounts") { !DesktopUiProbe.bounds.containsKey("remove-cancel") && c.state.value.route==DesktopRoute.Accounts && c.state.value.accounts.any{it.key==removeKey} }
+        waitFor("removal dialog returns focus to opener") { DesktopUiProbe.focus["remove:$removeKey"]==true }
         // Voluntary sign-out is tested before the second authentication method.
         click("account:${c.state.value.accounts.first().key}");ready(DesktopRoute.Home);click("nav:settings");ready(DesktopRoute.Settings);click("sign-out")
         waitFor("signed out"){c.state.value.account==null&&!c.state.value.busy}
@@ -247,7 +271,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val code=c.state.value.quickCode!!
         val temp=File(out,"quick-connect-request.tmp");temp.writeText("{\"code\":\"$code\"}\n");java.nio.file.Files.move(temp.toPath(),File(out,"quick-connect-request.json").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         screenshot("13-quick-connect");ready(DesktopRoute.Home);checks["quickConnect"]=true
-        click("shortcuts");screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
+        click("shortcuts");waitFor("keyboard help focuses Close") { DesktopUiProbe.focus["help-close"]==true };screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
         waitFor("Escape dismisses keyboard help without navigating") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
         // Traverse real controls after the dialog restores its opener. A key
         // injection without observing focus is not keyboard-navigation evidence.
@@ -265,6 +289,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         if(c.state.value.detail?.isWatched!=true) { click("watched");waitFor("watched server state") { c.state.value.detail?.isWatched==true } }
         if(c.state.value.detail?.userData?.isFavorite!=true) { click("favorite");waitFor("favorite server state") { c.state.value.detail?.userData?.isFavorite==true } }
         screenshot("15-detail-selected-states")
+        DesktopUiProbe.requestFocus["watched"]?.requestFocus();waitFor("watched toggle keyboard focus"){DesktopUiProbe.focus["watched"]==true};screenshot("15c-watched-keyboard-focus",listOf(1280 to 800))
+        DesktopUiProbe.requestFocus["favorite"]?.requestFocus();waitFor("favorite toggle keyboard focus"){DesktopUiProbe.focus["favorite"]==true};screenshot("15d-favorite-keyboard-focus",listOf(1280 to 800))
         screenshot("15b-favorite-tooltip",hoverTag="favorite")
         click("watched");waitFor("unwatched server state") { c.state.value.detail?.isWatched==false }
         click("favorite");waitFor("unfavorite server state") { c.state.value.detail?.userData?.isFavorite==false }
