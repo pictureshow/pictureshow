@@ -235,7 +235,13 @@ class OfflineRecoveryTest {
         userStopped(permit.issuedAt)
         assertEquals(null, offlineRecoveryPermit(app))
         assertTrue(offlineRecoveryPermit(app, viewerReturned = true) != null)
-        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(10))
+        // Permit timestamps use the real wall clock in this non-instrumented app
+        // code; advancing Robolectric's uptime clock cannot separate the permits.
+        val wallClockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (System.currentTimeMillis() <= permit.issuedAt && System.nanoTime() < wallClockDeadline) {
+            Thread.sleep(1)
+        }
+        assertTrue("Real wall clock did not advance beyond the original permit within one second", System.currentTimeMillis() > permit.issuedAt)
         assertTrue(offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS, viewerReturned = true))
         val renewed = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
         assertTrue(renewed.issuedAt > permit.issuedAt)
