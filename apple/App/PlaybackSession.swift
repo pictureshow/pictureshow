@@ -127,6 +127,7 @@ final class ViewingAVPlayer: AVPlayer {
     private var observedSubtitleSelection = false
     private var observedSubtitleIndex: Int?
     private var subtitleObservation: AnyCancellable?
+    private var subtitleCueObservation: AnyCancellable?
     private let client: JellyfinClient
     private let account: Account
     let preferences: PlaybackPreferences
@@ -200,6 +201,12 @@ final class ViewingAVPlayer: AVPlayer {
                 if unavailable { return "Subtitles are unavailable. Retrying while video continues." }
                 return loading ? "Loading selected subtitles. Video playback can continue." : nil
             }.removeDuplicates().sink { [weak self] in self?.subtitleStatus = $0 }
+        subtitleCueObservation = self.externalSubtitles.committedCueChanges.sink { [weak self] in
+            guard let self, !self.closed else { return }
+            // Arrival, cache reuse and Off refresh a paused overlay immediately;
+            // they must not depend on playback-clock scheduling or a resume.
+            self.refreshSubtitleCue()
+        }
         player.allowsExternalPlayback = true
         (player as? ViewingAVPlayer)?.nativePlayRequested = { [weak self] in
             MainActor.assumeIsolated { self?.nativePlayRequested() ?? false }

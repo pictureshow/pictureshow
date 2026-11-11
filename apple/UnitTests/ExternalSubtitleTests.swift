@@ -880,6 +880,42 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         await embeddedSession.stop()
     }
 
+    func testCommittedSelectedCuesRefreshSessionWithoutAPlaybackClockTask() async throws {
+        let loader = ExternalTextSubtitles(fetch: { _ in ExternalSubtitleHTTP.caption })
+        defer { loader.release() }
+        let player = SubtitleInertPlayer()
+        player.mediaTime = { CMTime(seconds: 121, preferredTimescale: 60_000) }
+        let client = JellyfinClient(deviceID: "cue-commit-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
+        let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "cue-commit-test")
+        // Deliberately never prepare: no playback tick task exists to rescue a
+        // missing cue-arrival subscription, regardless of scheduler timing.
+        let session = PlaybackSession(client: client, account: account, item: MediaItem(id: "movie", name: "Fixture movie", type: "Movie"), player: player, externalSubtitles: loader)
+        let transport = player.transportReceipts
+        let (visible, didPublish) = receipt("Committed parsed cues must reach the session without a playback clock task")
+        let observation = session.$subtitleCue.filter { $0 == "Selected caption" }.prefix(1).sink { _ in didPublish() }
+        defer { observation.cancel() }
+        loader.select(asset())
+        let selectedTask = loader.task
+        let join = Task(priority: .userInitiated) { await selectedTask?.value }
+        defer { join.cancel() }
+        let result = await XCTWaiter.fulfillment(of: [visible], timeout: 2)
+        XCTAssertEqual(result, .completed)
+        XCTAssertEqual(session.subtitleCue, "Selected caption")
+        XCTAssertEqual(player.currentTime().seconds, 121)
+        XCTAssertEqual(session.positionTicks, 0, "No playback tick has sampled or advanced the session position")
+
+        loader.select(nil)
+        XCTAssertNil(session.subtitleCue, "Off clears the visible cue in the same committed change")
+        loader.select(asset())
+        XCTAssertEqual(loader.cacheHits, 1)
+        XCTAssertEqual(session.subtitleCue, "Selected caption", "Cache reuse also refreshes synchronously without a clock")
+        loader.release()
+        XCTAssertNil(session.subtitleCue)
+        XCTAssertEqual(player.transportReceipts, transport, "Caption arrival/Off/cache/release must not play or pause video")
+        XCTAssertTrue(player.seekTargets.isEmpty)
+        XCTAssertEqual(player.replacements, 0)
+    }
+
     func testColdSelectedCuesPublishWhilePausedWithoutClockMovementOrResume() async throws {
         ExternalSubtitleHTTP.reset(.held)
         let trace = SubtitlePhaseTrace(), clock = SubtitleRetryClock()

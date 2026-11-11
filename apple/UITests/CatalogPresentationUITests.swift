@@ -138,6 +138,12 @@ final class CatalogPresentationUITests: XCTestCase {
             // actual reader events to arrive without another input operation.
             XCTAssertTrue(anchor.exists && anchor.isHittable)
             #endif
+            #if os(iOS)
+            // The reader can report enabled before it has established initial
+            // focus. Pump its events within the existing readiness bound rather
+            // than sending a move command before current speech is available.
+            let initial = try settledSpeech("reader enabled")
+            #else
             var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
             if output == nil {
                 // One real next-element operation establishes initial reader
@@ -145,6 +151,7 @@ final class CatalogPresentationUITests: XCTestCase {
                 output = try readSpeech("reader initial focus forward", { try service.moveForward() })
             }
             let initial = try settledSpeech("reader enabled", first: output)
+            #endif
             attachSpeech("132 VoiceOver enabled actual first speech")
             #if os(tvOS)
             // A fresh tvOS27 sandbox presents this native introduction. The

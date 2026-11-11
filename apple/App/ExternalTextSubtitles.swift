@@ -21,7 +21,13 @@ import PictureshowCore
             self.streamIndex = streamIndex; self.sourceID = sourceID; self.selectionCount = selectionCount
         }
     }
-    @Published private(set) var cues: [TextSubtitleCue] = []
+    // @Published emits before assignment. The session needs a post-commit
+    // signal so it can read these cues synchronously without waiting for a tick.
+    private let cueCommits = PassthroughSubject<Void, Never>()
+    var committedCueChanges: AnyPublisher<Void, Never> { cueCommits.eraseToAnyPublisher() }
+    @Published private(set) var cues: [TextSubtitleCue] = [] {
+        didSet { cueCommits.send() }
+    }
     @Published private(set) var loading = false
     @Published private(set) var unavailable = false
     private(set) var selected: Asset?
