@@ -55,6 +55,9 @@ internal class Media3PlaybackOutput(
             applyingSync = before
         }
     }
+    internal fun interceptSync(command: String, positionMs: Long?): Boolean =
+        !applyingSync && syncRequest?.invoke(command, positionMs) == true
+
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
     fun setSpeed(value: Float) {
@@ -384,9 +387,7 @@ internal class Media3PlaybackOutput(
         } else {
             managed
         }
-        val exposed = SyncTransportPlayer(timeline) { command, target ->
-            !applyingSync && syncRequest?.invoke(command, target) == true
-        }
+        val exposed = SyncTransportPlayer(timeline, ::interceptSync)
         var initialReady = false
         var initialTargetMs = positionMs
         listener = object : Player.Listener {

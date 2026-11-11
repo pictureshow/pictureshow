@@ -159,6 +159,13 @@ internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
     )
 }
 
+/** Native SEEK is emitted when Media3 actually accepts a position, including deferred availability. */
+internal fun syncPositionApplicationListener(onApplied: () -> Unit): Player.Listener = object : Player.Listener {
+    override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+        if (reason == Player.DISCONTINUITY_REASON_SEEK) onApplied()
+    }
+}
+
 /** Shared by group transport and correction; only correction rechecks its live execution band. */
 internal fun PlaybackHostState.applySyncTimeline(
     positionTicks: Long?,
@@ -186,7 +193,7 @@ internal fun PlaybackHostState.applySyncTimeline(
     }
     var changed = false
     if (target != null && kotlin.math.abs(current - target / 10_000) > 1) {
-        seekToLocal(target / 10_000, revealControls = false)
+        seekToLocal(target / 10_000, revealControls = false, bypassSync = true)
         changed = pendingSeek == null && state.seekTargetMs == null
     }
     if (active.playbackParameters.speed != rate.toFloat()) active.setPlaybackSpeed(rate.toFloat())
@@ -215,7 +222,14 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
                 host.applySyncTimeline(positionTicks, playing, rate, sampledAtMillis)
         }
     }
-    DisposableEffect(sync, host, opening) {
+    val generation = sync.membership.generation
+    val entryId = sync.membership.queue?.current?.playlistItemId
+    DisposableEffect(sync, host, opening, host.player, generation, entryId) {
+        val active = host.player
+        val positionListener = syncPositionApplicationListener {
+            if (active != null) sync.rendererPositionApplied(token, bridge, active, generation, entryId)
+        }
+        active?.addListener(positionListener)
         host.output.traceNative("binding-install", "localCopy=${host.localCopy}")
         host.output.syncRequest = sync::transport
         host.output.syncParticipating = { sync.participating }
@@ -231,6 +245,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             host.output.applySync { host.output.pause() }
         }
         onDispose {
+            active?.removeListener(positionListener)
             host.output.traceNative("binding-dispose")
             sync.clearRenderer(token)
             host.output.syncRequest = null

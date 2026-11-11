@@ -119,7 +119,7 @@ internal class SyncPlayHost(
     val opens = opening.asSharedFlow()
     var panelOpen by mutableStateOf(false)
     private var account: Account? = null
-    internal var membership = SyncMembership()
+    internal var membership by mutableStateOf(SyncMembership())
         private set
     private var leavePending = false
     val participating: Boolean get() = membership.active || membership.groupId != null || leavePending
@@ -549,6 +549,28 @@ internal class SyncPlayHost(
         pendingSource = null
         awaitingSource = null
         readiness = SyncReadinessState()
+    }
+
+    /** Actual native seek callbacks also cover deferred seeks and sub-tick buffer cycles. */
+    fun rendererPositionApplied(token: Any, output: SyncRenderer, source: Any, generation: Long, entryId: String?) {
+        if (entryId == null || !participating || rendererToken !== token || renderer !== output || output.sourceIdentity !== source) return
+        val current = membership.queue?.current ?: return
+        val value = output.snapshot()
+        if (!app.pictureshow.core.sync.syncOpenMatches(
+                generation,
+                membership.generation,
+                entryId,
+                current.playlistItemId,
+                value.itemId,
+                current.itemId
+            )
+        ) {
+            return
+        }
+        if (!membership.hasSnapshot || value.itemId != current.itemId || openingEntry != null) return
+        readiness = readiness.afterPositionApplied(true)
+        drift = syncTransportApplied(drift, monotonic(), true)
+        trace("position-applied", "source=native-callback " + stateFields(value))
     }
 
     /** True consumes every timeline intent while grouped, even during reconnect or preparation. */

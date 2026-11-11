@@ -2558,6 +2558,110 @@
           "report": true
         }
       ]
+    },
+    {
+      "id": "sync-state.deferred-native-completion-sub-tick-buffer",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        },
+        {
+          "op": "position-applied",
+          "changed": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.deferred-native-completion-long-buffer",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        },
+        {
+          "op": "position-applied",
+          "changed": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": false,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.native-completion-same-decoder-same-media-retired-entry",
+      "operation": "renderer-bind",
+      "openGeneration": 7,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-b",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": false
+    },
+    {
+      "id": "sync-state.native-completion-retired-membership",
+      "operation": "renderer-bind",
+      "openGeneration": 6,
+      "currentGeneration": 7,
+      "openEntryId": "entry-a",
+      "currentEntryId": "entry-a",
+      "openItemId": "media-a",
+      "currentItemId": "media-a",
+      "expected": false
     }
   ]
 }

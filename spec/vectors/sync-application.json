@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-application",
+  "cases": [
+    {
+      "id": "sync-application.deferred-server-7000",
+      "operation": "deferred-seek",
+      "source": "server",
+      "targetMs": 7000,
+      "expectedNativeSeeks": [
+        7000
+      ],
+      "expectedGroupSeekAfterCompletion": false,
+      "nextViewerSeekMs": 9000
+    },
+    {
+      "id": "sync-application.deferred-server-0",
+      "operation": "deferred-seek",
+      "source": "server",
+      "targetMs": 0,
+      "expectedNativeSeeks": [
+        0
+      ],
+      "expectedGroupSeekAfterCompletion": false,
+      "nextViewerSeekMs": 9000
+    },
+    {
+      "id": "sync-application.deferred-viewer-7000",
+      "operation": "deferred-seek",
+      "source": "viewer",
+      "targetMs": 7000,
+      "expectedNativeSeeks": [],
+      "expectedGroupSeekAfterCompletion": true,
+      "nextViewerSeekMs": 9000
+    }
+  ]
+}

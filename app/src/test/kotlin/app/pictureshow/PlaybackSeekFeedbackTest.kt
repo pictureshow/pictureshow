@@ -17,6 +17,12 @@ import com.google.common.util.concurrent.Futures
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -118,6 +124,87 @@ class PlaybackSeekFeedbackTest {
         } finally {
             player.release()
             output.release()
+        }
+    }
+
+    @Test fun deferredSeekReportsActualApplicationEvenWhenNoBufferingSampleExists() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+        val player = LocalPlayer()
+        try {
+            val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+            host.playerSource = mutableStateOf(player)
+            var applications = 0
+            val listener = syncPositionApplicationListener { applications++ }
+            player.addListener(listener)
+            player.allowSeek(false)
+            assertEquals(false, host.applySyncTimeline(70_000_000, false, 1.0))
+            assertEquals(0, applications)
+            assertEquals(7_000L, host.pendingSeek)
+            player.allowSeek(true)
+            host.applyPendingSeek()
+            android.os.Looper.getMainLooper().let { org.robolectric.Shadows.shadowOf(it).idle() }
+            assertEquals(listOf(7_000L), player.seeks)
+            assertEquals(1, applications, "actual native completion must be observed even while both sampled states are READY")
+            assertNull(host.pendingSeek)
+            assertNull(host.seekPreview)
+            player.removeListener(listener)
+        } finally {
+            player.release()
+            output.release()
+        }
+    }
+
+    @Test fun deferredServerAlignmentRetainsItsBypassInsteadOfEchoingAGroupSeek() {
+        val vectors = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { java.io.File(it, "spec/vectors/sync-application.json") }.first { it.isFile }
+        val cases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertEquals(3, cases.size)
+        for (value in cases) {
+            val row = value.jsonObject
+            val id = row.getValue("id").jsonPrimitive.content
+            assertEquals("deferred-seek", row.getValue("operation").jsonPrimitive.content, id)
+            val target = row.getValue("targetMs").jsonPrimitive.long
+            val output =
+                Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+            val native = LocalPlayer()
+            val exposed = SyncTransportPlayer(native, output::interceptSync)
+            val requests = mutableListOf<Pair<String, Long?>>()
+            output.syncRequest = { command, position ->
+                requests += command to position
+                true
+            }
+            try {
+                val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+                host.playerSource = mutableStateOf(exposed)
+                native.allowSeek(false)
+                if (row.getValue("source").jsonPrimitive.content == "server") {
+                    host.applySyncTimeline(target * 10_000, false, 1.0)
+                } else {
+                    host.seekToLocal(target, revealControls = false)
+                }
+                assertEquals(target, host.pendingSeek, id)
+                assertEquals(emptyList(), requests, id)
+                native.allowSeek(true)
+                host.applyPendingSeek()
+                assertEquals(row.getValue("expectedNativeSeeks").jsonArray.map { it.jsonPrimitive.long }, native.seeks, id)
+                val expectedRequests = if (row.getValue(
+                        "expectedGroupSeekAfterCompletion"
+                    ).jsonPrimitive.boolean
+                ) {
+                    listOf("seek" to target)
+                } else {
+                    emptyList()
+                }
+                assertEquals(expectedRequests, requests, id)
+                assertNull(host.seekPreview, id)
+                val next = row.getValue("nextViewerSeekMs").jsonPrimitive.long
+                exposed.seekTo(next)
+                assertEquals(expectedRequests + ("seek" to next), requests, id)
+                assertEquals(row.getValue("expectedNativeSeeks").jsonArray.map { it.jsonPrimitive.long }, native.seeks, id)
+            } finally {
+                exposed.release()
+                output.release()
+            }
         }
     }
 

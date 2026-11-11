@@ -601,6 +601,102 @@ class SyncPlayHostTest {
         assertFalse(rig.operations().any { it in setOf("Buffering", "Unpause", "Seek") })
     }
 
+    @Test fun deferredNativeCompletionRearmsReadinessAndCooldownForShortAndLongBufferCycles() = runTest {
+        for (longBuffer in listOf(false, true)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.joined("Playing")
+            rig.queue()
+            runCurrent()
+            rig.preparedEntry()
+            rig.host.receive(rig.command("Unpause", ticks = 50_000_000L))
+            runCurrent()
+            rig.host.tick()
+            runCurrent()
+            val before = rig.operations().count { it == "Ready" }
+            rig.renderer.skipCorrectionAtExecution = true
+            advanceTimeBy(2_100)
+            runCurrent()
+            // The actual deferred native seek finishes now, independent of the ticker.
+            rig.renderer.value = rig.renderer.value.copy(positionTicks = 70_000_000L, ready = !longBuffer, buffering = longBuffer)
+            rig.host.rendererPositionApplied(
+                rig.renderer,
+                rig.renderer,
+                rig.renderer.sourceIdentity,
+                rig.host.membership.generation,
+                "entry-a"
+            )
+            rig.renderer.skipCorrectionAtExecution = false
+            rig.renderer.applied.clear()
+            rig.host.tick()
+            runCurrent()
+            if (longBuffer) {
+                assertEquals("Buffering", rig.operations().last())
+                rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false)
+                rig.host.tick()
+                runCurrent()
+            }
+            assertEquals(before + 1, rig.operations().count { it == "Ready" }, "completion requires a fresh Ready at the actual position")
+            assertEquals(
+                70_000_000L,
+                rig.sent.last {
+                    it.second.operation == "Ready"
+                }.second.body!!.getValue("PositionTicks").jsonPrimitive.long
+            )
+            assertFalse(rig.renderer.applied.any { it.position != null }, "completion starts a real seek cooldown")
+        }
+    }
+
+    @Test fun aDelayedCallbackCannotBorrowTheNextEntryForTheSameMediaAndDecoder() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Paused")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        val generation = rig.host.membership.generation
+        val decoder = rig.renderer.sourceIdentity
+        rig.host.tick()
+        runCurrent()
+        rig.queue(entry = "entry-b")
+        runCurrent()
+        rig.preparedEntry()
+        // Rebind the exact same decoder after the second destination's opening fence clears.
+        assertTrue(rig.host.bindRenderer(rig.renderer, rig.renderer, opening = SyncOpen(generation, "entry-b", "local-item", 0)))
+        rig.host.tick()
+        runCurrent()
+        val before = rig.operations().count { it == "Ready" }
+        rig.host.rendererPositionApplied(rig.renderer, rig.renderer, decoder, generation, "entry-a")
+        rig.host.rendererPositionApplied(rig.renderer, rig.renderer, decoder, generation - 1, "entry-b")
+        rig.host.tick()
+        runCurrent()
+        assertEquals(before, rig.operations().count { it == "Ready" })
+        rig.host.rendererPositionApplied(rig.renderer, rig.renderer, decoder, generation, "entry-b")
+        rig.host.tick()
+        runCurrent()
+        assertEquals(before + 1, rig.operations().count { it == "Ready" })
+    }
+
+    @Test fun aRetiredDecoderCannotRearmCurrentRendererReadiness() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.tick()
+        runCurrent()
+        val before = rig.operations().count { it == "Ready" }
+        val staleSource = rig.renderer.sourceIdentity
+        rig.renderer.sourceIdentity = Any()
+        rig.host.rendererPositionApplied(rig.renderer, rig.renderer, staleSource, rig.host.membership.generation, "entry-a")
+        rig.host.rendererPositionApplied(Any(), rig.renderer, rig.renderer.sourceIdentity, rig.host.membership.generation, "entry-a")
+        rig.host.rendererPositionApplied(rig.renderer, Renderer(), rig.renderer.sourceIdentity, rig.host.membership.generation, "entry-a")
+        rig.host.tick()
+        runCurrent()
+        assertEquals(before, rig.operations().count { it == "Ready" })
+    }
+
     @Test fun aSkippedCorrectionExecutionDoesNotMoveTheLastActualSeekDeadline() = runTest {
         val rig = Rig(this)
         rig.join()
