@@ -70,6 +70,8 @@ struct Surface {
     int w=0,h=0;
     std::atomic<unsigned long> frames{0};
     std::string receipt;
+    bool diagnosticCaptured=false;
+    double referenceWhiteNits=203;
     Timing renderTime, glWait, drawableWait, metalWait, frameTime, pollGap;
     Clock::time_point previousPollEnd=Clock::now();
     std::atomic<unsigned long> polls{0};

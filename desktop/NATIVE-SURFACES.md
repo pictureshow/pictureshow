@@ -53,7 +53,7 @@ An OUTPUT shader converts mpv's 203-nit linear reference to scRGB's 80-nit refer
 A separate native HWND is kept behind the transparent Compose control window.
 `ps_sync` uses asynchronous positioning so the EDT cannot deadlock waiting for the
 render thread to enter its message loop. Hosted CI explicitly uses WARP and a null
-audio sink; this cannot qualify real GPU throughput, audible surround or HDR output.
+audio sink; this cannot qualify real GPU throughput, audible surround or physical HDR scanout.
 
 Linux: the `wayland` mode owns an xdg-toplevel video surface and an SDR subsurface
 above it. Compose ImageComposeScene draws the controls and performs pointer hit tests;
@@ -173,3 +173,19 @@ No GPL Jellyfin Desktop implementation was used. Public contracts:
 [OpenGL API](https://github.com/mpv-player/mpv/blob/v0.42.0/include/mpv/render_gl.h),
 [D3D11 API](https://github.com/mpv-player/mpv/blob/v0.42.0/include/mpv/render_d3d11.h),
 [FFmpeg licensing](https://ffmpeg.org/legal.html).
+
+## Numeric HDR output gate (leg136)
+
+The generated CC0 source and real-app/independent-output gates are described in
+[tools/hdr/README.md](tools/hdr/README.md). These replace the old retagged SDR
+fixture as color evidence. Free hosted Windows VDD+WGC and local Apple-Silicon
+reference-virtual-display+ScreenCaptureKit routes have numeric PQ/SDR output
+checks. Current Linux output results remain in the leg136 execution report;
+accepted surface tags or app-only readbacks are insufficient.
+
+The renderer preserves the full PQ10000-nit domain when source mastering data
+is missing. Windows converts linear BT2020 to extended BT709 scRGB after mpv
+gamut handling; Mac uses an explicit203-to100 unit conversion on an HDR target
+and retains203-relative units on an SDR target. The selected startup display
+is tested; moving between output profiles during playback is not qualified by
+these tests. Normal playback has no recurring CPU frame readbacks.

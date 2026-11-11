@@ -45,9 +45,9 @@ fun layerMain(args: Array<String>) {
     require(args.size >= 2) { "Usage: layer MEDIA EVIDENCE [--sustain=125]" }
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
-    val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
     val numericPosition=System.getenv("SPIKE_HDR_WINDOW_X")?.let { x -> WindowPosition.Absolute(x.toInt().dp,(System.getenv("SPIKE_HDR_WINDOW_Y") ?: "40").toInt().dp) } ?: WindowPosition.PlatformDefault
     val hdrHold=System.getenv("SPIKE_HDR_HOLD_SECONDS")?.toInt()?.also { require(it in 1..60) } ?: 0
+    val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
     val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")),NativeLayer::class.java)
     val mpv=Mpv(out)
     val executor=Executors.newSingleThreadScheduledExecutor { r -> Thread(r,"native-video") }
@@ -128,7 +128,7 @@ fun layerMain(args: Array<String>) {
                             mpv.option("video-timing-offset",if(ahead) (System.getenv("SPIKE_MAC_HEADROOM") ?: "0.050") else "0")
                         }
                         // Preserve the full PQ domain on Mac; WindowServer owns display adaptation.
-                        mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak",if(Platform.isMac()) "10000" else "1000")
+                        mpv.option("target-prim","bt.2020"); mpv.option("target-trc","linear"); mpv.option("target-peak","10000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
                         mpv.option("dither-depth","no") // Float output must not be quantized as an 8-bit window framebuffer.
                         if(Platform.isMac()) {
@@ -143,8 +143,9 @@ fun layerMain(args: Array<String>) {
                             mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         if(Platform.isWindows()) {
+                            // Convert AFTER mpv gamut handling; negative scRGB channels preserve wide gamut.
                             val shader=File(out,"scrgb-reference.glsl")
-                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
+                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4((mat3(1.660491,-0.124550,-0.018151, -0.587641,1.132900,-0.100579, -0.072850,-0.008349,1.118730) * c.rgb) * (203.0 / 80.0), c.a); }\n")
                             mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         mpv.initialize()

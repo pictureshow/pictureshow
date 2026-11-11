@@ -49,9 +49,9 @@ fun waylandMain(args:Array<String>) {
  val hdr=!args.contains("--sdr")
  val native=Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE")?:"pictureshow_wayland",WaylandNative::class.java)
  val mpv=Mpv(out)
- mpv.option("vo","libmpv");mpv.option("loop-file","no");mpv.option("hwdec","auto-safe")
+ mpv.option("vo","libmpv");mpv.option("loop-file",if(args.contains("--hdr-numeric")) "inf" else "no");mpv.option("hwdec","auto-safe")
  mpv.option("video-timing-offset","0")
- if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","1000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
+ if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","10000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
  mpv.initialize()
  val context=native.ps_wayland_create(mpv.handle,File(out,"native.txt").absolutePath,if(hdr)1 else 0)
  var clicks by mutableStateOf(0)
@@ -97,6 +97,22 @@ fun waylandMain(args:Array<String>) {
  try {
   updateUi();mpv.command("loadfile",media)
   waitFor(20000){mpv.get("vo-configured")=="yes"&&mpv.get("time-pos")!=null};check(mpv.get("vo-configured")=="yes")
+  if(args.contains("--hdr-numeric")){
+   // Dedicated generated fixture gate: no seeking, subtitle assumptions or UI injection.
+   // Keep the decoded static frame available after the two-frame file reaches EOF.
+   native.ps_wayland_fullscreen_set(context,1)
+   waitFor(5000){native.ps_wayland_fullscreen(context)==1}
+   check(native.ps_wayland_fullscreen(context)==1)
+   // The static fixture loops so shader compilation cannot consume the whole file.
+   // Warm up multiple complete cycles before pausing; time-pos alone is not proof
+   // that a one-fps frame survived initial software shader compilation.
+   waitFor(8000)
+   mpv.set("pause","yes")
+   stage("numeric")
+   check(mpv.get("video-params/primaries") == if(media.endsWith("pq.mkv")) "bt.2020" else "bt.709")
+   File(out,"sequence.txt").writeText("numeric=true\nactualCompositorFramebuffer=true\n")
+   return
+  }
   stage("01-window")
   mpv.set("pause","yes");native.ps_wayland_resize(context,740,500);stage("03-resize");check(mpv.get("pause")=="yes");mpv.set("pause","no")
   native.ps_wayland_fullscreen_set(context,1);waitFor(5000){native.ps_wayland_fullscreen(context)==1};stage("04-fullscreen")
