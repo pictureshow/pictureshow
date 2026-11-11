@@ -335,29 +335,100 @@ class DesktopController(
             prepareViewing(g, a, playable, if (fromStart) 0.0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000_000.0)
         }
     }
-    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null) {
+    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null) {
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
         catch (e: LinkageError) { recordDesktopPlayerFailure("factory", e); publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
-        val profile = try { player.profile(mutable.value.settings) }
+        val profile = try { player.profile(mutable.value.settings).forDesktopSubtitle(subtitleCodec) }
         catch (e: Throwable) {
             recordDesktopPlayerFailure("profile", e)
             runCatching { player.close() }
             if (e is CancellationException || e is VirtualMachineError) throw e
             publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
         }
-        val outcome = try { attempt(g, a) { playbackClient.prepareFor(a, item.id, profile, mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate,
+        val maxBitrate = mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate
+        var outcome = try { attempt(g, a) { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
             PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) } }
         catch (e: Throwable) { runCatching { player.close() }; throw e }
+        val rejectedDecisions = mutableListOf<PlayDecision>()
+        suspend fun discardPreparedPlayer() {
+            runCatching { player.close() }
+            withContext(NonCancellable) {
+                rejectedDecisions.distinctBy { it.playSessionId }.filter { it.method == PlayMethod.Transcode && it.playSessionId != null }
+                    .forEach { decision -> runCatching { playbackClient.stopEncoding(a, requireNotNull(decision.playSessionId)) } }
+            }
+        }
+        var negotiatedAudio = audio
+        var negotiatedSubtitle = subtitle
+        if (outcome is PlayOutcome.Play) {
+            val firstDecision = outcome.decision
+            rejectedDecisions += firstDecision
+            val firstStreams = firstDecision.mediaSource.mediaStreams
+            val initialAudio = audio ?: StreamDefaults.choose(firstStreams, MediaStreamType.Audio, firstDecision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
+            val initialSubtitle = subtitle ?: StreamDefaults.choose(firstStreams, MediaStreamType.Subtitle, firstDecision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
+            val selected = firstStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == initialSubtitle }
+            if (selected != null) {
+                val delivery = selected.deliveryUrl?.takeIf { it.isNotBlank() }
+                val safeDelivery = delivery?.let { candidate ->
+                    runCatching { PlayDecisions.isSameOrigin(a.server, PlayDecisions.resolve(a.server, candidate)) }.getOrDefault(false)
+                } ?: false
+                if (selected.requiresExternalSubtitleDelivery() && delivery != null && !safeDelivery) {
+                    discardPreparedPlayer()
+                    publish(g) { it.copy(error = "The selected subtitle could not be loaded safely. Choose another subtitle or turn subtitles off.") }
+                    return
+                }
+
+                val bitmapFormat = desktopBitmapSubtitleFormat(selected.codec)
+                    ?.takeIf { !selected.isExternal && selected.deliveryMethod != SubtitleDeliveryMethod.Embed }
+                val needsExternalRetry = selected.requiresExternalSubtitleDelivery() && delivery == null
+                val needsBitmapRetry = bitmapFormat != null
+                if (needsExternalRetry || needsBitmapRetry) {
+                    val retryProfile = if (needsBitmapRetry) profile.forDesktopSubtitle(selected.codec) else profile.forDesktopSubtitle(null)
+                    outcome = try { attempt(g, a) {
+                        playbackClient.prepareFor(a, item.id, retryProfile, maxBitrate,
+                            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = initialAudio,
+                                subtitleStreamIndex = initialSubtitle, mediaSourceId = firstDecision.mediaSourceId))
+                    } } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+                    val retryDecision = (outcome as? PlayOutcome.Play)?.decision
+                    if (retryDecision != null) rejectedDecisions += retryDecision
+                    val retriedSubtitle = retryDecision?.mediaSource?.mediaStreams?.firstOrNull {
+                        it.type == MediaStreamType.Subtitle && it.index == initialSubtitle
+                    }
+                    val retryUrl = retriedSubtitle?.deliveryUrl?.takeIf { it.isNotBlank() }
+                    val retryUrlIsSafe = retryUrl?.let { candidate ->
+                        runCatching { PlayDecisions.isSameOrigin(a.server, PlayDecisions.resolve(a.server, candidate)) }.getOrDefault(false)
+                    } ?: false
+                    val bitmapReady = retriedSubtitle != null &&
+                        desktopBitmapSubtitleFormat(retriedSubtitle.codec) == bitmapFormat &&
+                        !retriedSubtitle.isExternal && retriedSubtitle.deliveryMethod == SubtitleDeliveryMethod.Embed
+                    val externalReady = retriedSubtitle?.requiresExternalSubtitleDelivery() == true && retryUrlIsSafe
+                    if (outcome == null) {
+                        discardPreparedPlayer()
+                        return
+                    }
+                    if (outcome !is PlayOutcome.Play || (needsBitmapRetry && !bitmapReady) || (needsExternalRetry && !externalReady)) {
+                        discardPreparedPlayer()
+                        val message = (outcome as? PlayOutcome.Unplayable)?.message
+                            ?: if (needsBitmapRetry)
+                                "The server could not prepare the selected bitmap subtitle for this player. Choose another subtitle or turn subtitles off."
+                            else "The server did not provide a safe URL for the selected text subtitle. Choose another subtitle or turn subtitles off."
+                        publish(g) { it.copy(playback = null, error = message) }
+                        return
+                    }
+                    negotiatedAudio = initialAudio
+                    negotiatedSubtitle = initialSubtitle
+                }
+            }
+        }
         if (outcome !is PlayOutcome.Play) {
-            player.close()
+            discardPreparedPlayer()
             if (outcome is PlayOutcome.Unplayable) publish(g) { it.copy(error = outcome.message) }
             return
         }
         val decision = outcome.decision
         val streams = decision.mediaSource.mediaStreams
-        val ai = audio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
-        val si = subtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
+        val ai = negotiatedAudio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
+        val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
         window?.let(player::attach)
         engine = player
         val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
@@ -465,10 +536,11 @@ class DesktopController(
             scope.launch { if (viewing === current) sendProgress(current) }
             return
         }
+        val requestedSubtitleCodec = subtitle?.takeIf { it >= 0 }?.let { index -> p.subtitleTracks.firstOrNull { it.index == index }?.codec }
         page(DesktopRoute.Player) { g ->
             finishViewing()
             prepareViewing(g, a, p.item, p.positionSeconds, audio ?: p.audioIndex, subtitle ?: p.subtitleIndex, p.decision.mediaSourceId,
-                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null)
+                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec)
         }
     }
     fun nextEpisode() {
@@ -532,6 +604,24 @@ class DesktopController(
 
 /** mpv's bundled FFmpeg demuxes these originals; output adaptation remains with the qualified native renderer. */
 internal val DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS = setOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt")
+internal val DESKTOP_BITMAP_SUBTITLE_FORMATS = mapOf(
+    "pgssub" to "pgssub", "hdmv_pgs_subtitle" to "pgssub",
+    "dvdsub" to "dvdsub", "dvd_subtitle" to "dvdsub",
+    "dvbsub" to "dvbsub", "dvb_subtitle" to "dvbsub"
+)
+internal fun desktopBitmapSubtitleFormat(codec: String?): String? = codec?.lowercase()?.let(DESKTOP_BITMAP_SUBTITLE_FORMATS::get)
+
+/** Keep profile formats disjoint: Jellyfin can convert text into an advertised bitmap Embed format. */
+internal fun DeviceProfile.forDesktopSubtitle(codec: String?): DeviceProfile {
+    val bitmapFormat = desktopBitmapSubtitleFormat(codec)
+    val subtitleProfiles = if (bitmapFormat != null) {
+        listOf(SubtitleProfile(bitmapFormat, SubtitleDeliveryMethod.Embed))
+    } else {
+        DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS.sorted().map { SubtitleProfile(it, SubtitleDeliveryMethod.External) }
+    }
+    return copy(subtitleProfiles = subtitleProfiles)
+}
+
 fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? = null): DeviceProfile {
     val bitrate = settings.preferences().deviceSettings().maxStreamingBitrate
     // Decoder codec names are FFmpeg's names used by Jellyfin. Lists match the source's
@@ -542,9 +632,9 @@ fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? =
     // mpv's decoder-list reports FFmpeg video/audio decoders, not the separate
     // libass/text-subtitle pipeline. Negotiate known text tracks as URL delivery
     // and bitmap tracks only when embedded in a format mpv can render.
-    val subtitleDeliveryProfiles = DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS.sorted().map { SubtitleProfile(it, SubtitleDeliveryMethod.External) } + listOf(
-        "pgssub", "dvdsub", "dvbsub"
-    ).map { SubtitleProfile(it, SubtitleDeliveryMethod.Embed) }
+    // Start with text-only profiles. Selected bitmap tracks get a targeted
+    // profile after PlaybackInfo identifies their codec.
+    val subtitleDeliveryProfiles = DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS.sorted().map { SubtitleProfile(it, SubtitleDeliveryMethod.External) }
     return DeviceProfile(
         name = "Pictureshow Desktop libmpv", maxStreamingBitrate = bitrate, maxStaticBitrate = bitrate,
         directPlayProfiles = listOf(DirectPlayProfile("mkv,matroska,mp4,m4v,mov,avi,ts,mpegts,m2ts,webm,mpg,mpeg,ogv,asf,wmv", audio, video, DlnaProfileType.Video)),

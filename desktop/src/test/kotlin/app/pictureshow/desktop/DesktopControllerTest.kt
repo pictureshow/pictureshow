@@ -23,20 +23,23 @@ class DesktopControllerTest {
     }
     private class Engine : DesktopPlaybackEngine {
         var opened = false; var closed = false; var position = 12.0; var paused = false; var ready = true
+        var openedAudio: Int? = null; var openedSubtitle: Int? = null
+        var failSubtitleSelection = false
         var throwOpen = false; var throwSnapshot = false; var throwClose = false
         override fun attach(window: java.awt.Window) {}
-        override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; this.position = position; if (throwOpen) error("startup failed after media opened") }
+        override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; openedAudio = audio; openedSubtitle = subtitle; this.position = position; if (throwOpen) error("startup failed after media opened") }
         override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready) }
         override fun togglePause() { paused = !paused }
         override fun seek(seconds: Double) { position = seconds }
         override fun volume(value: Int) {}
         override fun selectAudio(index: Int) = true
-        override fun selectSubtitle(index: Int) = true
+        override fun selectSubtitle(index: Int) = !failSubtitleSelection
         override fun fullscreen(enabled: Boolean) {}
         override fun close() { closed = true; if (throwClose) error("GPU drain failed") }
     }
     private class Fixture : AutoCloseable {
         val requests = CopyOnWriteArrayList<Pair<String, String>>()
+        val activeEncodingQueries = CopyOnWriteArrayList<String>()
         val executor = Executors.newCachedThreadPool()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val url get() = "http://127.0.0.1:${server.address.port}"
@@ -45,6 +48,11 @@ class DesktopControllerTest {
         var unauthorized = false
         var itemUnauthorized = false
         var transcode = false
+        @Volatile var defaultSubtitleIndex: Int? = null
+        @Volatile var deliverSubtitleOnExplicitRequest = false
+        @Volatile var deliverDefaultSubtitleUrl = false
+        @Volatile var embedBitmapOnExplicitRequest = false
+        @Volatile var subtitleCodec = "subrip"
         @Volatile var holdStart = false
         val startEntered = java.util.concurrent.CountDownLatch(1)
         val startRelease = java.util.concurrent.CountDownLatch(1)
@@ -55,6 +63,7 @@ class DesktopControllerTest {
                 val path = e.requestURI.path
                 val request = e.requestBody.bufferedReader().use { it.readText() }
                 requests.add(path to request)
+                if (path == "/Videos/ActiveEncodings") activeEncodingQueries.add(e.requestURI.rawQuery.orEmpty())
                 var status = 200
                 val body = when {
                     itemUnauthorized && path in setOf("/Users/viewer/Items/movie", "/Items/movie") -> { status = 401; "" }
@@ -70,8 +79,8 @@ class DesktopControllerTest {
                     path == "/UserItems/Resume" || path == "/Shows/NextUp" -> """{"Items":[],"TotalRecordCount":0}"""
                     path == "/Items/Latest" -> if (failLatest) { status = 500; "" } else "[$movie]"
                     path == "/Users/viewer/Items/movie" || path == "/Items/movie" -> { if (slowMovie) Thread.sleep(350); movie }
-                    path.endsWith("/PlaybackInfo") && transcode -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","Container":"mkv","TranscodingUrl":"/Videos/movie/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported","SupportsTranscoding":true}]}"""
-                    path.endsWith("/PlaybackInfo") -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","Container":"mkv","SupportsDirectPlay":true,"RunTimeTicks":1800000000,"DefaultAudioStreamIndex":1,"DefaultSubtitleStreamIndex":null,"MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"},{"Type":"Audio","Index":1,"Codec":"aac","Language":"eng"},{"Type":"Subtitle","Index":2,"Codec":"subrip","Language":"eng"}]}]}"""
+                    path.endsWith("/PlaybackInfo") && transcode -> playbackInfo(request, transcoding = true)
+                    path.endsWith("/PlaybackInfo") -> playbackInfo(request)
                     path == "/Items" || path == "/Users/viewer/Items" -> """{"Items":[$movie],"TotalRecordCount":1}"""
                     path.contains("/FavoriteItems/") -> """{"IsFavorite":true}"""
                     path.contains("/PlayedItems/") -> """{"Played":true}"""
@@ -86,6 +95,18 @@ class DesktopControllerTest {
             }
             server.start()
         }
+        private fun playbackInfo(request: String, transcoding: Boolean = false): String {
+            val explicitSubtitle = Regex("\\\"SubtitleStreamIndex\\\"\\s*:\\s*(\\d+)").find(request)?.groupValues?.get(1)?.toIntOrNull()
+            val delivery = when {
+                deliverSubtitleOnExplicitRequest && explicitSubtitle == 2 -> ",\"DeliveryMethod\":\"External\",\"DeliveryUrl\":\"/Videos/movie/Subtitles/2/Stream.srt\""
+                deliverDefaultSubtitleUrl && explicitSubtitle == null && defaultSubtitleIndex == 2 -> ",\"DeliveryMethod\":\"External\",\"DeliveryUrl\":\"/Videos/movie/Subtitles/2/Stream.srt\""
+                embedBitmapOnExplicitRequest && explicitSubtitle == 2 && request.contains("\"Format\":\"pgssub\"") -> ",\"DeliveryMethod\":\"Embed\""
+                else -> ""
+            }
+            val defaultSubtitle = defaultSubtitleIndex?.toString() ?: "null"
+            val playbackMethod = if (transcoding) "\"TranscodingUrl\":\"/Videos/movie/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported\",\"SupportsTranscoding\":true" else "\"SupportsDirectPlay\":true"
+            return """{"PlaySessionId":"session","MediaSources":[{"Id":"source","Container":"mkv",$playbackMethod,"RunTimeTicks":1800000000,"DefaultAudioStreamIndex":1,"DefaultSubtitleStreamIndex":$defaultSubtitle,"MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"},{"Type":"Audio","Index":1,"Codec":"aac","Language":"eng"},{"Type":"Subtitle","Index":2,"Codec":"$subtitleCodec","Language":"eng"$delivery}]}]}"""
+        }
         override fun close() { server.stop(0); executor.shutdownNow() }
         companion object { const val movie = """{"Id":"movie","Name":"The first picture","Type":"Movie","RunTimeTicks":1800000000,"UserData":{"PlaybackPositionTicks":900000000}}""" }
     }
@@ -96,6 +117,121 @@ class DesktopControllerTest {
         signIn("Viewer", "correct"); await { it.route == DesktopRoute.Home && !it.busy }
     }
     private fun directory() = Files.createTempDirectory("pictureshow-desktop-test-").toFile()
+
+    @Test fun defaultTextSubtitleWithoutUrlRetriesPlaybackInfoBeforeOpening(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.defaultSubtitleIndex = 2
+            f.deliverSubtitleOnExplicitRequest = true
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.playback?.ready == true }
+
+                val requests = f.requests.filter { it.first.endsWith("/PlaybackInfo") }.map { it.second }
+                assertEquals(2, requests.size, "A missing default text delivery URL should trigger one targeted renegotiation")
+                assertFalse(requests.first().contains("\"SubtitleStreamIndex\":2"), "First request should use the unqualified default")
+                assertTrue(requests.last().contains("\"SubtitleStreamIndex\":2"))
+                assertTrue(requests.last().contains("\"MediaSourceId\":\"source\""), "Retry must preserve the selected media source")
+                assertTrue(requests.last().contains("\"AudioStreamIndex\":1"), "Retry must preserve the chosen audio")
+                assertTrue(requests.last().contains("\"StartTimeTicks\":900000000"), "Retry must preserve resume position")
+                assertEquals(1, engine.openedAudio)
+                assertEquals(2, engine.openedSubtitle)
+                assertEquals(2, c.state.value.playback?.subtitleIndex)
+                withTimeout(10000) { while (f.requests.none { it.first == "/Sessions/Playing" }) delay(20) }
+                assertEquals(1, f.requests.count { it.first == "/Sessions/Playing" })
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+            }
+        }
+    }
+
+    @Test fun defaultTextSubtitleStillMissingUrlFailsBeforePublishingPlaybackAndClosesPlayer(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.defaultSubtitleIndex = 2
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.route == DesktopRoute.Player && !it.busy && it.error?.contains("safe URL for the selected text subtitle") == true }
+
+                assertEquals(2, f.requests.count { it.first.endsWith("/PlaybackInfo") }, "Renegotiation is bounded to one retry")
+                assertTrue(engine.closed, "Prepared player must be closed when delivery cannot be resolved")
+                assertFalse(engine.opened, "Do not open playback with a false selected-subtitle state")
+                assertNull(c.state.value.playback)
+                assertEquals(0, f.requests.count { it.first == "/Sessions/Playing" })
+            }
+        }
+    }
+
+    @Test fun missingDefaultSubtitleUrlStopsRejectedTranscodeBeforeOpeningAndOnlyOnce(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.transcode = true
+            f.defaultSubtitleIndex = 2
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.route == DesktopRoute.Player && !it.busy && it.error?.contains("safe URL for the selected text subtitle") == true }
+
+                assertEquals(2, f.requests.count { it.first.endsWith("/PlaybackInfo") })
+                assertTrue(engine.closed)
+                assertFalse(engine.opened)
+                assertNull(c.state.value.playback)
+                val stops = f.requests.filter { it.first == "/Videos/ActiveEncodings" }
+                assertEquals(1, stops.size, "Rejected pre-open negotiation must release its transcoding session once")
+                assertTrue(f.activeEncodingQueries.single().contains("playSessionId=session"))
+                assertEquals(0, f.requests.count { it.first == "/Sessions/Playing" })
+            }
+        }
+    }
+
+    @Test fun defaultBitmapSubtitleRetriesWithOnlyItsSelectedEmbedProfile(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.defaultSubtitleIndex = 2
+            f.subtitleCodec = "hdmv_pgs_subtitle"
+            f.embedBitmapOnExplicitRequest = true
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.playback?.ready == true }
+
+                val requests = f.requests.filter { it.first.endsWith("/PlaybackInfo") }.map { it.second }
+                assertEquals(2, requests.size, "A selected bitmap track should negotiate one codec-specific embedded profile")
+                assertTrue(requests.first().contains("\"Format\":\"srt\""))
+                assertFalse(requests.first().contains("\"Method\":\"Embed\""), "Text baseline must not advertise bitmap Embed formats")
+                assertTrue(requests.last().contains("\"Format\":\"pgssub\""))
+                assertTrue(requests.last().contains("\"Method\":\"Embed\""))
+                assertFalse(requests.last().contains("\"Format\":\"srt\""), "Bitmap retry must not re-advertise text delivery")
+                assertEquals(2, engine.openedSubtitle)
+                assertEquals(2, c.state.value.playback?.subtitleIndex)
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+            }
+        }
+    }
+
+    @Test fun explicitSubtitleOffIsPreservedAndDoesNotRenegotiateTheServerDefault(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.defaultSubtitleIndex = 2
+            f.deliverDefaultSubtitleUrl = true
+            val first = Engine().apply { failSubtitleSelection = true }
+            val second = Engine()
+            var creates = 0
+            DesktopController(directory(), playbackFactory = { if (creates++ == 0) first else second }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.playback?.ready == true }
+                c.selectSubtitle(-1)
+                c.await { it.playback?.ready == true && it.playback.subtitleIndex == -1 }
+
+                val requests = f.requests.filter { it.first.endsWith("/PlaybackInfo") }.map { it.second }
+                assertEquals(2, requests.size, "Off should cause only the existing selection reprepare")
+                assertTrue(requests.last().contains("\"SubtitleStreamIndex\":-1"))
+                assertEquals(-1, second.openedSubtitle, "The server default must not replace explicit Off")
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+            }
+        }
+    }
 
     @Test fun passwordLoginClearsAuthenticationBackStackAndLoadsRealCoreHome(): Unit = runBlocking {
         Fixture().use { f ->
@@ -355,10 +491,15 @@ class DesktopControllerTest {
             setOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt"),
             profile.subtitleProfiles.filter { it.method == SubtitleDeliveryMethod.External }.mapNotNull { it.format }.toSet()
         )
-        assertEquals(
-            setOf("pgssub", "dvdsub", "dvbsub"),
-            profile.subtitleProfiles.filter { it.method == SubtitleDeliveryMethod.Embed }.mapNotNull { it.format }.toSet()
-        )
+        assertTrue(profile.subtitleProfiles.none { it.method == SubtitleDeliveryMethod.Embed }, "Baseline text negotiation must not let Jellyfin convert text into bitmap Embed output")
+        val pgs = profile.forDesktopSubtitle("hdmv_pgs_subtitle")
+        assertEquals(listOf(SubtitleProfile("pgssub", SubtitleDeliveryMethod.Embed)), pgs.subtitleProfiles)
+        assertEquals("pgssub", desktopBitmapSubtitleFormat("pgssub"))
+        assertEquals("dvdsub", desktopBitmapSubtitleFormat("dvd_subtitle"))
+        assertEquals("dvbsub", desktopBitmapSubtitleFormat("dvb_subtitle"))
+        assertEquals(listOf(SubtitleProfile("dvdsub", SubtitleDeliveryMethod.Embed)), profile.forDesktopSubtitle("dvd_subtitle").subtitleProfiles)
+        assertEquals(listOf(SubtitleProfile("dvbsub", SubtitleDeliveryMethod.Embed)), profile.forDesktopSubtitle("dvb_subtitle").subtitleProfiles)
+        assertEquals(profile.subtitleProfiles, profile.forDesktopSubtitle("subrip").subtitleProfiles)
         assertEquals("aac", profile.transcodingProfiles.single().audioCodec)
     }
 
