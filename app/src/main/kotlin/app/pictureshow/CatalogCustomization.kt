@@ -134,7 +134,7 @@ private fun CatalogEditor(
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         Box(Modifier.fillMaxSize()) {
                             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                TopAppBar(title = { Text(title) }, navigationIcon = {
+                                TopAppBar(modifier = Modifier.widthIn(max = 640.dp), title = { Text(title) }, navigationIcon = {
                                     IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
                                         Icon(touchActionIcon("back"), "Back")
                                     }

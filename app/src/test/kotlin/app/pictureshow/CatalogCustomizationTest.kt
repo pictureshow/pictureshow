@@ -95,6 +95,23 @@ class CatalogCustomizationTest {
     }
 
     @Test
+    @Config(qualifiers = "w1000dp-h800dp-land")
+    fun tabletHomeAppBarSharesTheCenteredEditorColumn() {
+        compose.setContent {
+            TouchTheme {
+                HomeCustomization(CatalogHomeState(loading = false), account, service, {}, {})
+            }
+        }
+        val editor = compose.onNodeWithTag("catalog:editor").getUnclippedBoundsInRoot()
+        val back = compose.onNodeWithTag("catalog:back").getUnclippedBoundsInRoot()
+        assertEquals(640.dp, editor.right - editor.left, "Tablet editing content stays bounded")
+        assertEquals(180.dp, editor.left, "The 640dp editor is centered in the 1000dp tablet window")
+        assertTrue(back.left >= editor.left, "The app bar navigation control shares the bounded content column")
+        assertTrue(back.left <= editor.left + 16.dp, "Navigation stays near the column's native leading edge")
+        assertTrue(back.right <= editor.right)
+    }
+
+    @Test
     @Config(qualifiers = "w411dp-h891dp-port")
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun failedSaveSnackbarTextContrastsWithItsActualContainer() {
