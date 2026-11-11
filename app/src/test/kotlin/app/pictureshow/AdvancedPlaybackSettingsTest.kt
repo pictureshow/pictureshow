@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -38,7 +39,7 @@ class AdvancedPlaybackSettingsTest {
         compose.onNodeWithText("Image subtitle opacity").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
             check(it())
         }
-        compose.onNodeWithText("80%").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.onNodeWithTag("tv-settings:option:1").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
         compose.runOnIdle { assertEquals(80, prefs.subtitleStyle.imageOpacity) }
         compose.onNodeWithText("Use my style for styled subtitles").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) {
             check(it())
