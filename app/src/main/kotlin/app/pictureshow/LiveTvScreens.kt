@@ -4,7 +4,9 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -31,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -49,7 +53,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Platform components share one destination and the same policy/write owner. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun LiveTvScreen(
     vm: LiveTvViewModel,
@@ -75,6 +79,13 @@ internal fun LiveTvScreen(
     var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocus by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
+    val platformBringIntoView = LocalBringIntoViewSpec.current
+    val density = LocalDensity.current
+    val recordingMargin = with(density) { FocusedCardMargin.toPx() }
+    val recordingPadding = with(density) { 12.dp.toPx() }
+    val recordingFocus = remember(account, platformBringIntoView, recordingMargin, recordingPadding) {
+        LiveRecordingFocus(platformBringIntoView, recordingMargin, recordingPadding)
+    }
     val guideList = rememberLazyListState()
     val guideScroll = rememberScrollState()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -360,11 +371,31 @@ internal fun LiveTvScreen(
                 }
             } else {
                 if (!detail && tab == "Guide") LiveGuideDateBar(state.windowStart, now, tv, !state.loading, vm::refresh)
+                val recordingShelf = tv && !detail && tab == "Recordings"
+                val lastRecordingGroup = state.recordings.map { it.seriesName?.takeIf(String::isNotBlank) ?: "Recordings" }
+                    .distinct().lastOrNull()
+                val recordingBottomPadding = if (recordingShelf) {
+                    with(density) { recordingFocus.trailingSpace(lastRecordingGroup).toDp() }
+                } else {
+                    12.dp
+                }
                 LazyColumn(
                     state = if (detail) rememberLazyListState() else list,
-                    contentPadding = PaddingValues(horizontal = if (tv || !detail) 0.dp else 16.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(
+                        start = if (tv || !detail) 0.dp else 16.dp,
+                        end = if (tv || !detail) 0.dp else 16.dp,
+                        top = 12.dp,
+                        bottom = recordingBottomPadding
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().then(
+                        if (recordingShelf) {
+                            Modifier.revealFocusAfterFontChange(list).testTag("live:recording-viewport")
+                                .onGloballyPositioned(recordingFocus::onViewportPositioned)
+                        } else {
+                            Modifier
+                        }
+                    )
                 ) {
                     if (tv && (recording != null || cancelling)) {
                         item {
@@ -541,7 +572,8 @@ internal fun LiveTvScreen(
                                 now,
                                 ::focused,
                                 onRecording,
-                                onOptions = { recordingMenu = it }
+                                onOptions = { recordingMenu = it },
+                                focus = recordingFocus.takeIf { tv }
                             )
                         }
                         tab == "Schedules" -> {
@@ -600,6 +632,8 @@ internal fun LiveTvScreen(
         Box(Modifier.weight(1f)) {
             if (!tv && !detail) {
                 androidx.compose.material3.pulltorefresh.PullToRefreshBox(state.loading, { vm.refresh() }) { body() }
+            } else if (tv && !detail && tab == "Recordings") {
+                CompositionLocalProvider(LocalBringIntoViewSpec provides recordingFocus.verticalSpec) { body() }
             } else {
                 body()
             }
