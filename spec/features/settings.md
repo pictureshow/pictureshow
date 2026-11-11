@@ -138,3 +138,5 @@ Audio output includes its own Audio passthrough control. Each format permission 
 
 Receiver-format summaries use the same viewer-facing Dolby Digital, Dolby Digital Plus, Dolby Atmos, Dolby TrueHD,
 DTS and DTS-HD names as their individual controls. Diagnostic codec identifiers do not replace these names in Settings.
+
+Short, wide touch windows (height below 480dp and width at least 600dp) keep the subtitle preview beside the settings in a dialog up to 600dp wide, with 16dp vertical margins. The first setting/current value/Done and at least 8dp of the second setting title remain visible at 800×360dp/font1.3. Scrollable touch lists retain native scrolling, dividers, edge fades and a position indicator so a row boundary cannot hide that more settings exist. Text/Image preview labels use equal-width cells aligned to their 25%/75% cue centers on both Android surfaces; the real renderer and independent image-opacity transform remain unchanged. These native layout expectations extend the playback-settings-layout case; ports provide their own geometry runner.

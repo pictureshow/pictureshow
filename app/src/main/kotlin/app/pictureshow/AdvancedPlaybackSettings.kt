@@ -12,29 +12,40 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.createBitmap
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
@@ -69,37 +80,36 @@ internal fun AdvancedPlaybackSettings(
         PlaybackSettingRows(group, local, touch, first, supportedPassthrough, onLocal)
     }
     if (touch) {
-        val scroll = rememberScrollState()
-        val scrolled by remember { derivedStateOf { scroll.value > 0 } }
         val compact = isShortTouchWindow()
-        Dialog(onDismissRequest = onClose) {
+        val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
+        val besidePreview = compact && wide && group == "Subtitle appearance"
+        Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = !besidePreview)) {
             androidx.compose.material3.Surface(
-                modifier = Modifier.testTag("settings:touch-panel"),
+                modifier = Modifier.padding(horizontal = if (besidePreview) 24.dp else 0.dp, vertical = if (compact) 16.dp else 0.dp)
+                    .then(if (besidePreview) Modifier.widthIn(max = 600.dp).fillMaxWidth() else Modifier)
+                    .testTag("settings:touch-panel"),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                 color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
-                Column(
-                    Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
-                ) {
-                    androidx.compose.material3.Text(
-                        group,
-                        modifier = Modifier.semantics { heading() }.padding(bottom = 12.dp),
-                        style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
-                    )
-                    if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
-                    if (scrolled) androidx.compose.material3.HorizontalDivider()
-                    Column(
-                        Modifier.weight(1f, fill = false).verticalScroll(scroll).testTag("settings:touch-list"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) { content() }
-                    if (scroll.canScrollForward) androidx.compose.material3.HorizontalDivider()
-                    androidx.compose.foundation.layout.Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
+                    .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
+                if (besidePreview) {
+                    Row(
+                        panelModifier,
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) {
-                            androidx.compose.material3.Text("Done")
+                        Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
+                        Column(Modifier.weight(1f)) {
+                            TouchSettingsHeading(group)
+                            TouchSettingsList(onClose, content)
                         }
+                    }
+                } else {
+                    Column(panelModifier) {
+                        TouchSettingsHeading(group)
+                        if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
+                        TouchSettingsList(onClose, content)
                     }
                 }
             }
@@ -111,6 +121,64 @@ internal fun AdvancedPlaybackSettings(
             firstFocus = first,
             preview = if (group == "Subtitle appearance") ({ SubtitlePreview(local.appearance, touch) }) else null
         ) { content() }
+    }
+}
+
+@Composable
+private fun TouchSettingsHeading(title: String) {
+    androidx.compose.material3.Text(
+        title,
+        modifier = Modifier.semantics { heading() }.padding(bottom = 12.dp),
+        style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
+    )
+}
+
+/** Keep the native scroll semantics and dividers, with a visible cue even when a row boundary fits exactly. */
+@Composable
+private fun ColumnScope.TouchSettingsList(onClose: () -> Unit, content: @Composable () -> Unit) {
+    val scroll = rememberScrollState()
+    val scrolled by remember { derivedStateOf { scroll.value > 0 } }
+    val surface = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
+    val indicator = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    if (scrolled) androidx.compose.material3.HorizontalDivider()
+    Box(
+        Modifier.weight(1f, fill = false).clipToBounds().drawWithContent {
+            drawContent()
+            if (scroll.canScrollBackward) {
+                val height = 16.dp.toPx().coerceAtMost(size.height)
+                drawRect(Brush.verticalGradient(listOf(surface, Color.Transparent), endY = height), size = size.copy(height = height))
+            }
+            if (scroll.canScrollForward) {
+                val height = 24.dp.toPx().coerceAtMost(size.height)
+                drawRect(
+                    Brush.verticalGradient(listOf(Color.Transparent, surface), startY = size.height - height, endY = size.height),
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - height),
+                    size = size.copy(height = height)
+                )
+            }
+            if (scroll.maxValue > 0) {
+                val total = size.height + scroll.maxValue
+                val thumb = (size.height * size.height / total).coerceAtLeast(24.dp.toPx()).coerceAtMost(size.height)
+                val top = (size.height - thumb) * scroll.value / scroll.maxValue
+                drawRoundRect(
+                    indicator,
+                    topLeft = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), top),
+                    size = androidx.compose.ui.geometry.Size(2.dp.toPx(), thumb),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx())
+                )
+            }
+        }
+    ) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(scroll).testTag("settings:touch-list"),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) { content() }
+    }
+    if (scroll.canScrollForward) androidx.compose.material3.HorizontalDivider()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) {
+            androidx.compose.material3.Text("Done")
+        }
     }
 }
 
@@ -471,9 +539,9 @@ internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = fa
         appearance.cues(
             listOf(
                 Cue.Builder().setText("Text subtitle").setPosition(0.25f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
-                    .setSize(0.45f).build(),
+                    .setLine(0.5f, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_MIDDLE).setSize(0.45f).build(),
                 Cue.Builder().setBitmap(image).setPosition(0.75f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
-                    .setLine(0.25f, Cue.LINE_TYPE_FRACTION).setSize(0.45f).build()
+                    .setLine(0.5f, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_MIDDLE).setSize(0.45f).build()
             )
         )
     }
@@ -499,32 +567,26 @@ internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = fa
                 it.setCues(cues)
             }
         )
-        androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            if (touch) {
-                androidx.compose.material3.Text(
-                    "Text",
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                androidx.compose.material3.Text(
-                    "Image",
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                androidx.tv.material3.Text(
-                    "Text",
-                    style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
-                    color = androidx.tv.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                androidx.tv.material3.Text(
-                    "Image",
-                    style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
-                    color = androidx.tv.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+            listOf("Text", "Image").forEach { label ->
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    val modifier = Modifier.testTag("settings:subtitle-label:$label")
+                    if (touch) {
+                        androidx.compose.material3.Text(
+                            label,
+                            modifier = modifier,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        androidx.tv.material3.Text(
+                            label,
+                            modifier = modifier,
+                            style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.tv.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
@@ -540,7 +602,7 @@ internal fun imageSubtitleSample(): Bitmap = createBitmap(480, 80, Bitmap.Config
     }
     val canvas = Canvas(image)
     paint.style = Paint.Style.STROKE
-    paint.strokeWidth = 4f
+    paint.strokeWidth = 8f
     paint.color = AndroidColor.BLACK
     canvas.drawText("Image subtitle", 240f, 56f, paint)
     paint.style = Paint.Style.FILL

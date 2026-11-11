@@ -4,7 +4,11 @@
 package app.pictureshow
 
 import android.app.Application
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -14,7 +18,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import java.io.File
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
@@ -66,5 +72,38 @@ class PhoneSettingsConstraintsTest {
         val panel = compose.onNodeWithTag("settings:touch-panel").getUnclippedBoundsInRoot()
         val doneVisible = done.top >= panel.top && done.bottom <= panel.bottom && done.bottom > done.top
         assertEquals(expected.getValue("doneFullyVisible").jsonPrimitive.boolean, doneVisible, "$done / $panel")
+        val nextTitle = compose.onNode(
+            hasText(input.getValue("secondRowTitle").jsonPrimitive.content) and !hasClickAction(),
+            useUnmergedTree = true
+        )
+            .getUnclippedBoundsInRoot()
+        val visibleHeight = minOf(nextTitle.bottom, viewport.bottom) - maxOf(nextTitle.top, viewport.top)
+        assertEquals(expected.getValue("secondRowTitleVisible").jsonPrimitive.boolean, visibleHeight >= 8.dp, "$nextTitle / $viewport")
+        assertPreviewLabelsCentered(expected.getValue("previewLabelsCentered").jsonPrimitive.boolean)
+    }
+
+    @Test fun previewCaptionsFollowTheTextAndImageCueCentersOnBothSurfaces() {
+        val touch = mutableStateOf(true)
+        compose.setContent {
+            androidx.compose.material3.MaterialTheme {
+                androidx.tv.material3.MaterialTheme {
+                    Box(Modifier.width(320.dp)) { SubtitlePreview(SubtitleAppearance(), touch.value) }
+                }
+            }
+        }
+        assertPreviewLabelsCentered(true)
+        compose.runOnIdle { touch.value = false }
+        assertPreviewLabelsCentered(true)
+    }
+
+    private fun assertPreviewLabelsCentered(expected: Boolean) {
+        val preview = compose.onNodeWithTag("settings:subtitle-preview").getUnclippedBoundsInRoot()
+        listOf("Text" to 0.25f, "Image" to 0.75f).forEach { (label, fraction) ->
+            val bounds = compose.onNodeWithTag("settings:subtitle-label:$label").getUnclippedBoundsInRoot()
+            val center = (bounds.left.value + bounds.right.value) / 2
+            val cueCenter = preview.left.value + (preview.right.value - preview.left.value) * fraction
+            // Equal-width cells can round an odd text width by half a physical pixel.
+            assertEquals(expected, abs(center - cueCenter) <= 1f, "$label center=$center cueCenter=$cueCenter")
+        }
     }
 }

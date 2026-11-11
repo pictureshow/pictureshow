@@ -10,12 +10,15 @@
         "heightDp": 360,
         "fontScale": 1.3,
         "group": "Subtitle appearance",
-        "currentValue": "Default"
+        "currentValue": "Default",
+        "secondRowTitle": "Text color"
       },
       "expected": {
         "firstRowFullyVisible": true,
         "currentValueFullyVisible": true,
-        "doneFullyVisible": true
+        "doneFullyVisible": true,
+        "secondRowTitleVisible": true,
+        "previewLabelsCentered": true
       }
     }
   ]
