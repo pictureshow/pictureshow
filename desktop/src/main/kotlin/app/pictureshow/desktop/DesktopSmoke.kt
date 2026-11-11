@@ -304,9 +304,20 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         check((c.state.value.playback!!.notice!=null) != qualityConversion) { "Conversion notice must explain a device limit, never a viewer quality cap" }
         screenshot(if(qualityConversion) "08b-quality-conversion" else "08b-conversion-notice")
         waitFor("converted progress"){(c.state.value.playback?.positionSeconds?:0.0)>=3}
+        // Freeze the real player before measuring a relative seek. Screenshot
+        // capture must remain unpaused so its advancing-frame gate stays real.
+        click("pause");waitFor("converted paused"){c.state.value.playback?.let{it.ready&&it.paused}==true}
+        val convertedBeforeSeek=requireNotNull(c.state.value.playback).positionSeconds
         click("seek-forward")
-        waitFor("converted seek full timeline"){(c.state.value.playback?.positionSeconds?:0.0)>=13}
+        waitFor("converted seek full timeline"){c.state.value.playback?.let{it.paused&&it.positionSeconds>=convertedBeforeSeek+9.5}==true}
+        val convertedAfterSeek=requireNotNull(c.state.value.playback).positionSeconds
+        click("pause");waitFor("converted resumed"){c.state.value.playback?.let{!it.paused&&it.positionSeconds>=convertedAfterSeek+.5}==true}
         Thread.sleep(2000)
+        click("pause");waitFor("converted paused before Stop"){c.state.value.playback?.paused==true}
+        File(out,"conversion-controls.json").writeText(buildJsonObject {
+            put("positionBeforeSeekSeconds",convertedBeforeSeek);put("positionAfterSeekSeconds",convertedAfterSeek)
+            put("relativeSeekVerified",true);put("resumeAdvancedVerified",true);put("pausedBeforeStop",true)
+        }.toString()+"\n")
         checks["conversion"]=true
         click("stop");ready(DesktopRoute.Detail)
         if(qualityConversion) { click("nav:settings");ready(DesktopRoute.Settings);click("quality");click("quality:0");ready(DesktopRoute.Settings) }

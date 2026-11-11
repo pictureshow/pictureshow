@@ -4,10 +4,13 @@
 
 The harness generates original CC0 H.264/AAC media, two audio languages, subtitles,
 posters, two movies and two episodes. `Signal One` is the 180-second direct-play
-and resume signal. `Archive Signal` is a 20-second FFV1 movie. Mac/Linux smoke
+and resume signal. `Archive Signal` is a 60-second FFV1 movie. Mac/Linux smoke
 dependencies omit its decoder; Windows requests a real viewer bitrate cap. Each
 case requires Jellyfin to convert it to H.264 without restricting the production
-device profile. The harness
+device profile. The conversion flow captures advancing frames, pauses, verifies
+a relative ten-second seek and resumed progress, then pauses before Stop. Its
+longer fixture leaves room for those controls before EOF; natural episode EOF
+is tested separately. The harness
 starts its own Jellyfin 10.11.11, creates an
 isolated viewer, seeds a 12-second resume point and launches the actual desktop
 runtime. Linux uses the pinned Jellyfin container; Windows and macOS use pinned

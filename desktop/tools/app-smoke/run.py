@@ -299,8 +299,10 @@ def generate_media(root: Path, ffmpeg: str) -> dict:
     # Mac/Linux's isolated smoke dependency closure omits FFV1. Windows keeps its
     # measured decoder set and uses a real viewer bitrate cap for conversion.
     # Neither case fabricates a limitation in the ordinary device profile.
+    # Leave room for real-frame screenshots and pause/seek/resume/Stop before
+    # EOF. Natural episode EOF has its own separate continuation assertion.
     subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-                    "-i", str(source), "-t", "20", "-map", "0:v:0", "-map", "0:a:0",
+                    "-i", str(source), "-t", "60", "-map", "0:v:0", "-map", "0:a:0",
                     "-c:v", "ffv1", "-level", "3", "-threads", "2", "-c:a", "copy",
                     str(archive / "Archive Signal (2026).mkv")], check=True)
     (archive / "movie.nfo").write_text("<movie><title>Archive Signal</title><year>2026</year><plot>An original CC0 FFV1 signal that requires server conversion.</plot><genre>Test signals</genre></movie>", encoding="utf-8")
@@ -320,7 +322,7 @@ def generate_media(root: Path, ffmpeg: str) -> dict:
     ppm.write_bytes(b"P6\n400 600\n255\n" + pixels)
     for directory in [movie, archive, show, season]:
         subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(ppm), "-frames:v", "1", str(directory / "poster.jpg")], check=True)
-    manifest = {"license": "CC0-1.0", "creator": "Legitimate LLC", "durationSeconds": 180, "conversionFixture": {"name": "Archive Signal", "videoCodec": "ffv1", "durationSeconds": 20}, "audioLanguages": ["eng", "spa"], "subtitleLanguages": ["eng"], "sha256": {str(p.relative_to(root)).replace(os.sep, "/"): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file() and p.suffix in (".mkv", ".jpg", ".nfo")}}
+    manifest = {"license": "CC0-1.0", "creator": "Legitimate LLC", "durationSeconds": 180, "conversionFixture": {"name": "Archive Signal", "videoCodec": "ffv1", "durationSeconds": 60}, "audioLanguages": ["eng", "spa"], "subtitleLanguages": ["eng"], "sha256": {str(p.relative_to(root)).replace(os.sep, "/"): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file() and p.suffix in (".mkv", ".jpg", ".nfo")}}
     write_json(root / "LICENSE.json", manifest)
     return manifest
 
