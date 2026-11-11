@@ -56,6 +56,12 @@ class OfflineForegroundGateTest {
     }
 
     @Test
+    fun `a sticky recreation with no unfinished work stops its actual service`() {
+        gate.started()
+        assertEquals(listOf("stop"), log)
+    }
+
+    @Test
     fun `nothing to stop when nothing started`() {
         gate.want(emptyList())
         assertEquals(emptyList<String>(), log)
