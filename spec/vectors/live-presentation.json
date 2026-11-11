@@ -11,7 +11,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveGuideNavigation.kt",
     "app/src/main/kotlin/app/pictureshow/LiveScheduleEditor.kt",
     "app/src/main/kotlin/app/pictureshow/LivePlayerPresentation.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideFreshness.kt"
   ],
   "cases": [
     {
@@ -1649,6 +1650,71 @@
         "now": 1001
       },
       "expected": null
+    },
+    {
+      "id": "live-presentation.guide-freshness-missing",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": null,
+        "twentyFour": false,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-freshness-twelve-hour",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": false,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Updated 3:14 PM"
+    },
+    {
+      "id": "live-presentation.guide-freshness-twenty-four-hour",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": true,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Updated 15:14"
+    },
+    {
+      "id": "live-presentation.guide-freshness-offline",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": false,
+        "offline": true,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Offline \u00b7 last loaded 3:14 PM"
+    },
+    {
+      "id": "live-presentation.guide-freshness-offline-fold",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-01T06:30:00Z",
+        "twentyFour": false,
+        "offline": true,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Offline \u00b7 last loaded 1:30 AM -05:00"
     }
   ]
 }

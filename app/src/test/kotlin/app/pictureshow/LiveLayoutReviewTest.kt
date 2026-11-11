@@ -160,11 +160,13 @@ class LiveLayoutReviewTest {
             TouchTheme { LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, false, {}, {}, {}) }
         }
         compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithText("Updated ", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("live:guide-rows").performScrollToNode(hasTestTag("live:guide-row:c14"))
         compose.onNodeWithTag("live:guide-row:c14").assertIsDisplayed()
         compose.onNodeWithTag("live:tab:Channels").performClick()
         compose.onNodeWithTag("live:c:c1").assertIsDisplayed()
         compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithText("Updated ", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("live:guide-row:c1").assertIsDisplayed()
     }
 

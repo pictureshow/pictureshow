@@ -217,3 +217,7 @@ well as the guide. A snapshot older than five minutes explains that the guide is
 instant reports freshness unavailable. A stale reference notice remains during a pending refresh; loading alone does not make a fresh snapshot stale.
 Detail toolbars retain an explicit Refresh action. Refreshing preserves the open
 detail and restores actions only after a successful fresh read; it never tunes or submits a recording by itself.
+
+Main Live TV destinations retain the last successful fetch time in every view mode, including phone Grid and List.
+The phone app bar carries the secondary freshness line without adding a content row. A missing fetch time creates no
+timestamp; offline cached data uses “Offline · last loaded”. Times follow the same device-clock and DST-fold rules.

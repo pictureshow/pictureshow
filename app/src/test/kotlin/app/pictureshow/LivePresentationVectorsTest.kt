@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(128, cases.size)
+        assertEquals(133, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -138,6 +138,24 @@ class LivePresentationVectorsTest {
                     liveRecordingDaysLabel(c.getValue("days").jsonArray.map { it.jsonPrimitive.content }.toSet()),
                     id
                 )
+
+                "guide-freshness-label" -> {
+                    val time = LiveTime(
+                        c.getValue("twentyFour").jsonPrimitive.boolean,
+                        Locale.forLanguageTag(value("locale")),
+                        ZoneId.of(value("zone")),
+                        Instant.parse(value("now")).toEpochMilli()
+                    )
+                    assertEquals(
+                        envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                        liveGuideFreshness(
+                            c["fetchedAt"]?.jsonPrimitive?.contentOrNull?.let { Instant.parse(it).toEpochMilli() },
+                            c.getValue("offline").jsonPrimitive.boolean,
+                            time
+                        )?.replace('\u202f', ' ')?.replace('\u00a0', ' '),
+                        id
+                    )
+                }
 
                 "guide-reference-notice" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.contentOrNull,

@@ -216,16 +216,28 @@ internal fun LiveTvScreen(
                     )
                 }
                 if (!detail) {
-                    state.fetchedAt?.let {
-                        LiveText("${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}", true, small = true)
-                    }
+                    liveGuideFreshness(state.fetchedAt, state.offline, time)?.let { LiveText(it, true, small = true) }
                     if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", true) { showSearch = !showSearch }
                 }
                 LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
             }
         } else if (!tv) {
             androidx.compose.material3.TopAppBar(
-                title = { androidx.compose.material3.Text(title, maxLines = 1) },
+                title = {
+                    Column {
+                        androidx.compose.material3.Text(title, maxLines = 1)
+                        if (!detail) {
+                            liveGuideFreshness(state.fetchedAt, state.offline, time)?.let {
+                                androidx.compose.material3.Text(
+                                    it,
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                },
                 navigationIcon = { LiveIcon("back", "Back", false) { if (detail) closeDetail() else onBack() } },
                 actions = {
                     if (!detail) {
@@ -330,16 +342,6 @@ internal fun LiveTvScreen(
                             LiveGuideViewMode(linear, tv) {
                                 linear = it
                                 returnFocus = null
-                            }
-                        } else if (!tv) {
-                            state.fetchedAt?.let {
-                                LiveText(
-                                    "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
-                                    false,
-                                    Modifier.weight(1f),
-                                    small = true,
-                                    maxLines = 1
-                                )
                             }
                         }
                     }
