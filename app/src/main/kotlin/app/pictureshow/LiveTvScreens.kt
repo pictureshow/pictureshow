@@ -393,14 +393,15 @@ internal fun LiveTvScreen(
                             bottom = recordingBottomPadding
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize().testTag("live:content-list").then(
-                            if (recordingShelf) {
-                                Modifier.revealFocusAfterFontChange(list).testTag("live:recording-viewport")
-                                    .onGloballyPositioned(recordingFocus::onViewportPositioned)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        modifier = Modifier.fillMaxSize()
+                            .testTag(if (recordingShelf) "live:recording-viewport" else "live:content-list").then(
+                                if (recordingShelf) {
+                                    Modifier.revealFocusAfterFontChange(list)
+                                        .onGloballyPositioned(recordingFocus::onViewportPositioned)
+                                } else {
+                                    Modifier
+                                }
+                            )
                     ) {
                         if (tv && (recording != null || cancelling)) {
                             item {
