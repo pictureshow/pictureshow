@@ -23,6 +23,7 @@ import java.net.SocketTimeoutException
 internal class PlaybackLoadDiagnostics(
     private val write: (String) -> Unit = PlaybackDiagnostics::write,
     private val trace: (String) -> Unit = {},
+    private val traceEnabled: Boolean = BuildConfig.DEBUG,
     private val clock: () -> Long = SystemClock::elapsedRealtime
 ) : AnalyticsListener,
     androidx.media3.datasource.TransferListener {
@@ -133,23 +134,25 @@ internal class PlaybackLoadDiagnostics(
                 "inFlight=${loads.size} oldestMs=${oldest?.let { (now - it.began).coerceAtLeast(0) } ?: 0} " +
                 "suppressed=$suppressed final=$final"
         )
-        synchronized(traceLock) {
-            cleanSources()
-            val active = sources.values.filter { it.transfer?.active == true }.sortedBy { it.id }
-            val loadIds = loads.entries.sortedBy { it.key }.take(20).joinToString(",") { "${it.key}:${it.value.retry + 1}" }
-            val transfers = active.take(20).joinToString(",") { source ->
-                val transfer = requireNotNull(source.transfer)
-                "${source.id}:${source.attempt}:${transfer.bytes}:${age(now, transfer.lastByte)}:${age(now, transfer.began)}"
+        if (traceEnabled) {
+            synchronized(traceLock) {
+                cleanSources()
+                val active = sources.values.filter { it.transfer?.active == true }.sortedBy { it.id }
+                val loadIds = loads.entries.sortedBy { it.key }.take(20).joinToString(",") { "${it.key}:${it.value.retry + 1}" }
+                val transfers = active.take(20).joinToString(",") { source ->
+                    val transfer = requireNotNull(source.transfer)
+                    "${source.id}:${source.attempt}:${transfer.bytes}:${age(now, transfer.lastByte)}:${age(now, transfer.began)}"
+                }
+                // Summary bypasses the event cap so suppressed evidence is always accounted for.
+                trace(
+                    "summary callbackMs=$now loadTaskIdsAttempts=[$loadIds] loadsOmitted=${(loads.size - 20).coerceAtLeast(0)} " +
+                        "activeTransfers=${active.size} transferSourceAttemptBytesIdleAge=[$transfers] " +
+                        "transfersOmitted=${(active.size - 20).coerceAtLeast(0)} association=unknown " +
+                        "collectedActiveTransfers=$collectedActiveTransfers " +
+                        "droppedTraceCount=$traceDropped droppedSinceSummary=${traceDropped - reportedDropped} final=$final"
+                )
+                reportedDropped = traceDropped
             }
-            // Summary bypasses the event cap so suppressed evidence is always accounted for.
-            trace(
-                "summary callbackMs=$now loadTaskIdsAttempts=[$loadIds] loadsOmitted=${(loads.size - 20).coerceAtLeast(0)} " +
-                    "activeTransfers=${active.size} transferSourceAttemptBytesIdleAge=[$transfers] " +
-                    "transfersOmitted=${(active.size - 20).coerceAtLeast(0)} association=unknown " +
-                    "collectedActiveTransfers=$collectedActiveTransfers " +
-                    "droppedTraceCount=$traceDropped droppedSinceSummary=${traceDropped - reportedDropped} final=$final"
-            )
-            reportedDropped = traceDropped
         }
         window = now
         completed = 0
@@ -165,35 +168,47 @@ internal class PlaybackLoadDiagnostics(
         source: androidx.media3.datasource.DataSource,
         dataSpec: androidx.media3.datasource.DataSpec,
         isNetwork: Boolean
-    ) = synchronized(traceLock) {
-        val now = clock()
-        val sourceState = sourceTrace(source)
-        val replacedActive = sourceState.transfer?.active == true
-        sourceState.attempt++
-        sourceState.transfer = TransferTrace(dataSpec.position, dataSpec.length, isNetwork, now, initialized = true)
-        traceTransfer("initializing", sourceState, now, "replacedActive=$replacedActive")
+    ) = if (traceEnabled) {
+        synchronized(traceLock) {
+            val now = clock()
+            val sourceState = sourceTrace(source)
+            val replacedActive = sourceState.transfer?.active == true
+            sourceState.attempt++
+            sourceState.transfer = TransferTrace(dataSpec.position, dataSpec.length, isNetwork, now, initialized = true)
+            traceTransfer("initializing", sourceState, now, "replacedActive=$replacedActive")
+        }
+    } else {
+        Unit
     }
     override fun onTransferStart(
         source: androidx.media3.datasource.DataSource,
         dataSpec: androidx.media3.datasource.DataSpec,
         isNetwork: Boolean
-    ) = synchronized(traceLock) {
-        val now = clock()
-        val sourceState = sourceTrace(source)
-        val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now, starting = true)
-        transfer.started = true
-        traceTransfer("start", sourceState, now)
+    ) = if (traceEnabled) {
+        synchronized(traceLock) {
+            val now = clock()
+            val sourceState = sourceTrace(source)
+            val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now, starting = true)
+            transfer.started = true
+            traceTransfer("start", sourceState, now)
+        }
+    } else {
+        Unit
     }
     override fun onTransferEnd(
         source: androidx.media3.datasource.DataSource,
         dataSpec: androidx.media3.datasource.DataSpec,
         isNetwork: Boolean
-    ) = synchronized(traceLock) {
-        val now = clock()
-        val sourceState = sourceTrace(source)
-        val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now)
-        traceTransfer("end", sourceState, now)
-        transfer.active = false
+    ) = if (traceEnabled) {
+        synchronized(traceLock) {
+            val now = clock()
+            val sourceState = sourceTrace(source)
+            val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now)
+            traceTransfer("end", sourceState, now)
+            transfer.active = false
+        }
+    } else {
+        Unit
     }
     override fun onBytesTransferred(
         source: androidx.media3.datasource.DataSource,
@@ -205,16 +220,18 @@ internal class PlaybackLoadDiagnostics(
             wireBytes.addAndGet(bytesTransferred.toLong())
             lastByte.set(clock())
         }
-        synchronized(traceLock) {
-            val now = clock()
-            val sourceState = sourceTrace(source)
-            val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now)
-            if (bytesTransferred > 0) {
-                transfer.bytes += bytesTransferred
-                transfer.lastByte = now
-                if (transfer.firstByte < 0) {
-                    transfer.firstByte = now
-                    traceTransfer("first-byte", sourceState, now)
+        if (traceEnabled) {
+            synchronized(traceLock) {
+                val now = clock()
+                val sourceState = sourceTrace(source)
+                val transfer = currentTransfer(sourceState, dataSpec, isNetwork, now)
+                if (bytesTransferred > 0) {
+                    transfer.bytes += bytesTransferred
+                    transfer.lastByte = now
+                    if (transfer.firstByte < 0) {
+                        transfer.firstByte = now
+                        traceTransfer("first-byte", sourceState, now)
+                    }
                 }
             }
         }
@@ -262,16 +279,20 @@ internal class PlaybackLoadDiagnostics(
         error: String = "none",
         cancelled: Boolean = false,
         status: Int = -1
-    ) = synchronized(traceLock) {
-        val now = clock()
-        boundedTrace(
-            "load event=$kind loadTaskId=${info.loadTaskId} attempt=${load.retry + 1} retryCount=${load.retry} " +
-                "dataType=${load.dataType} trackType=${load.trackType} eventMs=${event.realtimeMs} " +
-                "loadElapsedMs=${info.elapsedRealtimeMs} callbackMs=$now " +
-                "position=${info.dataSpec.position} length=${info.dataSpec.length} " +
-                "bytes=${info.bytesLoaded} durationMs=${info.loadDurationMs} errorClass=$error httpStatus=$status cancelled=$cancelled",
-            now
-        )
+    ) = if (traceEnabled) {
+        synchronized(traceLock) {
+            val now = clock()
+            boundedTrace(
+                "load event=$kind loadTaskId=${info.loadTaskId} attempt=${load.retry + 1} retryCount=${load.retry} " +
+                    "dataType=${load.dataType} trackType=${load.trackType} eventMs=${event.realtimeMs} " +
+                    "loadElapsedMs=${info.elapsedRealtimeMs} callbackMs=$now " +
+                    "position=${info.dataSpec.position} length=${info.dataSpec.length} " +
+                    "bytes=${info.bytesLoaded} durationMs=${info.loadDurationMs} errorClass=$error httpStatus=$status cancelled=$cancelled",
+                now
+            )
+        }
+    } else {
+        Unit
     }
 
     private fun traceTransfer(kind: String, source: SourceTrace, now: Long, extra: String = "") {

@@ -46,6 +46,31 @@ class PlaybackLoadTraceTest {
         override fun toString(): String = error("Source metadata must not cross the trace boundary")
     }
 
+    @Test fun disabledTracingDoesNotInspectTransfersOrEmitButPreservesLegacyNetworkCounters() {
+        val old = mutableListOf<String>()
+        val trace = mutableListOf<String>()
+        var clockReads = 0
+        val log = PlaybackLoadDiagnostics(old::add, trace::add, traceEnabled = false) {
+            clockReads++
+            0L
+        }
+        val source = Source()
+        val before = clockReads
+        log.onTransferInitializing(source, spec, false)
+        log.onTransferStart(source, spec, false)
+        log.onBytesTransferred(source, spec, false, 4)
+        log.onTransferEnd(source, spec, false)
+        assertEquals(before, clockReads, "Disabled local transfer tracing must not sample clocks or build source state")
+        log.onBytesTransferred(source, spec, true, 8)
+        assertEquals(before + 1, clockReads, "Only the existing network last-byte counter samples time")
+        log.onLoadStarted(time, info(1), media, 0)
+        log.onLoadCompleted(time, info(1, 20, 8), media)
+        log.summary(final = true)
+        assertTrue(trace.isEmpty())
+        assertTrue(old.single().contains("wireBytes=8"))
+        assertTrue(old.single().contains("completed=1"))
+    }
+
     @Test fun initialAndFastCompletedLoadsCarryAllThreeClocksAndNumericRangesWithoutChangingLegacySilence() {
         val old = mutableListOf<String>()
         val trace = mutableListOf<String>()
