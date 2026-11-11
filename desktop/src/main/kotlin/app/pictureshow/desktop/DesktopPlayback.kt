@@ -212,10 +212,18 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             player.option("video-timing-offset", if (Platform.isMac()) "0.050" else "0")
             player.option("target-trc", "linear"); player.option("target-prim", "bt.2020"); player.option("target-peak", "10000")
             player.option("fbo-format", if (Platform.isMac()) "rgba16f" else "rgba16hf"); player.option("dither-depth", "no")
-            val title = "Pictureshow player ${UUID.randomUUID()}"
             savedTitle = (w as? java.awt.Frame)?.title
-            onEdt { (w as? java.awt.Frame)?.title = title }
-            val view = if (Platform.isMac()) requireNotNull(bridge.ps_find_window(title)) { "Player window is not visible" } else Native.getWindowPointer(w)
+            val view = if (Platform.isMac()) {
+                // The native bridge needs a unique title to identify the Compose window, but
+                // that lookup token is an implementation detail and must not remain user-visible.
+                val lookupTitle = "Pictureshow player ${UUID.randomUUID()}"
+                try {
+                    onEdt { (w as? java.awt.Frame)?.title = lookupTitle }
+                    requireNotNull(bridge.ps_find_window(lookupTitle)) { "Player window is not visible" }
+                } finally {
+                    onEdt { (w as? java.awt.Frame)?.title = savedTitle.orEmpty() }
+                }
+            } else Native.getWindowPointer(w)
             if (Platform.isMac()) {
                 val reference = bridge.ps_edr_reference_white(view)
                 check(reference == 100.0 || reference == 203.0)

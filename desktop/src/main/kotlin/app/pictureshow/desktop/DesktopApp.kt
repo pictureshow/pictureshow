@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -504,20 +505,17 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
             videoTop = it.positionInWindow().y.toDouble()
             videoBottom = videoTop + it.size.height
         })
-        p.notice?.let { notice ->
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.widthIn(max = 560.dp).padding(horizontal = 20.dp, vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("ⓘ", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.titleMedium)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(notice.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        Text(notice.reason, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        Text(notice.fix, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=.96f)) {
+            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(if (p.notice != null) 12.dp else 10.dp)) {
+                p.notice?.let { notice ->
+                    Column(
+                        Modifier.widthIn(max = 720.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(notice.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                        Text("${notice.reason} ${notice.fix}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-            }
-        }
-        Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=.96f)) {
-            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Text(p.item.name,style=MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text(clock(p.positionSeconds),Modifier.width(72.dp),textAlign=TextAlign.End,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
@@ -559,7 +557,7 @@ private fun SettingsPage(state:DesktopState,c:DesktopController) {
             SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
                 Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
             }
-            SettingSwitch("Explain video conversion","Tell me when this desktop needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
+            SettingSwitch("Explain video conversion","Tell me when this computer needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
             SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
