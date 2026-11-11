@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import secrets
 import shutil
 import socket
@@ -324,6 +325,8 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
             for line in raw_log.read_text(encoding="utf-8", errors="replace").splitlines():
                 if line.startswith(("SMOKE ", "Exception in thread", "Caused by:", "java.lang.", "kotlin.")):
                     line = line.replace(password, "<redacted>").replace(viewer.token, "<redacted>")
+                    line = re.sub(r'https?://[^\s\]"<>]+', "<server-url>", line)
+                    line = re.sub(r'(?i)(accessToken|token|password|secret)(\s*[=:]\s*)[^\s,;]+', r'\1\2<redacted>', line)
                     lines.append(line)
             (evidence / "app-output.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     write_json(evidence / "server-session-observations.json", {"samples": samples, "quickConnectApproved": bool(qc_codes)})
