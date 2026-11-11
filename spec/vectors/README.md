@@ -456,3 +456,4 @@ otherwise, since the server's own default is public.
 Android settings UI checks distinguish the merged accessibility row from its rendered text. A row that replaces
 its accessibility semantics can still have visible text children in Compose's unmerged test tree. Geometry checks
 select that visual text, while separate native AccessibilityNodeInfo checks verify the exported checked state.
+Centering permits at most one physical pixel of glyph-position rounding; row height and radio alignment remain exact.

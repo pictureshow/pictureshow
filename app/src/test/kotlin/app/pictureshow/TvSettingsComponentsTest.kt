@@ -243,7 +243,10 @@ class TvSettingsComponentsTest {
         val text = compose.onNodeWithTag("tv-settings:label:20 Mbps", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val radio = compose.onNodeWithTag("tv-settings:radio:1", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertEquals(56.dp, row.bottom - row.top)
-        assertEquals((row.top + row.bottom) / 2, (text.top + text.bottom) / 2)
+        // Compose places whole pixels: an odd-pixel glyph box cannot share the
+        // exact centre of an even-pixel row. Allow at most one physical pixel.
+        val onePixel = (1f / compose.activity.resources.displayMetrics.density).dp
+        assertTrue(kotlin.math.abs(((row.top + row.bottom) / 2 - (text.top + text.bottom) / 2).value) <= onePixel.value)
         assertEquals((row.top + row.bottom) / 2, (radio.top + radio.bottom) / 2)
         compose.onNodeWithTag("tv-settings:option:1").assertIsFocused().assertIsSelected()
         key("tv-settings:panel", Key.DirectionCenter)
