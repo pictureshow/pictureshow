@@ -49,6 +49,14 @@ internal fun PlayerQualityMenu(
         title = { Text("Quality") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()).selectableGroup().testTag("player:quality-menu")) {
+                if (isShortTouchWindow()) {
+                    Text(
+                        "Scroll for more options",
+                        modifier = Modifier.testTag("player:quality-scroll-hint").padding(bottom = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 PlaybackQualityPresentation.choices.forEach { choice ->
                     val note = supporting(choice)
                     TouchRadioRow(

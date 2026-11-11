@@ -76,3 +76,5 @@ fresh bandwidth samples can then reduce quality. A reduction is identified in th
 bitrate and buffering reason. Downloads show fixed quality. Both native surfaces use these states (SET-14), preserving
 clock, pause and track intent across request changes. SET-16/21 choices keep PLAY-27 conversion causes and remedies
 accurate; changing presentation labels never changes compatibility facts.
+
+On short touch windows, the player Quality list shows “Scroll for more options” when it opens, so the visible Auto and high-cap rows do not imply that lower caps are absent. The cue is visible at 800×360dp/font1.3. When Auto is current, opening preserves that selection without changing quality; scrolling to a lower cap and selecting it commits once and closes the menu. The native playback-settings-layout overflow case verifies the real window, initial cue visibility, and selection of 4 Mbps.

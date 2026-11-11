@@ -11,25 +11,31 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import java.io.File
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -85,6 +91,66 @@ class PlayerQualityMenuTest {
             assertEquals(null, value)
             assertEquals(3, selections)
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h360dp-land-mdpi")
+    fun shortLandscapeQualityMenuRevealsOverflowAndSelectsLowerCapOnce() {
+        val file = listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
+            .single { it.isFile }
+        val case = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.single { it.getValue("operation").jsonPrimitive.content == "player-quality-short-window-overflow" }
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        var value by mutableStateOf<Int?>(null)
+        var open by mutableStateOf(true)
+        var selections = 0
+        var closes = 0
+        compose.setContent {
+            assertEquals(
+                IntSize(input.getValue("widthDp").jsonPrimitive.int, input.getValue("heightDp").jsonPrimitive.int),
+                LocalWindowInfo.current.containerSize,
+                "The real native window must match the portable short landscape viewport"
+            )
+            CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
+                TouchTheme {
+                    if (open) {
+                        PlayerQualityMenu(
+                            null,
+                            input.getValue("automaticContext").jsonPrimitive.content,
+                            input.getValue("reductionNotice").jsonPrimitive.content,
+                            true,
+                            {
+                                value = it
+                                selections++
+                            },
+                            {
+                                closes++
+                                open = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(expected.getValue("selectionCountOnOpen").jsonPrimitive.int, selections)
+            assertEquals(null, value)
+            assertEquals(0, closes)
+        }
+        compose.onNodeWithTag("player:quality-choice:auto").assertIsSelected()
+        val hint = expected.getValue("overflowHint").jsonPrimitive.content
+        // Count first: omitting the cue must fail a content assertion, not a node lookup.
+        assertEquals(1, compose.onAllNodesWithText(hint).fetchSemanticsNodes().size, "A short Quality menu must reveal its lower choices")
+        compose.onNodeWithText(hint).assertIsDisplayed()
+        val requested = input.getValue("selectMbps").jsonPrimitive.int
+        compose.onNodeWithTag("player:quality-choice:$requested").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertEquals(requested, value)
+            assertEquals(expected.getValue("selectionCountAfterChoice").jsonPrimitive.int, selections)
+            assertEquals(expected.getValue("closeCountAfterChoice").jsonPrimitive.int, closes)
+        }
+        assertEquals(0, compose.onAllNodesWithTag("player:quality-menu").fetchSemanticsNodes().size, "Selecting a cap closes the menu")
     }
 
     @Test fun tvOpensFocusedOnCurrentRadioAndSelectingAutoIsExplicit() {
