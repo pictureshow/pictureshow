@@ -65,7 +65,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             if(shifted) robot.keyRelease(KeyEvent.VK_SHIFT)
         }
     }
-    fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080)) {
+    fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null) {
         for((w,h) in sizes) {
             SwingUtilities.invokeAndWait {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
@@ -83,6 +83,12 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 observed.width==w && observed.height==h && window.graphicsConfiguration.bounds.contains(observed)
             }
             Thread.sleep(400) // Allow the final native resize and Compose layout to paint.
+            hoverTag?.let { tag ->
+                val target=DesktopUiProbe.bounds.getValue(tag)
+                val origin=window.locationOnScreen;val scale=window.graphicsConfiguration.defaultTransform.scaleX
+                robot.mouseMove(origin.x+(target.center.x/scale).roundToInt(),origin.y+(target.center.y/scale).roundToInt())
+                Thread.sleep(1100)
+            }
             val bounds=window.bounds
             check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested ${w}x${h} window not visible; actual=$bounds display=${window.graphicsConfiguration.bounds}" }
             val original=robot.createScreenCapture(bounds)
@@ -232,6 +238,15 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("Enter opens keyboard help") { DesktopUiProbe.bounds.containsKey("help-close") }
         key(KeyEvent.VK_ESCAPE)
         waitFor("keyboard help closes with Escape") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
+        click("nav:library:${library.id}");ready(DesktopRoute.Library)
+        click("grid:${movie.id}");ready(DesktopRoute.Detail)
+        if(c.state.value.detail?.isWatched!=true) { click("watched");waitFor("watched server state") { c.state.value.detail?.isWatched==true } }
+        if(c.state.value.detail?.userData?.isFavorite!=true) { click("favorite");waitFor("favorite server state") { c.state.value.detail?.userData?.isFavorite==true } }
+        screenshot("15-detail-selected-states")
+        screenshot("15b-favorite-tooltip",hoverTag="favorite")
+        click("watched");waitFor("unwatched server state") { c.state.value.detail?.isWatched==false }
+        click("favorite");waitFor("unfavorite server state") { c.state.value.detail?.userData?.isFavorite==false }
+        click("nav:home");ready(DesktopRoute.Home)
         successful=checks.size==18&&checks.values.all{it}
         File(out,"app-smoke-result.json").writeText("{\"pass\":$successful,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         check(successful)
