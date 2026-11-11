@@ -27,6 +27,8 @@ object DesktopGlyph {
 
     val WatchedOutline by lazy { outlineGlyph("WatchedOutline") { moveTo(12f,1f); arcTo(11f,11f,0f,true,true,11.9f,23f); arcTo(11f,11f,0f,false,true,12f,1f); close(); moveTo(6f,12f); lineTo(9f,15f); lineTo(18f,7f) } }
     val FavoriteOutline by lazy { outlineGlyph("FavoriteOutline") { moveTo(12f,21f); curveTo(10f,19f,2f,14f,2f,8f); curveTo(2f,3f,9f,1f,12f,7f); curveTo(15f,1f,22f,3f,22f,8f); curveTo(22f,14f,14f,19f,12f,21f); close() } }
+    val ChevronDown by lazy { glyph("ChevronDown") { moveTo(5f,8f); lineTo(12f,15f); lineTo(19f,8f); lineTo(21f,10f); lineTo(12f,19f); lineTo(3f,10f); close() } }
+    val Remove by lazy { glyph("Remove") { moveTo(7f,3f); lineTo(17f,3f); lineTo(17f,5f); lineTo(21f,5f); lineTo(21f,7f); lineTo(3f,7f); lineTo(3f,5f); lineTo(7f,5f); close(); moveTo(5f,8f); lineTo(19f,8f); lineTo(18f,21f); lineTo(6f,21f); close(); moveTo(9f,10f); lineTo(11f,10f); lineTo(11f,19f); lineTo(9f,19f); close(); moveTo(13f,10f); lineTo(15f,10f); lineTo(15f,19f); lineTo(13f,19f); close() } }
 
 }
 

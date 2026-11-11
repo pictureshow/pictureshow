@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import kotlinx.coroutines.delay
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
@@ -95,7 +96,7 @@ internal fun DesktopTooltip(label: String, content: @Composable () -> Unit) {
 private fun ShortcutRow(keys: String, action: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(4.dp)) {
-            Text(keys, Modifier.widthIn(min = 112.dp).padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, textAlign = TextAlign.Center)
+            Text(keys, Modifier.width(160.dp).padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, textAlign = TextAlign.Center, maxLines = 1)
         }
         Text(action, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
@@ -138,7 +139,17 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     var remove by remember { mutableStateOf<Account?>(null) }
     PictureshowTheme {
         val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density * if (state.settings.largeInterface) 1.25f else 1f, density.fontScale)) {
+        CompositionLocalProvider(
+            LocalDensity provides Density(density.density * if (state.settings.largeInterface) 1.25f else 1f, density.fontScale),
+            LocalScrollbarStyle provides ScrollbarStyle(
+                minimalHeight = 32.dp,
+                thickness = 8.dp,
+                shape = RoundedCornerShape(4.dp),
+                hoverDurationMillis = 300,
+                unhoverColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                hoverColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        ) {
             // Window shortcuts remain active when resize or pointer input clears a
             // child's focus, and when focus is in the custom title bar.
             SideEffect { windowKeys { e ->
@@ -185,7 +196,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             }
                             Spacer(Modifier.weight(1f))
                             NavigationDrawerItem(label = { Text("Settings") }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.probe("nav:settings"))
-                            NavigationDrawerItem(label = { Text("Switch user") }, selected = false, onClick = controller::accounts, modifier = Modifier.probe("nav:accounts"))
+                            NavigationDrawerItem(label = { Text("Switch account") }, selected = false, onClick = controller::accounts, modifier = Modifier.probe("nav:accounts"))
                         }
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -210,14 +221,33 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                     Text("In Jellyfin, open Settings → Quick Connect and enter this code. Keep this window open while you approve.")
                                     InlineTextAction("Use username and password", "quick-back", controller::back)
                                 }
-                                DesktopRoute.Accounts -> FormPage("Who's watching?", "Choose a saved viewer or connect another server.") {
+                                DesktopRoute.Accounts -> FormPage("Who's watching?", "Choose an account or add one.") {
                                     state.accounts.forEach { a ->
-                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            OutlinedButton(onClick = { controller.selectAccount(a.key) }, modifier = Modifier.weight(1f).probe("account:${a.key}")) { Text("${a.user.name} · ${a.server.name}") }
-                                            TextButton(onClick = { remove = a }, modifier = Modifier.probe("remove:${a.key}")) { Text("Remove") }
+                                        Row(
+                                            Modifier.fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
+                                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                                                .clickable { controller.selectAccount(a.key) }.probe("account:${a.key}")
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
+                                                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                                                    Text(a.user.name.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                                }
+                                            }
+                                            Column(Modifier.weight(1f)) {
+                                                Text(a.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(a.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            DesktopTooltip("Remove account") {
+                                                IconButton(onClick = { remove = a }, modifier = Modifier.probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
+                                                    Icon(DesktopGlyph.Remove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
                                         }
                                     }
-                                    Button(onClick = controller::addServer, modifier = Modifier.probe("add-server")) { Text("Add a server / sign in another user") }
+                                    OutlinedButton(onClick = controller::addServer, modifier = Modifier.heightIn(min = 48.dp).probe("add-server")) { Text("Add account") }
                                 }
                                 DesktopRoute.Home -> HomePage(state, controller)
                                 DesktopRoute.Library -> LibraryPage(state, controller)
@@ -247,7 +277,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
             remove?.let { a ->
                 val cancelFocus = remember(a.key) { FocusRequester() }
                 LaunchedEffect(a.key) { delay(100); cancelFocus.requestFocus() }
-                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove viewer") } }) }
+                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove account") } }) }
         }
     }
 }
@@ -468,30 +498,54 @@ private fun clock(seconds:Double):String { val s=seconds.toLong().coerceAtLeast(
 private fun SettingsPage(state:DesktopState,c:DesktopController) {
     val s=state.settings
     FormPage("Settings","Playback and viewing preferences for this desktop.") {
+        CatalogHeading("Account",section=true)
+        SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
+            OutlinedButton(onClick = c::signOut, modifier = Modifier.heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
+        }
         CatalogHeading("Playback",section=true)
-        Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality") { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+        SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
+            Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+        }
         SettingSwitch("Explain video conversion","Tell me when this desktop needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
         SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
-        Text("Volume · ${s.volume}%")
-        Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.probe("volume").semantics { contentDescription="Volume" })
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Volume", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.weight(1f))
+                Text("${s.volume}%", style = MaterialTheme.typography.labelLarge)
+            }
+            Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.probe("volume").semantics { contentDescription="Volume" })
+        }
         HorizontalDivider()
         CatalogHeading("Interface",section=true)
         SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
+        HorizontalDivider()
+        CatalogHeading("About",section=true)
         Text("Pictureshow · Free, open source Jellyfin client\nMPL-2.0 · Legitimate LLC\nVideo: dynamically loaded LGPL libmpv",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        InlineTextAction("Sign out", "sign-out", c::signOut)
+    }
+}
+@Composable
+private fun SettingRow(title: String, caption: String, trailing: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        trailing()
     }
 }
 @Composable
 private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,onChange:(Boolean)->Unit) {
-    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Text(caption,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(value,onChange,Modifier.probe(tag).semantics { contentDescription=title }) }
+    SettingRow(title, caption) { Switch(value,onChange,Modifier.probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
-private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,onChoose:(T)->Unit) {
+private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=null,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
             if(icon!=null) Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp))
             Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis)
+            if (trailingIcon != null) { Spacer(Modifier.width(4.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
         }
         DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.probe("$tag:$key")) } }
     }
