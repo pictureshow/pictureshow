@@ -68,7 +68,7 @@ jobs:
           export MPV_LIBRARY="$PWD/desktop/build/app-native/prefix/lib/libmpv.dylib"
           export SPIKE_LAYER_BRIDGE="$PWD/desktop/build/app-native/libpictureshow_layer.dylib"
           export SPIKE_NULL_AUDIO=1
-          python3 desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+          python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
       - name: Windows app against its disposable Jellyfin portable server
         if: runner.os == 'Windows'
         shell: pwsh
@@ -80,6 +80,15 @@ jobs:
           $env:SPIKE_NULL_AUDIO = '1'
           $env:SPIKE_SOFTWARE_GPU = '1'
           $env:SKIKO_RENDER_API = 'SOFTWARE'
+          cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Display setup compile failed' }
+          New-Item -ItemType Directory -Force desktop-evidence/display | Out-Null
+          $screenJson = & desktop/build/windows-smoke-screen.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Hosted display cannot fit the requested app windows' }
+          $screenJson | Set-Content desktop-evidence/display/smoke-screen.json
+          $screen = $screenJson | ConvertFrom-Json
+          $env:PICTURESHOW_SMOKE_WINDOW_X = [string]$screen.x
+          $env:PICTURESHOW_SMOKE_WINDOW_Y = [string]$screen.y
           python desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
           if ($LASTEXITCODE -ne 0) { throw 'Desktop E2E smoke failed' }
       - uses: actions/upload-artifact@v7

@@ -74,6 +74,18 @@ pinned upstream LGPL mpv archive and WARP on hosted CI. These software runs do n
 qualify physical HDR, speaker output, real-GPU performance or release packaging.
 The separate numeric HDR and pacing gates retain their existing entry points.
 
+Hosted screenshots require a display large enough for the entire requested
+window. Linux uses its owned 1920x1080 Xvfb at origin zero. The hosted-only Mac
+wrapper creates an additional unmirrored 2048x1280 virtual display, verifies its
+reported bounds, positions the app there, and stops the helper after the smoke
+even on failure. Its lease is at most 900 seconds; existing HDR helper calls keep
+their 1280x720 size and 120-second maximum. Existing physical displays retain
+their mode, origin and primary status. Windows enumerates supported display
+modes, tests a mode of at least 1920x1080, applies it dynamically without registry
+writes, then verifies the actual mode and records its origin and system DPI.
+Display receipts are included in the CI artifact. These setup wrappers refuse
+to mutate a display outside a GitHub runner.
+
 The GitHub `Desktop app` workflow runs the JVM/vector gate and application smoke
 on free standard Linux, macOS and Windows hosted runners, with a separate Ubuntu
 Android `check assembleDebug` gate. Evidence includes the named app checks,
@@ -95,3 +107,10 @@ not claimed to be upstream signature verification. Docker digest matches the
 existing repository launch-fixture capture. Ad-hoc Mac server signing follows the
 official portable instructions and applies only to the disposable downloaded test
 server. Signing the Pictureshow application remains a separate packaging task.
+
+Windows display API sources checked 2026-11-10: Microsoft
+[EnumDisplaySettingsW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsw)
+and [ChangeDisplaySettingsExW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-changedisplaysettingsexw).
+The implementation uses a driver-enumerated mode, `CDS_TEST`, dynamic flags zero,
+and actual-mode readback; it neither installs a display driver nor changes the
+registry mode.

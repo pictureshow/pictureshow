@@ -13,6 +13,27 @@ import time
 spec = importlib.util.spec_from_file_location("app_smoke", Path(__file__).with_name("run.py"))
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
+display_spec = importlib.util.spec_from_file_location("macos_smoke_display", Path(__file__).with_name("macos-run.py"))
+display = importlib.util.module_from_spec(display_spec)
+display_spec.loader.exec_module(display)
+
+
+class DisplayBoundsTest(unittest.TestCase):
+    def receipt(self):
+        return {"phase": "virtual", "online": 1, "mirrored": 0, "main": 0,
+                "width": 2048, "height": 1280, "x": 1074, "y": -30}
+
+    def test_virtual_origin_is_preserved(self):
+        self.assertEqual((1074, -30), display.smoke_origin(self.receipt()))
+
+    def test_clipped_or_physical_display_is_rejected(self):
+        for field, value in [("width", 1024), ("height", 768), ("main", 1),
+                             ("mirrored", 1), ("online", 0), ("phase", "before")]:
+            with self.subTest(field=field):
+                receipt = self.receipt()
+                receipt[field] = value
+                with self.assertRaisesRegex(RuntimeError, "virtual display"):
+                    display.smoke_origin(receipt)
 
 
 class SmokeVerdictTest(unittest.TestCase):

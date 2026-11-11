@@ -9,6 +9,7 @@ export MPV_LIBRARY="$prefix/lib/x86_64-linux-gnu/libmpv.so"
 [[ -f "$MPV_LIBRARY" ]] || export MPV_LIBRARY="$prefix/lib/libmpv.so"
 export SPIKE_WAYLAND_BRIDGE="$build/native/libpictureshow_wayland.so"
 export SPIKE_NULL_AUDIO=1 SPIKE_SOFTWARE_GPU=1 SKIKO_RENDER_API=SOFTWARE LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=softpipe
+export PICTURESHOW_SMOKE_WINDOW_X=0 PICTURESHOW_SMOKE_WINDOW_Y=0
 export XDG_RUNTIME_DIR
 XDG_RUNTIME_DIR=$(mktemp -d)
 export WAYLAND_DISPLAY=pictureshow-app-smoke
