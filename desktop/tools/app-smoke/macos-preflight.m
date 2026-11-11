@@ -18,17 +18,41 @@ static NSString *loaderFailure(const char *error) {
     return @"unclassified loader failure"; // Keep machine paths out of receipts.
 }
 
+static NSDictionary *contextProbe(BOOL core32) {
+    CGLPixelFormatAttribute attributes[4] = {0};
+    if (core32) {
+        attributes[0] = kCGLPFAOpenGLProfile;
+        attributes[1] = (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core;
+    }
+    CGLPixelFormatObj format = NULL; GLint count = 0;
+    CGLError formatError = CGLChoosePixelFormat(attributes, &format, &count);
+    CGLContextObj context = NULL;
+    CGLError contextError = format ? CGLCreateContext(format, NULL, &context) : kCGLBadPixelFormat;
+    NSMutableDictionary *result = [@{@"formatError":@(formatError), @"formatCount":@(count),
+                                     @"contextError":@(contextError)} mutableCopy];
+    if (context) {
+        CGLSetCurrentContext(context);
+        const GLubyte *renderer = glGetString(GL_RENDERER), *version = glGetString(GL_VERSION);
+        result[@"renderer"] = renderer ? [NSString stringWithUTF8String:(const char *)renderer] : @"unavailable";
+        result[@"version"] = version ? [NSString stringWithUTF8String:(const char *)version] : @"unavailable";
+        CGLSetCurrentContext(NULL); CGLDestroyContext(context);
+    }
+    if (format) CGLDestroyPixelFormat(format);
+    return result;
+}
+
 int main(int argc, const char **argv) { @autoreleasepool {
-    if (argc != 2) return 2;
+    if (argc > 2) return 2;
     NSMutableDictionary *receipt = [NSMutableDictionary dictionary];
 #if defined(__arm64__)
     receipt[@"architecture"] = @"arm64";
 #elif defined(__x86_64__)
     receipt[@"architecture"] = @"x86_64";
 #endif
-    void *adapter = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
-    receipt[@"adapterLoaded"] = @(adapter != NULL);
-    receipt[@"loaderFailure"] = loaderFailure(adapter ? NULL : dlerror());
+    void *adapter = argc == 2 ? dlopen(argv[1], RTLD_NOW | RTLD_LOCAL) : NULL;
+    receipt[@"adapterProbeRequested"] = @(argc == 2);
+    receipt[@"adapterLoaded"] = argc == 2 ? (id)@(adapter != NULL) : (id)NSNull.null;
+    receipt[@"loaderFailure"] = argc == 2 ? loaderFailure(adapter ? NULL : dlerror()) : @"not requested";
     NSMutableArray *missing = [NSMutableArray array];
     if (adapter) {
         for (NSString *symbol in @[@"ps_find_window", @"ps_edr_reference_white", @"ps_create",
@@ -55,6 +79,8 @@ int main(int argc, const char **argv) { @autoreleasepool {
         CGLSetCurrentContext(NULL); CGLDestroyContext(context);
     }
     if (pixelFormat) CGLDestroyPixelFormat(pixelFormat);
+    receipt[@"core32WithoutAccelerationRequirement"] = contextProbe(YES);
+    receipt[@"legacyWithoutAccelerationRequirement"] = contextProbe(NO);
     if (adapter) dlclose(adapter);
     NSData *json = [NSJSONSerialization dataWithJSONObject:receipt options:NSJSONWritingPrettyPrinted error:nil];
     fwrite(json.bytes, 1, json.length, stdout); puts("");
