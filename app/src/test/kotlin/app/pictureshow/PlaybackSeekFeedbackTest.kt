@@ -187,7 +187,7 @@ class PlaybackSeekFeedbackTest {
                 native.allowSeek(true)
                 host.applyPendingSeek()
                 assertEquals(row.getValue("expectedNativeSeeks").jsonArray.map { it.jsonPrimitive.long }, native.seeks, id)
-                val expectedRequests = if (row.getValue(
+                val expectedRequests: List<Pair<String, Long?>> = if (row.getValue(
                         "expectedGroupSeekAfterCompletion"
                     ).jsonPrimitive.boolean
                 ) {
