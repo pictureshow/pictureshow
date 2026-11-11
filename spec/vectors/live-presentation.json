@@ -1626,7 +1626,7 @@
         "fetchedAt": 1000,
         "now": 301001
       },
-      "expected": null
+      "expected": "Guide is out of date. Refresh before scheduling or tuning."
     },
     {
       "id": "live-presentation.guide-notice-missing",
@@ -1635,6 +1635,17 @@
         "loading": false,
         "offline": false,
         "fetchedAt": null,
+        "now": 1001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-refreshing-fresh",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": true,
+        "offline": false,
+        "fetchedAt": 1000,
         "now": 1001
       },
       "expected": null

@@ -100,7 +100,7 @@ internal fun LiveTvScreen(
     val guideList = androidx.compose.runtime.key(scrollOwner) { rememberLazyListState() }
     val guideScroll = rememberScrollState()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(state.fetchedAt) {
         while (true) {
             now = System.currentTimeMillis()
             delay(1_000)

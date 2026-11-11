@@ -214,5 +214,6 @@ guide refresh establishes the stale/unavailable read state; clearing a write err
 
 Stale or offline reference notices remain visible in program, recording and schedule detail/edit/review screens as
 well as the guide. A snapshot older than five minutes explains that the guide is out of date; a clock before its fetch
-instant reports freshness unavailable. Detail toolbars retain an explicit Refresh action. Refreshing preserves the open
+instant reports freshness unavailable. A stale reference notice remains during a pending refresh; loading alone does not make a fresh snapshot stale.
+Detail toolbars retain an explicit Refresh action. Refreshing preserves the open
 detail and restores actions only after a successful fresh read; it never tunes or submits a recording by itself.

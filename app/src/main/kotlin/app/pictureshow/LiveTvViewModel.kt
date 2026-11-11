@@ -256,8 +256,8 @@ internal fun LiveTvState.actionsAvailable(now: Long): Boolean = LiveGuideCache(
 /** Reference descriptions remain readable while an explicit refresh recovers stale actions. */
 internal fun LiveTvState.guideReferenceNotice(now: Long): String? = when {
     offline -> "Saved guide is for reference. Reconnect before scheduling or tuning."
-    loading || fetchedAt == null -> null
+    fetchedAt == null -> null
     now < fetchedAt -> "Guide freshness is unavailable. Refresh before scheduling or tuning."
-    !actionsAvailable(now) -> "Guide is out of date. Refresh before scheduling or tuning."
+    !copy(loading = false).actionsAvailable(now) -> "Guide is out of date. Refresh before scheduling or tuning."
     else -> null
 }
