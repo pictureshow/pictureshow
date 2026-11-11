@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -252,6 +255,14 @@ class PhoneSettingsConstraintsTest {
                 }
             }
         }
+        val hint = case.getValue("expected").jsonObject.getValue("overflowHint").jsonPrimitive.content
+        compose.onNodeWithTag("touch:choice-options")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, hint))
+        assertEquals(
+            0,
+            compose.onAllNodesWithText(hint, useUnmergedTree = true).fetchSemanticsNodes().size,
+            "Choice overflow is an accessibility hint, not a visible instruction"
+        )
         val label = compose.onNodeWithTag("touch:choice-label:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val radio = compose.onNode(
             hasTestTag("touch:radio-indicator") and hasAnyAncestor(hasTestTag("touch:choice-option:0")),

@@ -9,11 +9,11 @@ object PlaybackQualityPresentation {
 
     fun choiceLabel(mbps: Int?): String = mbps?.let { "$it Mbps" } ?: "Auto"
 
-    fun automaticContext(network: PlaybackNetwork, configuredBitrate: Int): String = "Automatic: ${when (network) {
-        PlaybackNetwork.Home -> "Home"
-        PlaybackNetwork.Remote -> "Remote"
-        PlaybackNetwork.Metered -> "Metered"
-    }} limit ${bitrate(configuredBitrate)}"
+    fun automaticContext(network: PlaybackNetwork, configuredBitrate: Int): String = "Up to ${bitrate(configuredBitrate)} ${when (network) {
+        PlaybackNetwork.Home -> "on your home network"
+        PlaybackNetwork.Remote -> "away from home"
+        PlaybackNetwork.Metered -> "on mobile data or a metered hotspot"
+    }}"
 
     fun reductionNotice(overrideMbps: Int?, activeBitrate: Int, configuredBitrate: Int): String? =
         if (overrideMbps == null && activeBitrate < configuredBitrate) {

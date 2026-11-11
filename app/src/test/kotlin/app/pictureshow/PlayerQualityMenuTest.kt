@@ -14,6 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
@@ -63,7 +66,7 @@ class PlayerQualityMenuTest {
         compose.setContent {
             androidx.compose.material3.MaterialTheme {
                 if (open) {
-                    PlayerQualityMenu(value, "Automatic: Remote limit 20 Mbps", null, true, {
+                    PlayerQualityMenu(value, "Up to 20 Mbps away from home", null, true, {
                         value = it
                         selections++
                     }, { open = false })
@@ -159,9 +162,13 @@ class PlayerQualityMenuTest {
         }
         compose.onNodeWithTag("player:quality-choice:auto").assertIsSelected()
         val hint = expected.getValue("overflowHint").jsonPrimitive.content
-        // Count first: omitting the cue must fail a content assertion, not a node lookup.
-        assertEquals(1, compose.onAllNodesWithText(hint).fetchSemanticsNodes().size, "A short Quality menu must reveal its lower choices")
-        compose.onNodeWithText(hint).assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-menu")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, hint))
+        assertEquals(
+            0,
+            compose.onAllNodesWithText(hint, useUnmergedTree = true).fetchSemanticsNodes().size,
+            "The overflow hint must remain accessibility-only, without consuming a visible line"
+        )
         val viewport = compose.onNodeWithTag("player:quality-menu").getBoundsInRoot()
         assertEquals(
             true,
@@ -234,7 +241,7 @@ class PlayerQualityMenuTest {
         var closed = 0
         compose.setContent {
             androidx.tv.material3.MaterialTheme {
-                PlayerQualityMenu(40, "Automatic: Metered limit 4 Mbps", null, false, { selected = it }, { closed++ })
+                PlayerQualityMenu(40, "Up to 4 Mbps on mobile data or a metered hotspot", null, false, { selected = it }, { closed++ })
             }
         }
         compose.onNodeWithText("40 Mbps").assertIsFocused().assertIsSelected()
@@ -257,8 +264,14 @@ class PlayerQualityMenuTest {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
                 TouchTheme {
-                    PlayerQualityMenu(null, "Automatic: Home limit 200 Mbps", "Quality limit reduced to 4 Mbps to avoid buffering.", true, {
-                    }, {})
+                    PlayerQualityMenu(
+                        null,
+                        "Up to 200 Mbps on your home network",
+                        "Quality limit reduced to 4 Mbps to avoid buffering.",
+                        true,
+                        {},
+                        {}
+                    )
                 }
             }
         }
@@ -278,10 +291,16 @@ class PlayerQualityMenuTest {
     @Test fun automaticRowExplainsConfiguredNetworkLimitAndCurrentReduction() {
         compose.setContent {
             androidx.compose.material3.MaterialTheme {
-                PlayerQualityMenu(null, "Automatic: Home limit 200 Mbps", "Quality limit reduced to 4 Mbps to avoid buffering.", true, {
-                }, {})
+                PlayerQualityMenu(
+                    null,
+                    "Up to 200 Mbps on your home network",
+                    "Quality limit reduced to 4 Mbps to avoid buffering.",
+                    true,
+                    {},
+                    {}
+                )
             }
         }
-        compose.onNodeWithText("Automatic: Home limit 200 Mbps\nQuality limit reduced to 4 Mbps to avoid buffering.").assertExists()
+        compose.onNodeWithText("Up to 200 Mbps on your home network\nQuality limit reduced to 4 Mbps to avoid buffering.").assertExists()
     }
 }

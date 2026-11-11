@@ -447,8 +447,9 @@ private fun PlaybackSettingRows(
                 tuning.hdr,
                 CapabilityOverride.entries,
                 touch,
-                { capabilityLabel(it, hdr = true) },
-                supporting = capabilityConsequence(tuning.hdr, hdr = true)
+                ::capabilityLabel,
+                supporting = capabilityConsequence(tuning.hdr, hdr = true),
+                optionSupporting = { capabilityConsequence(it, hdr = true) }
             ) { value ->
                 onLocal { it.copy(tuning = it.tuning.copy(hdr = value)) }
             }
@@ -457,8 +458,9 @@ private fun PlaybackSettingRows(
                 tuning.dolbyVision,
                 CapabilityOverride.entries,
                 touch,
-                { capabilityLabel(it, hdr = false) },
-                supporting = capabilityConsequence(tuning.dolbyVision, hdr = false)
+                ::capabilityLabel,
+                supporting = capabilityConsequence(tuning.dolbyVision, hdr = false),
+                optionSupporting = { capabilityConsequence(it, hdr = false) }
             ) { value ->
                 onLocal { it.copy(tuning = it.tuning.copy(dolbyVision = value)) }
             }
@@ -478,7 +480,7 @@ internal fun bitrateLabel(value: Int?) = value?.let { "$it Mbps" } ?: "Auto"
 internal fun bitrateOptionSupporting(value: Int?): String? = if (value ==
     null
 ) {
-    "Up to 200 Mbps; this is a ceiling, not unlimited."
+    "Up to 200 Mbps"
 } else {
     null
 }
@@ -488,22 +490,14 @@ internal fun subtitleValueLabel(value: String) = PlaybackSettingsPresentation.su
 internal fun postCreditsLabel(value: PostCredits) = PlaybackSettingsPresentation.postCreditsLabel(value)
 internal fun audioChannelLabel(value: Int?) = PlaybackSettingsPresentation.audioChannelLabel(value)
 internal fun passthroughLabel(value: PassthroughEncoding) = PlaybackSettingsPresentation.passthroughLabel(value)
-internal fun capabilityLabel(value: CapabilityOverride, hdr: Boolean) = PlaybackSettingsPresentation.capabilityLabel(value, hdr)
+internal fun capabilityLabel(value: CapabilityOverride) = PlaybackSettingsPresentation.capabilityLabel(value)
 internal fun capabilityConsequence(value: CapabilityOverride, hdr: Boolean) = PlaybackSettingsPresentation.capabilityConsequence(value, hdr)
 internal fun burnLabel(value: SubtitleBurnIn) = when (value) {
     SubtitleBurnIn.Always -> "Always"
     SubtitleBurnIn.ImageOnly -> "Only image formats"
     else -> "Automatic"
 }
-internal fun burnConsequence(value: SubtitleBurnIn) = when (value) {
-    SubtitleBurnIn.Always ->
-        "Every selected subtitle is burned into video by the server. This requires video conversion; " +
-            "local appearance and timing controls cannot change it."
-    SubtitleBurnIn.ImageOnly ->
-        "Image subtitles are burned into the video, requiring video conversion. Supported text " +
-            "subtitles can still use your style. Unsupported text may also need conversion."
-    else -> "Plays supported subtitles on this device. Your server converts the video when a selected subtitle cannot play here."
-}
+internal fun burnConsequence(value: SubtitleBurnIn) = PlaybackSettingsPresentation.burnConsequence(value)
 
 @Composable
 private fun <T> ChoiceRow(

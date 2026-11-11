@@ -22,14 +22,22 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.tv.material3.MaterialTheme
 import app.pictureshow.core.playback.PassthroughEncoding
+import java.io.File
 import kotlin.test.assertEquals
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +71,60 @@ class SettingsShortcutParityTest {
     private fun closePanel() {
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
+    }
+
+    private fun mainCopyCase() = Json.parseToJsonElement(
+        listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
+            .single { it.isFile }.readText()
+    ).jsonObject.getValue("cases").jsonArray.map { it.jsonObject }
+        .single { it.getValue("operation").jsonPrimitive.content == "main-settings-contextual-copy" }
+
+    @Test fun mainTvShortcutsUseContextualNamesAndOneSegmentCaption() {
+        val case = mainCopyCase()
+        compose.setContent {
+            MaterialTheme { PlaybackSettingsScreen(PlaybackSettingsState(loading = false), "PCM only", {}, { _, _ -> }, {}, onBack = {}) }
+        }
+        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        case.getValue("input").jsonObject.getValue("rows").jsonArray.forEach { item ->
+            val row = item.jsonObject
+            val node = compose.onNodeWithTag(row.getValue("tag").jsonPrimitive.content)
+            node.performSemanticsAction(SemanticsActions.RequestFocus)
+            node.assertIsDisplayed().assert(hasText(row.getValue("title").jsonPrimitive.content))
+                .assert(hasText(row.getValue("supporting").jsonPrimitive.content))
+        }
+        val expected = case.getValue("expected").jsonObject
+        assertEquals(
+            expected.getValue("segmentCaptionCount").jsonPrimitive.int,
+            compose.onAllNodesWithText(expected.getValue("segmentCaption").jsonPrimitive.content).fetchSemanticsNodes().size
+        )
+        assertEquals(
+            expected.getValue("shortcutMetaCopyCount").jsonPrimitive.int,
+            compose.onAllNodesWithText("Shortcut to", substring = true).fetchSemanticsNodes().size
+        )
+        assertEquals(0, compose.onAllNodesWithText("Ask shows a skip button.", substring = true).fetchSemanticsNodes().size)
+    }
+
+    @Test fun mainTouchShortcutsUseContextualNamesAndOneSegmentCaption() {
+        val case = mainCopyCase()
+        compose.setContent {
+            androidx.compose.material3.MaterialTheme {
+                TouchSettings(PlaybackSettingsState(loading = false), "PCM only", {}, { _, _ -> }, {}, {}, {}, {}, {})
+            }
+        }
+        case.getValue("input").jsonObject.getValue("rows").jsonArray.forEach { item ->
+            val row = item.jsonObject
+            compose.onNodeWithText(row.getValue("title").jsonPrimitive.content).performScrollTo().assertIsDisplayed()
+                .assert(hasText(row.getValue("supporting").jsonPrimitive.content))
+        }
+        val expected = case.getValue("expected").jsonObject
+        assertEquals(
+            expected.getValue("segmentCaptionCount").jsonPrimitive.int,
+            compose.onAllNodesWithText(expected.getValue("segmentCaption").jsonPrimitive.content).fetchSemanticsNodes().size
+        )
+        assertEquals(
+            expected.getValue("shortcutMetaCopyCount").jsonPrimitive.int,
+            compose.onAllNodesWithText("Shortcut to", substring = true).fetchSemanticsNodes().size
+        )
     }
 
     @Test fun homeAndSubtitleShortcutsAndTheirPanelsEditTheSamePreferencesInBothDirections() {

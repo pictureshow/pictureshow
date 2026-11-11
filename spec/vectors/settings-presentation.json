@@ -187,7 +187,7 @@
         "value": "Disable",
         "hdr": true
       },
-      "expected": "Off (convert to SDR)"
+      "expected": "Off"
     },
     {
       "id": "settings-presentation.capability-consequence.Detected.23",
@@ -693,6 +693,14 @@
         "downmix": true
       },
       "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.always-burn-viewer-consequence",
+      "operation": "burn-consequence",
+      "input": {
+        "value": "Always"
+      },
+      "expected": "The server draws every subtitle into the video. This converts the video, and your subtitle style and timing settings won't apply."
     }
   ]
 }

@@ -103,8 +103,8 @@ class AdvancedPlaybackSettingsTest {
         compose.onNodeWithText("Burn in subtitles").performClick()
         compose.onNodeWithText("Always").performClick()
         compose.onNodeWithText(
-            "Every selected subtitle is burned into video by the server. This requires video conversion; " +
-                "local appearance and timing controls cannot change it."
+            "The server draws every subtitle into the video. This converts the video, " +
+                "and your subtitle style and timing settings won't apply."
         ).assertExists()
     }
 
@@ -157,7 +157,7 @@ class AdvancedPlaybackSettingsTest {
         }
         compose.onNode(hasText("Home limit") and hasText("Auto")).assertExists()
         compose.onNodeWithText("Home limit").performClick()
-        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.").assertExists()
+        compose.onNodeWithText("Up to 200 Mbps").assertExists()
     }
 
     @Test fun videoOverrideExplainsFailureRiskBesideItsChoice() {

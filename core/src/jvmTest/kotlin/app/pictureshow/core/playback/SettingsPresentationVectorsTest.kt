@@ -40,9 +40,9 @@ class SettingsPresentationVectorsTest {
                 "credits-label" -> presentation.postCreditsLabel(PostCredits.valueOf(value))
                 "channel-label" -> presentation.audioChannelLabel(input.getValue("value").takeUnless { it == JsonNull }?.jsonPrimitive?.int)
                 "passthrough-label" -> presentation.passthroughLabel(PassthroughEncoding.valueOf(value))
+                "burn-consequence" -> presentation.burnConsequence(SubtitleBurnIn.valueOf(value))
                 "capability-label" -> presentation.capabilityLabel(
-                    CapabilityOverride.valueOf(value),
-                    input.getValue("hdr").jsonPrimitive.boolean
+                    CapabilityOverride.valueOf(value)
                 )
                 "capability-consequence" -> presentation.capabilityConsequence(
                     CapabilityOverride.valueOf(value),

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -78,15 +79,8 @@ internal fun PlayerQualityMenu(
                             Column(
                                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
                                     .selectableGroup().testTag("player:quality-menu")
+                                    .semantics { if (compact) stateDescription = "Scroll for more options" }
                             ) {
-                                if (compact) {
-                                    Text(
-                                        "Scroll for more options",
-                                        modifier = Modifier.testTag("player:quality-scroll-hint").padding(bottom = 8.dp),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
                                 PlaybackQualityPresentation.choices.forEach { choice ->
                                     val note = supporting(choice)
                                     TouchRadioRow(
