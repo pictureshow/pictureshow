@@ -70,6 +70,11 @@ class PhoneSettingsConstraintsTest {
         assertEquals(expected.getValue("currentValueFullyVisible").jsonPrimitive.boolean, valueVisible, text.toString())
         val done = compose.onNodeWithText("Done").getUnclippedBoundsInRoot()
         val panel = compose.onNodeWithTag("settings:touch-panel").getUnclippedBoundsInRoot()
+        assertEquals(
+            true,
+            panel.right - panel.left <= expected.getValue("maximumDialogWidthDp").jsonPrimitive.int.dp,
+            "Painted dialog width: $panel"
+        )
         val doneVisible = done.top >= panel.top && done.bottom <= panel.bottom && done.bottom > done.top
         assertEquals(expected.getValue("doneFullyVisible").jsonPrimitive.boolean, doneVisible, "$done / $panel")
         val nextTitle = compose.onNode(

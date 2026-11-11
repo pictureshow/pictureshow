@@ -84,32 +84,34 @@ internal fun AdvancedPlaybackSettings(
         val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
         val besidePreview = compact && wide && group == "Subtitle appearance"
         Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = !besidePreview)) {
-            androidx.compose.material3.Surface(
-                modifier = Modifier.padding(horizontal = if (besidePreview) 24.dp else 0.dp, vertical = if (compact) 16.dp else 0.dp)
-                    .then(if (besidePreview) Modifier.widthIn(max = 600.dp).fillMaxWidth() else Modifier)
-                    .testTag("settings:touch-panel"),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
-                    .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
-                if (besidePreview) {
-                    Row(
-                        panelModifier,
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
-                        Column(Modifier.weight(1f)) {
+            // Keep transparent window insets separate from the painted, width-capped dialog.
+            Box(Modifier.padding(horizontal = if (besidePreview) 24.dp else 0.dp, vertical = if (compact) 16.dp else 0.dp)) {
+                androidx.compose.material3.Surface(
+                    modifier = (if (besidePreview) Modifier.widthIn(max = 600.dp).fillMaxWidth() else Modifier)
+                        .testTag("settings:touch-panel"),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
+                        .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
+                    if (besidePreview) {
+                        Row(
+                            panelModifier,
+                            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
+                            Column(Modifier.weight(1f)) {
+                                TouchSettingsHeading(group)
+                                TouchSettingsList(onClose, content)
+                            }
+                        }
+                    } else {
+                        Column(panelModifier) {
                             TouchSettingsHeading(group)
+                            if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
                             TouchSettingsList(onClose, content)
                         }
-                    }
-                } else {
-                    Column(panelModifier) {
-                        TouchSettingsHeading(group)
-                        if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
-                        TouchSettingsList(onClose, content)
                     }
                 }
             }

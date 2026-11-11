@@ -18,7 +18,8 @@
         "currentValueFullyVisible": true,
         "doneFullyVisible": true,
         "secondRowTitleVisible": true,
-        "previewLabelsCentered": true
+        "previewLabelsCentered": true,
+        "maximumDialogWidthDp": 600
       }
     }
   ]
