@@ -124,12 +124,12 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var proxy: DesktopMediaProxy? = null
     private var layer: NativeLayer? = null
     @Volatile private var surface: Pointer? = null
-    private var creationTask: Future<Pointer>? = null
+    private var nativeOwner: DesktopNativeOwner<Pointer>? = null
+    private val playerRelease = DesktopPlayerRelease { mpv?.close(); mpv = null }
     private val stopped = AtomicBoolean(false)
     private val failure = AtomicReference<String?>(null)
     private val pixels = AtomicReference(Dimension(1280, 800))
     private val render = Executors.newSingleThreadExecutor { r -> Thread(r, "pictureshow-native-render").apply { isDaemon = true } }
-    private var renderTask: Future<*>? = null
     private var listener: ComponentAdapter? = null
     private var linux: LinuxPlayerWindow? = null
     private var savedTitle: String? = null
@@ -170,7 +170,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             if (hdr) { player.option("target-trc", "pq"); player.option("target-prim", "bt.2020"); player.option("target-peak", "10000"); player.option("fbo-format", "rgba16f"); player.option("dither-depth", "10") }
             player.option("video-timing-offset", "0")
             player.initialize()
-            linux = LinuxPlayerWindow(player, directory, hdr, ::togglePause, { seek(snapshot().positionSeconds + it) }).also { it.start() }
+            linux = LinuxPlayerWindow(player, directory, hdr, ::togglePause, { seek(snapshot().positionSeconds + it) }, playerRelease::release)
+            linux!!.start()
         } else {
             val w = requireNotNull(window) { "The player needs a desktop window" }
             val bridge = Native.load(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge") ?: if (Platform.isMac()) "pictureshow_surface" else "pictureshow_layer", NativeLayer::class.java)
@@ -194,24 +195,30 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
                 player.option("glsl-shaders", shader.absolutePath)
             }
             player.initialize()
-            creationTask = render.submit<Pointer> {
-                val created = requireNotNull(bridge.ps_create(view, player.handle)) { "Native video surface could not be created" }
-                if (stopped.get()) {
-                    try { bridge.ps_finish(created) } finally { bridge.ps_destroy(created); player.close() }
-                    throw CancellationException("The viewing ended during native initialization")
-                }
-                surface = created
-                created
-            }
-            creationTask!!.get(40, TimeUnit.SECONDS)
+            val owner = DesktopNativeOwner(
+                create = {
+                    check(!stopped.get()) { "The viewing ended before native initialization" }
+                    requireNotNull(bridge.ps_create(view, player.handle)) { "Native video surface could not be created" }.also { surface = it }
+                },
+                frames = { target ->
+                    while (!stopped.get()) {
+                        val p = pixels.get()
+                        check(bridge.ps_frame(target, p.width, p.height) >= 0) { "Native video frame failed" }
+                        if (Platform.isWindows()) Thread.sleep(1)
+                    }
+                },
+                finish = { target -> check(bridge.ps_finish(target) >= 0) { "Native GPU drain failed" } },
+                destroy = { target -> bridge.ps_destroy(target); surface = null },
+                player = playerRelease,
+                failed = { if (!stopped.get()) failure.set("The video surface stopped. Return to the title and try again.") }
+            )
+            nativeOwner = owner
+            render.submit(owner)
+            owner.created.get(40, TimeUnit.SECONDS)
             fun sync() { if (stopped.get()) return; val t = w.graphicsConfiguration.defaultTransform; pixels.set(Dimension((w.width * t.scaleX).toInt(), (w.height * t.scaleY).toInt())); surface?.let(bridge::ps_sync) }
             onEdt {
                 listener = object : ComponentAdapter() { override fun componentMoved(e: ComponentEvent) = sync(); override fun componentResized(e: ComponentEvent) = sync() }
                 w.addComponentListener(listener); sync()
-            }
-            renderTask = render.submit {
-                try { while (!stopped.get()) { val p = pixels.get(); check(bridge.ps_frame(surface!!, p.width, p.height) >= 0); if (Platform.isWindows()) Thread.sleep(1) } }
-                catch (_: Exception) { if (!stopped.get()) failure.set("The video surface stopped. Return to the title and try again.") }
             }
         }
         // mpv's stream IDs are per-type ordinals, while Jellyfin's indices span all media types.
@@ -230,7 +237,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         }
     }
     @Synchronized override fun snapshot(): EngineSnapshot {
-        val p = mpv ?: return EngineSnapshot()
+        val p = mpv ?: return EngineSnapshot(error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true)
         val ready = p.get("vo-configured") == "yes" && p.get("time-pos") != null
         if (ready) pendingExternalSubtitle?.let { url ->
             p.command("sub-add", url, "select"); pendingExternalSubtitle = null
@@ -275,47 +282,70 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
         var linuxReleased = linux == null
-        var rendererStopped = renderTask == null
-        var creationStopped = creationTask == null
-        var nativeReleased = surface == null && creationStopped
         val errors = runDesktopCleanupActions(
             { window?.let { w -> onEdt { listener?.let(w::removeComponentListener); listener = null } } },
             { linux?.close(); linux = null; linuxReleased = true },
-            { try { renderTask?.get(35, TimeUnit.SECONDS) } finally { rendererStopped = renderTask?.isDone != false } },
-            { try { creationTask?.get(35, TimeUnit.SECONDS) } finally { creationStopped = creationTask?.isDone != false } },
             {
-                if (rendererStopped && creationStopped) {
-                    val target = surface
-                    if (target == null) nativeReleased = true
-                    else {
-                        val destroyed = AtomicBoolean(false)
-                        try {
-                            render.submit {
-                                try { check(layer!!.ps_finish(target) >= 0) { "Native GPU drain failed" } }
-                                finally {
-                                    layer!!.ps_destroy(target)
-                                    destroyed.set(true); surface = null
-                                    // If a GPU drain outlives the caller's wait, completion still
-                                    // owns this final release. Never free mpv under a live context.
-                                    mpv?.close()
-                                }
-                            }.get(35, TimeUnit.SECONDS)
-                        } finally { nativeReleased = destroyed.get() }
-                    }
-                }
+                val owner = nativeOwner
+                if (owner != null) {
+                    // One worker owns create -> frames -> finish -> destroy -> player release.
+                    // A caller timeout never removes that worker's finally path or frees its mpv.
+                    owner.completed.get(35, TimeUnit.SECONDS)
+                } else if (linuxReleased) playerRelease.release()
+                else error("The Wayland owner is still active; player release remains with that owner")
             },
             { window?.let { w -> onEdt { savedTitle?.let { (w as? java.awt.Frame)?.title = it } } } },
             { render.shutdown() },
-            {
-                if (linuxReleased && rendererStopped && creationStopped && nativeReleased) { mpv?.close(); mpv = null }
-                else error("Native rendering is still active; libmpv release is deferred until its owning context completes")
-            },
             { proxy?.close(); proxy = null }
         )
         if (errors.isNotEmpty()) throw IllegalStateException("The player could not complete every native cleanup step", errors.first())
     }
     private fun onEdt(block: () -> Unit) { if (SwingUtilities.isEventDispatchThread()) block() else SwingUtilities.invokeAndWait(block) }
 }
+/** A handle has one release action even if caller and owning native thread finish together. */
+internal class DesktopPlayerRelease(private val releaseHandle: () -> Unit) {
+    private val released = AtomicBoolean(false)
+    fun release() { if (released.compareAndSet(false, true)) releaseHandle() }
+}
+
+/** All native context operations, including deferred teardown, stay on the thread that created it. */
+internal class DesktopNativeOwner<T : Any>(
+    private val create: () -> T,
+    private val frames: (T) -> Unit,
+    private val finish: (T) -> Unit,
+    private val destroy: (T) -> Unit,
+    private val player: DesktopPlayerRelease,
+    private val failed: (Throwable) -> Unit = {}
+) : Runnable {
+    val created = CompletableFuture<T>()
+    val completed = CompletableFuture<Unit>()
+    private val started = AtomicBoolean(false)
+    override fun run() {
+        check(started.compareAndSet(false, true)) { "A native owner can only run once" }
+        var context: T? = null
+        var failure: Throwable? = null
+        try {
+            context = create()
+            created.complete(context)
+            frames(context)
+        } catch (error: Throwable) {
+            failure = error
+            created.completeExceptionally(error)
+            failed(error)
+        } finally {
+            val target = context
+            var contextReleased = target == null
+            val cleanup = runDesktopCleanupActions(
+                { if (target != null) finish(target) },
+                { if (target != null) destroy(target); contextReleased = true },
+                { if (contextReleased) player.release() else error("Native context destruction was not confirmed; player retained") }
+            )
+            val error = failure ?: cleanup.firstOrNull()
+            if (error == null) completed.complete(Unit) else completed.completeExceptionally(error)
+        }
+    }
+}
+
 /** Run every resource release; one native failure cannot leave an authenticated HTTP capability alive. */
 internal fun runDesktopCleanupActions(vararg actions: () -> Unit): List<Throwable> = buildList {
     actions.forEach { action ->
@@ -346,7 +376,7 @@ private interface DesktopWaylandApi : Library {
 /** A native Wayland video window. Its changing controls use the qualified SDR shm overlay; video stays on the GPU. */
 private class LinuxPlayerWindow(
     private val mpv: Mpv, private val out: File, private val hdr: Boolean,
-    private val pause: () -> Unit, private val skip: (Double) -> Unit
+    private val pause: () -> Unit, private val skip: (Double) -> Unit, private val releasePlayer: () -> Unit
 ) : AutoCloseable {
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "pictureshow-wayland-ui").apply { isDaemon = true } }
     private val running = AtomicBoolean(true)
@@ -441,7 +471,7 @@ private class LinuxPlayerWindow(
                 context?.let { Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE") ?: "pictureshow_wayland", DesktopWaylandApi::class.java).ps_wayland_close(it) }
                 // A timed-out caller must not free mpv while this native context is live.
                 // Its owning thread completes the deferred release after context destruction.
-                if (!running.get()) mpv.close()
+                if (!running.get()) releasePlayer()
             }
         }
         initialized.get(40, TimeUnit.SECONDS)
