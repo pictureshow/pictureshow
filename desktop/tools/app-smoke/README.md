@@ -4,8 +4,10 @@
 
 The harness generates original CC0 H.264/AAC media, two audio languages, subtitles,
 posters, two movies and two episodes. `Signal One` is the 180-second direct-play
-and resume signal. `Archive Signal` is a 20-second FFV1 movie, deliberately absent
-from the desktop device profile, so Jellyfin must convert it to H.264. The harness
+and resume signal. `Archive Signal` is a 20-second FFV1 movie. Mac/Linux smoke
+dependencies omit its decoder; Windows requests a real viewer bitrate cap. Each
+case requires Jellyfin to convert it to H.264 without restricting the production
+device profile. The harness
 starts its own Jellyfin 10.11.11, creates an
 isolated viewer, seeds a 12-second resume point and launches the actual desktop
 runtime. Linux uses the pinned Jellyfin container; Windows and macOS use pinned
@@ -52,8 +54,13 @@ decoders/demuxers/parsers and libdav1d for software AV1. The isolated Mac/Linux
 smoke dependency build then explicitly omits the FFV1 decoder, with a separate
 receipt, so Archive Signal tests a genuinely unavailable decoder. This omission
 is a test-closure choice and must not restrict the shipping device profile.
-The pinned Windows upstream archive retains its own decoder set; a real requested
-bitrate cap can require conversion there even when FFV1 decoding is available.
+The pinned Windows upstream archive retains its own decoder set. Its smoke first
+direct-plays Archive Signal when its measured decoder set supports FFV1, then
+requests a real 4 Mbps viewer bitrate cap to require conversion. This quality-only
+conversion must not show the device-limitation PLAY-27 notice. Mac/Linux's omitted
+decoder witnesses the actual device-limitation notice. `SMOKE_FORCE_QUALITY` lets
+the local full-decoder runtime exercise the same explicit quality-cap smoke branch;
+it does not change ordinary app behavior or capability reporting.
 HTTPS uses Secure Transport on Mac and GnuTLS on Linux. Linux retains stock Weston 16
 and uses `softpipe`; the AWT shell has its own Xvfb display. Windows uses the
 pinned upstream LGPL mpv archive and WARP on hosted CI. These software runs do not
@@ -66,6 +73,11 @@ Android `check assembleDebug` gate. Evidence includes the named app checks,
 independent server samples, library fixture provenance, generated-media license,
 native build hashes and test XML. Credentials and raw server/app logs are outside
 the artifact tree; only selected sanitized app errors/progress are published.
+Fixture failures publish item/probe counts, media stream types/codecs, FFmpeg
+basename/version and sanitized server errors. The owned encoder observer runs
+concurrently with HTTP checks and the app; Windows retains one CIM process rather
+than restarting PowerShell for each short-lived encoder sample. All observers stop
+in the app's cleanup path.
 
 Sources checked 2026-11-10: official [portable installation instructions](https://jellyfin.org/docs/general/installation/advanced/manual/),
 official [container instructions](https://jellyfin.org/docs/general/installation/container/),

@@ -22,6 +22,7 @@ import shutil
 import socket
 import subprocess
 import tarfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -202,8 +203,9 @@ def generate_media(root: Path, ffmpeg: str) -> dict:
     (movie / "movie.nfo").write_text("<movie><title>Signal One</title><year>2026</year><plot>An original CC0 signal for the desktop acceptance test.</plot><genre>Test signals</genre></movie>", encoding="utf-8")
     archive = root / "movies" / "Archive Signal (2026)"
     archive.mkdir(parents=True)
-    # FFV1 is deliberately absent from desktopMpvProfile. Jellyfin must really
-    # convert this original signal to H.264; changing a UI flag cannot satisfy it.
+    # Mac/Linux's isolated smoke dependency closure omits FFV1. Windows keeps its
+    # measured decoder set and uses a real viewer bitrate cap for conversion.
+    # Neither case fabricates a limitation in the ordinary device profile.
     subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                     "-i", str(source), "-t", "20", "-map", "0:v:0", "-map", "0:a:0",
                     "-c:v", "ffv1", "-level", "3", "-threads", "2", "-c:a", "copy",
@@ -372,17 +374,17 @@ def provision(api: API, media_base: str):
 def encoding_process_count(api: API) -> int:
     """Inspect only the owned server tree/container, never command arguments."""
     if api.fixture_container is not None:
-        names = subprocess.check_output(["docker", "top", api.fixture_container, "-eo", "comm"], text=True)
+        names = subprocess.check_output(["docker", "top", api.fixture_container, "-eo", "comm"], text=True, timeout=5)
         return sum(Path(line.strip()).name.lower() in ("ffmpeg", "ffmpeg.exe")
                    for line in names.splitlines())
     server_pid = api.fixture_process.pid
     if platform.system() == "Windows":
         command = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress"
-        records = json.loads(subprocess.check_output(["pwsh", "-NoProfile", "-Command", command], text=True))
+        records = json.loads(subprocess.check_output(["pwsh", "-NoProfile", "-Command", command], text=True, timeout=10))
         processes = [(record["ProcessId"], record["ParentProcessId"], record["Name"])
                      for record in records]
     else:
-        lines = subprocess.check_output(["ps", "-axo", "pid=,ppid=,comm="], text=True)
+        lines = subprocess.check_output(["ps", "-axo", "pid=,ppid=,comm="], text=True, timeout=5)
         processes = [(int(fields[0]), int(fields[1]), fields[2])
                      for line in lines.splitlines() if len(fields := line.split(None, 2)) == 3]
     descendants = {server_pid}
@@ -395,6 +397,90 @@ def encoding_process_count(api: API) -> int:
                for pid, _, name in processes)
 
 
+class EncoderObserver:
+    """Observe short-lived encoders concurrently with HTTP and app automation.
+
+    A single PowerShell process keeps Windows CIM warm; launching PowerShell for
+    each sample can take longer than an entire short encoding. No process command
+    arguments are read, and only counts from the owned server tree are retained.
+    """
+    def __init__(self, api: API):
+        self.api = api
+        self.samples = []
+        self.error = None
+        self.stopping = threading.Event()
+        self.process = None
+        self.thread = None
+
+    def start(self):
+        if platform.system() == "Windows" and self.api.fixture_container is None:
+            server_pid = int(self.api.fixture_process.pid)
+            command = f"""
+$ErrorActionPreference = 'Stop'
+$serverProcessId = {server_pid}
+while ($true) {{
+  $rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name)
+  $owned = [System.Collections.Generic.HashSet[uint32]]::new()
+  [void]$owned.Add([uint32]$serverProcessId)
+  do {{
+    $changed = $false
+    foreach ($row in $rows) {{
+      if ($owned.Contains([uint32]$row.ParentProcessId)) {{
+        if ($owned.Add([uint32]$row.ProcessId)) {{ $changed = $true }}
+      }}
+    }}
+  }} while ($changed)
+  $count = @($rows | Where-Object {{ $owned.Contains([uint32]$_.ProcessId) -and $_.Name -ieq 'ffmpeg.exe' }}).Count
+  [Console]::Out.WriteLine($count)
+  [Console]::Out.Flush()
+  Start-Sleep -Milliseconds 100
+}}
+"""
+            self.process = subprocess.Popen(["pwsh", "-NoProfile", "-Command", command],
+                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            target = self._windows
+        else:
+            target = self._portable
+        self.thread = threading.Thread(target=target, name="owned-fixture-encoder-observer")
+        self.thread.start()
+
+    def _record(self, count):
+        self.samples.append({"observedMonotonic": round(time.monotonic(), 3), "encoderCount": count})
+
+    def _portable(self):
+        try:
+            while not self.stopping.is_set():
+                self._record(encoding_process_count(self.api))
+                self.stopping.wait(.1)
+        except Exception as error:
+            self.error = type(error).__name__
+
+    def _windows(self):
+        try:
+            for line in self.process.stdout:
+                if self.stopping.is_set():
+                    break
+                self._record(int(line.strip()))
+            if not self.stopping.is_set():
+                self.error = "Windows process observer ended unexpectedly"
+        except Exception as error:
+            self.error = type(error).__name__
+
+    def stop(self):
+        self.stopping.set()
+        if self.process is not None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
+        if self.thread is not None:
+            self.thread.join(timeout=7)
+            if self.thread.is_alive():
+                self.error = "Owned encoder observer did not stop"
+
+
 def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     command = [args.java, "--enable-native-access=ALL-UNNAMED"]
     if platform.system() == "Darwin":
@@ -405,11 +491,12 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     environment["SPIKE_NULL_AUDIO"] = "1"
     environment["PICTURESHOW_SMOKE"] = "1"
     raw_log = args.work / "app.log"
-    samples, encoder_samples, qc_codes = [], [], set()
-    next_encoder_sample = 0.0
+    samples, qc_codes = [], set()
+    observer = EncoderObserver(viewer)
     with raw_log.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
         try:
+            observer.start()
             deadline = time.monotonic() + args.timeout
             while process.poll() is None and time.monotonic() < deadline:
                 qc_path = evidence / "quick-connect-request.json"
@@ -431,16 +518,13 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                             samples.append({"itemId": session["NowPlayingItem"]["Id"], "positionTicks": session.get("PlayState", {}).get("PositionTicks", 0), "isPaused": session.get("PlayState", {}).get("IsPaused"), "playMethod": session.get("PlayState", {}).get("PlayMethod"), "videoDirect": (session.get("TranscodingInfo") or {}).get("IsVideoDirect"), "observedMonotonic": round(time.monotonic(), 3)})
                 except RuntimeError:
                     pass
-                if time.monotonic() >= next_encoder_sample:
-                    encoder_samples.append({"observedMonotonic": round(time.monotonic(), 3),
-                                            "encoderCount": encoding_process_count(viewer)})
-                    next_encoder_sample = time.monotonic() + 1
                 time.sleep(.25)
             if process.poll() is None:
                 raise RuntimeError("Desktop app E2E exceeded its finite smoke timeout")
             if process.returncode != 0:
                 raise RuntimeError(f"Desktop app E2E exited {process.returncode}; inspect sanitized app-output.txt")
         finally:
+            observer.stop()
             if process.poll() is None:
                 process.terminate()
                 try:
@@ -459,7 +543,8 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
             # Keep the independent observations even when the app fails before
             # its receipt. A failure must not discard the only server evidence.
             write_json(evidence / "server-session-observations.json", {"samples": samples,
-                                                                      "encoderSamples": encoder_samples,
+                                                                      "encoderSamples": observer.samples,
+                                                                      "encoderObserverError": observer.error,
                                                                       "cleanup": None,
                                                                       "quickConnectApproved": bool(qc_codes)})
     cleanup_deadline = time.monotonic() + 20
@@ -472,11 +557,14 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
         if cleanup == {"activePlayingItems": 0, "encoderCount": 0}:
             break
         time.sleep(.5)
-    write_json(evidence / "server-session-observations.json", {"samples": samples, "encoderSamples": encoder_samples,
+    write_json(evidence / "server-session-observations.json", {"samples": samples, "encoderSamples": observer.samples,
+                                                              "encoderObserverError": observer.error,
                                                               "cleanup": cleanup, "quickConnectApproved": bool(qc_codes)})
     receipt_path = evidence / "app-smoke-result.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    return validate_receipt(receipt, samples, bool(qc_codes), ids, encoder_samples, cleanup)
+    if observer.error:
+        raise RuntimeError("Owned fixture encoder observation failed: " + observer.error)
+    return validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
 
 
 def main():
@@ -504,7 +592,12 @@ def main():
         with owned_server(args.work / "fixture", args.work / "media", args.ffmpeg) as (admin, media_base, provenance):
             try:
                 viewer, password, ids = provision(admin, media_base)
-                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "resumeSeconds": 12, "disposable": True})
+                quality_witness = platform.system() == "Windows" or bool(os.getenv("SMOKE_FORCE_QUALITY"))
+                witness = {"reason": "viewer-bitrate-cap" if quality_witness else "unavailable-decoder",
+                           "bitrateCapMbps": 4 if quality_witness else None,
+                           "conversionNoticeExpected": not quality_witness}
+                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
+                result["conversionWitness"] = witness
                 result.update(run_app(args, viewer, password, ids, args.evidence))
                 viewer.request("POST", "/Sessions/Logout")
                 admin.request("POST", "/Sessions/Logout")

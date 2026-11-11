@@ -4,6 +4,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+import threading
 
 spec = importlib.util.spec_from_file_location("app_smoke", Path(__file__).with_name("run.py"))
 smoke = importlib.util.module_from_spec(spec)
@@ -121,6 +123,23 @@ class SmokeVerdictTest(unittest.TestCase):
         for secret in ["example.invalid", "abc", "secret-value", "film.mkv", '"pw"']:
             self.assertNotIn(secret, cleaned)
         self.assertIn("Failed", cleaned)
+
+    def test_encoder_observer_samples_concurrently_and_stops(self):
+        sampled = threading.Event()
+        def observe(_api):
+            sampled.set()
+            return 1
+        api = type("OwnedServer", (), {"fixture_container": "owned-fixture"})()
+        observer = smoke.EncoderObserver(api)
+        with patch.object(smoke, "encoding_process_count", observe):
+            try:
+                observer.start()
+                self.assertTrue(sampled.wait(timeout=2))
+            finally:
+                observer.stop()
+        self.assertFalse(observer.thread.is_alive())
+        self.assertIsNone(observer.error)
+        self.assertTrue(any(sample["encoderCount"] == 1 for sample in observer.samples))
 
 
 if __name__ == "__main__":
