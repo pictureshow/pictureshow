@@ -48,7 +48,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     fun key(code:Int) {
         if(code==KeyEvent.VK_ESCAPE || code==KeyEvent.VK_F11) {
             val manager=java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
-            println("SMOKE key=$code activeViewer=${manager.activeWindow===window} focusedViewer=${manager.focusedWindow===window} focusOwner=${manager.focusOwner?.javaClass?.simpleName} composeFocus=${DesktopUiProbe.focus.filterValues{it}.keys}")
+            println("SMOKE key=$code activeViewer=${manager.activeWindow===window} focusedViewer=${manager.focusedWindow===window} focusOwner=${manager.focusOwner?.javaClass?.simpleName} defaultInput=${window.focusTraversalPolicy.getDefaultComponent(window)?.javaClass?.simpleName} composeFocus=${DesktopUiProbe.focus.filterValues{it}.keys}")
         }
         robot.keyPress(code);robot.keyRelease(code)
     }
@@ -72,7 +72,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 val display=java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }.firstOrNull { it.contains(wantedX,wantedY) } ?: window.graphicsConfiguration.bounds
                 check(display.width>=w && display.height>=h) { "Smoke needs a display at least ${w}x${h}; got ${display.width}x${display.height}" }
                 windowState.position=WindowPosition.Absolute((display.x+minOf(100,display.width-w)).dp,(display.y+minOf(60,display.height-h)).dp)
-                windowState.size=DpSize(w.dp,h.dp);window.toFront();window.requestFocus()
+                windowState.size=DpSize(w.dp,h.dp);window.toFront()
+                window.focusTraversalPolicy.getDefaultComponent(window)?.requestFocusInWindow()
             }
             robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
             Thread.sleep(900)
