@@ -731,7 +731,8 @@ internal fun PlayerItemScreen(
                             Modifier
                         },
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        itemVerticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
                     ) {
                         PlaybackToggle(
                             paused,
