@@ -107,6 +107,7 @@ class OfflineNextHostTest {
         startKoin {
             modules(
                 module {
+                    syncPlayFixture()
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }
