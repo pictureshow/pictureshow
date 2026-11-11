@@ -228,9 +228,17 @@ class LiveRecordingLayoutTest {
         )
         val title = titleNode.getUnclippedBoundsInRoot()
         val meta = metaNode.getUnclippedBoundsInRoot()
+        // Text semantics expose visible text bounds; use actual layout coordinates for the column's gap.
+        val titleCoordinates = titleNode.fetchSemanticsNode().layoutInfo.coordinates
+        val metadataCoordinates = metaNode.fetchSemanticsNode().layoutInfo.coordinates
+        val density = titleNode.fetchSemanticsNode().layoutInfo.density.density
+        val layoutGap = -metadataCoordinates.localPositionOf(
+            titleCoordinates,
+            androidx.compose.ui.geometry.Offset(0f, titleCoordinates.size.height.toFloat())
+        ).y / density
         assertTrue(
-            meta.top - title.bottom in 0.dp..5.dp,
-            "Title and metadata retain the4dp gap, including native focus scaling; title=$title metadata=$meta"
+            layoutGap.dp in 0.dp..5.dp,
+            "Title and metadata retain the 4dp layout gap, including native focus scaling; gap=$layoutGap title=$title metadata=$meta"
         )
         val titleLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
         titleNode.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
@@ -240,13 +248,10 @@ class LiveRecordingLayoutTest {
             titleLayout.lineCount,
             "The short episode title has one actual text line: ${titleLayout.layoutInput.text} / $title / ${titleLayout.size}"
         )
-        // Normalize the native text layout into the root coordinates, including real focus scaling.
-        val lastTitleLineBottom = title.top +
-            (title.bottom - title.top) * (titleLayout.getLineBottom(0) / titleLayout.size.height)
+        val firstLineHeight = titleLayout.getLineBottom(0) - titleLayout.getLineTop(0)
         assertTrue(
-            meta.top - lastTitleLineBottom in 0.dp..5.dp,
-            "Metadata follows the actual title line, without a blank line inside its text box: " +
-                "title=$title lineBottom=$lastTitleLineBottom metadata=$meta"
+            titleLayout.size.height < firstLineHeight * 1.5f,
+            "The single-line title must not reserve a second empty line: layout=${titleLayout.size} lineHeight=$firstLineHeight"
         )
         val status = compose.onNodeWithTag("live:recording:status:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(status.bottom <= caption.top, "Recording state belongs on the artwork")
