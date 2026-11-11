@@ -112,7 +112,7 @@ class AdvancedPlaybackSettingsTest {
         var prefs by mutableStateOf(PlaybackPreferences())
         compose.setContent {
             androidx.compose.material3.MaterialTheme {
-                AdvancedPlaybackSettings("Audio output", prefs, true, { prefs = it(prefs) }, {})
+                AdvancedPlaybackSettings("Audio output", prefs, true, { prefs = it(prefs) }, {}, PassthroughEncoding.entries.toSet())
             }
         }
         compose.onNodeWithText("Audio channel limit").performClick()
@@ -131,7 +131,7 @@ class AdvancedPlaybackSettingsTest {
             }
         }
         compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsEnabled().assertIsOn()
-        compose.onNodeWithTag("settings:DTS").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("settings:DTS").assertDoesNotExist()
         compose.onNodeWithTag("settings:Downmix to stereo").performScrollTo().performClick()
         compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsNotEnabled().assertIsOn()
         compose.onNodeWithTag("settings:Downmix to stereo").performScrollTo().performClick()
@@ -143,9 +143,10 @@ class AdvancedPlaybackSettingsTest {
             supported = emptySet()
             prefs = prefs.copy(passthrough = true)
         }
-        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("No supported surround formats are detected. Connect a compatible receiver to use passthrough.")
-            .performScrollTo().assertExists()
+        compose.onNodeWithTag("settings:Dolby Digital").assertDoesNotExist()
+        compose.onNodeWithText("On when a compatible receiver is connected. None detected now.").performScrollTo().assertExists()
+        compose.onNodeWithText("Format choices appear when a receiver is connected.").performScrollTo().assertExists()
+        compose.runOnIdle { assertEquals(setOf(PassthroughEncoding.AC3), prefs.tuning.disabledPassthrough) }
     }
 
     @Test fun shortAutoValueKeepsItsCeilingInTheActualNetworkPicker() {

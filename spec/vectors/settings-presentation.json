@@ -196,7 +196,7 @@
         "value": "Detected",
         "hdr": true
       },
-      "expected": "Uses supported formats. HDR switches automatically with the video."
+      "expected": "Plays HDR when this device and display support it."
     },
     {
       "id": "settings-presentation.capability-consequence.Force.24",
@@ -250,7 +250,7 @@
         "value": "Detected",
         "hdr": false
       },
-      "expected": "Uses supported formats. HDR switches automatically with the video."
+      "expected": "Plays Dolby Vision when this device and display support it."
     },
     {
       "id": "settings-presentation.capability-consequence.Force.30",
@@ -349,6 +349,350 @@
         "supported": true
       },
       "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.0.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "Off. No compatible receiver detected now."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.0.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.2.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "Off. Detected now: Dolby Digital, DTS."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.2.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.6.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "Off. Detected now: Dolby Digital, Dolby Digital Plus, Dolby Atmos (Dolby Digital Plus), Dolby TrueHD, DTS, DTS-HD."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.6.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.0.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. None detected now."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.0.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.2.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. Detected now: Dolby Digital, DTS."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.2.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.6.false",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. Detected now: Dolby Digital, Dolby Digital Plus, Dolby Atmos (Dolby Digital Plus), Dolby TrueHD, DTS, DTS-HD."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.6.true",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": false
+      },
+      "expected": "On when a compatible receiver is connected. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.0.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "Off. No compatible receiver detected now."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.0.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.2.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "Off. Detected now: Dolby Digital, DTS."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.2.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.6.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "Off. Detected now: Dolby Digital, Dolby Digital Plus, Dolby Atmos (Dolby Digital Plus), Dolby TrueHD, DTS, DTS-HD."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.false.6.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": false,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "Off. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.0.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. None detected now."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.0.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.2.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Detected now: Dolby Digital, DTS."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.2.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Checking connected receiver support."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.6.false-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": false,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Detected now: Dolby Digital, Dolby Digital Plus, Dolby Atmos (Dolby Digital Plus), Dolby TrueHD, DTS, DTS-HD."
+    },
+    {
+      "id": "settings-presentation.passthrough-summary.true.6.true-downmix",
+      "operation": "passthrough-summary",
+      "input": {
+        "enabled": true,
+        "supported": [
+          "DTS_HD",
+          "DTS",
+          "TRUEHD",
+          "EAC3_JOC",
+          "EAC3",
+          "AC3"
+        ],
+        "checking": true,
+        "downmix": true
+      },
+      "expected": "On when a compatible receiver is connected. Downmix is on, so passthrough is not used. Checking connected receiver support."
     }
   ]
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
@@ -59,7 +60,9 @@ internal fun TouchTheme(content: @Composable () -> Unit) {
             secondary = Color(0xFFCCC2DC),
             background = Color(0xFF10131C),
             surface = Color(0xFF10131C),
-            surfaceContainer = Color(0xFF202330)
+            surfaceContainer = Color(0xFF202330),
+            surfaceContainerHigh = Color(0xFF262A38),
+            surfaceContainerHighest = Color(0xFF30344A)
         )
     ) {
         Surface(Modifier.fillMaxSize(), content = content)
@@ -173,14 +176,43 @@ private fun RowScope.TouchRowText(title: String, supporting: String?, enabled: B
     }
 }
 
-/** A list row with a current value under its name; it opens the choice. */
+/** A setting's label, state and consequence share one target and one vertical rhythm. */
 @Composable
-internal fun TouchValueRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun RowScope.TouchSettingText(title: String, value: String?, supporting: String?, enabled: Boolean) {
+    val alpha = if (enabled) 1f else 0.6f
+    Column(Modifier.weight(1f)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+        if (value != null) {
+            Text(
+                value,
+                modifier = Modifier.padding(top = 2.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = alpha)
+            )
+        }
+        if (supporting != null) {
+            Text(
+                supporting,
+                modifier = Modifier.padding(top = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+            )
+        }
+    }
+}
+
+/** Keep the existing call shape; the consequence overload keeps all explanatory text inside the target. */
+@Composable
+internal fun TouchValueRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) =
+    TouchValueRow(title, value, enabled, supporting = null, onClick)
+
+@Composable
+internal fun TouchValueRow(title: String, value: String, enabled: Boolean, supporting: String?, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
-    ) { TouchRowText(title, value, enabled) }
+    ) { TouchSettingText(title, value, supporting, enabled) }
 }
 
 /** A list row that goes somewhere: a name, an optional line, and a chevron. */
@@ -212,11 +244,11 @@ internal fun TouchSwitchRow(title: String, caption: String?, checked: Boolean, t
         Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(tag)
             .toggleable(value = checked, role = Role.Switch, enabled = enabled, onValueChange = onChange)
             .semantics { stateDescription = if (checked) "On" else "Off" }
-            .padding(vertical = 8.dp),
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TouchRowText(title, caption, enabled)
+        TouchSettingText(title, null, caption, enabled)
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
@@ -232,6 +264,7 @@ internal fun TouchRadioRow(
     enabled: Boolean = true,
     description: String? = null,
     onClick: () -> Unit,
+    alignToFirstLine: Boolean = false,
     content: @Composable RowScope.() -> Unit
 ) {
     Row(
@@ -239,10 +272,23 @@ internal fun TouchRadioRow(
             .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) { description?.let { contentDescription = it } }
             .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (alignToFirstLine) Alignment.Top else Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        RadioButton(selected = selected, onClick = null, enabled = enabled, modifier = Modifier.offset(x = (-2).dp))
+        val radio: @Composable () -> Unit = {
+            RadioButton(
+                selected = selected,
+                onClick = null,
+                enabled = enabled,
+                modifier = Modifier.offset(x = (-2).dp).testTag("touch:radio-indicator")
+            )
+        }
+        if (alignToFirstLine) {
+            val lineHeight = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.lineHeight.toDp() }
+            Box(Modifier.height(lineHeight), contentAlignment = Alignment.Center) { radio() }
+        } else {
+            radio()
+        }
         content()
     }
 }

@@ -11,7 +11,8 @@
         "fontScale": 1.3,
         "group": "Subtitle appearance",
         "currentValue": "Default",
-        "secondRowTitle": "Text color"
+        "secondRowTitle": "Text color",
+        "surface": "touch"
       },
       "expected": {
         "firstRowFullyVisible": true,
@@ -19,7 +20,56 @@
         "doneFullyVisible": true,
         "secondRowTitleVisible": true,
         "previewLabelsCentered": true,
-        "maximumDialogWidthDp": 600
+        "maximumDialogWidthDp": 600,
+        "choicePickerWindowCount": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.choice-consequence-target",
+      "operation": "settings-choice-target",
+      "input": {
+        "title": "Quality",
+        "value": "Auto",
+        "choices": [
+          "Auto",
+          "20 Mbps"
+        ],
+        "consequence": "A lower limit may convert the video."
+      },
+      "expected": {
+        "consequenceInsideClickTarget": true
+      }
+    },
+    {
+      "id": "playback-settings-layout.radio-first-line-font1.3",
+      "operation": "settings-radio-first-line",
+      "input": {
+        "title": "Home limit",
+        "fontScale": 1.3,
+        "choices": [
+          "Auto",
+          "20 Mbps"
+        ],
+        "notes": [
+          "Up to 200 Mbps; this is a ceiling, not unlimited.",
+          null
+        ]
+      },
+      "expected": {
+        "maximumCenterOffsetDp": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.choice-returns-to-scrolled-opener",
+      "operation": "settings-choice-scroll-return",
+      "input": {
+        "group": "Subtitle appearance",
+        "fontScale": 1.3,
+        "scrollTargetTitle": "Image subtitle opacity"
+      },
+      "expected": {
+        "choicePickerWindowCount": 1,
+        "maximumScrollReturnOffsetDp": 1
       }
     }
   ]

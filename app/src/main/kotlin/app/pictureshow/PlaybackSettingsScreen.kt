@@ -168,13 +168,13 @@ internal fun PlaybackSettingsScreen(
                 "Audio passthrough",
                 local.passthrough,
                 Modifier.testTag("settings:passthrough"),
-                supportingText = when {
-                    acceptedAudio == "Checking…" -> "Shortcut to Audio output. Checking receiver support…"
-                    supportedPassthrough.isEmpty() -> "Shortcut to Audio output. This TV can't send surround formats to a receiver."
-                    else -> "Shortcut to Audio output. Supported receiver formats: ${supportedPassthrough.sortedBy {
-                        it.ordinal
-                    }.joinToString(", ", transform = ::passthroughLabel)}."
-                }
+                supportingText =
+                "Shortcut to Audio output. " + app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
+                    local.passthrough,
+                    supportedPassthrough,
+                    checking = acceptedAudio.startsWith("Checking"),
+                    downmix = local.tuning.downmix
+                )
             ) { value -> onLocal { it.copy(passthrough = value) } }
             TvSettingsToggleRow(
                 "Conversion notice",

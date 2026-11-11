@@ -10,6 +10,7 @@ import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,9 +26,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -41,6 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -80,21 +85,45 @@ internal fun AdvancedPlaybackSettings(
         PlaybackSettingRows(group, local, touch, first, supportedPassthrough, onLocal)
     }
     if (touch) {
+        var picker by remember { mutableStateOf<TouchChoicePanel?>(null) }
+        val groupScroll = rememberScrollState()
         val compact = isShortTouchWindow()
         val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
-        val besidePreview = compact && wide && group == "Subtitle appearance"
-        Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = !besidePreview)) {
+        val besidePreview = compact && wide && group == "Subtitle appearance" && picker == null
+        val closePanel = { if (picker != null) picker = null else onClose() }
+        val rows: @Composable () -> Unit = {
+            CompositionLocalProvider(LocalTouchChoicePanel provides { picker = it }) { content() }
+        }
+        Dialog(onDismissRequest = closePanel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             // Keep transparent window insets separate from the painted, width-capped dialog.
-            Box(Modifier.padding(horizontal = if (besidePreview) 24.dp else 0.dp, vertical = if (compact) 16.dp else 0.dp)) {
+            Box(Modifier.padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)) {
                 androidx.compose.material3.Surface(
-                    modifier = (if (besidePreview) Modifier.widthIn(max = 600.dp).fillMaxWidth() else Modifier)
-                        .testTag("settings:touch-panel"),
+                    modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth().testTag("settings:touch-panel")
+                        .semantics { paneTitle = picker?.title ?: group },
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
                         .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
-                    if (besidePreview) {
+                    val currentPicker = picker
+                    if (currentPicker != null) {
+                        Column(panelModifier) {
+                            TouchSettingsHeading(currentPicker.title)
+                            Box(Modifier.weight(1f, fill = false)) {
+                                TouchChoiceOptions(currentPicker) { index ->
+                                    currentPicker.onSelect(index)
+                                    picker = null
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    picker = null
+                                }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                    androidx.compose.material3.Text("Cancel")
+                                }
+                            }
+                        }
+                    } else if (besidePreview) {
                         Row(
                             panelModifier,
                             horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -103,14 +132,14 @@ internal fun AdvancedPlaybackSettings(
                             Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
                             Column(Modifier.weight(1f)) {
                                 TouchSettingsHeading(group)
-                                TouchSettingsList(onClose, content)
+                                TouchSettingsList(onClose, groupScroll, rows)
                             }
                         }
                     } else {
                         Column(panelModifier) {
                             TouchSettingsHeading(group)
                             if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
-                            TouchSettingsList(onClose, content)
+                            TouchSettingsList(onClose, groupScroll, rows)
                         }
                     }
                 }
@@ -137,8 +166,7 @@ private fun TouchSettingsHeading(title: String) {
 
 /** Keep the native scroll semantics and dividers, with a visible cue even when a row boundary fits exactly. */
 @Composable
-private fun ColumnScope.TouchSettingsList(onClose: () -> Unit, content: @Composable () -> Unit) {
-    val scroll = rememberScrollState()
+private fun ColumnScope.TouchSettingsList(onClose: () -> Unit, scroll: ScrollState, content: @Composable () -> Unit) {
     val scrolled by remember { derivedStateOf { scroll.value > 0 } }
     val surface = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
     val indicator = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -173,7 +201,7 @@ private fun ColumnScope.TouchSettingsList(onClose: () -> Unit, content: @Composa
     ) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(scroll).testTag("settings:touch-list"),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) { content() }
     }
     if (scroll.canScrollForward) androidx.compose.material3.HorizontalDivider()
@@ -357,22 +385,29 @@ private fun PlaybackSettingRows(
                 onLocal { it.copy(tuning = it.tuning.copy(downmix = !it.tuning.downmix)) }
             }
             if (touch) {
-                SettingSupportingText("Send to receiver (passthrough)", true)
+                androidx.compose.material3.Text(
+                    "Receiver passthrough",
+                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp).semantics { heading() },
+                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                )
             } else {
-                TvSettingsSectionHeader("Send to receiver (passthrough)")
+                TvSettingsSectionHeader("Receiver passthrough")
+            }
+            if (supportedPassthrough.isEmpty()) {
+                SettingSupportingText("Format choices appear when a receiver is connected.", touch)
             }
             ToggleRow(
                 "Audio passthrough",
                 local.passthrough,
                 touch,
-                supporting = if (supportedPassthrough.isEmpty()) {
-                    "No supported surround formats are detected. Connect a compatible receiver to use passthrough."
-                } else {
-                    "Used only when your receiver supports the format. Downmix turns passthrough off. " +
-                        "Turning a format off may convert the audio."
-                }
+                supporting = PlaybackSettingsPresentation.passthroughSummary(
+                    local.passthrough,
+                    supportedPassthrough,
+                    downmix = tuning.downmix
+                ) + if (supportedPassthrough.isEmpty()) "" else " Turning a format off may convert the audio."
             ) { onLocal { it.copy(passthrough = !it.passthrough) } }
-            PassthroughEncoding.entries.forEach { format ->
+            PassthroughEncoding.entries.filter { it in supportedPassthrough }.forEach { format ->
                 ToggleRow(
                     passthroughLabel(format),
                     format !in tuning.disabledPassthrough,
@@ -426,10 +461,10 @@ private fun PlaybackSettingRows(
                 onLocal { it.copy(tuning = it.tuning.copy(dolbyVision = value)) }
             }
             ToggleRow(
-                "Prefer Dolby Vision over HDR10+",
+                "Prefer Dolby Vision",
                 tuning.preferDolbyVision,
                 touch,
-                supporting = "Chooses Dolby Vision for compatible videos when both formats are available. Your device must support it."
+                supporting = "Tries Dolby Vision when a video also has HDR10+. Your device must support it."
             ) {
                 onLocal { it.copy(tuning = it.tuning.copy(preferDolbyVision = !it.tuning.preferDolbyVision)) }
             }
@@ -520,12 +555,13 @@ private fun SettingSupportingText(text: String, touch: Boolean) {
     if (touch) {
         androidx.compose.material3.Text(
             text,
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
         )
     } else {
         androidx.tv.material3.Text(
             text,
+            modifier = Modifier.padding(horizontal = 16.dp),
             style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
             color = androidx.tv.material3.MaterialTheme.colorScheme.onSurfaceVariant
         )

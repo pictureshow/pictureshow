@@ -30,6 +30,12 @@ class SettingsPresentationVectorsTest {
                     input.getValue("downmix").jsonPrimitive.boolean,
                     input.getValue("supported").jsonPrimitive.boolean
                 )
+                "passthrough-summary" -> presentation.passthroughSummary(
+                    input.getValue("enabled").jsonPrimitive.boolean,
+                    input.getValue("supported").jsonArray.map { PassthroughEncoding.valueOf(it.jsonPrimitive.content) }.toSet(),
+                    input.getValue("checking").jsonPrimitive.boolean,
+                    input.getValue("downmix").jsonPrimitive.boolean
+                )
                 "subtitle-label" -> presentation.subtitleValueLabel(value)
                 "credits-label" -> presentation.postCreditsLabel(PostCredits.valueOf(value))
                 "channel-label" -> presentation.audioChannelLabel(input.getValue("value").takeUnless { it == JsonNull }?.jsonPrimitive?.int)

@@ -129,17 +129,28 @@ class SettingsShortcutParityTest {
         }
         openGroup("Audio output")
         compose.onNodeWithTag("settings:Dolby Digital").assertIsEnabled()
-        compose.onNodeWithTag("settings:DTS").assertIsNotEnabled()
+        compose.onNodeWithTag("settings:DTS").assertDoesNotExist()
+        compose.onNodeWithTag("settings:Dolby Digital").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { assertEquals(setOf(PassthroughEncoding.AC3), state.local.tuning.disabledPassthrough) }
         compose.runOnIdle { supported = emptySet() }
-        compose.onNodeWithTag("settings:Dolby Digital").assertIsNotEnabled()
-        compose.runOnIdle { assertEquals(emptySet(), state.local.tuning.disabledPassthrough) }
+        PassthroughEncoding.entries.forEach { compose.onNodeWithTag("settings:${passthroughLabel(it)}").assertDoesNotExist() }
+        compose.onNodeWithText("Format choices appear when a receiver is connected.").assertExists()
+        compose.runOnIdle { assertEquals(setOf(PassthroughEncoding.AC3), state.local.tuning.disabledPassthrough) }
         closePanel()
-        compose.onNodeWithText("This TV can't send surround formats to a receiver.", substring = true).assertExists()
+        compose.onNodeWithText("On when a compatible receiver is connected. None detected now.", substring = true).assertExists()
         compose.onNodeWithText("PCM only", substring = true).assertDoesNotExist()
     }
 
-    @Test fun remoteCanReadEveryDisabledReceiverFormatWithoutChangingAnyPreference() {
-        var state by mutableStateOf(PlaybackSettingsState(loading = false))
+    @Test fun unsupportedFormatsStayHiddenAndEveryDetectedDisabledFormatRemainsReadableWithoutChangingPermission() {
+        var supported by mutableStateOf(emptySet<PassthroughEncoding>())
+        var state by mutableStateOf(
+            PlaybackSettingsState(
+                loading = false,
+                local = PlaybackPreferences().copy(
+                    tuning = PlaybackPreferences().tuning.copy(disabledPassthrough = setOf(PassthroughEncoding.DTS))
+                )
+            )
+        )
         compose.setContent {
             MaterialTheme {
                 PlaybackSettingsScreen(
@@ -148,28 +159,54 @@ class SettingsShortcutParityTest {
                     { change -> state = state.copy(local = change(state.local)) },
                     { _, _ -> },
                     {},
-                    supportedPassthrough = emptySet(),
+                    supportedPassthrough = supported,
                     onBack = {}
                 )
             }
         }
         openGroup("Audio output")
-        fun down() {
-            compose.onNodeWithTag("tv-settings:panel").performKeyInput { pressKey(Key.DirectionDown) }
+        PassthroughEncoding.entries.forEach { compose.onNodeWithTag("settings:${passthroughLabel(it)}").assertDoesNotExist() }
+        compose.onNodeWithText("Format choices appear when a receiver is connected.").assertExists()
+        compose.runOnIdle { assertEquals(setOf(PassthroughEncoding.DTS), state.local.tuning.disabledPassthrough) }
+        compose.runOnIdle { supported = PassthroughEncoding.entries.toSet() }
+        compose.onNodeWithText("Format choices appear when a receiver is connected.").assertDoesNotExist()
+        fun toggle(title: String) {
+            panelChoice(title).performSemanticsAction(SemanticsActions.OnClick) { it() }
             compose.waitForIdle()
         }
-        down() // Downmix to stereo.
-        down() // Global passthrough permission.
-        val before = state.local
-        PassthroughEncoding.entries.forEach { format ->
-            down()
-            val row = compose.onNodeWithTag("settings:${passthroughLabel(format)}")
-            row.assertIsFocused().assertIsDisplayed().assertIsNotEnabled()
-                .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
-            compose.onNodeWithTag("tv-settings:panel").performKeyInput { pressKey(Key.DirectionCenter) }
+        fun verifyDisabledRows() {
+            panelChoice("Audio channel limit").performSemanticsAction(SemanticsActions.RequestFocus)
             compose.waitForIdle()
-            row.assertIsFocused()
-            compose.runOnIdle { assertEquals(before, state.local) }
+            fun down() {
+                compose.onNodeWithTag("tv-settings:panel").performKeyInput { pressKey(Key.DirectionDown) }
+                compose.waitForIdle()
+            }
+            down() // Downmix to stereo.
+            down() // Global passthrough permission.
+            val before = state.local
+            PassthroughEncoding.entries.forEach { format ->
+                down()
+                val row = compose.onNodeWithTag("settings:${passthroughLabel(format)}")
+                row.assertIsFocused().assertIsDisplayed().assertIsNotEnabled()
+                    .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+                compose.onNodeWithTag("tv-settings:panel").performKeyInput { pressKey(Key.DirectionCenter) }
+                compose.waitForIdle()
+                row.assertIsFocused()
+                compose.runOnIdle { assertEquals(before, state.local) }
+            }
         }
+        toggle("Audio passthrough")
+        compose.runOnIdle { assertEquals(false, state.local.passthrough) }
+        verifyDisabledRows()
+        toggle("Audio passthrough")
+        toggle("Downmix to stereo")
+        compose.runOnIdle {
+            assertEquals(true, state.local.passthrough)
+            assertEquals(true, state.local.tuning.downmix)
+        }
+        compose.onNodeWithText("Downmix is on, so passthrough is not used.", substring = true).assertExists()
+        verifyDisabledRows()
+        closePanel()
+        compose.onNodeWithText("Downmix is on, so passthrough is not used.", substring = true).assertExists()
     }
 }

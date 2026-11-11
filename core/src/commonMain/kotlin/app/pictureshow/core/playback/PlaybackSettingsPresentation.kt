@@ -7,6 +7,25 @@ package app.pictureshow.core.playback
 object PlaybackSettingsPresentation {
     fun canConfigurePassthrough(passthrough: Boolean, downmix: Boolean, supported: Boolean) = passthrough && !downmix && supported
 
+    /** The saved permission and current receiver detection are different facts. */
+    fun passthroughSummary(
+        enabled: Boolean,
+        supported: Set<PassthroughEncoding>,
+        checking: Boolean = false,
+        downmix: Boolean = false
+    ): String {
+        val permission = if (enabled) "On when a compatible receiver is connected." else "Off."
+        val capability = when {
+            checking -> "Checking connected receiver support."
+            supported.isEmpty() -> if (enabled) "None detected now." else "No compatible receiver detected now."
+            else -> "Detected now: ${PassthroughEncoding.entries.filter {
+                it in supported
+            }.joinToString(", ", transform = ::passthroughLabel)}."
+        }
+        val output = if (enabled && downmix) " Downmix is on, so passthrough is not used." else ""
+        return "$permission$output $capability"
+    }
+
     fun subtitleSizeLabel(value: SubtitleSize) = subtitleValueLabel(value.name)
     fun subtitleBackgroundLabel(value: SubtitleBackground) = subtitleValueLabel(value.name)
     fun subtitleValueLabel(value: String) = when (value) {
@@ -42,6 +61,10 @@ object PlaybackSettingsPresentation {
         } else {
             "Uses another supported format or converts the video. This may require conversion on your server."
         }
-        CapabilityOverride.Detected -> "Uses supported formats. HDR switches automatically with the video."
+        CapabilityOverride.Detected -> if (hdr) {
+            "Plays HDR when this device and display support it."
+        } else {
+            "Plays Dolby Vision when this device and display support it."
+        }
     }
 }

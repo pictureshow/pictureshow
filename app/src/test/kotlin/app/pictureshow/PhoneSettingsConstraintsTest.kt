@@ -5,18 +5,26 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -24,6 +32,8 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
@@ -42,17 +52,13 @@ class PhoneSettingsConstraintsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun landscapeLargeFontShowsTheEntireFirstChoiceBelowItsPreview() {
-        val file = listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
-            .single { it.isFile }
-        val document = Json.parseToJsonElement(file.readText()).jsonObject
-        assertEquals("playback-settings-layout", document.getValue("suite").jsonPrimitive.content)
-        val case = document.getValue("cases").jsonArray.single().jsonObject
-        assertEquals("settings-first-row-visible", case.getValue("operation").jsonPrimitive.content)
+        val case = vector("settings-first-row-visible")
         val input = case.getValue("input").jsonObject
         val expected = case.getValue("expected").jsonObject
         // The native fixture's resource configuration must match the portable viewport, never silently ignore it.
         assertEquals(800, input.getValue("widthDp").jsonPrimitive.int)
         assertEquals(360, input.getValue("heightDp").jsonPrimitive.int)
+        assertEquals("touch", input.getValue("surface").jsonPrimitive.content)
         compose.setContent {
             androidx.compose.material3.MaterialTheme {
                 CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
@@ -85,6 +91,11 @@ class PhoneSettingsConstraintsTest {
         val visibleHeight = minOf(nextTitle.bottom, viewport.bottom) - maxOf(nextTitle.top, viewport.top)
         assertEquals(expected.getValue("secondRowTitleVisible").jsonPrimitive.boolean, visibleHeight >= 8.dp, "$nextTitle / $viewport")
         assertPreviewLabelsCentered(expected.getValue("previewLabelsCentered").jsonPrimitive.boolean)
+        first.performClick()
+        compose.onAllNodes(isDialog()).assertCountEquals(expected.getValue("choicePickerWindowCount").jsonPrimitive.int)
+        compose.onNodeWithTag("touch:choice-option:0").assertIsSelected()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNode(hasText("Font size") and hasClickAction()).assertExists()
     }
 
     @Test fun previewCaptionsFollowTheTextAndImageCueCentersOnBothSurfaces() {
@@ -99,6 +110,105 @@ class PhoneSettingsConstraintsTest {
         assertPreviewLabelsCentered(true)
         compose.runOnIdle { touch.value = false }
         assertPreviewLabelsCentered(true)
+    }
+
+    @Test fun aChoiceConsequenceSharesItsWholeClickableRow() {
+        val case = vector("settings-choice-target")
+        val input = case.getValue("input").jsonObject
+        val title = input.getValue("title").jsonPrimitive.content
+        val consequence = input.getValue("consequence").jsonPrimitive.content
+        compose.setContent {
+            TouchTheme {
+                Column {
+                    TouchChoice(
+                        title,
+                        input.getValue("value").jsonPrimitive.content,
+                        input.getValue("choices").jsonArray.map { it.jsonPrimitive.content },
+                        { it },
+                        supporting = consequence
+                    ) {}
+                }
+            }
+        }
+        val row = compose.onNode(hasText(title) and hasClickAction()).getUnclippedBoundsInRoot()
+        val explanation = compose.onNode(hasText(consequence) and !hasClickAction(), useUnmergedTree = true)
+        val bounds = explanation.getUnclippedBoundsInRoot()
+        assertEquals(
+            case.getValue("expected").jsonObject.getValue("consequenceInsideClickTarget").jsonPrimitive.boolean,
+            bounds.top >= row.top && bounds.bottom <= row.bottom,
+            "$bounds outside target $row"
+        )
+        explanation.performClick()
+        compose.onNodeWithText(input.getValue("choices").jsonArray[1].jsonPrimitive.content).assertExists()
+    }
+
+    @Test fun anOptionWithAConsequenceKeepsItsRadioOnTheLabelLine() {
+        val case = vector("settings-radio-first-line")
+        val input = case.getValue("input").jsonObject
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
+                TouchTheme {
+                    Box(Modifier.width(320.dp)) {
+                        TouchChoiceOptions(
+                            TouchChoicePanel(
+                                input.getValue("title").jsonPrimitive.content,
+                                0,
+                                input.getValue("choices").jsonArray.map { it.jsonPrimitive.content },
+                                input.getValue("notes").jsonArray.map { if (it == JsonNull) null else it.jsonPrimitive.content },
+                                true,
+                                {}
+                            ),
+                            onSelected = {}
+                        )
+                    }
+                }
+            }
+        }
+        val label = compose.onNodeWithTag("touch:choice-label:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val radio = compose.onNode(
+            hasTestTag("touch:radio-indicator") and hasAnyAncestor(hasTestTag("touch:choice-option:0")),
+            useUnmergedTree = true
+        ).getUnclippedBoundsInRoot()
+        val labelCenter = (label.top.value + label.bottom.value) / 2
+        val radioCenter = (radio.top.value + radio.bottom.value) / 2
+        assertEquals(
+            true,
+            abs(labelCenter - radioCenter) <= case.getValue("expected").jsonObject.getValue("maximumCenterOffsetDp").jsonPrimitive.float,
+            "$label / $radio"
+        )
+    }
+
+    @Test fun aGroupPickerReturnsToTheSameScrolledChoice() {
+        val case = vector("settings-choice-scroll-return")
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
+                TouchTheme { AdvancedPlaybackSettings(input.getValue("group").jsonPrimitive.content, PlaybackPreferences(), true, {}, {}) }
+            }
+        }
+        val title = input.getValue("scrollTargetTitle").jsonPrimitive.content
+        val opener = compose.onNode(hasText(title) and hasClickAction()).performScrollTo()
+        val before = opener.getUnclippedBoundsInRoot()
+        opener.performClick()
+        compose.onAllNodes(isDialog()).assertCountEquals(expected.getValue("choicePickerWindowCount").jsonPrimitive.int)
+        compose.onNodeWithText("Cancel").performClick()
+        val after = compose.onNode(hasText(title) and hasClickAction()).getUnclippedBoundsInRoot()
+        assertEquals(
+            true,
+            abs(before.top.value - after.top.value) <= expected.getValue("maximumScrollReturnOffsetDp").jsonPrimitive.float,
+            "$before / $after"
+        )
+    }
+
+    private fun vector(operation: String): JsonObject {
+        val file = listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
+            .single { it.isFile }
+        val document = Json.parseToJsonElement(file.readText()).jsonObject
+        assertEquals("playback-settings-layout", document.getValue("suite").jsonPrimitive.content)
+        return document.getValue("cases").jsonArray.map { it.jsonObject }.single {
+            it.getValue("operation").jsonPrimitive.content == operation
+        }
     }
 
     private fun assertPreviewLabelsCentered(expected: Boolean) {
