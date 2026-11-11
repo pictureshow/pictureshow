@@ -39,6 +39,8 @@ android {
             matchingFallbacks += "release"
         }
     }
+    // Low minSdk otherwise compresses DEX: ART must inflate it on the startup critical path.
+    packaging.dex.useLegacyPackaging = false
     buildFeatures {
         compose = true
         buildConfig = true
