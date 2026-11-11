@@ -20,6 +20,46 @@ display = importlib.util.module_from_spec(display_spec)
 display_spec.loader.exec_module(display)
 
 
+class NativeMetadataEvidenceTest(unittest.TestCase):
+    def test_decoder_envelope_copies_only_codec_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "decoder-envelope.json").write_text(json.dumps({"source": "actual loaded libmpv decoder-list", "codecs": ["subrip", "ass", "hdmv_pgs_subtitle"], "unused": "private-token"}))
+            smoke.copy_decoder_envelope(root, root / "evidence")
+            copied = json.loads((root / "evidence/playback/decoder-envelope.json").read_text())
+            self.assertEqual(["ass", "hdmv_pgs_subtitle", "subrip"], copied["codecs"])
+            self.assertNotIn("private-token", json.dumps(copied))
+
+    def test_decoder_envelope_rejects_urls_and_nonobject(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for receipt in [[], {"source": "actual loaded libmpv decoder-list", "codecs": ["https://private.invalid/token"]}]:
+                (root / "decoder-envelope.json").write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(RuntimeError, "unexpected evidence"):
+                    smoke.copy_decoder_envelope(root, root / "evidence")
+            self.assertFalse((root / "evidence/playback/decoder-envelope.json").exists())
+
+    def test_decoder_envelope_rejects_oversized_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "decoder-envelope.json").write_bytes(b" " * (256 * 1024 + 1))
+            with self.assertRaisesRegex(RuntimeError, "exceeds"):
+                smoke.copy_decoder_envelope(root, root / "evidence")
+
+    def test_subtitle_failure_receipt_withholds_raw_log_and_bounds_scan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mpv.log").write_bytes(b"Error parsing subtitle\n" + b"x" * (2 * 1024 * 1024) + b"Could not open libavcodec subtitle converter https://private.invalid/token\n")
+            smoke.copy_subtitle_failure_categories(root, root / "evidence")
+            copied = json.loads((root / "evidence/playback/subtitle-failure-categories.json").read_text())
+            self.assertTrue(copied["categories"]["converterOpenFailed"])
+            self.assertFalse(copied["categories"]["parseFailed"])
+            self.assertTrue(copied["tailTruncated"])
+            self.assertEqual(2 * 1024 * 1024, copied["scannedBytes"])
+            self.assertNotIn("private.invalid", json.dumps(copied))
+            self.assertNotIn("token", json.dumps(copied))
+
+
 class DisplayBoundsTest(unittest.TestCase):
     def receipt(self):
         return {"phase": "virtual", "online": 1, "mirrored": 0, "main": 0,

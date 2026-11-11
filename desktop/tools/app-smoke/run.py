@@ -818,6 +818,51 @@ def validate_native_close(evidence: Path, enabled: bool) -> dict:
     return {"nativeCloseVerified": True}
 
 
+def copy_decoder_envelope(playback: Path, evidence: Path):
+    source = playback / "decoder-envelope.json"
+    if not source.exists():
+        return
+    with source.open("rb") as stream:
+        data = stream.read(256 * 1024 + 1)
+    if len(data) > 256 * 1024:
+        raise RuntimeError("Native decoder envelope exceeds its evidence bound")
+    receipt = json.loads(data)
+    codecs = receipt.get("codecs") if isinstance(receipt, dict) else None
+    if (not isinstance(receipt, dict) or receipt.get("source") != "actual loaded libmpv decoder-list"
+            or not isinstance(codecs, list) or not 1 <= len(codecs) <= 2048
+            or not all(isinstance(codec, str) and re.fullmatch(r"[A-Za-z0-9_.+-]{1,80}", codec) for codec in codecs)):
+        raise RuntimeError("Native decoder envelope contains unexpected evidence fields")
+    # Reconstruct only known metadata; never forward arbitrary additional fields.
+    write_json(evidence / "playback" / source.name,
+               {"source": "actual loaded libmpv decoder-list", "codecs": sorted(set(codecs))})
+
+
+def copy_subtitle_failure_categories(playback: Path, evidence: Path):
+    source = playback / "mpv.log"
+    limit = 2 * 1024 * 1024
+    data = b""
+    size = 0
+    if source.exists():
+        with source.open("rb") as stream:
+            size = stream.seek(0, 2)
+            stream.seek(max(0, size - limit))
+            data = stream.read(limit)
+    # Fixed mpv subtitle diagnostics only. No log lines, codec argument values,
+    # authenticated URLs or paths enter this receipt, even on a matching line.
+    signatures = {
+        "decoderNotFound": b"Could not find subtitle decoder for format",
+        "converterOpenFailed": b"Could not open libavcodec subtitle converter",
+        "parseFailed": b"Error parsing subtitle",
+        "decodeFailed": b"Error decoding subtitle",
+        "codecChangeFailed": b"Can't change to new codec.",
+        "bitmapIgnored": b"Ignoring bitmap subtitle.",
+    }
+    write_json(evidence / "playback" / "subtitle-failure-categories.json",
+               {"sourcePresent": source.exists(), "scannedBytes": len(data),
+                "tailTruncated": size > limit,
+                "categories": {name: signature in data for name, signature in signatures.items()}})
+
+
 def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     command = [args.java, "--enable-native-access=ALL-UNNAMED"]
     if platform.system() == "Darwin":
@@ -886,6 +931,9 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
             if native_receipt.exists():
                 # Native metadata only: renderer/format/geometry/counters, no media URL.
                 write_json(evidence / "playback" / "native-surface.json", json.loads(native_receipt.read_text(encoding="utf-8")))
+            playback = Path(environment["PICTURESHOW_DATA_DIR"]) / "playback"
+            copy_decoder_envelope(playback, evidence)
+            copy_subtitle_failure_categories(playback, evidence)
             # Keep the independent observations even when the app fails before
             # its receipt. A failure must not discard the only server evidence.
             write_json(evidence / "server-session-observations.json", {"samples": samples,
