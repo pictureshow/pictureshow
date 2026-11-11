@@ -144,11 +144,16 @@ internal fun TouchCatalogHome(
                     TouchCatalogHeading("Pictureshow", Modifier.weight(1f))
                     if (onCustomize != null) {
                         Box {
-                            IconButton(onClick = { homeMenu = true }, modifier = Modifier.testTag("touch:home-menu")) {
+                            IconButton(
+                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                                onClick = { homeMenu = true },
+                                modifier = Modifier.testTag("touch:home-menu")
+                            ) {
                                 Icon(touchActionIcon("more"), contentDescription = "Home options")
                             }
                             DropdownMenu(homeMenu, { homeMenu = false }) {
                                 DropdownMenuItem(
+                                    enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
                                     text = { Text("Customize home") },
                                     onClick = {
                                         homeMenu = false

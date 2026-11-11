@@ -6,9 +6,12 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -137,5 +140,36 @@ class CatalogRevisionPresentationTest {
         assertTrue(bounds.bottom - bounds.top <= 120.dp, "List rows remain compact")
         row.performClick()
         compose.runOnIdle { assertEquals("film", opened) }
+    }
+
+    @Test fun tvHomeEditorWaitsForInitialViewerPreferences() = homeEditorWaitsForPreferences(tv = true)
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchHomeEditorWaitsForInitialViewerPreferences() = homeEditorWaitsForPreferences(tv = false)
+
+    private fun homeEditorWaitsForPreferences(tv: Boolean) {
+        val state = mutableStateOf(CatalogHomeState())
+        var opens = 0
+        compose.setContent {
+            MaterialTheme {
+                androidx.tv.material3.MaterialTheme {
+                    if (tv) {
+                        CatalogHome(state.value, account, {}, {}, {}, {}, onCustomize = { opens++ })
+                    } else {
+                        TouchCatalogHome(state.value, account, {}, {}, onCustomize = { opens++ })
+                    }
+                }
+            }
+        }
+        val entry = compose.onNodeWithTag(if (tv) "home:customize" else "touch:home-menu")
+        entry.assertIsNotEnabled().performClick()
+        compose.runOnIdle {
+            assertEquals(0, opens, "Pending read must not open an editor populated with defaults")
+            state.value = state.value.copy(preferencesReady = true, loading = false)
+        }
+        entry.assertIsEnabled().performClick()
+        if (!tv) compose.onNodeWithTag("touch:customize").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(1, opens) }
     }
 }

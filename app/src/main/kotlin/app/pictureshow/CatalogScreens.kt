@@ -416,6 +416,7 @@ fun CatalogHome(
                         ) { Text("Settings") }
                         if (onCustomize != null) {
                             Button(
+                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
                                 onClick = {
                                     selectedRow = "customize"
                                     onCustomize()

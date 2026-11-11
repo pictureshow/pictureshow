@@ -40,3 +40,5 @@ During explicit TV search editing, the shared panel’s focus target is the atta
 Named single-value choices (including Person Any) expose the radio role on their row. Home pin commands expose the button role with the visible “On your home” check/status; decorative check icons do not repeat the spoken label.
 
 The combined sort/direction control announces its sort name once and Ascending/Descending as its state. Direction arrows are decorative icons with no spoken label; opening the picker exposes the current sort/direction as a selected radio choice. Two direction-label vectors cover both states.
+
+Home editor entry remains disabled while the initial per-viewer preference read is pending. Enable it only after either the server layout or the local fallback has resolved (`preferencesReady`); catalog refreshes may retain an already resolved layout. This prevents a cold start from presenting editable default rows before the viewer’s layout arrives. TV and touch use the same rule; the launcher callback also guards a stale click. Cases `home-editor-pending-read-blocks-default-layout` and `home-editor-ready-server-or-local-layout-opens` cover the portable decision.

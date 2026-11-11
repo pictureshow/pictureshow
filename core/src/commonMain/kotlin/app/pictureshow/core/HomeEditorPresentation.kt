@@ -96,3 +96,6 @@ fun namedPickerFocusTarget(hasChoices: Boolean, hasAny: Boolean, hasSelection: B
 
 /** Announce the direction once; visual arrows remain decorative. */
 fun sortDirectionLabel(descending: Boolean): String = if (descending) "Descending" else "Ascending"
+
+/** Initial preferences must resolve before an editor can expose or mutate a default layout. */
+fun canOpenHomeEditor(preferencesReady: Boolean): Boolean = preferencesReady

@@ -1529,7 +1529,7 @@
         "moving": true,
         "tv": true
       },
-      "expected": "Moving · Up/Down · OK to drop"
+      "expected": "Moving \u00b7 Up/Down \u00b7 OK to drop"
     },
     {
       "id": "editor-hint-true-false-true",
@@ -1539,7 +1539,7 @@
         "moving": true,
         "tv": true
       },
-      "expected": "Hidden · Moving · Up/Down · OK to drop"
+      "expected": "Hidden \u00b7 Moving \u00b7 Up/Down \u00b7 OK to drop"
     },
     {
       "id": "editor-hint-false-true-false",
@@ -1569,7 +1569,7 @@
         "moving": true,
         "tv": false
       },
-      "expected": "Moving · Release to drop"
+      "expected": "Moving \u00b7 Release to drop"
     },
     {
       "id": "editor-hint-false-false-true",
@@ -1579,7 +1579,7 @@
         "moving": true,
         "tv": false
       },
-      "expected": "Hidden · Moving · Release to drop"
+      "expected": "Hidden \u00b7 Moving \u00b7 Release to drop"
     },
     {
       "id": "restore-all-none",
@@ -1692,7 +1692,7 @@
         "pinned": true,
         "count": 2
       },
-      "expected": "On your home · 2 titles"
+      "expected": "On your home \u00b7 2 titles"
     },
     {
       "id": "reset-home-false",
@@ -2034,6 +2034,22 @@
         "descending": true
       },
       "expected": "Descending"
+    },
+    {
+      "id": "home-editor-pending-read-blocks-default-layout",
+      "operation": "home-editor-entry",
+      "input": {
+        "preferencesReady": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-editor-ready-server-or-local-layout-opens",
+      "operation": "home-editor-entry",
+      "input": {
+        "preferencesReady": true
+      },
+      "expected": true
     }
   ]
 }

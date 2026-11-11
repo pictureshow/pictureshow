@@ -253,6 +253,9 @@ class HomeBrowseVectorsTest {
                         }
                     }
                 }
+                "home-editor-entry" -> JsonPrimitive(
+                    canOpenHomeEditor(input.getValue("preferencesReady").jsonPrimitive.content.toBooleanStrict())
+                )
                 "sort-direction-label" -> JsonPrimitive(
                     sortDirectionLabel(input.getValue("descending").jsonPrimitive.content.toBooleanStrict())
                 )
