@@ -77,6 +77,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     chrome: @Composable (@Composable () -> Unit) -> Unit = { it() },
     windowControls: @Composable RowScope.() -> Unit = {}) {
     val state by controller.state.collectAsState()
+    // Semantics and tooltip callbacks may outlive this composition during sign-out.
+    val sidebarAccount = state.account
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
         DesktopRoute.Detail -> ":${state.detail?.id}"
@@ -138,11 +140,11 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 }
                 Row(Modifier.weight(1f)) {
-                    if (state.account != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
+                    if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         Column(Modifier.width(184.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(state.account!!.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(state.account!!.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint()) {
-                                Text(state.account!!.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = state.account!!.server.name })
+                            Text(sidebarAccount.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(sidebarAccount.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint()) {
+                                Text(sidebarAccount.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = sidebarAccount.server.name })
                             }
                             NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.probe("nav:home"))
                             state.homeRows.filter { it.library }.flatMap { it.items }.forEach { library ->
