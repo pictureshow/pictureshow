@@ -307,7 +307,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         return DesktopSelectedTracks(
             player.get("aid")?.toIntOrNull(), player.get("sid")?.toIntOrNull(),
             player.get("sub-text").orEmpty(), player.get("sub-visibility") == "yes",
-            player.get("mpv-version"), player.get("ffmpeg-version"), player.get("sub-codec"),
+            player.get("mpv-version"), player.get("ffmpeg-version"), player.get("current-tracks/sub/codec") ?: player.get("sub-codec"),
             player.get("sub-start")?.toDoubleOrNull(), player.get("sub-end")?.toDoubleOrNull(),
             player.get("time-pos")?.toDoubleOrNull(), initialSubtitleIndex
         )

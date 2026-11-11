@@ -178,6 +178,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
         click("username");waitFor("username has actual keyboard focus") { DesktopUiProbe.focus["username"]==true };type(user);click("password");waitFor("password has actual keyboard focus") { DesktopUiProbe.focus["password"]==true };type("wrong-password");click("sign-in")
         waitFor("recoverable password rejection") { c.state.value.route==DesktopRoute.SignIn && !c.state.value.busy && c.state.value.errorKind==ErrorKind.INVALID_CREDENTIALS }
+        waitFor("rejected password is focused") { DesktopUiProbe.focus["password"]==true }
         key(KeyEvent.VK_RIGHT);Thread.sleep(250)
         check(c.state.value.errorKind==ErrorKind.INVALID_CREDENTIALS) { "Cursor movement cleared the credential rejection" };screenshot("02b-sign-in-error");screenshot("02b-sign-in-error-minimum",listOf(800 to 600))
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
@@ -214,7 +215,11 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         }
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
         val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
-        waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") }==true }
+        waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
+                it.subtitleCodec in setOf("srt", "subrip") &&
+                it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
+                it.positionSeconds?.let { position -> position>=0.0 && position<180.0 }==true &&
+                it.initialSubtitleIndex in setOf(-1, sub.index) }==true }
         screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)

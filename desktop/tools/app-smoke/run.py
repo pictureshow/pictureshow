@@ -863,13 +863,13 @@ def validate_decoder_envelope(evidence: Path) -> dict:
     codecs = receipt.get("codecs") if isinstance(receipt, dict) else None
     if (not isinstance(receipt, dict)
             or receipt.get("source") != "actual loaded libmpv decoder-list"
-            or not isinstance(codecs, list)
-            or not all(isinstance(codec, str) for codec in codecs)):
+            or not isinstance(codecs, list) or not 1 <= len(codecs) <= 2048
+            or not all(isinstance(codec, str) and re.fullmatch(r"[A-Za-z0-9_.+-]{1,80}", codec) for codec in codecs)):
         raise RuntimeError("Successful native playback has an invalid decoder envelope")
-    subtitle_decoder = next((codec for codec in codecs if codec.lower() in {"subrip", "srt"}), None)
-    if subtitle_decoder is None:
-        raise RuntimeError("Successful native playback is missing the fixture subtitle decoder")
-    return {"nativeSubtitleDecoderVerified": True, "nativeSubtitleDecoder": subtitle_decoder}
+    # mpv decoder-list enumerates audio/video decoders, not libass subtitle
+    # decoders. The real selected-track cue/codec/timing receipt is the subtitle
+    # gate; absence of subtitle names in this inventory is not lack of support.
+    return {"nativeDecoderEnvelopeVerified": True, "nativeDecoderCount": len(codecs)}
 
 
 def copy_subtitle_failure_categories(playback: Path, evidence: Path):
