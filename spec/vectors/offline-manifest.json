@@ -1,0 +1,4863 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-manifest",
+ "cases": [
+  {
+   "id": "offline-manifest.blockers-none",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-job-phase",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "transferring",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "job-phase"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-no-media",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "s",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "no-media"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-incomplete",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "incomplete:m"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-unverified-no-hash",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": null,
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "unverified:m"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-unverified-no-bytes",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": null,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "unverified:m"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-no-title",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": " "
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "no-title"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-optional-incomplete-does-not-block",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "a",
+         "role": "artwork",
+         "path": "art.jpg",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-required-subtitle-blocks",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "s",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "incomplete:s"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-media-is-needed-even-if-marked-optional",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "incomplete:m"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-unsafe-resource-path",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "../media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "verifying",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "unsafe:m"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.blockers-all-in-order",
+   "operation": "blockers",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": ""
+       },
+       "resources": [
+        {
+         "id": "s",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "a",
+         "role": "audio",
+         "path": "a.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": null,
+         "complete": true
+        }
+       ],
+       "tracks": [],
+       "job": {
+        "phase": "paused",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      }
+     },
+     "expected": {
+      "blockers": [
+       "job-phase",
+       "no-media",
+       "incomplete:s",
+       "unverified:a",
+       "no-title"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-ok",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": true,
+      "reason": null,
+      "changedEntries": [
+       "i1:original"
+      ],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-each-blocker-job-phase",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "job-phase",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "transferring"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-each-blocker-no-media",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "no-media",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-each-blocker-incomplete",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "incomplete:m",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-each-blocker-unverified",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 100,
+        "sha256": null,
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "unverified:m",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-each-blocker-no-title",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": ""
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "no-title",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-reasons-are-joined",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": ""
+      },
+      "resources": [],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "no-media,no-title",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-stale-attempt",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 9
+     },
+     "expected": {
+      "ok": false,
+      "reason": "stale-attempt",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "verifying"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-unknown-entry",
+   "operation": "commit",
+   "state": {
+    "entries": []
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "nope",
+      "attempt": 1
+     },
+     "expected": {
+      "ok": false,
+      "reason": "no-entry",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.commit-kill-before-commit-cannot-expose-ready",
+   "operation": "commit",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "entryId": "i1:original",
+      "attempt": 2
+     },
+     "expected": {
+      "ok": false,
+      "reason": "job-phase",
+      "changedEntries": [],
+      "deletePaths": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-intact-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": true
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-file-gone-becomes-missing",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {}
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-wrong-size-becomes-missing-and-file-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 99
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 99,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-optional-gone-stays-ready-and-marks-incomplete",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       },
+       {
+        "id": "s",
+        "role": "subtitle",
+        "path": "s.vtt",
+        "required": false,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": true
+          },
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-required-subtitle-gone-is-missing",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       },
+       {
+        "id": "s",
+        "role": "subtitle",
+        "path": "s.vtt",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-stray-file-is-an-orphan",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100,
+       "i1_original/old.tmp": 7
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [
+       "i1_original/old.tmp"
+      ],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-ready-part-is-owned-not-orphan",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100,
+       "i1_original/media.mkv.part": 7
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 107,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-preparing-goes-back-to-queued-keeping-partial",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued",
+          "attempt": 2,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 50,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-transferring-goes-back-to-queued-keeping-partial",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued",
+          "attempt": 2,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 50,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-verifying-goes-back-to-queued-keeping-partial",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued",
+          "attempt": 2,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 50,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-verifying-with-intact-file-keeps-complete",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued",
+          "attempt": 2,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": true
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-queued-is-unchanged-and-partial-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50,
+       "i1_original/scratch": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "queued",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 51,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-waitingNetwork-is-unchanged-and-partial-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50,
+       "i1_original/scratch": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "waitingNetwork",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 51,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-waitingStorage-is-unchanged-and-partial-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50,
+       "i1_original/scratch": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "waitingStorage",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 51,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-paused-is-unchanged-and-partial-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50,
+       "i1_original/scratch": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "paused",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 51,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-failed-is-unchanged-and-partial-stays",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 50,
+       "i1_original/scratch": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "failed",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 51,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-non-ready-complete-file-gone-is-incomplete",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       },
+       {
+        "id": "s",
+        "role": "subtitle",
+        "path": "s.vtt",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/s.vtt": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "paused",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          },
+          {
+           "complete": true
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-part-alone-means-incomplete",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "paused",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         },
+         "resources": [
+          {
+           "complete": false
+          }
+         ]
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-deleting-is-unchanged-and-owned",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": false
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv.part": 5
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "deleting",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 5,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-orphans-are-deleted-sorted",
+   "operation": "reconcile",
+   "state": {
+    "entries": []
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "zz/b": 1,
+       "aa/c": 2,
+       "aa/a": 3
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [
+       "aa/a",
+       "aa/c",
+       "zz/b"
+      ],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-unsafe-orphans-are-never-listed",
+   "operation": "reconcile",
+   "state": {
+    "entries": []
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "../up": 1,
+       "/abs/x": 1,
+       "a/../b": 1,
+       "a\\b/c": 1,
+       "ok/\u0000x": 1,
+       "ok/fine": 1
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [
+       "ok/fine"
+      ],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-a-file-in-the-root-is-not-an-entry-file",
+   "operation": "reconcile",
+   "state": {
+    "entries": []
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "manifest.json": 9
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-used-is-recomputed-and-reservations-cleared",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ],
+    "budget": {
+     "capBytes": 1000,
+     "usedBytes": 777,
+     "reservations": {
+      "gone": 5
+     }
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/media.mkv": 100,
+       "other/x": 40
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [
+       "other/x"
+      ],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 100,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-pending-cleanup-with-files-stays-pending",
+   "operation": "reconcile",
+   "state": {
+    "entries": [],
+    "pendingByteCleanup": [
+     "i9:original"
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i9_original/media.mkv": 5
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [
+       "i9_original/media.mkv"
+      ],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       },
+       "pendingByteCleanup": [
+        "i9:original"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-pending-cleanup-without-files-clears",
+   "operation": "reconcile",
+   "state": {
+    "entries": [],
+    "pendingByteCleanup": [
+     "i9:original"
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {}
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [],
+      "manifest": {
+       "entries": [],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       },
+       "pendingByteCleanup": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-resource-with-unsafe-path-counts-as-absent",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "../media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {
+       "i1_original/../media.mkv": 100
+      }
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.reconcile-eviction-of-all-files-makes-every-ready-missing",
+   "operation": "reconcile",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i2:original",
+      "itemId": "i2",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Title"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "inventory": {}
+     },
+     "expected": {
+      "ok": true,
+      "deletePaths": [],
+      "changedEntries": [
+       "i1:original",
+       "i2:original"
+      ],
+      "manifest": {
+       "entries": [
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        },
+        {
+         "job": {
+          "phase": "missing",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "budget": {
+        "usedBytes": 0,
+        "reservations": {}
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-current",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 1, \"wifiOnly\": false, \"autoCleanWatched\": true, \"pendingByteCleanup\": [\"x\"]}"
+     },
+     "expected": {
+      "manifest": {
+       "schema": 1,
+       "wifiOnly": false,
+       "autoCleanWatched": true,
+       "pendingByteCleanup": [
+        "x"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-schema-0-upgrades-explicit",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 0, \"nextSequence\": 4}"
+     },
+     "expected": {
+      "manifest": {
+       "schema": 1,
+       "nextSequence": 4,
+       "autoCleanWatched": false,
+       "pendingByteCleanup": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-missing-schema-is-0",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"nextSequence\": 4, \"wifiOnly\": false}"
+     },
+     "expected": {
+      "manifest": {
+       "schema": 1,
+       "nextSequence": 4,
+       "wifiOnly": false,
+       "autoCleanWatched": false,
+       "pendingByteCleanup": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-newer-schema-is-refused",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 2}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-negative-schema-is-refused",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": -1}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-text-schema-is-refused",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": \"1\"}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-null-schema-is-refused",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": null}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-fractional-schema-is-refused",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\":1.5}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-corrupt",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\":1,"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-empty",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": ""
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-not-an-object",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "[1]"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-wrong-field-type",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 1, \"entries\": \"x\"}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-unknown-enum",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 1, \"entries\": [{\"id\": \"a\", \"itemId\": \"a\", \"kind\": \"podcast\", \"preset\": \"original\", \"labels\": {\"title\": \"t\"}}]}"
+     },
+     "expected": {
+      "manifest": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.decode-unknown-field-is-tolerated",
+   "operation": "decode",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "{\"schema\": 1, \"future\": true, \"nextSequence\": 2}"
+     },
+     "expected": {
+      "manifest": {
+       "schema": 1,
+       "nextSequence": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.roundtrip-keeps-everything",
+   "operation": "roundtrip",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "manifest": {
+       "entries": [
+        {
+         "id": "i1:original",
+         "itemId": "i1",
+         "kind": "movie",
+         "preset": "original",
+         "labels": {
+          "title": "Title"
+         },
+         "resources": [
+          {
+           "id": "m",
+           "role": "media",
+           "path": "media.mkv",
+           "required": true,
+           "bytes": 100,
+           "sha256": "aa",
+           "complete": true
+          }
+         ],
+         "tracks": [
+          {
+           "serverIndex": 1,
+           "type": "audio",
+           "label": "English",
+           "language": "eng",
+           "isDefault": true
+          }
+         ],
+         "job": {
+          "phase": "ready",
+          "attempt": 1,
+          "cellularAllowed": false,
+          "failure": null,
+          "pausedByCap": false
+         }
+        }
+       ],
+       "nextSequence": 7,
+       "budget": {
+        "capBytes": 1000,
+        "usedBytes": 100,
+        "reservations": {
+         "a": 5
+        }
+       },
+       "wifiOnly": false,
+       "autoCleanWatched": true,
+       "pendingByteCleanup": [
+        "p"
+       ]
+      }
+     },
+     "expected": {
+      "same": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-embedded",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": 1
+     },
+     "expected": {
+      "action": "local"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-downloaded-second-language",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": 2
+     },
+     "expected": {
+      "action": "local"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-undownloaded-resource",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": 3
+     },
+     "expected": {
+      "action": "reconnect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-embedded-not-in-this-file",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": 4
+     },
+     "expected": {
+      "action": "reconnect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-unknown-track",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": 9
+     },
+     "expected": {
+      "action": "reconnect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-off-audio",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "audio",
+      "serverIndex": null
+     },
+     "expected": {
+      "action": "local"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-off-subtitle",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "subtitle",
+      "serverIndex": null
+     },
+     "expected": {
+      "action": "local"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-subtitle-undownloaded",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "subtitle",
+      "serverIndex": 5
+     },
+     "expected": {
+      "action": "reconnect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.track-type-must-match",
+   "operation": "track-switch",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "m",
+         "role": "media",
+         "path": "media.mkv",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "fr",
+         "role": "audio",
+         "path": "fr.m4a",
+         "required": true,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": true
+        },
+        {
+         "id": "de",
+         "role": "audio",
+         "path": "de.m4a",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        },
+        {
+         "id": "sub",
+         "role": "subtitle",
+         "path": "s.vtt",
+         "required": false,
+         "bytes": 100,
+         "sha256": "aa",
+         "complete": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng",
+         "isDefault": true
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fra",
+         "resourceId": "fr"
+        },
+        {
+         "serverIndex": 3,
+         "type": "audio",
+         "label": "German",
+         "language": "deu",
+         "resourceId": "de"
+        },
+        {
+         "serverIndex": 4,
+         "type": "audio",
+         "label": "Italian",
+         "language": "ita",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub"
+        }
+       ],
+       "job": {
+        "phase": "ready",
+        "attempt": 1,
+        "cellularAllowed": false,
+        "failure": null,
+        "pausedByCap": false
+       }
+      },
+      "type": "subtitle",
+      "serverIndex": 1
+     },
+     "expected": {
+      "action": "reconnect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.id-plain",
+   "operation": "entry-id",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "abc123",
+      "preset": "original"
+     },
+     "expected": {
+      "id": "abc123:original",
+      "dir": "abc123_original",
+      "dirIsSafe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.id-video",
+   "operation": "entry-id",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "abc",
+      "preset": "video720"
+     },
+     "expected": {
+      "id": "abc:video720",
+      "dir": "abc_video720",
+      "dirIsSafe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.id-hostile-item",
+   "operation": "entry-id",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "a/../b",
+      "preset": "audio128"
+     },
+     "expected": {
+      "id": "a/../b:audio128",
+      "dir": "a_.._b_audio128",
+      "dirIsSafe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.dir-dots",
+   "operation": "entry-dir",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entryId": ".."
+     },
+     "expected": {
+      "dir": "__"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.dir-empty",
+   "operation": "entry-dir",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entryId": ""
+     },
+     "expected": {
+      "dir": "_"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.dir-non-ascii",
+   "operation": "entry-dir",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entryId": "caf\u00e9"
+     },
+     "expected": {
+      "dir": "caf_"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.dir-allowed-marks",
+   "operation": "entry-dir",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entryId": "a_b.c-d"
+     },
+     "expected": {
+      "dir": "a_b.c-d"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-20a77b9d",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "media.mkv"
+     },
+     "expected": {
+      "safe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-5479d643",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a/b.vtt"
+     },
+     "expected": {
+      "safe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-2782f65b",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a..b/c"
+     },
+     "expected": {
+      "safe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-16924190",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": ".hidden"
+     },
+     "expected": {
+      "safe": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-e3b0c442",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": ""
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-74acf318",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "/etc/passwd"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-5ec1f7e7",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": ".."
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-d6b96a97",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "../x"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-900ea8b7",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a/../b"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-d5c7a6c2",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a/.."
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-c62016d0",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a\\b"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-59b271ae",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a\u0000b"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-7a9acf33",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a//b"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-cb786a9a",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "./a"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-b3dda5b6",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "a/"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.path-35a70e2c",
+   "operation": "safe-path",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "path": "C:/x"
+     },
+     "expected": {
+      "safe": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.preview-exact-titles-and-bytes",
+   "operation": "preview",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "One"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       },
+       {
+        "id": "s",
+        "role": "subtitle",
+        "path": "s",
+        "required": true,
+        "bytes": 5,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i2:original",
+      "itemId": "i2",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Two"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 7,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i3:original",
+      "itemId": "i3",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Three"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i4:original",
+      "itemId": "i4",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Unwatched"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i1:video720",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "video720",
+      "labels": {
+       "title": "One small"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": null,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "played": [
+       "i1",
+       "i2",
+       "i3"
+      ]
+     },
+     "expected": {
+      "entryIds": [
+       "i1:original",
+       "i2:original",
+       "i1:video720"
+      ],
+      "titles": [
+       "One",
+       "Two",
+       "One small"
+      ],
+      "bytes": 112
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-manifest.preview-empty",
+   "operation": "preview",
+   "state": {
+    "entries": [
+     {
+      "id": "i1:original",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "One"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       },
+       {
+        "id": "s",
+        "role": "subtitle",
+        "path": "s",
+        "required": true,
+        "bytes": 5,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i2:original",
+      "itemId": "i2",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Two"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": 7,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i3:original",
+      "itemId": "i3",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Three"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i4:original",
+      "itemId": "i4",
+      "kind": "movie",
+      "preset": "original",
+      "labels": {
+       "title": "Unwatched"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "media.mkv",
+        "required": true,
+        "bytes": 100,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     },
+     {
+      "id": "i1:video720",
+      "itemId": "i1",
+      "kind": "movie",
+      "preset": "video720",
+      "labels": {
+       "title": "One small"
+      },
+      "resources": [
+       {
+        "id": "m",
+        "role": "media",
+        "path": "m",
+        "required": true,
+        "bytes": null,
+        "sha256": "aa",
+        "complete": true
+       }
+      ],
+      "tracks": [],
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "event": {
+      "played": [
+       "i3",
+       "zz"
+      ]
+     },
+     "expected": {
+      "entryIds": [],
+      "titles": [],
+      "bytes": 0
+     }
+    }
+   ]
+  }
+ ]
+}

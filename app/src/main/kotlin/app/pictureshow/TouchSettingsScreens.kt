@@ -55,6 +55,7 @@ internal fun TouchSettings(
     onRemote: () -> Unit = {},
     onSyncPlay: () -> Unit = {},
     onThisDevice: () -> Unit = {},
+    onDownloads: () -> Unit = {},
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
     onCastEnabled: (Boolean) -> Unit = {},
@@ -69,6 +70,7 @@ internal fun TouchSettings(
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
+            TouchNavRow("Downloads", onClick = onDownloads)
             TouchNavRow("Watch together", onClick = onSyncPlay)
             castEnabled?.let {
                 TouchSwitchRow(

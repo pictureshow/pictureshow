@@ -26,6 +26,18 @@ for i in range(2):
 audio('Scope Ensemble/Conversion/PCM Source.wav',550,20,'pcm_s24le',{'title':'PCM Source','album':'Conversion','artist':'Scope Ensemble','track':'1'})
 run('video/Scope Pattern/Scope Pattern.mkv',['-f','lavfi','-i','testsrc2=size=320x180:rate=24:duration=90','-f','lavfi','-i','sine=frequency=660:sample_rate=48000:duration=90','-c:v','libx264','-preset','ultrafast','-threads','1','-pix_fmt','yuv420p','-g','48','-c:a','aac','-shortest'])
 run('restricted/Restricted Pattern/Restricted Pattern.mkv',['-i',str(root/'video/Scope Pattern/Scope Pattern.mkv'),'-c','copy'])
+# Offline: two languages of sound and captions, one direct-play file and one the phone can't decode (HEVC 10-bit, AC-3).
+for rel,cue in [('reference/offline-spa.srt','Subtitulo en espanol'),('reference/offline-fra.srt','Sous-titre en francais')]:
+    (root/rel).write_text(f'1\n00:00:01,000 --> 00:06:00,000\n{cue}\n')
+def offline(rel,duration,video,audio):
+    run(rel,['-f','lavfi','-i',f'testsrc2=size=640x360:rate=24:duration={duration}','-f','lavfi','-i',f'sine=frequency=660:sample_rate=48000:duration={duration}','-f','lavfi','-i',f'sine=frequency=880:sample_rate=48000:duration={duration}','-i',str(root/'reference/offline-spa.srt'),'-i',str(root/'reference/offline-fra.srt'),'-map','0:v','-map','1:a','-map','2:a','-map','3:s','-map','4:s',*video,*audio,'-c:s','srt','-metadata:s:a:0','language=eng','-metadata:s:a:1','language=spa','-metadata:s:s:0','language=spa','-metadata:s:s:1','language=fra','-disposition:s:0','default','-threads','1'])
+    srt=f"1\n00:00:01,000 --> 00:00:30,000\nEnglish external subtitle one\n\n2\n00:03:00,000 --> 00:06:00,000\nEnglish external subtitle two\n"
+    if duration>60: (root/rel.replace('.mkv','.eng.srt')).write_text(srt); manifest['files'].append({'file':rel.replace('.mkv','.eng.srt'),'sha256':hashlib.sha256(srt.encode()).hexdigest(),'parameters':['external caption text written by this generator'],'tags':{}})
+h264=['-c:v','libx264','-preset','ultrafast','-g','48','-b:v','1500k']; aac=['-c:a','aac','-b:a','128k']
+offline('video/Scope Offline/Scope Offline.mkv',360,h264,aac)
+offline('video/Scope Offline Convert/Scope Offline Convert.mkv',360,['-c:v','libx265','-preset','ultrafast','-b:v','1800k','-pix_fmt','yuv420p10le'],['-c:a','ac3','-b:a','192k'])
+run('video/Scope Offline Large/Scope Offline Large.mkv',['-f','lavfi','-i','testsrc2=size=1920x1080:rate=24:duration=20','-f','lavfi','-i','sine=frequency=660:sample_rate=48000:duration=20','-c:v','libx265','-preset','ultrafast','-b:v','4000k','-pix_fmt','yuv420p10le','-c:a','ac3','-b:a','192k','-threads','1'])
+for episode in (1,2): offline(f'shows/Scope Serial/Season 01/Scope Serial S01E{episode:02d}.mkv',40,h264,aac)
 # Public manifest records relative, portable arguments only.
 for f in manifest['files']:
     f['parameters']=[s.replace(str(root),'${OUTPUT}') for s in f['parameters']]

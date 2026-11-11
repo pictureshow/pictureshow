@@ -121,6 +121,31 @@ internal fun SyncPlayCoordinator(
     }
 }
 
+/** Shared by TV and touch; download provenance belongs to the actual viewing, not its metadata or connection. */
+internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
+    val p = player
+    val d = state.decision
+    val duration = this.duration.takeIf { it > 0 } ?: p?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0
+    return SyncRendererState(
+        item.id,
+        output.position().milliseconds.coerceAtLeast(0) * 10_000,
+        duration * 10_000,
+        p?.playbackState == Player.STATE_READY && error == null && !state.preparing,
+        p?.playbackState == Player.STATE_BUFFERING,
+        p?.isPlaying == true,
+        syncSourceEligible(
+            duration * 10_000,
+            d?.mediaSource != null && p?.isCurrentMediaItemSeekable == true,
+            item.type == "TvChannel" || d?.mediaSource?.liveStreamId != null,
+            d?.mediaSource?.isInfiniteStream == true,
+            offline = localCopy
+        ),
+        // Media3's generic speed command does not advertise these exact rates for encoded output.
+        // Until separately qualified, use the required bounded seek fallback.
+        rateSupported = false
+    )
+}
+
 @Composable
 internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     val sync: SyncPlayHost = koinInject()
@@ -129,29 +154,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     host.sync = sync
     val bridge = remember(host, sync) {
         object : SyncRenderer {
-            override fun snapshot(): SyncRendererState {
-                val p = host.player
-                val d = host.state.decision
-                val duration = host.duration.takeIf { it > 0 } ?: p?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0
-                return SyncRendererState(
-                    host.item.id,
-                    host.output.position().milliseconds.coerceAtLeast(0) * 10_000,
-                    duration * 10_000,
-                    p?.playbackState == Player.STATE_READY && host.error == null && !host.state.preparing,
-                    p?.playbackState == Player.STATE_BUFFERING,
-                    p?.isPlaying == true,
-                    syncSourceEligible(
-                        duration * 10_000,
-                        d?.mediaSource != null && p?.isCurrentMediaItemSeekable == true,
-                        host.item.type == "TvChannel" || d?.mediaSource?.liveStreamId != null,
-                        d?.mediaSource?.isInfiniteStream == true,
-                        offline = false
-                    ),
-                    // Media3's generic speed command does not advertise these exact rates for encoded output.
-                    // Until separately qualified, use the required bounded seek fallback.
-                    rateSupported = false
-                )
-            }
+            override fun snapshot(): SyncRendererState = host.syncRendererSnapshot()
             override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
                 var positionChanged = false
                 host.output.applySync {

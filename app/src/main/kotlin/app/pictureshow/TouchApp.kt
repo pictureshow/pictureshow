@@ -39,6 +39,13 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
+/** Sign-in steps and every playing route, downloaded or streamed, own the whole screen. */
+internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = signedIn &&
+    route !in listOf("waiting", "servers") &&
+    route?.startsWith("login?") != true &&
+    route?.startsWith("quick?") != true &&
+    !isPlayerRoute(route)
+
 @Composable
 internal fun TouchPictureshow(
     session: SessionViewModel = koinViewModel(),
@@ -55,6 +62,8 @@ internal fun TouchPictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -83,12 +92,8 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = route?.startsWith("player?") == true
-    val showNavigation = signedIn &&
-        route !in listOf("waiting", "servers") &&
-        route?.startsWith("login?") != true &&
-        route?.startsWith("quick?") != true &&
-        !inPlayer
+    val inPlayer = isPlayerRoute(route)
+    val showNavigation = touchShowsNavigation(route, signedIn)
     val sync: SyncPlayHost = koinInject()
     SyncPlayCoordinator(state.snapshot.currentAccount, catalog, onMusicOpen = {
         nav.navigate(MUSIC_NOW_ROUTE) {
@@ -175,7 +180,7 @@ internal fun TouchPictureshow(
             installedExpired = expired
             installedToken = token
             accountInstalled = true
-            val destination = accountDestination(state.snapshot)
+            val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
             nav.navigate(destination) {
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
@@ -217,6 +222,7 @@ internal fun TouchPictureshow(
             consumeSearchEntry()
         }
         NavHost(navController = nav, startDestination = "waiting") {
+            offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
                 val vm: ServerViewModel = koinViewModel()
@@ -331,6 +337,7 @@ internal fun TouchPictureshow(
                         val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
+                        val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                             profileState.account.copy(server = account.server),
@@ -340,7 +347,8 @@ internal fun TouchPictureshow(
                                 vm.reload()
                             },
                             onResume = vm::resumed,
-                            librariesOnly = destination == "libraries"
+                            librariesOnly = destination == "libraries",
+                            onWatchDownloads = watchDownloads
                         )
                     }
                 }
@@ -502,6 +510,9 @@ internal fun TouchPictureshow(
                             onBack = { nav.popBackStack() },
                             origin = item,
                             onPlayedRequest = vm::playedRequested,
+                            onDownload = { shown, season, seasonName ->
+                                offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                            },
                             offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
                         )
                     }
@@ -553,6 +564,7 @@ internal fun TouchPictureshow(
                         onRemote = { nav.navigate("remote") },
                         onSyncPlay = sync::show,
                         onThisDevice = { nav.navigate("this-device") },
+                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
                         castEnabled = castSwitchState(castState.capability, castStored),
                         onCastEnabled = cast::setEnabled,
                         onUpdateServices = settingsContext::openPlayServicesListing.takeIf {

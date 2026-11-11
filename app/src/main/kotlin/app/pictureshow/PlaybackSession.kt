@@ -123,6 +123,9 @@ internal data class PlaybackState(
 )
 
 /** Used on the player thread: network transitions are serialized; buffering feedback has its own deadline. */
+/** Tracks a viewer already chose before this session opened; a null index leaves that choice to the server. */
+internal data class PlaybackStartTracks(val mediaSourceId: String?, val audioIndex: Int?, val subtitleIndex: Int?)
+
 internal class PlaybackSession(
     private val gateway: PlaybackGateway,
     private val output: PlaybackOutput,
@@ -177,9 +180,19 @@ internal class PlaybackSession(
         }
     }
 
-    fun start(positionMs: Long) = enqueue {
+    fun start(positionMs: Long, tracks: PlaybackStartTracks? = null) = enqueue {
         if (decision == null && mutable.value.error == null) {
-            negotiate(PlaybackRequest(startPosition = positionMs.coerceAtLeast(0).milliseconds), false)
+            if (tracks?.audioIndex != null) audioChosenByViewer = true
+            if (tracks?.subtitleIndex != null) subtitleChosenByViewer = true
+            negotiate(
+                PlaybackRequest(
+                    startPosition = positionMs.coerceAtLeast(0).milliseconds,
+                    mediaSourceId = tracks?.mediaSourceId,
+                    audioStreamIndex = tracks?.audioIndex,
+                    subtitleStreamIndex = tracks?.subtitleIndex
+                ),
+                false
+            )
         }
     }
 

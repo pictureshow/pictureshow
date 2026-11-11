@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Rule
@@ -62,7 +63,7 @@ class TouchPlaybackHostTest {
     val timeLimit = PerTestTimeLimit(180)
 
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
+    private var account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
     private val episode = MediaItem("episode", "An episode", "Episode", seriesId = "series")
     private val releaseLookup = CompletableDeferred<Unit>()
     private val metadataGate = CompletableDeferred<Unit>()
@@ -78,6 +79,7 @@ class TouchPlaybackHostTest {
     private val next = mutableListOf<String>()
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
+    private val catalogApi = CatalogModelsTest.FakeCatalog()
 
     @After fun cleanup() {
         releaseLookup.complete(Unit)
@@ -136,6 +138,142 @@ class TouchPlaybackHostTest {
         waitUntil { exits > 0 }
         assertEquals(1, exits)
         assertTrue(next.isEmpty())
+    }
+
+    /** The next local viewing starts where the online one stopped: the wiring from the player's session down to the download's store. */
+    @Test fun anOnlineViewingOfADownloadedTitleTeachesTheDownloadItsPlace() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = """{"PlaybackPositionTicks":7000,"Played":false,"PlayCount":0}"""
+    ) { store, _ -> assertEquals(7000L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
+
+    @Test fun backFromAnOnlineViewingTeachesTheDownloadWithoutAPlayedReport() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = """{"PlaybackPositionTicks":30000,"Played":false}""",
+        naturalEnd = false
+    ) { store, _ ->
+        assertEquals(30_000L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") })
+        assertTrue(catalogApi.actions.none { it.first == "played" })
+    }
+
+    /** The same URL can answer as someone else: their place says nothing about what this viewer has unsent. */
+    @Test fun anOnlineViewingReadAsAnotherViewerLeavesAnUnsentPlaceAlone() = onlineViewing(
+        me = { """{"Id":"someone-else"}""" },
+        userData = """{"PlaybackPositionTicks":30000,"Played":false,"PlayCount":0}"""
+    ) { store, paths ->
+        assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") })
+        assertTrue(paths.none { it.contains("/UserData") }, "Nothing is read once the viewer is someone else: $paths")
+    }
+
+    @Test fun anOnlineViewingThatCannotProveTheViewerLeavesAnUnsentPlaceAlone() = onlineViewing(
+        me = { null },
+        userData = """{"PlaybackPositionTicks":30000,"Played":false,"PlayCount":0}"""
+    ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
+
+    /** An empty answer isn't position 0. */
+    @Test fun anOnlineViewingReadWithAnEmptyBodyLeavesAnUnsentPlaceAlone() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = "{}"
+    ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
+
+    @Test fun anOnlineViewingReadWithoutPlayedLeavesAnUnsentPlaceAlone() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = """{"PlaybackPositionTicks":30000}"""
+    ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
+
+    @Test fun anOnlineViewingReadWithoutAPositionLeavesAnUnsentPlaceAlone() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = """{"Played":false}"""
+    ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
+
+    /** A downloaded title holding an unsent place of 500, base 100, then one online viewing against a server answering these. */
+    private fun onlineViewing(
+        me: () -> String?,
+        userData: String,
+        naturalEnd: Boolean = true,
+        check: (OfflineProgressStore, List<String>) -> Unit
+    ) {
+        val paths = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                val path = request.path.orEmpty()
+                paths += path
+                val body = if (path.startsWith("/Users/Me")) me() else userData
+                return if (body == null) {
+                    okhttp3.mockwebserver.MockResponse().setResponseCode(500)
+                } else {
+                    okhttp3.mockwebserver.MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+                }
+            }
+        }
+        server.start()
+        account = account.copy(server = account.server.copy(url = server.url("/").toString().trimEnd('/')))
+        val engineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        try {
+            val entry = app.pictureshow.core.offline.OfflineEntry(
+                "episode:original",
+                "episode",
+                app.pictureshow.core.offline.OfflineMediaKind.episode,
+                preset = app.pictureshow.core.offline.OfflinePreset.original,
+                labels = app.pictureshow.core.offline.OfflineLabels("An episode"),
+                job = app.pictureshow.core.offline.OfflineJob(phase = app.pictureshow.core.offline.OfflinePhase.ready)
+            )
+            OfflineFiles(compose.activity.noBackupFilesDir).manifest(account.key).apply {
+                parentFile!!.mkdirs()
+                writeText(
+                    app.pictureshow.core.offline.offlineEncodeManifest(
+                        app.pictureshow.core.offline.OfflineManifest(entries = listOf(entry))
+                    )
+                )
+            }
+            val accounts = AccountStore(
+                object : TextPersistence {
+                    private var text: String? = null
+                    override suspend fun read() = text
+                    override suspend fun write(value: String) {
+                        text = value
+                    }
+                }
+            )
+            kotlinx.coroutines.runBlocking { accounts.remember(account) }
+            val engine = OfflineEngine(
+                compose.activity,
+                accounts,
+                { app.pictureshow.core.ClientIdentity("Test", "install-id", "1") },
+                object : OfflineForeground {
+                    override fun update(activeTitles: List<String>) = Unit
+                },
+                networkState = { OfflineNetwork.none },
+                scope = engineScope
+            )
+            kotlinx.coroutines.runBlocking { engine.start().join() }
+            val store = kotlinx.coroutines.runBlocking { engine.progressStore(account) }
+            kotlinx.coroutines.runBlocking {
+                store.remember("episode", app.pictureshow.core.offline.OfflineUserData(positionTicks = 100))
+                store.viewing("episode", store.newSequence(), 500)
+            }
+            launch(noNext = true, offlineEngine = engine)
+            releaseLookup.complete(Unit)
+            if (naturalEnd) {
+                reopenAndEnd()
+            } else {
+                compose.runOnIdle {
+                    observedHost.seekTo(30_000)
+                    observedHost.finish(reason = "back")
+                }
+            }
+            waitUntil { exits == 1 }
+            // Back returns before final reporting finishes. Keep Android Main moving while that finite scope drains.
+            waitUntil { paths.isNotEmpty() }
+            // Reads run in call order, so one that fails at once comes after everything the viewing started.
+            kotlinx.coroutines.runBlocking {
+                engine.onlineViewingEnded(account, "episode") { throw java.io.IOException("the end of the queue") }.join()
+            }
+            check(store, paths)
+        } finally {
+            engineScope.cancel()
+            server.shutdown()
+        }
     }
 
     @Test fun equalLookupFailureAfterRetryExitsOnceWithoutAnotherAttempt() {
@@ -234,7 +372,13 @@ class TouchPlaybackHostTest {
         assertEquals(2, exits)
     }
 
-    private fun launch(failFirst: Boolean = false, accessible: Boolean = false, noNext: Boolean = false, failAlways: Boolean = false) {
+    private fun launch(
+        failFirst: Boolean = false,
+        accessible: Boolean = false,
+        noNext: Boolean = false,
+        failAlways: Boolean = false,
+        offlineEngine: OfflineEngine? = null
+    ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
@@ -289,6 +433,7 @@ class TouchPlaybackHostTest {
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }
+                    offlineEngine?.let { engine -> single { engine } }
                 }
             )
         }
@@ -296,7 +441,7 @@ class TouchPlaybackHostTest {
             override suspend fun read(): String? = null
             override suspend fun write(value: String) = Unit
         })
-        val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
+        val catalog = CatalogSession(catalogApi, accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
         shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
