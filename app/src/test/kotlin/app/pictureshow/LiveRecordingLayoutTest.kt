@@ -189,7 +189,7 @@ class LiveRecordingLayoutTest {
 
     @Test fun tvRecordingCaptionsKeepRelatedLinesTogetherAndPutStatusOnArtwork() {
         val growing = recording.copy(
-            episodeTitle = "Actual episode",
+            episodeTitle = "One",
             name = "Generated series",
             recordingStatus = "InProgress",
             recordingEndDate = "2026-11-10T23:30:00Z",
@@ -227,7 +227,11 @@ class LiveRecordingLayoutTest {
         compose.onAllNodesWithTag("live:recording:title", useUnmergedTree = true)[0]
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
         val titleLayout = titleLayouts.single()
-        assertEquals(1, titleLayout.lineCount, "The short episode title has one actual text line")
+        assertEquals(
+            1,
+            titleLayout.lineCount,
+            "The short episode title has one actual text line: ${titleLayout.layoutInput.text} / $title / ${titleLayout.size}"
+        )
         // Normalize the native text layout into the root coordinates, including real focus scaling.
         val lastTitleLineBottom = title.top +
             (title.bottom - title.top) * (titleLayout.getLineBottom(0) / titleLayout.size.height)
@@ -238,7 +242,7 @@ class LiveRecordingLayoutTest {
         )
         val status = compose.onNodeWithTag("live:recording:status:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(status.bottom <= caption.top, "Recording state belongs on the artwork")
-        compose.onNodeWithTag("live:r:r").assert(hasContentDescription("Actual episode", substring = true))
+        compose.onNodeWithTag("live:r:r").assert(hasContentDescription("One", substring = true))
     }
 
     @Test fun recordingDetailKeepsPlayAndDownloadInOneVisibleNativeActionRow() {

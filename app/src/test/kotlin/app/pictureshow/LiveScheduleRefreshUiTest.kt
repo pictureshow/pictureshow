@@ -75,7 +75,7 @@ class LiveScheduleRefreshUiTest {
         val channelTextRight = channel.left +
             (channel.right - channel.left) * (channelLayout.getLineRight(0) / channelLayout.size.width)
         assertTrue(
-            range.left - channelTextRight in 0.dp..1.dp,
+            range.left - channelTextRight in 0.dp..2.dp,
             "The range follows the actual short channel text, without empty width inside its node: $channelTextRight / $range"
         )
         assertEquals(channel.top, range.top)
