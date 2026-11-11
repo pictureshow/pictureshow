@@ -162,6 +162,7 @@ internal fun PlaybackStatus(label: String, modifier: Modifier = Modifier) {
 internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: Boolean, behindMs: Long? = null): String = when {
     expired -> "Paused · Buffer expired. Go live to resume."
     !canTimeShift -> "Live · Time shift unavailable"
+    behindMs == null -> "Live position unavailable"
     paused && behindMs != null && behindMs > 2_000 -> "Paused · ${liveBehindDescription(behindMs)}"
     paused -> "Paused · At live edge"
     behindMs != null && behindMs > 2_000 -> liveBehindDescription(behindMs)

@@ -75,7 +75,7 @@ internal fun liveTimelineReadout(
 }
 
 internal fun liveForwardSeekAllowed(isLive: Boolean, window: ObservedLiveWindow?, positionMs: Long, expired: Boolean): Boolean =
-    !isLive || (window?.canTimeShift == true && !expired && !window.atLiveEdge(positionMs, expired))
+    !isLive || (window?.contains(positionMs) == true && !expired && !window.atLiveEdge(positionMs, expired))
 
 /** Status has full contrast and no input action; a paused edge still needs an explicit resume action. */
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)

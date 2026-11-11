@@ -22,6 +22,8 @@ class LivePlayerReadoutTest {
     }
 
     @Test fun unavailableAndExpiredRangesNeverShowAnInventedDistanceOrLiveClaim() {
+        assertEquals("Live position unavailable", liveTimelineLabel(false, true, false, null))
+        assertEquals("Live position unavailable", liveTimelineLabel(true, true, false, null))
         assertEquals(LiveTimelineReadout("Time shift unavailable", ""), liveTimelineReadout(null, 0, false, false, false))
         assertEquals(
             LiveTimelineReadout("Live position unavailable", ""),
@@ -37,6 +39,7 @@ class LivePlayerReadoutTest {
         assertTrue(liveForwardSeekAllowed(true, window, 24_000, false))
         assertFalse(liveForwardSeekAllowed(true, window, 24_000, true))
         assertFalse(liveForwardSeekAllowed(true, null, 24_000, false))
+        assertFalse(liveForwardSeekAllowed(true, window, 31_000, false), "Out-of-window positions do not authorize a forward request")
         assertFalse(liveForwardSeekAllowed(true, window.copy(seekable = false), 24_000, false))
         assertTrue(liveForwardSeekAllowed(false, null, 24_000, true), "VOD retains its existing seek rules")
     }

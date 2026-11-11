@@ -182,7 +182,7 @@ stable until a deliberate playback action, but a fresh native accessibility quer
 position and behind-live distance for both the position control and status. The phone status has the stable name
 Live playback status and a separate queried state. The native range/provider and SetProgress action remain intact.
 The reader sequence vector models a paused position of 10s in a 30s window/default 27s, then a 50s window/default 47s:
-fresh queries say 17s then 37s behind; loss of seekability reports Live · Time shift unavailable. These modeled numbers are
+fresh queries say 17s then 37s behind; an unavailable measured default reports Live position unavailable; loss of seekability reports Live · Time shift unavailable. These modeled numbers are
 a contract test, not a claim about a particular decoder's default-position offset.
 
 ### Schedule sections and loading ownership
@@ -198,3 +198,7 @@ Muted status badges use the platform's visible surface container and its matchin
 The floating phone pull indicator is owned only by an actual pull gesture while that request is loading. Entry,
 toolbar, TV and write activity use the thin header progress indicator. Completing even an immediate pull request
 releases gesture ownership, so a later toolbar refresh cannot inherit a stale floating indicator.
+
+A missing/invalid measured live default or an out-of-window current position cannot establish that playback is at the
+live edge. Both visible and freshly queried reader state say Live position unavailable. Forward seek also requires the
+current position to lie in the measured seekable window; it must not turn an unknown position into a clamped backward seek.

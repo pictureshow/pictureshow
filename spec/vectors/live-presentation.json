@@ -1240,6 +1240,11 @@
           },
           {
             "duration": 50000,
+            "default": -1,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
             "default": 47000,
             "seekable": false
           }
@@ -1248,6 +1253,7 @@
       "expected": [
         "Paused \u00b7 17 sec behind live",
         "Paused \u00b7 37 sec behind live",
+        "Live position unavailable",
         "Time shift unavailable"
       ]
     },
@@ -1439,6 +1445,40 @@
       "expected": {
         "pullRefreshing": false,
         "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.forward-outside-window",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.readout-outside-window",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false,
+        "paused": true,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live position unavailable",
+        "clock": ""
       }
     }
   ]
