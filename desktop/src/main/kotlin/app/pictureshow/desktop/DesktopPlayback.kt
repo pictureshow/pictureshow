@@ -53,6 +53,17 @@ data class DesktopSelectedTracks(
     val subtitleExternal: Boolean? = null
 )
 
+internal fun MediaStream.isDeliveredExternally(): Boolean =
+    isExternal || deliveryMethod == SubtitleDeliveryMethod.External
+
+/** Return mpv's embedded subtitle ordinal unless Jellyfin negotiated URL delivery for this track. */
+internal fun nativeSubtitleOrdinal(streams: List<MediaStream>, index: Int): Int? {
+    val selected = streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return null
+    if (selected.isDeliveredExternally()) return null
+    val embedded = streams.filter { it.type == MediaStreamType.Subtitle && !it.isExternal }
+    return embedded.indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
+}
+
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
     val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false)
 
@@ -243,14 +254,15 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         applyViewport()
         // mpv's stream IDs are per-type ordinals, while Jellyfin's indices span all media types.
         val streams = decision.mediaSource.mediaStreams
-        fun ordinal(index: Int, type: MediaStreamType) = streams.filter { it.type == type && !it.isExternal }.indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
+        fun ordinal(index: Int, type: MediaStreamType) = streams.filter { it.type == type && !it.isExternal }
+            .indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
         player.optionIfInitialized("aid", ordinal(audio, MediaStreamType.Audio)?.toString() ?: "auto")
-        player.optionIfInitialized("sid", ordinal(subtitle, MediaStreamType.Subtitle)?.toString() ?: "no")
+        player.optionIfInitialized("sid", nativeSubtitleOrdinal(streams, subtitle)?.toString() ?: "no")
         offset = if (decision.method == PlayMethod.Transcode) position else 0.0
         if (decision.method != PlayMethod.Transcode && position > 0) player.set("start", position.toString())
         player.command("loadfile", proxy!!.url())
         // External subtitle responses receive the same origin checks and headers as media.
-        streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.isExternal }?.deliveryUrl?.let { delivery ->
+        streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.isDeliveredExternally() }?.deliveryUrl?.let { delivery ->
             val url = PlayDecisions.resolve(account.server, delivery)
             require(PlayDecisions.isSameOrigin(account.server, url))
             pendingExternalSubtitle = proxy!!.url(url)
@@ -260,7 +272,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         val p = mpv ?: return EngineSnapshot(error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true)
         val ready = p.get("vo-configured") == "yes" && p.get("time-pos") != null
         if (ready) pendingExternalSubtitle?.let { url ->
-            p.command("sub-add", url, "select"); pendingExternalSubtitle = null
+            pendingExternalSubtitle = null
+            p.command("sub-add", url, "cached")
         }
         return EngineSnapshot(
             positionSeconds = (p.get("time-pos")?.toDoubleOrNull() ?: 0.0) + offset,
@@ -282,12 +295,13 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         pendingExternalSubtitle = null
         if (index == -1) { mpv?.set("sid", "no"); return true }
         val stream = d.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return false
-        if (stream.isExternal) {
+        if (stream.isDeliveredExternally()) {
             val account = sourceAccount ?: return false
             val delivery = stream.deliveryUrl ?: return false
             val url = PlayDecisions.resolve(account.server, delivery)
             if (!PlayDecisions.isSameOrigin(account.server, url)) return false
             pendingExternalSubtitle = requireNotNull(proxy).url(url)
+            mpv?.set("sid", "no")
         } else {
             val ordinal = d.mediaSource.mediaStreams.filter { it.type == MediaStreamType.Subtitle && !it.isExternal }.indexOfFirst { it.index == index }
             if (ordinal < 0) return false

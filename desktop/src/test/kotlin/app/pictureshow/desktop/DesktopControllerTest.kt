@@ -343,16 +343,42 @@ class DesktopControllerTest {
             }
         } finally { origin.stop(0); destination.stop(0) }
     }
-    @Test fun deviceProfileAdvertisesOnlyActualDecoderEnvelope() {
-        val profile = desktopMpvProfile(DesktopSettings(), setOf("h264", "hevc", "aac", "subrip"))
-        assertEquals(setOf("h264", "hevc", "aac", "subrip"), profile.directPlayProfiles.single().videoCodec!!.split(',').toSet())
+    @Test fun deviceProfileKeepsAvDecoderEnvelopeSeparateFromSubtitleDeliveryCapabilities() {
+        val profile = desktopMpvProfile(DesktopSettings(), setOf("h264", "hevc", "aac"))
+        assertEquals(setOf("h264", "hevc", "aac"), profile.directPlayProfiles.single().videoCodec!!.split(',').toSet())
         assertFalse(profile.directPlayProfiles.single().videoCodec!!.contains("av1"))
-        assertEquals(setOf("h264", "hevc", "aac", "subrip"), profile.directPlayProfiles.single().audioCodec!!.split(',').toSet())
+        assertEquals(setOf("h264", "hevc", "aac"), profile.directPlayProfiles.single().audioCodec!!.split(',').toSet())
         val rich = desktopMpvProfile(DesktopSettings(), setOf("h264", "aac", "ffv1", "prores"))
         assertTrue("ffv1" in rich.directPlayProfiles.single().videoCodec!!.split(','))
         assertTrue("prores" in rich.directPlayProfiles.single().videoCodec!!.split(','))
-        assertTrue(profile.subtitleProfiles.all { it.format in listOf("srt", "subrip") })
+        assertEquals(
+            setOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt"),
+            profile.subtitleProfiles.filter { it.method == SubtitleDeliveryMethod.External }.mapNotNull { it.format }.toSet()
+        )
+        assertEquals(
+            setOf("pgssub", "dvdsub", "dvbsub"),
+            profile.subtitleProfiles.filter { it.method == SubtitleDeliveryMethod.Embed }.mapNotNull { it.format }.toSet()
+        )
         assertEquals("aac", profile.transcodingProfiles.single().audioCodec)
+    }
+
+    @Test fun externalDeliveryMethodMarksSubtitleAsUrlDeliveredWithoutExternalFileFlag() {
+        val stream = MediaStream(type = MediaStreamType.Subtitle, deliveryMethod = SubtitleDeliveryMethod.External,
+            deliveryUrl = "/Videos/movie/Subtitles/1/Stream.srt")
+        assertTrue(stream.isDeliveredExternally())
+        assertTrue(MediaStream(type = MediaStreamType.Subtitle, isExternal = true).isDeliveredExternally())
+        assertFalse(MediaStream(type = MediaStreamType.Subtitle, deliveryMethod = SubtitleDeliveryMethod.Embed).isDeliveredExternally())
+    }
+
+    @Test fun externalDeliverySkipsSelectionButStillCountsItsPhysicalEmbeddedTrackOrdinal() {
+        val streams = listOf(
+            MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "subrip",
+                deliveryMethod = SubtitleDeliveryMethod.External, deliveryUrl = "/Videos/movie/Subtitles/3/Stream.srt"),
+            MediaStream(type = MediaStreamType.Subtitle, index = 6, codec = "hdmv_pgs_subtitle",
+                deliveryMethod = SubtitleDeliveryMethod.Embed)
+        )
+        assertNull(nativeSubtitleOrdinal(streams, 3), "URL-delivered SRT must wait for sub-add")
+        assertEquals(2, nativeSubtitleOrdinal(streams, 6), "SRT remains in Matroska track ordering for the later embedded PGS track")
     }
     @Test fun settingsPersistAndInvalidBitrateCannotCommit() {
         val dir = directory(); val store = DesktopSettingsStore(File(dir, "settings.properties"))

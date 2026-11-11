@@ -538,12 +538,19 @@ fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? =
     // Keep every real decoder (including FFV1/ProRes), not an Android-shaped whitelist.
     val video = (availableCodecs ?: setOf("h264", "hevc", "vp8", "vp9", "av1", "mpeg2video", "mpeg4", "vc1")).sorted().joinToString(",")
     val audio = (availableCodecs ?: setOf("aac", "ac3", "eac3", "truehd", "dts", "flac", "alac", "opus", "vorbis", "mp3", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le")).sorted().joinToString(",")
-    val subtitleCodecs = mapOf("srt" to "subrip", "subrip" to "subrip", "ass" to "ass", "ssa" to "ass", "vtt" to "webvtt", "webvtt" to "webvtt", "pgssub" to "hdmv_pgs_subtitle", "dvdsub" to "dvd_subtitle", "dvbsub" to "dvb_subtitle")
+    // mpv's decoder-list reports FFmpeg video/audio decoders, not the separate
+    // libass/text-subtitle pipeline. Negotiate known text tracks as URL delivery
+    // and bitmap tracks only when embedded in a format mpv can render.
+    val subtitleDeliveryProfiles = listOf(
+        "srt", "subrip", "ass", "ssa", "vtt", "webvtt"
+    ).map { SubtitleProfile(it, SubtitleDeliveryMethod.External) } + listOf(
+        "pgssub", "dvdsub", "dvbsub"
+    ).map { SubtitleProfile(it, SubtitleDeliveryMethod.Embed) }
     return DeviceProfile(
         name = "Pictureshow Desktop libmpv", maxStreamingBitrate = bitrate, maxStaticBitrate = bitrate,
         directPlayProfiles = listOf(DirectPlayProfile("mkv,matroska,mp4,m4v,mov,avi,ts,mpegts,m2ts,webm,mpg,mpeg,ogv,asf,wmv", audio, video, DlnaProfileType.Video)),
         transcodingProfiles = listOf(TranscodingProfile("ts", DlnaProfileType.Video, "h264", listOf("aac", "ac3", "mp3").filter { availableCodecs == null || it in availableCodecs }.joinToString(","), MediaStreamProtocol.Hls, maxAudioChannels = "8", minSegments = 1, segmentLength = 3)),
         codecProfiles = listOf(CodecProfile(CodecType.Video, conditions = listOf(ProfileCondition(ProfileConditionType.EqualsAny, ProfileConditionValue.VideoRangeType, "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR")))),
-        subtitleProfiles = subtitleCodecs.filter { (_, codec) -> availableCodecs == null || codec in availableCodecs }.keys.flatMap { format -> listOf(SubtitleProfile(format, SubtitleDeliveryMethod.Embed), SubtitleProfile(format, SubtitleDeliveryMethod.External)) }
+        subtitleProfiles = subtitleDeliveryProfiles
     )
 }
