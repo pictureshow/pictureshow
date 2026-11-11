@@ -508,7 +508,7 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
                         "replaceAllMetadata": "false", "replaceAllImages": "false"})
                     attempt["queued"] = True
         time.sleep(1)
-    raise RuntimeError("Generated two movies and two episodes did not complete video stream probing")
+    raise RuntimeError("Generated two movies and two episodes did not complete video stream probing and episode metadata")
 
 
 def provision(api: API, media_base: str):
