@@ -125,7 +125,12 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
     try {
         if(com.sun.jna.Platform.isMac()) check(File(out,"window-chrome.json").readText().contains("\"nativeMacChrome\":true")) { "Mac smoke requires visible standard window controls" }
-        ready(DesktopRoute.Servers);screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
+        ready(DesktopRoute.Servers)
+        if(System.getenv("PICTURESHOW_SMOKE_DISCOVERY_PORT")!=null) {
+            waitFor("owned loopback Jellyfin discovery") { c.state.value.discovered.any { it.address==server } }
+            File(out,"discovery-result.json").writeText("{\"foundOwnedServer\":true}\n")
+        }
+        screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
         click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
         check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
