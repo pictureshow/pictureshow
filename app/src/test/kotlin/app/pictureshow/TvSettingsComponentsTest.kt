@@ -21,6 +21,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -35,6 +36,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -167,6 +169,35 @@ class TvSettingsComponentsTest {
         compose.onNodeWithTag("command").assertIsFocused()
         key("command", Key.DirectionDown)
         compose.onNodeWithTag("value").assertIsFocused()
+    }
+
+    @Test fun commandSupportingTextUsesTheDrawnForegroundWhileFocusedAndResting() {
+        compose.setContent {
+            PictureshowTheme {
+                val first = remember { FocusRequester() }
+                Column {
+                    TvSettingsActionRow(
+                        "Find by name",
+                        Modifier.focusRequester(first).testTag("search"),
+                        supportingText = "An exact query"
+                    ) {
+                    }
+                    TvSettingsActionRow("Another command", Modifier.testTag("next")) {}
+                }
+                LaunchedEffect(Unit) { first.requestFocus() }
+            }
+        }
+        fun color(text: String): androidx.compose.ui.graphics.Color {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithText(text, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            return layouts.single().layoutInput.style.color
+        }
+        compose.onNodeWithTag("search").assertIsFocused()
+        assertEquals(color("Find by name"), color("An exact query"), "Focus must not assume a light surface that was not drawn")
+        key("search", Key.DirectionDown)
+        compose.onNodeWithTag("next").assertIsFocused()
+        assertEquals(color("Find by name"), color("An exact query"), "Resting support follows the actual surface foreground too")
     }
 
     @Test fun longPickerArrivesAtCurrentOffscreenValueWithReadableSupportingText() {

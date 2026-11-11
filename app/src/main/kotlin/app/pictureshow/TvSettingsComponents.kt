@@ -259,7 +259,7 @@ internal fun TvSettingsRow(
                 leading?.invoke()
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.bodyLarge)
-                    supportingText?.let { Text(it, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
+                    supportingText?.let { Text(it, color = LocalContentColor.current, style = MaterialTheme.typography.bodyMedium) }
                 }
                 trailing?.invoke()
             }
