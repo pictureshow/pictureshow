@@ -90,7 +90,11 @@ final class CatalogPresentationUITests: XCTestCase {
             var candidate = first
             var spoken = ""
             var unexpected: (any Error)?
-            let ready = waitUntil {
+            // The service delivers focus/speech updates to the test process.
+            // Keep this actor's run loop live while polling instead of sleeping
+            // it; a synchronous currentSpeech result can precede that update.
+            let deadline = ProcessInfo.processInfo.systemUptime + 10
+            func sample() -> Bool {
                 do {
                     let output: XCUIVoiceOverService.Output?
                     if let initial = candidate { output = initial; candidate = nil }
@@ -99,6 +103,11 @@ final class CatalogPresentationUITests: XCTestCase {
                     spoken = record(operation + " observed", output)
                     return spoken != previous && accepts(spoken)
                 } catch { unexpected = error; return true }
+            }
+            var ready = sample()
+            while !ready && ProcessInfo.processInfo.systemUptime < deadline {
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+                ready = sample()
             }
             if let unexpected { throw unexpected }
             if !ready { attachSpeech(operation + " before speech readiness failure"); disableReader() }
@@ -110,7 +119,7 @@ final class CatalogPresentationUITests: XCTestCase {
             let output = try readSpeech(operation + " move", action)
             return try settledSpeech(operation, after: previous, first: output)
         }
-        func enableReader() throws {
+        func enableReader(at anchor: XCUIElement) throws {
             do { try service.enable() }
             catch {
                 transcript.append("enable API error: \(error)")
@@ -121,6 +130,15 @@ final class CatalogPresentationUITests: XCTestCase {
             // Capture before querying speech: a newly enabled reader may not
             // yet have a focused element and currentSpeech can throw noSpeech.
             attachSpeech("132 VoiceOver enabled actual system state before first speech")
+            #if os(iOS)
+            // A real single touch explores this visible control with VoiceOver
+            // enabled. It establishes reader focus without activating it. The
+            // speech below still comes solely from the OS service, and all
+            // subsequent backward/forward and selected-state checks remain.
+            XCTAssertTrue(anchor.exists && anchor.isHittable)
+            anchor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertTrue(anchor.exists, "Reader exploration must not activate or leave the current screen")
+            #endif
             var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
             if output == nil {
                 // One real next-element operation establishes initial reader
@@ -183,7 +201,7 @@ final class CatalogPresentationUITests: XCTestCase {
         let fullSeriesTitle = "The fixture series with a long readable catalog title"
         XCTAssertEqual(series.elementType, .button)
         XCTAssertEqual(series.label, fullSeriesTitle + ", 2026", "The entire native card identity and role must be available independently of the speech fragment")
-        try enableReader()
+        try enableReader(at: series)
         try roundTrip("132 VoiceOver catalog title identity") {
             // CI7 returned the full unique title but ended mid-role at Butt.
             // This is observed output, not a documented API length limit.
@@ -210,7 +228,7 @@ final class CatalogPresentationUITests: XCTestCase {
         let watchedAction = watched.label
         let watchedState = try XCTUnwrap(watched.value as? String)
         XCTAssertFalse(watchedAction.isEmpty); XCTAssertFalse(watchedState.isEmpty)
-        try enableReader()
+        try enableReader(at: watched)
         try roundTrip("132 VoiceOver detail watched action and current state") {
             $0.localizedCaseInsensitiveContains(watchedAction) && words(watchedState).isSubset(of: words($0))
         }
@@ -237,7 +255,7 @@ final class CatalogPresentationUITests: XCTestCase {
         #else
         reveal(conversion, app: app)
         #endif
-        try enableReader()
+        try enableReader(at: conversion)
         try roundTrip("132 VoiceOver native conversion switch state") {
             $0.localizedCaseInsensitiveContains("Conversion notice") && words($0).contains("on")
         }

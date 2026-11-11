@@ -223,6 +223,11 @@ private final class SubtitleInertPlayer: AVPlayer {
     enum TransportReceipt: Equatable { case play, immediate(Float), pause, rate(Float) }
     private(set) var transportReceipts: [TransportReceipt] = []
     private var simulatedRate: Float = 0
+    private var simulatedDefaultRate: Float = 1
+    override var defaultRate: Float {
+        get { simulatedDefaultRate }
+        set { simulatedDefaultRate = newValue }
+    }
     override var rate: Float {
         get { simulatedRate }
         set { simulatedRate = newValue; transportReceipts.append(.rate(newValue)) }
@@ -266,6 +271,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
     func testInertTransportRecordsEveryPlaybackEntryPointWithoutStartingAVFoundation() {
         let player = SubtitleInertPlayer()
         player.defaultRate = 1.5
+        XCTAssertEqual(player.defaultRate, 1.5)
         player.play()
         XCTAssertEqual(player.rate, 1.5)
         player.pause()
