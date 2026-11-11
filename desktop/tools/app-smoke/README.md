@@ -15,6 +15,13 @@ official portable archives. The server and app have finite lifetimes and cleanup
 runs on failure too. No existing server can be selected. Do not upload the private
 work directory: it contains ephemeral credentials, server state and raw logs.
 
+For a local POSIX GUI session shared with the HDR or pacing gates, explicitly pass
+`--gui-lock PATH_TO_SHARED_GUI_LOCK`. The harness holds an advisory `flock` only
+around the app run, after provisioning the server. The default wait is zero, so a
+busy lock fails before launching the app. `--wait-gui-seconds 120` gives that one
+run a finite acquisition budget. No lock path is assumed, lock files are not
+deleted, and hosted CI needs neither option.
+
 The app entry point is:
 
 ```

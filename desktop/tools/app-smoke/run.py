@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -46,6 +47,34 @@ REQUIRED_CHECKS = frozenset({
 def write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+@contextlib.contextmanager
+def gui_lease(path: Path | None, wait_seconds: float = 0):
+    """Optionally share an advisory POSIX GUI lock with other visible test runs."""
+    if path is None:
+        yield
+        return
+    if os.name != "posix":
+        raise ValueError("The optional GUI lock requires POSIX flock")
+    if not math.isfinite(wait_seconds) or wait_seconds < 0:
+        raise ValueError("GUI lock wait must be a finite nonnegative number of seconds")
+    import fcntl
+    deadline = time.monotonic() + wait_seconds
+    with path.open("a+b") as lock:
+        while True:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"GUI lock stayed busy for {wait_seconds:g} seconds; desktop app was not launched") from None
+                time.sleep(min(.1, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def sanitized(text: str, *private_values: str) -> str:
@@ -575,7 +604,16 @@ def main():
     parser.add_argument("--java", default="java")
     parser.add_argument("--ffmpeg", default=shutil.which("ffmpeg"))
     parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--gui-lock", type=Path, help="Optional POSIX GUI coordination lock; no default path")
+    parser.add_argument("--wait-gui-seconds", type=float, default=0,
+                        help="Finite GUI lock acquisition budget; default 0 fails immediately if busy")
     args = parser.parse_args()
+    if not math.isfinite(args.wait_gui_seconds) or args.wait_gui_seconds < 0:
+        parser.error("--wait-gui-seconds must be finite and nonnegative")
+    if args.gui_lock is not None and os.name != "posix":
+        parser.error("--gui-lock requires POSIX flock; omit it on Windows")
+    if args.gui_lock is None and args.wait_gui_seconds:
+        parser.error("--wait-gui-seconds requires --gui-lock")
     if not args.ffmpeg:
         parser.error("FFmpeg is required to generate the original CC0 fixture")
     if args.work.exists() or args.evidence.exists():
@@ -598,7 +636,8 @@ def main():
                            "conversionNoticeExpected": not quality_witness}
                 write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
                 result["conversionWitness"] = witness
-                result.update(run_app(args, viewer, password, ids, args.evidence))
+                with gui_lease(args.gui_lock, args.wait_gui_seconds):
+                    result.update(run_app(args, viewer, password, ids, args.evidence))
                 viewer.request("POST", "/Sessions/Logout")
                 admin.request("POST", "/Sessions/Logout")
             except Exception as error:

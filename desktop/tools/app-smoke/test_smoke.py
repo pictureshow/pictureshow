@@ -6,6 +6,9 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 import threading
+import os
+import tempfile
+import time
 
 spec = importlib.util.spec_from_file_location("app_smoke", Path(__file__).with_name("run.py"))
 smoke = importlib.util.module_from_spec(spec)
@@ -140,6 +143,40 @@ class SmokeVerdictTest(unittest.TestCase):
         self.assertFalse(observer.thread.is_alive())
         self.assertIsNone(observer.error)
         self.assertTrue(any(sample["encoderCount"] == 1 for sample in observer.samples))
+
+    @unittest.skipUnless(os.name == "posix", "Optional GUI coordination uses POSIX flock")
+    def test_busy_gui_lock_fails_before_app_launch_by_default(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gui.lock"
+            with path.open("a+b") as owner:
+                fcntl.flock(owner.fileno(), fcntl.LOCK_EX)
+                launched = False
+                with self.assertRaisesRegex(RuntimeError, "app was not launched"):
+                    with smoke.gui_lease(path):
+                        launched = True
+                self.assertFalse(launched)
+
+    @unittest.skipUnless(os.name == "posix", "Optional GUI coordination uses POSIX flock")
+    def test_explicit_finite_gui_wait_acquires_after_owner_releases(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gui.lock"
+            with path.open("a+b") as owner:
+                fcntl.flock(owner.fileno(), fcntl.LOCK_EX)
+                def release():
+                    time.sleep(.1)
+                    fcntl.flock(owner.fileno(), fcntl.LOCK_UN)
+                releaser = threading.Thread(target=release)
+                releaser.start()
+                launches = 0
+                try:
+                    with smoke.gui_lease(path, wait_seconds=2):
+                        launches += 1
+                finally:
+                    releaser.join(timeout=2)
+                self.assertEqual(1, launches)
+                self.assertFalse(releaser.is_alive())
 
 
 if __name__ == "__main__":
