@@ -189,6 +189,38 @@ class DiscoveryResponderTest(unittest.TestCase):
                     smoke.validate_discovery(evidence)
 
 
+class VoiceOverCheckpointTest(unittest.TestCase):
+    def test_absence_requires_both_exact_process_checkpoints(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(smoke.platform, 'system', return_value='Darwin'):
+            evidence = Path(folder)
+            query = type('Query', (), {'returncode': 1})()
+            with patch.object(smoke.subprocess, 'run', return_value=query) as run:
+                smoke.record_voiceover_checkpoint(evidence, 'before')
+                with self.assertRaisesRegex(RuntimeError, 'screenshot qualification'):
+                    smoke.validate_voiceover_checkpoints(evidence)
+                smoke.record_voiceover_checkpoint(evidence, 'after')
+                self.assertTrue(smoke.validate_voiceover_checkpoints(evidence)['voiceOverProcessAbsentAtCheckpoints'])
+            self.assertEqual(['pgrep', '-x', 'VoiceOver'], run.call_args.args[0])
+
+    def test_active_reader_and_failed_query_cannot_qualify_screenshots(self):
+        for status in [0, 2]:
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as folder, patch.object(smoke.platform, 'system', return_value='Darwin'):
+                evidence = Path(folder)
+                with patch.object(smoke.subprocess, 'run', return_value=type('Query', (), {'returncode': status})()):
+                    smoke.record_voiceover_checkpoint(evidence, 'before')
+                    smoke.record_voiceover_checkpoint(evidence, 'after')
+                with self.assertRaisesRegex(RuntimeError, 'screenshot qualification'):
+                    smoke.validate_voiceover_checkpoints(evidence)
+
+    def test_query_timeout_cannot_invent_reader_absence(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(smoke.platform, 'system', return_value='Darwin'):
+            evidence = Path(folder)
+            with patch.object(smoke.subprocess, 'run', side_effect=smoke.subprocess.TimeoutExpired('pgrep', 5)):
+                smoke.record_voiceover_checkpoint(evidence, 'before')
+            with self.assertRaisesRegex(RuntimeError, 'screenshot qualification'):
+                smoke.validate_voiceover_checkpoints(evidence, ('before',))
+
+
 class SmokeVerdictTest(unittest.TestCase):
     def receipt(self):
         return {"pass": True, "checks": dict.fromkeys(smoke.REQUIRED_CHECKS, True)}

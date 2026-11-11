@@ -739,6 +739,36 @@ def validate_discovery(evidence: Path) -> dict:
     return {"serverDiscoveredOverLoopbackUdp": True, "lanBroadcastTested": False}
 
 
+def record_voiceover_checkpoint(evidence: Path, checkpoint: str) -> None:
+    if platform.system() != "Darwin":
+        return
+    path = evidence / "screen-reader-checkpoints.json"
+    receipt = json.loads(path.read_text()) if path.exists() else {
+        "readerProcessName": "VoiceOver", "claim": "Exact-name process absence at before/after checkpoints only", "checkpoints": {}}
+    try:
+        query = subprocess.run(["pgrep", "-x", "VoiceOver"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=5)
+        observed = {"processAbsent": query.returncode == 1, "queryExitCode": query.returncode}
+    except (OSError, subprocess.TimeoutExpired) as error:
+        observed = {"processAbsent": False, "queryError": type(error).__name__}
+    receipt["checkpoints"][checkpoint] = observed
+    write_json(path, receipt)
+
+
+def validate_voiceover_checkpoints(evidence: Path, checkpoints=("before", "after")) -> dict:
+    if platform.system() != "Darwin":
+        return {}
+    try:
+        receipt = json.loads((evidence / "screen-reader-checkpoints.json").read_text())
+        checks = receipt["checkpoints"]
+        valid = all(checks[name].get("processAbsent") is True and checks[name].get("queryExitCode") == 1 for name in checkpoints)
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
+        valid = False
+    if not valid:
+        raise RuntimeError("Mac screenshot qualification requires VoiceOver process absence at the recorded checkpoints")
+    return {"voiceOverProcessAbsentAtCheckpoints": True}
+
+
 def validate_native_close(evidence: Path, enabled: bool) -> dict:
     if not enabled:
         return {}
@@ -769,6 +799,8 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     samples, qc_codes = [], set()
     uncaught = []
     observer = EncoderObserver(viewer)
+    record_voiceover_checkpoint(evidence, "before")
+    validate_voiceover_checkpoints(evidence, ("before",))
     public_info = viewer.request("GET", "/System/Info/Public")
     with OwnedDiscoveryResponder(viewer.url, public_info, evidence) as discovery, raw_log.open("w", encoding="utf-8") as log:
         environment["PICTURESHOW_SMOKE_DISCOVERY_PORT"] = str(discovery.port)
@@ -817,6 +849,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                 raw_output, password, viewer.token), encoding="utf-8")
             uncaught = uncaught_app_exceptions(raw_output)
             write_json(evidence / "uncaught-app-exceptions.json", {"exceptions": uncaught})
+            record_voiceover_checkpoint(evidence, "after")
             native_receipt = Path(environment["PICTURESHOW_DATA_DIR"]) / "playback" / "native-surface.json"
             if native_receipt.exists():
                 # Native metadata only: renderer/format/geometry/counters, no media URL.
@@ -848,8 +881,10 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     if observer.error:
         raise RuntimeError("Owned fixture encoder observation failed: " + observer.error)
     require_no_uncaught_exceptions(uncaught)
+    screen_reader = validate_voiceover_checkpoints(evidence)
     result = validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
     result.update(validate_discovery(evidence))
+    result.update(screen_reader)
     result.update(validate_native_close(evidence, environment.get("PICTURESHOW_SMOKE_NATIVE_CLOSE") == "1"))
     return result
 
