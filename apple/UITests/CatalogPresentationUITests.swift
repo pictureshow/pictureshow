@@ -160,7 +160,32 @@ final class CatalogPresentationUITests: XCTestCase {
             }
             #endif
         }
-        func roundTrip(_ name: String, matches: (String) -> Bool) throws {
+        enum ReaderDirection { case up, down, left, right }
+        #if os(tvOS)
+        // tvOS Navigation mode follows the native remote focus engine. Exercise
+        // that real input with VoiceOver enabled, then read actual OS speech;
+        // generic next/previous service commands can leave native focus still.
+        func roundTrip(_ name: String, anchor: XCUIElement,
+                       away: ReaderDirection, back: ReaderDirection,
+                       matches: (String) -> Bool) throws {
+            defer { attachSpeech(name) }
+            focus(anchor, app: app)
+            XCTAssertTrue(anchor.hasFocus, "The real remote must reach the expected control")
+            let spoken = try settledSpeech(name + " focused", accepts: matches)
+            XCTAssertTrue(matches(spoken))
+            func button(_ direction: ReaderDirection) -> XCUIRemote.Button {
+                switch direction { case .up: .up; case .down: .down; case .left: .left; case .right: .right }
+            }
+            XCUIRemote.shared.press(button(away))
+            let previous = try settledSpeech(name + " remote away", after: spoken)
+            XCTAssertFalse(anchor.hasFocus, "The native remote must actually leave the target")
+            XCUIRemote.shared.press(button(back))
+            let returned = try settledSpeech(name + " remote return", after: previous, accepts: matches)
+            XCTAssertTrue(anchor.hasFocus, "One inverse native remote move must return to the same control")
+            XCTAssertTrue(matches(returned), "Actual VoiceOver must speak the same meaningful control/state on return")
+        }
+        #else
+        func roundTrip(_ name: String, anchor: XCUIElement, away: ReaderDirection, back: ReaderDirection, matches: (String) -> Bool) throws {
             defer { attachSpeech(name) }
             var spoken = try settledSpeech(name + " current")
             for move in 0..<32 {
@@ -175,6 +200,7 @@ final class CatalogPresentationUITests: XCTestCase {
             if !matches(returned) { attachSpeech(name + " before return failure"); disableReader() }
             XCTAssertTrue(matches(returned), "Forward must return to the same meaningful app control/state")
         }
+        #endif
 
         XCTAssertTrue(app.buttons["connect"].waitForExistence(timeout: 15), "Run this speech test on a fresh owned simulator sandbox")
         activate(app.buttons["connect"], app: app)
@@ -202,21 +228,30 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertEqual(series.elementType, .button)
         XCTAssertEqual(series.label, fullSeriesTitle + ", 2026", "The entire native card identity and role must be available independently of the speech fragment")
         try enableReader(at: series)
-        try roundTrip("132 VoiceOver catalog title identity") {
+        try roundTrip("132 VoiceOver catalog title identity", anchor: series, away: .up, back: .down) {
             // CI7 returned the full unique title but ended mid-role at Butt.
             // This is observed output, not a documented API length limit.
             $0.localizedCaseInsensitiveContains(fullSeriesTitle)
         }
         // Reader navigation reaches a failed page's real footer control while
         // the scrolling header is gone and the quiet visual strip is present.
-        try roundTrip("132 VoiceOver catalog Retry with quiet pinned context") {
+        try roundTrip("132 VoiceOver catalog Retry with quiet pinned context", anchor: app.buttons["pageRetry"], away: .up, back: .down) {
             words($0).contains("retry") && words($0).contains("button")
         }
+        XCTAssertLessThan(app.staticTexts["libraryHeading"].frame.maxY, 0,
+                          "The actual reader Retry traversal must reach a scrolled catalog")
+        XCTAssertFalse(app.staticTexts.matching(identifier: "librarySortStrip").firstMatch.exists,
+                       "The visual pinned context must remain absent from the reader tree")
         disableReader()
 
         activate(series, app: app)
         let seasonTwo = app.buttons["season-catalog-season-2"]
         XCTAssertTrue(seasonTwo.waitForExistence(timeout: 15)); activate(seasonTwo, app: app)
+        #if os(iOS)
+        // The episode grid is lazy and may be below the visible season shelf.
+        // Reveal its real heading before requiring the dependent tile to attach.
+        reveal(app.staticTexts["Episodes"].firstMatch, app: app)
+        #endif
         XCTAssertTrue(app.buttons["item-catalog-episode-2"].waitForExistence(timeout: 15))
         #if os(tvOS)
         focus(app.buttons["play"], app: app)
@@ -229,17 +264,19 @@ final class CatalogPresentationUITests: XCTestCase {
         let watchedState = try XCTUnwrap(watched.value as? String)
         XCTAssertFalse(watchedAction.isEmpty); XCTAssertFalse(watchedState.isEmpty)
         try enableReader(at: watched)
-        try roundTrip("132 VoiceOver detail watched action and current state") {
+        try roundTrip("132 VoiceOver detail watched action and current state", anchor: watched, away: .left, back: .right) {
             $0.localizedCaseInsensitiveContains(watchedAction) && words(watchedState).isSubset(of: words($0))
         }
-        try roundTrip("132 VoiceOver selected season") {
+        try roundTrip("132 VoiceOver selected season", anchor: seasonTwo, away: .left, back: .right) {
             $0.localizedCaseInsensitiveContains("Season 2") && words($0).contains("selected")
         }
         // Preserve any real boundary speech in the transcript, without claiming
         // that a service next-element operation emulates a remote/reader gesture.
+        #if os(iOS)
         let selectedSeasonSpeech = try settledSpeech("detail selected season before boundary observation")
         let afterSeasonSpeech = try movedSpeech("detail after selected season", after: selectedSeasonSpeech, { try service.moveForward() })
         _ = try movedSpeech("detail back to selected season", after: afterSeasonSpeech, { try service.moveBackward() })
+        #endif
         attachSpeech("132 VoiceOver detail traversal after selected season")
         disableReader()
         back(app); back(app)
@@ -256,7 +293,7 @@ final class CatalogPresentationUITests: XCTestCase {
         reveal(conversion, app: app)
         #endif
         try enableReader(at: conversion)
-        try roundTrip("132 VoiceOver native conversion switch state") {
+        try roundTrip("132 VoiceOver native conversion switch state", anchor: conversion, away: .up, back: .down) {
             $0.localizedCaseInsensitiveContains("Conversion notice") && words($0).contains("on")
         }
     }
