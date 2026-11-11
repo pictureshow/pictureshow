@@ -65,7 +65,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             if(shifted) robot.keyRelease(KeyEvent.VK_SHIFT)
         }
     }
-    fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null) {
+    fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null, focusTag:String? = null) {
         for((w,h) in sizes) {
             SwingUtilities.invokeAndWait {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
@@ -122,7 +122,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 }
                 File(screens,"$name-${w}x${h}.viewport.json").writeText(requireNotNull(receipt)+"\n")
             }
+            focusTag?.let { tag ->
+                SwingUtilities.invokeAndWait { requireNotNull(DesktopUiProbe.requestFocus[tag]).requestFocus() }
+                waitFor("capture focus $tag") { DesktopUiProbe.focus[tag]==true }
+            }
             val original=robot.createScreenCapture(bounds)
+            focusTag?.let { tag -> check(DesktopUiProbe.focus[tag]==true) { "Focus moved before capture completed" } }
+
             if(name=="02b-sign-in-error" && w==1920) {
                 val username=DesktopUiProbe.bounds.getValue("username")
                 val passwordBounds=DesktopUiProbe.bounds.getValue("password")
@@ -226,12 +232,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         }
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
         val sub=c.state.value.playback!!.subtitleTracks.first()
-        val deliveryUrl=requireNotNull(sub.deliveryUrl) { "Fixture subtitle has no negotiated full-text delivery URL" }
-        check(sub.deliveryMethod==app.pictureshow.core.playback.SubtitleDeliveryMethod.External) { "Fixture subtitle was not negotiated as external delivery" }
+        click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index && c.state.value.playback?.ready==true && !c.state.value.busy}
+        val deliveredSub=c.state.value.playback!!.subtitleTracks.first { it.index==sub.index }
+        val deliveryUrl=requireNotNull(deliveredSub.deliveryUrl) { "Fixture subtitle has no negotiated full-text delivery URL" }
+        check(deliveredSub.deliveryMethod==app.pictureshow.core.playback.SubtitleDeliveryMethod.External) { "Fixture subtitle was not negotiated as external delivery" }
         val sameOrigin=app.pictureshow.core.playback.PlayDecisions.isSameOrigin(c.state.value.account!!.server, app.pictureshow.core.playback.PlayDecisions.resolve(c.state.value.account!!.server,deliveryUrl))
         check(sameOrigin) { "Fixture subtitle delivery left the server origin" }
-        File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",sub.deliveryMethod!!.name);put("sourceFileIsExternal",sub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
-        click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
+        File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",deliveredSub.deliveryMethod!!.name);put("sourceFileIsExternal",deliveredSub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
         waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleExternal==true && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
                 it.subtitleCodec in setOf("srt", "subrip", "webvtt", "ass", "ssa") &&
                 it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
@@ -331,8 +338,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         if(c.state.value.detail?.isWatched!=true) { click("watched");waitFor("watched server state") { c.state.value.detail?.isWatched==true } }
         if(c.state.value.detail?.userData?.isFavorite!=true) { click("favorite");waitFor("favorite server state") { c.state.value.detail?.userData?.isFavorite==true } }
         screenshot("15-detail-selected-states")
-        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["watched"]?.requestFocus() };waitFor("watched toggle keyboard focus"){DesktopUiProbe.focus["watched"]==true};screenshot("15c-watched-keyboard-focus",listOf(1280 to 800))
-        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["favorite"]?.requestFocus() };waitFor("favorite toggle keyboard focus"){DesktopUiProbe.focus["favorite"]==true};screenshot("15d-favorite-keyboard-focus",listOf(1280 to 800))
+        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["watched"]?.requestFocus() };waitFor("watched toggle keyboard focus"){DesktopUiProbe.focus["watched"]==true};screenshot("15c-watched-keyboard-focus",listOf(1280 to 800),focusTag="watched")
+        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["favorite"]?.requestFocus() };waitFor("favorite toggle keyboard focus"){DesktopUiProbe.focus["favorite"]==true};screenshot("15d-favorite-keyboard-focus",listOf(1280 to 800),focusTag="favorite")
         screenshot("15b-favorite-tooltip",hoverTag="favorite")
         click("watched");waitFor("unwatched server state") { c.state.value.detail?.isWatched==false }
         click("favorite");waitFor("unfavorite server state") { c.state.value.detail?.userData?.isFavorite==false }
