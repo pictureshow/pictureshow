@@ -197,7 +197,10 @@ struct ConversionNoticeBanner: View {
     let openInfo: () -> Void
     private var signature: String { "\(session.item.id)|\(session.conversionNotice != nil)|\(session.waitingForVideo)|\(fits)|\(obscured)" }
     var body: some View {
-        Group {
+        // Keep the observer mounted while the notice is pending. Group forwards
+        // modifiers to its children; with no active notice it has no child to
+        // observe the READY/fit change that is supposed to reveal that notice.
+        ZStack(alignment: .topLeading) {
             if presentation.active, fits, !obscured, let notice = session.conversionNotice {
                 #if os(tvOS)
                 noticeContent(notice)
