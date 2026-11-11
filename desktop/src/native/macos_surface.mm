@@ -8,6 +8,7 @@
 #import <IOSurface/IOSurface.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl3.h>
+#import <OpenGL/CGLRenderers.h>
 #include <dlfcn.h>
 #include <mpv/client.h>
 #include <mpv/render_gl.h>
@@ -151,12 +152,12 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
         }
     });
     if(!s->overlay || !s->device || !s->video) { ps_destroy(s); return nullptr; }
-    // Hosted smoke explicitly permits Apple's software GL producer. The normal
+    // Hosted smoke explicitly selects Apple's software GL producer. The normal
     // physical-display path still requires acceleration; FP16 IOSurface/Metal
     // ownership and presentation remain identical in either context.
     const char *softwareFlag=std::getenv("SPIKE_SOFTWARE_GPU");
     bool softwareAllowed=softwareFlag && std::string(softwareFlag)=="1";
-    CGLPixelFormatAttribute attrs[]={kCGLPFAOpenGLProfile,(CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,softwareAllowed?(CGLPixelFormatAttribute)0:kCGLPFAAccelerated,(CGLPixelFormatAttribute)0};
+    CGLPixelFormatAttribute attrs[]={kCGLPFAOpenGLProfile,(CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,softwareAllowed?kCGLPFARendererID:kCGLPFAAccelerated,softwareAllowed?(CGLPixelFormatAttribute)kCGLRendererGenericFloatID:(CGLPixelFormatAttribute)0,(CGLPixelFormatAttribute)0};
     CGLPixelFormatObj pf; GLint n;
     if(CGLChoosePixelFormat(attrs,&pf,&n)!=kCGLNoError) { ps_destroy(s); return nullptr; }
     auto err=CGLCreateContext(pf,nullptr,&s->gl); CGLDestroyPixelFormat(pf);

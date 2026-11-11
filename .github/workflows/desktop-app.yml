@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Observe hosted Metal and CGL capabilities without app dependencies
+        env:
+          SPIKE_SOFTWARE_GPU: '1'
         run: |
           mkdir -p desktop-evidence/mac-graphics
           clang -O2 -fobjc-arc desktop/tools/app-smoke/macos-preflight.m \

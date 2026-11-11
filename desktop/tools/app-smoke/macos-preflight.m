@@ -7,6 +7,7 @@
 #import <Metal/Metal.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl3.h>
+#import <OpenGL/CGLRenderers.h>
 #import <IOSurface/IOSurface.h>
 #include <dlfcn.h>
 
@@ -79,16 +80,22 @@ static NSDictionary *interopProbe(CGLContextObj context) {
 }
 
 static NSDictionary *contextProbe(BOOL core32) {
-    CGLPixelFormatAttribute attributes[4] = {0};
+    CGLPixelFormatAttribute attributes[6] = {0};
+    BOOL forceSoftware = [NSProcessInfo.processInfo.environment[@"SPIKE_SOFTWARE_GPU"] isEqualToString:@"1"];
     if (core32) {
         attributes[0] = kCGLPFAOpenGLProfile;
         attributes[1] = (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core;
+        if (forceSoftware) {
+            attributes[2] = kCGLPFARendererID;
+            attributes[3] = (CGLPixelFormatAttribute)kCGLRendererGenericFloatID;
+        }
     }
     CGLPixelFormatObj format = NULL; GLint count = 0;
     CGLError formatError = CGLChoosePixelFormat(attributes, &format, &count);
     CGLContextObj context = NULL;
     CGLError contextError = format ? CGLCreateContext(format, NULL, &context) : kCGLBadPixelFormat;
     NSMutableDictionary *result = [@{@"formatError":@(formatError), @"formatCount":@(count),
+                                     @"genericSoftwareRendererRequested":@(core32 && forceSoftware),
                                      @"contextError":@(contextError)} mutableCopy];
     if (context) {
         CGLSetCurrentContext(context);
