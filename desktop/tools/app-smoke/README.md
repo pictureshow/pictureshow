@@ -3,7 +3,10 @@
 `python desktop/tools/app-smoke/run.py --work PRIVATE_FRESH_DIRECTORY --evidence FRESH_EVIDENCE_DIRECTORY`
 
 The harness generates original CC0 H.264/AAC media, two audio languages, subtitles,
-posters, one movie and two episodes. It starts its own Jellyfin 10.11.11, creates an
+posters, two movies and two episodes. `Signal One` is the 180-second direct-play
+and resume signal. `Archive Signal` is a 20-second FFV1 movie, deliberately absent
+from the desktop device profile, so Jellyfin must convert it to H.264. The harness
+starts its own Jellyfin 10.11.11, creates an
 isolated viewer, seeds a 12-second resume point and launches the actual desktop
 runtime. Linux uses the pinned Jellyfin container; Windows and macOS use pinned
 official portable archives. The server and app have finite lifetimes and cleanup
@@ -23,21 +26,30 @@ The app must render and exercise its real screens and produce
 
 ```
 server, passwordSignIn, home, library, sort, detail, seasons, episodes,
-resume, playback, progress, audio, subtitles, nextEpisode, settings, quickConnect
+resume, playback, progress, audio, subtitles, nextEpisode, settings, quickConnect,
+conversion, autoplayNext
 ```
 
 The outer verifier also polls Jellyfin sessions independently, requiring active
 playback and an advancing reported position for the same item. An initial Start
-at a nonzero resume position does not count as progress. Missing checks, failed
-app exit, stale output directories, absent Quick Connect approval and static
-server progress all fail. Run verdict negative controls with:
+at a nonzero resume position does not count as progress. The server must observe
+Archive Signal as a transcoding session and an FFmpeg process in only the owned
+server process tree/container. At exit, both active playback and owned encoders
+must be gone. To corroborate natural continuation, the server must observe
+episode one at or after 170 seconds followed by episode two; the app separately
+checks native EOF and automatic transition. Seek to 168 seconds and wait for EOF
+so the ten-second reporting cadence has time to publish the near-end position.
+Missing checks, failed app exit, stale output directories, absent Quick Connect
+approval and static server progress all fail. Run verdict negative controls with:
 
 ```
 python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
 ```
 
 `build-native.sh` creates development smoke dependencies using LGPL-disabled-GPL
-FFmpeg and mpv plus the qualified native adapter. Linux retains stock Weston 16
+FFmpeg and mpv plus the qualified native adapter. FFmpeg includes its built-in
+decoders/demuxers/parsers and libdav1d for software AV1, covering the advertised
+desktop profile; HTTPS uses Secure Transport on Mac and GnuTLS on Linux. Linux retains stock Weston 16
 and uses `softpipe`; the AWT shell has its own Xvfb display. Windows uses the
 pinned upstream LGPL mpv archive and WARP on hosted CI. These software runs do not
 qualify physical HDR, speaker output, real-GPU performance or release packaging.

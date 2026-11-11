@@ -26,7 +26,7 @@ export PKG_CONFIG_PATH="$prefix/share/pkgconfig:$prefix/lib/pkgconfig:$prefix/li
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 if [[ "$os" == linux ]]; then
  # Keep compositor and EGL implementation identical to the qualified Linux gate.
- # Its minimal FFmpeg is rebuilt below with the HTTP/catalog fixture codecs too.
+ # Its minimal FFmpeg is rebuilt below with the advertised desktop codecs too.
  bash desktop/tools/hdr/linux_build.sh
  cp -a desktop/build/hdr-linux/prefix/. "$prefix/"
  export PKG_CONFIG_PATH="$prefix/share/pkgconfig:$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
@@ -34,15 +34,18 @@ if [[ "$os" == linux ]]; then
 fi
 fetch https://ffmpeg.org/releases/ffmpeg-8.0.tar.xz b2751fccb6cc4c77708113cd78b561059b6fa904b24162fa0be2d60273d27b8e ffmpeg.tar.xz
 extra=()
-if [[ "$os" == mac ]]; then extra+=(--enable-videotoolbox --enable-audiotoolbox); fi
+if [[ "$os" == mac ]]; then
+ extra+=(--enable-videotoolbox --enable-audiotoolbox --enable-securetransport)
+else
+ extra+=(--enable-gnutls)
+fi
 (
  cd "$build/source/ffmpeg-8.0"
  ./configure --prefix="$prefix" --disable-gpl --disable-nonfree --enable-shared --disable-static \
   --disable-programs --disable-doc --disable-debug --disable-autodetect --disable-everything \
-  --enable-protocol=file,http,tcp,crypto --enable-network \
-  --enable-demuxer=matroska,mov,mpegts,hls,srt,ass,webvtt \
-  --enable-decoder=h264,hevc,aac,ass,srt,subrip,webvtt \
-  --enable-parser=h264,hevc,aac --enable-filter=buffer,buffersink,format,null,scale \
+  --enable-protocol=file,http,https,tcp,tls,crypto,data,httpproxy --enable-network \
+  --enable-decoders --enable-demuxers --enable-parsers --enable-libdav1d \
+  --enable-filter=buffer,buffersink,format,null,scale \
   --enable-swscale --enable-swresample "${extra[@]}"
  make -j2
  make install
