@@ -10,6 +10,9 @@ kotlin { jvmToolchain(21) }
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":ui-shared"))
+    implementation(compose.material3)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.serialization.json)

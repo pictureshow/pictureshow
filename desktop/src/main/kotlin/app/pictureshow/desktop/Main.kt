@@ -35,6 +35,7 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 fun main(args: Array<String>) {
+    if (args.isEmpty() || args.firstOrNull() in setOf("app", "app-smoke")) { desktopMain(args); return }
     if (args.firstOrNull() == "wayland") { waylandMain(args.drop(1).toTypedArray()); return }
     if (args.firstOrNull() == "window") { windowMain(args.drop(1).toTypedArray()); return }
     if (args.firstOrNull() == "canvas") { canvasMain(args.drop(1).toTypedArray()); return }

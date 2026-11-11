@@ -40,7 +40,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -93,12 +92,8 @@ import app.pictureshow.core.MediaPerson
 import app.pictureshow.core.detailReadBandText
 import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
-import app.pictureshow.core.imageUrl
-import app.pictureshow.core.isWatched
-import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
-import coil3.compose.AsyncImage
 import kotlin.math.ceil
 
 /** TOUCH-06 and CAT-04: the same three sorts as TV, with touch's word for the first. */
@@ -864,58 +859,7 @@ internal fun TouchCatalogCard(
     modifier: Modifier = Modifier,
     artHeight: Dp? = null,
     reserveLines: Boolean = true
-) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp).testTag("touch:card:${item.id}").semantics(mergeDescendants = true) {
-            contentDescription = catalogAnnouncement(item)
-        },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        val poster = !wide && item.type != "Episode"
-        TouchCatalogArtwork(
-            item,
-            account,
-            wide,
-            // An episode in a poster grid keeps its own shape; everything else takes the grid's one height.
-            if (artHeight != null && (poster || wide)) {
-                Modifier.fillMaxWidth().height(artHeight)
-            } else {
-                Modifier.fillMaxWidth().aspectRatio(if (poster) 2f / 3f else 16f / 9f)
-            }
-        )
-        // Always 4 dp tall, so progress on one card doesn't step it out of its row.
-        Box(Modifier.fillMaxWidth().height(4.dp)) {
-            if (progress(item) > 0 && !item.isWatched) {
-                LinearProgressIndicator(progress = { progress(item) }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
-            }
-        }
-        Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Two title lines and a subtitle line are always reserved: cards in a row share one height whatever the data.
-            Text(
-                item.name,
-                style = MaterialTheme.typography.titleSmall,
-                minLines = if (reserveLines) 2 else 1,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val subtitle = if (item.type == "Episode") {
-                listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
-            } else {
-                listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
-            }
-            if (reserveLines || subtitle.isNotBlank()) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
+) = app.pictureshow.ui.CatalogCard(item, account, wide, onClick, modifier, artHeight, reserveLines, catalogAnnouncement(item))
 
 @Composable
 internal fun TouchCatalogArtwork(
@@ -924,42 +868,11 @@ internal fun TouchCatalogArtwork(
     wide: Boolean,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
-) {
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-        val url = imageUrl(account.server, item, 720, wide = wide)
-        var failed by remember(url) { mutableStateOf(false) }
-        if (url != null) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = contentScale,
-                modifier = Modifier.fillMaxSize(),
-                onSuccess = { failed = false },
-                onError = { failed = true }
-            )
-        }
-        if (url == null || failed) {
-            Text(
-                item.name.take(1).uppercase(),
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clearAndSetSemantics {
-                }
-            )
-        }
-    }
-}
+) = app.pictureshow.ui.CatalogArtwork(item, account, wide, modifier, contentScale)
 
 @Composable
-internal fun TouchCatalogHeading(title: String, modifier: Modifier = Modifier, section: Boolean = false) {
-    Text(
-        title,
-        modifier.semantics {
-            heading()
-        },
-        style = if (section) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium
-    )
-}
+internal fun TouchCatalogHeading(title: String, modifier: Modifier = Modifier, section: Boolean = false) =
+    app.pictureshow.ui.CatalogHeading(title, modifier, section)
 
 @Composable
 internal fun TouchCatalogLoading(label: String) {
