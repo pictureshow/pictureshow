@@ -167,6 +167,7 @@ class MusicHostTest {
     }
 
     private var lastPlayer: ExoPlayer? = null
+    private val createdPlayers = mutableListOf<ExoPlayer>()
     private var paceNetworkClock = false
     private data class ClockPace(val clock: FakeClock, val originNs: Long, var advancedMs: Long = 0)
     private val pacedClocks = mutableListOf<ClockPace>()
@@ -201,6 +202,7 @@ class MusicHostTest {
             }
             .build()
             .also {
+                createdPlayers += it
                 lastPlayer = it
                 it.addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
@@ -257,6 +259,13 @@ class MusicHostTest {
 
     @After fun close() {
         scopes.forEach { it.cancel() }
+        // Cancelling a host's jobs does not release its native player. An old auto clock can
+        // otherwise keep advancing Robolectric uptime while the next test uses a manual clock.
+        createdPlayers.forEach {
+            assertEquals(it.applicationLooper, android.os.Looper.myLooper(), "Release the fixture player on its application looper")
+            it.release()
+        }
+        ShadowLooper.idleMainLooper()
         hosts.forEach { pump(200) }
         server.shutdown()
         java.io.File(context.filesDir, "music").deleteRecursively()
