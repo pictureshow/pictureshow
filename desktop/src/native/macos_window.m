@@ -3,6 +3,15 @@
  * Geometry-only AppKit probe, independent of JOGL/libmpv.
  */
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
+static char desktopChromeObserverKey;
+@interface PSChromeObservers:NSObject
+@property(strong) id updated;
+@property(strong) id closed;
+@end
+@implementation PSChromeObservers
+-(void)dealloc { if(_updated) [NSNotificationCenter.defaultCenter removeObserver:_updated]; if(_closed) [NSNotificationCenter.defaultCenter removeObserver:_closed]; }
+@end
 @interface PSWindowCall:NSObject
 @property(copy) void (^block)(void);
 -(void)run;
@@ -20,7 +29,12 @@ const char *ps_window_info(void *ptr) {
  if(!ptr) return "{\"error\":\"null window handle\"}";
  onMain(^{
  NSWindow *w=(__bridge NSWindow*)ptr;
- NSDictionary *d=@{@"class":NSStringFromClass(w.class),@"frame":NSStringFromRect(w.frame),@"screen":NSStringFromRect(w.screen.frame),@"styleMask":@(w.styleMask),@"collectionBehavior":@(w.collectionBehavior),@"level":@(w.level),@"active":@(NSApp.isActive),@"activationPolicy":@(NSApp.activationPolicy),@"nativeFullscreen":@((w.styleMask&NSWindowStyleMaskFullScreen)!=0),@"borderless":@((w.styleMask&NSWindowStyleMaskTitled)==0),@"appDelegate":NSStringFromClass(NSApp.delegate.class),@"mainRunLoopMode":NSRunLoop.currentRunLoop.currentMode?:@"nil",@"maxEDR":@(w.screen.maximumExtendedDynamicRangeColorComponentValue)};
+ NSMutableArray *buttons=[NSMutableArray array];
+ for(NSInteger tag=13700;tag<13703;tag++) {
+  NSView *v=[w.contentView viewWithTag:tag];
+  if(v) [buttons addObject:@{@"tag":@(tag),@"frame":NSStringFromRect(v.frame),@"hidden":@(v.hidden),@"superHidden":@(v.superview.hidden)}];
+ }
+ NSDictionary *d=@{@"customButtons":buttons,@"contentFlipped":@(w.contentView.isFlipped),@"contentBounds":NSStringFromRect(w.contentView.bounds),@"contentFrame":NSStringFromRect(w.contentView.frame),@"class":NSStringFromClass(w.class),@"frame":NSStringFromRect(w.frame),@"screen":NSStringFromRect(w.screen.frame),@"styleMask":@(w.styleMask),@"collectionBehavior":@(w.collectionBehavior),@"level":@(w.level),@"active":@(NSApp.isActive),@"activationPolicy":@(NSApp.activationPolicy),@"nativeFullscreen":@((w.styleMask&NSWindowStyleMaskFullScreen)!=0),@"borderless":@((w.styleMask&NSWindowStyleMaskTitled)==0),@"appDelegate":NSStringFromClass(NSApp.delegate.class),@"mainRunLoopMode":NSRunLoop.currentRunLoop.currentMode?:@"nil",@"maxEDR":@(w.screen.maximumExtendedDynamicRangeColorComponentValue)};
  NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
  free(result);result=calloc(data.length+1,1);memcpy(result,data.bytes,data.length);
  });NSLog(@"ps_window_info return %p",result);return result?result:"{\"error\":\"AppKit callback did not execute\"}";
@@ -72,6 +86,27 @@ int ps_window_desktop_chrome(void *ptr) {
    if(!button || button.hidden || button.superview.hidden) configured=0;
   }
   [content layoutSubtreeIfNeeded];
+  if(!objc_getAssociatedObject(w,&desktopChromeObserverKey)) {
+   PSChromeObservers *observers=[PSChromeObservers new];
+   __weak NSWindow *weakWindow=w;
+   // Skiko can replace/reorder its native view during resize. Keep standard
+   // controls above that view; a stable order performs no mutation per update.
+   observers.updated=[NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidUpdateNotification object:w queue:nil usingBlock:^(NSNotification *n) {
+    NSView *view=weakWindow.contentView;
+    NSView *last=[view viewWithTag:13702];
+    if(last && view.subviews.lastObject!=last) {
+     for(NSInteger tag=13700;tag<13703;tag++) {
+      NSView *button=[view viewWithTag:tag];
+      if(button) [view addSubview:button positioned:NSWindowAbove relativeTo:nil];
+     }
+    }
+   }];
+   observers.closed=[NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification object:w queue:nil usingBlock:^(NSNotification *n) {
+    NSWindow *window=weakWindow;
+    if(window) objc_setAssociatedObject(window,&desktopChromeObserverKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+   }];
+   objc_setAssociatedObject(w,&desktopChromeObserverKey,observers,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
  });
  return configured;
 }

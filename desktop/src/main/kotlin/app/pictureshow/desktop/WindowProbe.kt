@@ -14,14 +14,14 @@ import com.sun.jna.*
 import java.awt.Robot
 import java.io.File
 import javax.swing.SwingUtilities
-interface WindowNative:Library {fun ps_window_find(title:String):Pointer?;fun ps_window_activate(ptr:Pointer);fun ps_window_info(ptr:Pointer):String;fun ps_window_toggle(ptr:Pointer)}
+interface WindowNative:Library {fun ps_window_find(title:String):Pointer?;fun ps_window_activate(ptr:Pointer);fun ps_window_info(ptr:Pointer):String;fun ps_window_toggle(ptr:Pointer);fun ps_window_desktop_chrome(ptr:Pointer):Int}
 /** Isolate Compose placement from mpv, JOGL and the prototype's direct JDK extension calls. */
 fun windowMain(args:Array<String>) {
  val method=args[0];val out=File(args[1]).apply{mkdirs()}
  val native=Native.load(System.getenv("SPIKE_WINDOW_BRIDGE") ?: System.getProperty("spike.window.bridge"),WindowNative::class.java)
  application {
  val state=rememberWindowState(width=740.dp,height=500.dp)
- Window(onCloseRequest={exitApplication()},title="Pictureshow fullscreen isolation",state=state,undecorated=method=="borderless") {
+ Window(onCloseRequest={exitApplication()},title="Pictureshow fullscreen isolation",state=state,undecorated=method in setOf("borderless","chrome"),transparent=method=="chrome") {
   MaterialTheme(colors=darkColors()) {Box(Modifier.fillMaxSize().background(Color(0xFF174E72))){Text("Pictureshow fullscreen isolation · $method",Modifier.padding(24.dp))}}
   LaunchedEffect(Unit){Thread {Thread.sleep(90000);Runtime.getRuntime().halt(3)}.apply{isDaemon=true}.start();Thread {
    try {
@@ -32,6 +32,17 @@ fun windowMain(args:Array<String>) {
       File(out,"$name-awt.txt").writeText("bounds=$b;screen=${window.graphicsConfiguration.bounds};placement=${state.placement};undecorated=${window.isUndecorated}\n")
       jpeg(Robot().createScreenCapture(java.awt.Rectangle(p.x,p.y,b.width,b.height)),File(out,"$name.jpg"))
      }
+    }
+    if(method=="chrome") {
+     val ptr=requireNotNull(native.ps_window_find("Pictureshow fullscreen isolation"))
+     check(native.ps_window_desktop_chrome(ptr)==1)
+     SwingUtilities.invokeAndWait { state.position=WindowPosition.Absolute(40.dp,40.dp) }
+     for((w,h) in listOf(1280 to 800,1920 to 1080,1280 to 800)) {
+      SwingUtilities.invokeAndWait { state.size=androidx.compose.ui.unit.DpSize(w.dp,h.dp) }
+      stage("chrome-${w}x${h}-${System.nanoTime()}")
+     }
+     File(out,"complete.txt").writeText("native controls resize sequence complete\n")
+     kotlin.system.exitProcess(0)
     }
     if(method.contains("active")) native.ps_window_activate(requireNotNull(native.ps_window_find("Pictureshow fullscreen isolation")))
     stage("01-before")

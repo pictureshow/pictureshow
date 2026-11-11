@@ -214,7 +214,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             )
             nativeOwner = owner
             render.submit(owner)
-            owner.created.get(40, TimeUnit.SECONDS)
+            val createdSurface = owner.created.get(40, TimeUnit.SECONDS)
+            if (Platform.isMac()) File(directory, "native-surface.json").writeText(bridge.ps_receipt(createdSurface))
             fun sync() { if (stopped.get()) return; val t = w.graphicsConfiguration.defaultTransform; pixels.set(Dimension((w.width * t.scaleX).toInt(), (w.height * t.scaleY).toInt())); surface?.let(bridge::ps_sync) }
             onEdt {
                 listener = object : ComponentAdapter() { override fun componentMoved(e: ComponentEvent) = sync(); override fun componentResized(e: ComponentEvent) = sync() }

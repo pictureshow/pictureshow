@@ -139,6 +139,26 @@ class DesktopControllerTest {
             assertFalse(c.state.value.route in setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Player))
         } }
     }
+    @Test fun selectingNewlyExpiredSavedViewerOpensSignInOnceAndPreservesOtherViewer(): Unit = runBlocking {
+        Fixture().use { first -> Fixture().use { second ->
+            val store = AccountStore(MemoryPersistence())
+            val a = Account(Server("first", "First cinema", first.url, "12.4.0"), User("viewer", "Viewer"), "first-test-token")
+            val b = Account(Server("second", "Second cinema", second.url, "12.4.0"), User("viewer", "Viewer"), "second-test-token")
+            store.remember(b); store.remember(a)
+            second.unauthorized = true
+            DesktopController(directory(), store = store).use { c ->
+                c.start(); c.await { it.route == DesktopRoute.Home && !it.busy }
+                c.accounts(); c.await { it.route == DesktopRoute.Accounts && !it.busy }
+                c.selectAccount(b.key)
+                c.await { it.route == DesktopRoute.SignIn && !it.busy }
+                assertEquals(b.server, c.state.value.server)
+                assertEquals(ErrorKind.EXPIRED, c.state.value.errorKind)
+                assertEquals(a, store.snapshots.value.accounts.first { it.key == a.key })
+                assertEquals(a.key, store.snapshots.value.currentKey)
+                assertTrue(store.snapshots.value.accounts.first { it.key == b.key }.expired)
+            }
+        } }
+    }
     @Test fun unreadableAccountStoreOffersRetryWithoutOverwritingData(): Unit = runBlocking {
         val memory = MemoryPersistence("do not discard").apply { failure = true }
         DesktopController(directory(), store = AccountStore(memory)).use { c ->

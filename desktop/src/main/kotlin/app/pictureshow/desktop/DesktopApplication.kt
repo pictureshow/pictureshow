@@ -32,15 +32,18 @@ fun desktopMain(args: Array<String>) {
         var macChrome by remember { mutableStateOf(false) }
         val keys = remember { java.util.concurrent.atomic.AtomicReference<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
         var restore by remember { mutableStateOf<java.awt.Rectangle?>(null) }
-        fun close() {
+        fun close(source: String = "window") {
             if(closing) return
             closing=true
+            fun receipt(complete: Boolean) { if(smoke) java.io.File(args[4], "close-lifecycle.json").writeText("{\"source\":\"$source\",\"shutdownComplete\":$complete}\n") }
+            receipt(false)
             Thread {
                 runBlocking { controller.shutdown() }
+                receipt(true)
                 SwingUtilities.invokeLater { exitApplication() }
             }.start()
         }
-        Window(onCloseRequest=::close,state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys.get().invoke(it)}) {
+        Window(onCloseRequest={ close("window") },state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys.get().invoke(it)}) {
             fun fullscreen() {
                 val bounds=if(!full) { restore=java.awt.Rectangle(window.bounds);window.graphicsConfiguration.bounds } else restore ?: window.bounds
                 state.placement=WindowPlacement.Floating
@@ -61,7 +64,7 @@ fun desktopMain(args: Array<String>) {
                 }
                 controller.attachWindow(window)
                 controller.start()
-                if(smoke) Thread { runDesktopSmoke(controller,window,state,args.drop(1),::close) }.apply { name="desktop-ui-smoke";isDaemon=true;start() }
+                if(smoke) Thread { runDesktopSmoke(controller,window,state,args.drop(1)) { close("smoke") } }.apply { name="desktop-ui-smoke";isDaemon=true;start() }
             }
             DisposableEffect(window) {
                 val listener=object:WindowAdapter() {
@@ -77,7 +80,7 @@ fun desktopMain(args: Array<String>) {
                         if (!macChrome) {
                             TextButton(onClick={state.isMinimized=true},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("—",Modifier.clearAndSetSemantics { contentDescription="Minimize window" }) }
                             TextButton(onClick={state.placement=if(state.placement==WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("□",Modifier.clearAndSetSemantics { contentDescription="Maximize or restore window" }) }
-                            TextButton(onClick=::close,contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
+                            TextButton(onClick={ close("window-button") },contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
                         }
                     })
             }

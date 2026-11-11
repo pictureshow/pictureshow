@@ -26,6 +26,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     val checks=linkedMapOf<String,Boolean>()
     val robot=Robot().apply { autoDelay=45 }
     var successful=false
+    var nativeCloseRequested=false
     fun waitFor(label:String,seconds:Long=45,predicate:()->Boolean) {
         val until=System.nanoTime()+seconds*1_000_000_000L
         while(!predicate()) { check(System.nanoTime()<until) { "SMOKE timed out: $label; route=${c.state.value.route}; busy=${c.state.value.busy}; error=${c.state.value.error != null}; window=${window.bounds}; display=${window.graphicsConfiguration.bounds}" };Thread.sleep(60) }
@@ -210,12 +211,25 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         File(out,"app-smoke-result.json").writeText("{\"pass\":$successful,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         check(successful)
         println("SMOKE all 18 viewer flows passed")
+        if(com.sun.jna.Platform.isMac() && System.getenv("PICTURESHOW_SMOKE_NATIVE_CLOSE")=="1") {
+            click("nav:library:${library.id}");ready(DesktopRoute.Library)
+            click("grid:${movie.id}");ready(DesktopRoute.Detail);click("play");ready(DesktopRoute.Player)
+            waitFor("native close source playing",60) { c.state.value.playback?.ready==true }
+            Thread.sleep(1500)
+            File(out,"native-close-request.json").writeText("{\"ready\":true}\n")
+            nativeCloseRequested=true
+            // The standard AppKit close button is anchored at (14,19), 14×14.
+            robot.mouseMove(window.x+21,window.y+26)
+            robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+            waitFor("native window close",15) { !window.isDisplayable }
+        }
     } catch(error:Throwable) {
+        successful=false
         File(out,"app-smoke-result.json").writeText("{\"pass\":false,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         runCatching { screenshot("99-failure") }
         System.err.println("SMOKE ${error.message}")
     } finally {
-        SwingUtilities.invokeLater{close()}
+        if(!nativeCloseRequested || !successful) SwingUtilities.invokeLater{close()}
         if(!successful) Thread {Thread.sleep(2500);kotlin.system.exitProcess(2)}.apply{isDaemon=true;start()}
     }
 }

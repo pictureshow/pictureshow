@@ -180,7 +180,13 @@ class DesktopController(
     fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
         if (account.expired || account.accessToken.isBlank()) { publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn) }; return@page }
-        if (attempt(g, account) { client.me(account) } == null) return@page
+        if (attempt(g, account) { client.me(account) } == null) {
+            if (store.snapshots.value.accounts.firstOrNull { it.key == key }?.expired == true) {
+                publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn,
+                    error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
+            }
+            return@page
+        }
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
         publish(g) { it.copy(account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
     }
