@@ -129,7 +129,7 @@ class IndependentSubtitlePlaybackTest {
             assertEquals(
                 Player.STATE_READY,
                 f.player.playbackState,
-                "A held selected subtitle response must not withdraw video readiness",
+                "A held selected subtitle response must not withdraw video readiness"
             )
             val requested = synchronized(f.requests) { f.requests.toList() }
             assertEquals(1, requested.size, "Only selected subtitle may open; requests=$requested")
@@ -140,7 +140,7 @@ class IndependentSubtitlePlaybackTest {
             assertEquals(
                 requested,
                 synchronized(f.requests) { f.requests.toList() },
-                "Other subtitles must stay idle through selected cue delivery",
+                "Other subtitles must stay idle through selected cue delivery"
             )
             assertNull(f.player.playerError)
             assertEquals(Player.STATE_READY, f.player.playbackState)
