@@ -672,6 +672,73 @@ while ($true) {{
                 self.error = "Owned encoder observer did not stop"
 
 
+class OwnedDiscoveryResponder:
+    """Real Jellyfin UDP protocol, advertising only this fixture over loopback."""
+    def __init__(self, address: str, public_info: dict, evidence: Path):
+        parsed = urllib.parse.urlparse(address)
+        if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
+            raise ValueError("Discovery responder requires the owned loopback fixture")
+        if not all(isinstance(public_info.get(k), str) and public_info[k] for k in ("Id", "ServerName")):
+            raise ValueError("Discovery responder requires actual public server identity")
+        self.reply = {"Address": address, "Id": public_info["Id"], "Name": public_info["ServerName"]}
+        self.evidence = evidence
+        self.requests = self.replies = self.unexpected = 0
+        self.error = None
+        self.stopping = threading.Event()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.bind(("127.0.0.1", 0))
+        self.socket.settimeout(.1)
+        self.port = self.socket.getsockname()[1]
+        self.thread = threading.Thread(target=self._serve, name="owned-loopback-discovery", daemon=True)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def _serve(self):
+        try:
+            while not self.stopping.is_set():
+                try:
+                    payload, peer = self.socket.recvfrom(256)
+                except socket.timeout:
+                    continue
+                if peer[0] != "127.0.0.1" or payload != b"Who is JellyfinServer?":
+                    self.unexpected += 1
+                    continue
+                self.requests += 1
+                self.socket.sendto(json.dumps(self.reply).encode("utf-8"), peer)
+                self.replies += 1
+        except OSError as error:
+            if not self.stopping.is_set():
+                self.error = type(error).__name__
+
+    def __exit__(self, *_):
+        self.stopping.set()
+        self.socket.close()
+        self.thread.join(timeout=2)
+        if self.thread.is_alive():
+            self.error = "Discovery responder did not stop"
+        write_json(self.evidence / "discovery-responder.json", {
+            "requests": self.requests, "replies": self.replies, "unexpectedRequests": self.unexpected,
+            "error": self.error, "stopped": not self.thread.is_alive(), "boundAddress": "127.0.0.1",
+            "port": self.port, "server": self.reply, "lanBroadcastTested": False})
+
+
+def validate_discovery(evidence: Path) -> dict:
+    try:
+        responder = json.loads((evidence / "discovery-responder.json").read_text(encoding="utf-8"))
+        app = json.loads((evidence / "discovery-result.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise RuntimeError("Real UDP discovery evidence missing or malformed") from None
+    if not isinstance(responder, dict) or responder.get("error") is not None or responder.get("stopped") is not True:
+        raise RuntimeError("Owned UDP discovery responder failed to stop cleanly")
+    if not all(type(responder.get(k)) is int and responder[k] > 0 for k in ("requests", "replies")):
+        raise RuntimeError("Owned UDP discovery received no actual protocol exchange")
+    if not isinstance(app, dict) or app.get("found") is not True:
+        raise RuntimeError("Desktop app did not discover the owned server over UDP")
+    return {"serverDiscoveredOverLoopbackUdp": True, "lanBroadcastTested": False}
+
+
 def validate_native_close(evidence: Path, enabled: bool) -> dict:
     if not enabled:
         return {}
@@ -702,7 +769,9 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     samples, qc_codes = [], set()
     uncaught = []
     observer = EncoderObserver(viewer)
-    with raw_log.open("w", encoding="utf-8") as log:
+    public_info = viewer.request("GET", "/System/Info/Public")
+    with OwnedDiscoveryResponder(viewer.url, public_info, evidence) as discovery, raw_log.open("w", encoding="utf-8") as log:
+        environment["PICTURESHOW_SMOKE_DISCOVERY_PORT"] = str(discovery.port)
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
         try:
             observer.start()
@@ -780,6 +849,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
         raise RuntimeError("Owned fixture encoder observation failed: " + observer.error)
     require_no_uncaught_exceptions(uncaught)
     result = validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
+    result.update(validate_discovery(evidence))
     result.update(validate_native_close(evidence, environment.get("PICTURESHOW_SMOKE_NATIVE_CLOSE") == "1"))
     return result
 

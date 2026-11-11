@@ -134,6 +134,60 @@ class MacEncoderProcessTest(unittest.TestCase):
                 smoke.mac_encoder_process_count(123)
 
 
+class DiscoveryResponderTest(unittest.TestCase):
+    def test_real_udp_protocol_returns_fixture_identity_and_stops(self):
+        with tempfile.TemporaryDirectory() as folder:
+            evidence = Path(folder)
+            with smoke.OwnedDiscoveryResponder('http://127.0.0.1:18096', {'Id': 'fixture-id', 'ServerName': 'Fixture'}, evidence) as responder:
+                with smoke.socket.socket(smoke.socket.AF_INET, smoke.socket.SOCK_DGRAM) as client:
+                    client.settimeout(1)
+                    client.sendto(b'Who is JellyfinServer?', ('127.0.0.1', responder.port))
+                    payload, peer = client.recvfrom(8192)
+                self.assertEqual({'Address': 'http://127.0.0.1:18096', 'Id': 'fixture-id', 'Name': 'Fixture'}, json.loads(payload))
+                self.assertEqual('127.0.0.1', peer[0])
+            self.assertFalse(responder.thread.is_alive())
+            self.assertEqual(-1, responder.socket.fileno())
+            (evidence / 'discovery-result.json').write_text(json.dumps({'found': True}))
+            self.assertTrue(smoke.validate_discovery(evidence)['serverDiscoveredOverLoopbackUdp'])
+            self.assertFalse(smoke.validate_discovery(evidence)['lanBroadcastTested'])
+
+    def test_other_datagrams_get_no_server_reply(self):
+        with tempfile.TemporaryDirectory() as folder:
+            evidence = Path(folder)
+            with smoke.OwnedDiscoveryResponder('http://127.0.0.1:18096', {'Id': 'fixture-id', 'ServerName': 'Fixture'}, evidence) as responder:
+                with smoke.socket.socket(smoke.socket.AF_INET, smoke.socket.SOCK_DGRAM) as client:
+                    client.settimeout(.2)
+                    client.sendto(b'Who is JellyfinServer? extra', ('127.0.0.1', responder.port))
+                    with self.assertRaises(smoke.socket.timeout):
+                        client.recvfrom(8192)
+            receipt = json.loads((evidence / 'discovery-responder.json').read_text())
+            self.assertEqual(0, receipt['requests'])
+            self.assertEqual(0, receipt['replies'])
+            self.assertEqual(1, receipt['unexpectedRequests'])
+
+    def test_non_owned_address_and_missing_public_identity_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for address, identity in [('http://192.0.2.1:8096', {'Id': 'x', 'ServerName': 'x'}),
+                                      ('http://127.0.0.1:18096', {'ServerName': 'x'})]:
+                with self.subTest(address=address), self.assertRaises(ValueError):
+                    smoke.OwnedDiscoveryResponder(address, identity, Path(folder))
+
+    def test_app_boolean_without_exchange_or_cleanup_cannot_pass(self):
+        cases = [({'requests': 0, 'replies': 0, 'stopped': True, 'error': None}, {'found': True}),
+                 ({'requests': 1, 'replies': 1, 'stopped': False, 'error': None}, {'found': True}),
+                 ({'requests': 1, 'replies': 1, 'stopped': True, 'error': 'OSError'}, {'found': True}),
+                 ({'requests': 1, 'replies': 1, 'stopped': True, 'error': None}, {'found': False}),
+                 ({'requests': 1, 'replies': 1, 'stopped': True, 'error': None}, None)]
+        for responder, app in cases:
+            with self.subTest(responder=responder, app=app), tempfile.TemporaryDirectory() as folder:
+                evidence = Path(folder)
+                (evidence / 'discovery-responder.json').write_text(json.dumps(responder))
+                if app is not None:
+                    (evidence / 'discovery-result.json').write_text(json.dumps(app))
+                with self.assertRaisesRegex(RuntimeError, 'UDP|discover'):
+                    smoke.validate_discovery(evidence)
+
+
 class SmokeVerdictTest(unittest.TestCase):
     def receipt(self):
         return {"pass": True, "checks": dict.fromkeys(smoke.REQUIRED_CHECKS, True)}
