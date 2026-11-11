@@ -3,9 +3,12 @@
  */
 package app.pictureshow
 
+import android.app.ActivityManager
 import android.app.Application
+import android.app.ApplicationExitInfo
 import android.app.job.JobScheduler
 import android.net.NetworkCapabilities
+import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
@@ -16,7 +19,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowActivityManager
 import org.robolectric.shadows.ShadowLooper
 
 @RunWith(RobolectricTestRunner::class)
@@ -29,9 +34,15 @@ class OfflineRecoveryTest {
     fun `a rejected watchdog booking stays owed and retries later without spinning`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         var calls = 0
-        val foreground = AndroidOfflineForeground(app) { owner, refreshUnknown ->
+        val foreground = AndroidOfflineForeground(app) { owner, refreshUnknown, viewerReturned ->
             calls++
-            if (calls == 1) false else offlineBookRecovery(app, owner = owner, refreshUnknown = refreshUnknown)
+            if (calls ==
+                1
+            ) {
+                false
+            } else {
+                offlineBookRecovery(app, owner = owner, refreshUnknown = refreshUnknown, viewerReturned = viewerReturned)
+            }
         }
         foreground.jobStarted(true)
         foreground.unfinished(true)
@@ -49,7 +60,7 @@ class OfflineRecoveryTest {
     fun `ending work cancels a rejected watchdog booking retry`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         var calls = 0
-        val foreground = AndroidOfflineForeground(app) { _, _ ->
+        val foreground = AndroidOfflineForeground(app) { _, _, _ ->
             calls++
             false
         }
@@ -145,6 +156,105 @@ class OfflineRecoveryTest {
     }
 
     @Test
+    fun `boot can recover a persisted timer when Android drops a delayed UIDT during restore`() {
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 7)
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        assertTrue(offlineBookRecovery(app))
+        scheduler.cancel(OFFLINE_JOB)
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 8)
+        assertTrue(offlineBookRecovery(app, OFFLINE_RECOVERY_A))
+        assertTrue(scheduler.getPendingJob(OFFLINE_RECOVERY_B)!!.isPersisted)
+        assertEquals(null, scheduler.getPendingJob(OFFLINE_JOB))
+        val foreground = AndroidOfflineForeground(app)
+        foreground.unfinished(true)
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        assertTrue(scheduler.allPendingJobs.any { it.id == OFFLINE_RECOVERY_A || it.id == OFFLINE_RECOVERY_B })
+    }
+
+    @Test
+    fun `a boot authorization never overrides a subsequent explicit user stop`() {
+        val permit = OfflineRecoveryPermit(7, 1_000)
+        assertTrue(permit.allowsBoot(8, 999))
+        assertTrue(permit.allowsBoot(9, 0))
+        assertFalse(permit.allowsBoot(7, 0))
+        assertFalse(permit.allowsBoot(8, 1_000))
+        assertFalse(permit.allowsBoot(8, 1_001))
+        assertFalse(OfflineRecoveryPermit(7, 0).allowsBoot(8, 0))
+    }
+
+    private fun userStopped(at: Long) {
+        shadowOf(app.getSystemService(ActivityManager::class.java)).addApplicationExitInfo(
+            ShadowActivityManager.ApplicationExitInfoBuilder.newBuilder()
+                .setReason(ApplicationExitInfo.REASON_USER_REQUESTED)
+                .setTimestamp(at)
+                .setPid(123)
+                .build()
+        )
+    }
+
+    @Test
+    fun `Task Manager Stop blocks recovery even if a pending UIDT survived it`() {
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        assertTrue(offlineBookRecovery(app))
+        val permit = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
+        userStopped(permit.issuedAt)
+        assertFalse(offlineBookRecovery(app, OFFLINE_RECOVERY_A))
+        assertEquals(null, scheduler.getPendingJob(OFFLINE_RECOVERY_B))
+        assertTrue(scheduler.getPendingJob(OFFLINE_JOB)!!.isUserInitiated)
+    }
+
+    @Test
+    fun `Task Manager Stop also wins over a later boot with a lost primary`() {
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 7)
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        assertTrue(offlineBookRecovery(app))
+        val permit = offlineRecoveryPermit(app)!!
+        userStopped(permit.issuedAt + 1)
+        scheduler.cancel(OFFLINE_JOB)
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 8)
+        assertFalse(offlineBookRecovery(app, OFFLINE_RECOVERY_A))
+        assertTrue(scheduler.allPendingJobs.isEmpty())
+    }
+
+    @Test
+    fun `a stop preceding the accepted user request does not block boot recovery`() {
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 7)
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        val permit = offlineRecoveryPermit(app)!!
+        userStopped(permit.issuedAt - 1)
+        assertTrue(offlineBookRecovery(app))
+        scheduler.cancel(OFFLINE_JOB)
+        Settings.Global.putInt(app.contentResolver, Settings.Global.BOOT_COUNT, 8)
+        assertTrue(offlineBookRecovery(app, OFFLINE_RECOVERY_A))
+    }
+
+    @Test
+    fun `only a viewer return can renew authorization after Task Manager Stop`() {
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        val permit = offlineRecoveryPermit(app)!!
+        userStopped(permit.issuedAt)
+        assertEquals(null, offlineRecoveryPermit(app))
+        assertTrue(offlineRecoveryPermit(app, viewerReturned = true) != null)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(10))
+        assertTrue(offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS, viewerReturned = true))
+        val renewed = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
+        assertTrue(renewed.issuedAt > permit.issuedAt)
+        assertFalse(offlineUserStoppedAfter(app, renewed))
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun `legacy timer retains its authorization until a viewer returns`() {
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        val original = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
+        userStopped(original.issuedAt)
+        offlineScheduleJob(app, OFFLINE_JOB_WAITING_MS)
+        val background = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
+        assertEquals(original, background)
+        assertTrue(offlineUserStoppedAfter(app, background))
+    }
+
+    @Test
     fun `finishing or canceling the queue removes both recovery timers`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         offlineBookRecovery(app)
@@ -173,7 +283,7 @@ class OfflineRecoveryTest {
     @Test
     @Config(sdk = [23, 30, 33])
     fun `legacy sticky service and timed primary do not gain modern watchdog jobs`() {
-        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        assertTrue(offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS))
         assertFalse(offlineBookRecovery(app))
         assertEquals(listOf(4802), scheduler.allPendingJobs.map { it.id })
     }

@@ -120,6 +120,10 @@ class OfflineJobService : JobService() {
     private var networkOwner: Any? = null
 
     override fun onStartJob(params: JobParameters): Boolean {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val permit = offlineStoredRecoveryPermit(params.extras)
+            if (permit == null || offlineUserStoppedAfter(this, permit)) return false
+        }
         val userInitiated = Build.VERSION.SDK_INT >= 34 && params.isUserInitiatedJob
         foreground.jobStarted(userInitiated)
         if (userInitiated) showTransferNotification(params)
@@ -176,15 +180,16 @@ class OfflineJobService : JobService() {
 }
 
 /** Returns acceptance, so a refused schedule is never remembered as a durable booking. */
-internal fun offlineScheduleJob(context: Context, delayMs: Long): Boolean {
+internal fun offlineScheduleJob(context: Context, delayMs: Long, viewerReturned: Boolean = false): Boolean {
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return false
     val component = ComponentName(context, OfflineJobService::class.java)
     if (Build.VERSION.SDK_INT >= 34) {
         // Do not replace an already accepted UIDT (including its system retry/backoff after a kill).
-        if (scheduler.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true) return true
+        if (scheduler.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true && offlineRecoveryPermit(context) != null) return true
         val accepted = runCatching {
             scheduler.schedule(
                 JobInfo.Builder(OFFLINE_JOB, component)
+                    .setExtras(offlineNewRecoveryPermit(context).extras())
                     .setUserInitiated(true)
                     // Builder defaults exclude VPNs. A private server may only be reachable through
                     // the viewer's VPN, so allow that route just as JobInfo's standard requests do.
@@ -205,6 +210,18 @@ internal fun offlineScheduleJob(context: Context, delayMs: Long): Boolean {
     return runCatching {
         scheduler.schedule(
             JobInfo.Builder(OFFLINE_JOB, component)
+                .setExtras(
+                    (
+                        if (viewerReturned ||
+                            Build.VERSION.SDK_INT < 24
+                        ) {
+                            null
+                        } else {
+                            offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)?.extras)
+                        }
+                        )
+                        ?.extras() ?: offlineNewRecoveryPermit(context).extras()
+                )
                 .setMinimumLatency(delayMs)
                 .setOverrideDeadline(delayMs * 2)
                 .setPersisted(true)
@@ -244,6 +261,13 @@ internal class OfflineRestartBooking(private val book: (Long) -> Boolean, privat
         running = false
         if (systemRetry) booked = wantedDelay()
         settle()
+    }
+
+    fun viewerReturned() {
+        if (!running) {
+            booked = null
+            settle()
+        }
     }
 
     private fun wantedDelay(): Long? = when {
@@ -315,8 +339,8 @@ internal class OfflineForegroundGate(private val start: (List<String>) -> Boolea
 
 internal class AndroidOfflineForeground(
     private val context: Context,
-    private val bookRecovery: (Int?, Boolean) -> Boolean = { owner, refreshUnknown ->
-        offlineBookRecovery(context, owner = owner, refreshUnknown = refreshUnknown)
+    private val bookRecovery: (Int?, Boolean, Boolean) -> Boolean = { owner, refreshUnknown, viewerReturned ->
+        offlineBookRecovery(context, owner = owner, refreshUnknown = refreshUnknown, viewerReturned = viewerReturned)
     }
 ) : OfflineForeground {
     val recovery = OfflineRecoveryGate()
@@ -332,7 +356,7 @@ internal class AndroidOfflineForeground(
         stop = { context.stopService(Intent(context, OfflineTransferService::class.java)) }
     )
     private val restart = OfflineRestartBooking(
-        book = { delayMs -> offlineScheduleJob(context, delayMs) },
+        book = { delayMs -> offlineScheduleJob(context, delayMs, recovery.viewerReturned) },
         cancel = { context.getSystemService(JobScheduler::class.java)?.cancel(OFFLINE_JOB) }
     )
     private val apply = Runnable {
@@ -342,7 +366,7 @@ internal class AndroidOfflineForeground(
         }
         restart.transferring(titles.isNotEmpty())
         // UIDT owns both notification and execution; a parallel FGS would add a six-hour limit.
-        gate.want(if (userInitiatedRunning || userInitiatedBooked()) emptyList() else titles)
+        gate.want(if (userInitiatedRunning || userInitiatedBooked() || recovery.owner != null) emptyList() else titles)
     }
 
     /** Called from the engine at every phase change. A flurry settles into one look at where things ended up. */
@@ -360,6 +384,15 @@ internal class AndroidOfflineForeground(
             hasUnfinished = any
             restart.unfinished(any)
             maintainRecovery()
+        }
+    }
+
+    override fun viewerReturned() {
+        main.post {
+            recovery.viewerReturned = true
+            recovery.timerKnown = false
+            restart.viewerReturned()
+            if (hasUnfinished) maintainRecovery()
         }
     }
 
@@ -391,10 +424,10 @@ internal class AndroidOfflineForeground(
 
     private fun maintainRecovery() {
         main.removeCallbacks(recoveryRetry)
-        if (!hasUnfinished || !userInitiatedBooked()) {
+        if (!hasUnfinished || offlineRecoveryPermit(context, recovery.viewerReturned) == null) {
             recovery.timerKnown = false
             offlineCancelRecovery(context)
-        } else if (!bookRecovery(recovery.owner, !recovery.timerKnown)) {
+        } else if (!bookRecovery(recovery.owner, !recovery.timerKnown, recovery.viewerReturned)) {
             // A rejected booking remains owed. Retry once later, without spinning or moving an accepted deadline.
             main.postDelayed(recoveryRetry, OFFLINE_RECOVERY_RETRY_MS)
         } else {

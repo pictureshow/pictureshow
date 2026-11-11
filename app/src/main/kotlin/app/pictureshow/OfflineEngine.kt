@@ -89,6 +89,7 @@ internal interface OfflineForeground {
 
     /** Something still has to finish without the viewer touching it, so a restart must stay booked. */
     fun unfinished(any: Boolean) = Unit
+    fun viewerReturned() = Unit
 }
 
 private const val OFFLINE_RETRIES = 3
@@ -173,6 +174,11 @@ internal class OfflineEngine(
 
     /** Runs once per process. Everything here works with the network off. */
     fun start(): Job {
+        foreground.viewerReturned()
+        return loadOnce()
+    }
+
+    private fun loadOnce(): Job {
         started?.let { return it }
         val job = scope.launch {
             emptyTrashSoon()
@@ -194,7 +200,7 @@ internal class OfflineEngine(
 
     /** The next booked job run. Starting is once per process, and a warm process still has rows nothing else will move. */
     suspend fun wake() {
-        start().join()
+        loadOnce().join()
         networkChanged()
     }
 
@@ -1064,7 +1070,7 @@ internal class OfflineEngine(
 
     /** Waits for the first load, for callers that need a settled answer (cold start). */
     suspend fun ready(): Map<String, OfflineLibrary> {
-        start().join()
+        loadOnce().join()
         return libraries.first()
     }
 

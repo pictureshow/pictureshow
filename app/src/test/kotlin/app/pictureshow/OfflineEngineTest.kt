@@ -79,6 +79,7 @@ class OfflineEngineTest {
     private var restMs = 1L
     private var recheckMs = 30_000L
     private var revocationMs = 60_000L
+    private var viewerReturns = 0
     private val unfinishedReports = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
 
     @Volatile
@@ -207,6 +208,16 @@ class OfflineEngineTest {
         return response
     }
 
+    @Test
+    fun `background wake and ready never claim that the viewer reopened the app`() = runBlocking {
+        val engine = engine()
+        engine.wake()
+        engine.ready()
+        assertEquals(0, viewerReturns)
+        engine.start().join()
+        assertEquals(1, viewerReturns)
+    }
+
     private fun engine(): OfflineEngine {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scopes += scope
@@ -215,6 +226,10 @@ class OfflineEngineTest {
             accounts,
             { ClientIdentity("Test", "install-id", "1") },
             object : OfflineForeground {
+                override fun viewerReturned() {
+                    viewerReturns++
+                }
+
                 override fun unfinished(any: Boolean) {
                     unfinishedReports += any
                 }

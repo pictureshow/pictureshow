@@ -3,6 +3,8 @@
  */
 package app.pictureshow
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
@@ -12,6 +14,8 @@ import android.content.Context
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import android.os.PersistableBundle
+import android.provider.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +26,59 @@ import org.koin.android.ext.android.inject
 internal const val OFFLINE_RECOVERY_A = 4803
 internal const val OFFLINE_RECOVERY_B = 4804
 private val recoveryIds = setOf(OFFLINE_RECOVERY_A, OFFLINE_RECOVERY_B)
+private const val RECOVERY_BOOT = "pictureshow.offline.boot"
+private const val RECOVERY_ISSUED = "pictureshow.offline.issued"
+
+/** An accepted user request can survive a lost UIDT at boot, but never a later explicit stop. */
+internal data class OfflineRecoveryPermit(val boot: Int, val issuedAt: Long) {
+    fun allowsBoot(currentBoot: Int, lastUserStop: Long): Boolean =
+        boot >= 0 && currentBoot > boot && issuedAt > 0 && lastUserStop < issuedAt
+
+    fun extras() = PersistableBundle().apply {
+        putInt(RECOVERY_BOOT, boot)
+        putLong(RECOVERY_ISSUED, issuedAt)
+    }
+}
+
+internal fun offlineNewRecoveryPermit(context: Context) = OfflineRecoveryPermit(
+    if (Build.VERSION.SDK_INT >= 24) Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, 0) else -1,
+    System.currentTimeMillis()
+)
+
+internal fun offlineStoredRecoveryPermit(extras: PersistableBundle?): OfflineRecoveryPermit? = extras?.let {
+    if (!it.containsKey(RECOVERY_BOOT) || !it.containsKey(RECOVERY_ISSUED)) {
+        null
+    } else {
+        OfflineRecoveryPermit(it.getInt(RECOVERY_BOOT), it.getLong(RECOVERY_ISSUED))
+    }
+}
+
+internal fun offlineUserStoppedAfter(context: Context, permit: OfflineRecoveryPermit): Boolean {
+    if (Build.VERSION.SDK_INT < 30) return false
+    val manager = context.getSystemService(ActivityManager::class.java) ?: return true
+    return runCatching {
+        manager.getHistoricalProcessExitReasons(context.packageName, 0, 0).any {
+            it.reason == ApplicationExitInfo.REASON_USER_REQUESTED && it.timestamp >= permit.issuedAt
+        }
+    }.getOrDefault(true)
+}
+
+internal fun offlineRecoveryPermit(context: Context, viewerReturned: Boolean = false): OfflineRecoveryPermit? {
+    if (Build.VERSION.SDK_INT < 34) return null
+    val scheduler = context.getSystemService(JobScheduler::class.java) ?: return null
+    val boot = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, 0)
+    val primary = scheduler.getPendingJob(OFFLINE_JOB)?.takeIf { it.isUserInitiated }
+    if (primary != null && viewerReturned) return offlineNewRecoveryPermit(context)
+    val permit = (
+        listOfNotNull(offlineStoredRecoveryPermit(primary?.extras)) + recoveryIds.mapNotNull { id ->
+            offlineStoredRecoveryPermit(scheduler.getPendingJob(id)?.extras)
+        }
+        ).maxByOrNull(OfflineRecoveryPermit::issuedAt) ?: return null
+    // API35 can persist a retry delay, then reject that UIDT when rebuilding JobInfo at boot.
+    // A later user stop still wins, including when a non-running UIDT record survived Stop.
+    if (offlineUserStoppedAfter(context, permit)) return null
+    return permit.takeIf { primary != null || it.allowsBoot(boot, 0) }
+}
 
 /** One transfer owner; a timer firing alongside it only maintains the next persisted timer. Main only. */
 internal class OfflineRecoveryGate {
@@ -29,6 +86,7 @@ internal class OfflineRecoveryGate {
         private set
     var primaryRunning = false
     var timerKnown = false
+    var viewerReturned = false
 
     fun claim(id: Int, serviceUp: Boolean): Boolean {
         if (primaryRunning || serviceUp || owner != null) return false
@@ -49,11 +107,17 @@ internal fun offlineRecoveryNextId(current: Int, owner: Int?): Int {
 }
 
 /** A READY UIDT retry can have no timer after a disconnected host. Keep a separate timed request. */
-internal fun offlineBookRecovery(context: Context, current: Int? = null, owner: Int? = null, refreshUnknown: Boolean = false): Boolean {
+internal fun offlineBookRecovery(
+    context: Context,
+    current: Int? = null,
+    owner: Int? = null,
+    refreshUnknown: Boolean = false,
+    viewerReturned: Boolean = false
+): Boolean {
     if (Build.VERSION.SDK_INT < 34) return false
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return false
-    // Task Manager Stop removes user-visible work. A watchdog must not create a replacement request.
-    if (scheduler.getPendingJob(OFFLINE_JOB)?.isUserInitiated != true) {
+    val permit = offlineRecoveryPermit(context, viewerReturned)
+    if (permit == null) {
         offlineCancelRecovery(context)
         return false
     }
@@ -69,6 +133,7 @@ internal fun offlineBookRecovery(context: Context, current: Int? = null, owner: 
     return runCatching {
         scheduler.schedule(
             JobInfo.Builder(id, ComponentName(context, OfflineRecoveryJobService::class.java))
+                .setExtras(permit.extras())
                 .setPersisted(true)
                 .setMinimumLatency(OFFLINE_JOB_TRANSFER_MS)
                 .setOverrideDeadline(OFFLINE_JOB_TRANSFER_MS * 2)
@@ -102,9 +167,9 @@ class OfflineRecoveryJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         val recovery = foreground.recovery
         // Book before waking the engine: another process death must leave a future timer intact.
-        if (!offlineBookRecovery(this, params.jobId, recovery.owner)) {
+        if (!offlineBookRecovery(this, params.jobId, recovery.owner, viewerReturned = recovery.viewerReturned)) {
             recovery.timerKnown = false
-            if (getSystemService(JobScheduler::class.java)?.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true) {
+            if (offlineRecoveryPermit(this, recovery.viewerReturned) != null) {
                 // A failed timer booking is not completion. Request a timed system retry too.
                 jobFinished(params, true)
                 return true
