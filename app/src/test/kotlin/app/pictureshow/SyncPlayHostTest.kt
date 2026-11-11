@@ -627,6 +627,19 @@ class SyncPlayHostTest {
             // Ready can elicit a fresh emission of the exact same timeline. Its new
             // MessageId/EmittedAt do not turn it into another explicit position change.
             rig.host.receive(rig.command("Unpause", delayMs = -100, ticks = 50_000_000L, id = "ready-response"))
+            if (waiting) {
+                // Unpause itself announces Playing. The subsequent StateUpdate can
+                // arrive before its coroutine runs and hold that scheduled mode.
+                rig.host.receive(
+                    rig.update(
+                        "StateUpdate",
+                        buildJsonObject {
+                            put("State", "Waiting")
+                            put("Reason", "Buffering")
+                        }
+                    )
+                )
+            }
             runCurrent()
             if (waiting) {
                 assertFalse(rig.renderer.value.playing)
