@@ -151,7 +151,12 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
         }
     });
     if(!s->overlay || !s->device || !s->video) { ps_destroy(s); return nullptr; }
-    CGLPixelFormatAttribute attrs[]={kCGLPFAOpenGLProfile,(CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,kCGLPFAAccelerated,(CGLPixelFormatAttribute)0};
+    // Hosted smoke explicitly permits Apple's software GL producer. The normal
+    // physical-display path still requires acceleration; FP16 IOSurface/Metal
+    // ownership and presentation remain identical in either context.
+    const char *softwareFlag=std::getenv("SPIKE_SOFTWARE_GPU");
+    bool softwareAllowed=softwareFlag && std::string(softwareFlag)=="1";
+    CGLPixelFormatAttribute attrs[]={kCGLPFAOpenGLProfile,(CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,softwareAllowed?(CGLPixelFormatAttribute)0:kCGLPFAAccelerated,(CGLPixelFormatAttribute)0};
     CGLPixelFormatObj pf; GLint n;
     if(CGLChoosePixelFormat(attrs,&pf,&n)!=kCGLNoError) { ps_destroy(s); return nullptr; }
     auto err=CGLCreateContext(pf,nullptr,&s->gl); CGLDestroyPixelFormat(pf);

@@ -22,7 +22,7 @@ jobs:
         run: |
           mkdir -p desktop-evidence/mac-graphics
           clang -O2 -fobjc-arc desktop/tools/app-smoke/macos-preflight.m \
-            -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics \
+            -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics -framework IOSurface \
             -o desktop-evidence/mac-graphics/preflight
           desktop-evidence/mac-graphics/preflight > desktop-evidence/mac-graphics/capabilities.json
           cat desktop-evidence/mac-graphics/capabilities.json
@@ -91,6 +91,8 @@ jobs:
           export MPV_LIBRARY="$PWD/desktop/build/app-native/prefix/lib/libmpv.dylib"
           export SPIKE_LAYER_BRIDGE="$PWD/desktop/build/app-native/libpictureshow_layer.dylib"
           export SPIKE_NULL_AUDIO=1
+          export SPIKE_SOFTWARE_GPU=1
+          export SKIKO_RENDER_API=SOFTWARE
           python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
       - name: Windows app against its disposable Jellyfin portable server
         if: runner.os == 'Windows'
