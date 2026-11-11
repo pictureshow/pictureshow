@@ -236,9 +236,10 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun togglePause() { mpv?.command("cycle", "pause") }
     override fun seek(seconds: Double) { mpv?.command("seek", (seconds - offset).coerceAtLeast(0.0).toString(), "absolute+exact") }
     override fun volume(value: Int) { mpv?.set("volume", value.coerceIn(0, 100).toString()) }
-    override fun fullscreen(enabled: Boolean) { linux?.fullscreen(enabled); surface?.let { layer?.ps_fullscreen(it, if (enabled) 1 else 0) } }
+    override fun fullscreen(enabled: Boolean) { if (stopped.get()) return; linux?.fullscreen(enabled); surface?.let { layer?.ps_fullscreen(it, if (enabled) 1 else 0) } }
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
+        window?.let { w -> onEdt { listener?.let(w::removeComponentListener); listener = null } }
         linux?.close(); linux = null
         renderTask?.get(35, TimeUnit.SECONDS)
         surface?.let { s -> render.submit { try { check(layer!!.ps_finish(s) >= 0) } finally { layer!!.ps_destroy(s) } }.get(35, TimeUnit.SECONDS) }; surface = null

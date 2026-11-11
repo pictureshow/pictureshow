@@ -41,6 +41,7 @@ fun cString(value: String) = Memory((value.toByteArray().size + 1).toLong()).app
 private interface NumericLocale : Library { fun setlocale(category: Int, locale: String): String? }
 
 class Mpv(val out: File, val probe: Boolean = true) : AutoCloseable {
+    private var closed = false
     init {
         // libmpv rejects a JVM process with a non-C numeric locale.
         // LC_NUMERIC is 1 on Linux, 4 on Darwin/Windows; preserve other locale categories.
@@ -80,9 +81,10 @@ class Mpv(val out: File, val probe: Boolean = true) : AutoCloseable {
         check(rc>=0) { "$name=$value: ${api.mpv_error_string(rc)}" }
     }
     fun initialize() = check(api.mpv_initialize(handle))
-    fun set(name: String, value: String) = check(api.mpv_set_property_string(handle, name, value))
-    fun command(vararg args: String) = check(api.mpv_command(handle, arrayOf(*args, null)))
-    fun get(name: String): String? {
+    @Synchronized fun set(name: String, value: String) { if (!closed) check(api.mpv_set_property_string(handle, name, value)) }
+    @Synchronized fun command(vararg args: String) { if (!closed) check(api.mpv_command(handle, arrayOf(*args, null))) }
+    @Synchronized fun get(name: String): String? {
+        if (closed) return null
         val p = api.mpv_get_property_string(handle, name) ?: return null
         return try { p.getString(0) } finally { api.mpv_free(p) }
     }
@@ -103,5 +105,5 @@ class Mpv(val out: File, val probe: Boolean = true) : AutoCloseable {
         data["geometry"] = geometry
         File(out, "$stage.json").writeText(data.entries.joinToString(",\n", "{\n", "\n}\n") { (k,v) -> "  ${quote(k)}: ${v?.let(::quote) ?: "null"}" })
     }
-    override fun close() = api.mpv_terminate_destroy(handle)
+    @Synchronized override fun close() { if (!closed) { closed = true; api.mpv_terminate_destroy(handle) } }
 }

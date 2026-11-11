@@ -365,6 +365,7 @@ class DesktopController(
         }
     }
     private suspend fun sendProgress(v: Viewing) {
+        if (!v.startAttempted || v.stopped) return
         val p = mutable.value.playback ?: return
         val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(p.positionSeconds.seconds, p.paused,
             p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }))
