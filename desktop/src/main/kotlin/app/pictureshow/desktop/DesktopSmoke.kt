@@ -18,6 +18,7 @@ import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 import javax.swing.SwingUtilities
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 /** Real window/control smoke. No network fixture, catalog or playback result is synthesized here. */
 fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowState,args:List<String>,close:()->Unit) {
@@ -25,6 +26,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     val out=File(evidence).apply{mkdirs()}
     val screens=File(out,"screens").apply{mkdirs()}
     val checks=linkedMapOf<String,Boolean>()
+    val cueStart = requireNotNull(System.getenv("PICTURESHOW_SMOKE_SUBTITLE_START")?.toDoubleOrNull())
+    val cueEnd = requireNotNull(System.getenv("PICTURESHOW_SMOKE_SUBTITLE_END")?.toDoubleOrNull())
+    require(cueStart.isFinite() && cueEnd.isFinite() && cueStart >= 0.0 && cueStart <= 1.0 / 24 && abs(cueEnd - cueStart - 180.0) <= .001)
     val robot=Robot().apply { autoDelay=45 }
     var successful=false
     var nativeCloseRequested=false
@@ -241,8 +245,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",deliveredSub.deliveryMethod!!.name);put("sourceFileIsExternal",deliveredSub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
         waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleExternal==true && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
                 it.subtitleCodec in setOf("srt", "subrip", "webvtt", "ass", "ssa") &&
-                it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
-                it.positionSeconds?.let { position -> position>=0.0 && position<180.0 }==true &&
+                it.subtitleStartSeconds?.let { start -> abs(start - cueStart) <= .001 }==true &&
+                it.subtitleEndSeconds?.let { end -> abs(end - cueEnd) <= .001 }==true &&
+                it.positionSeconds?.let { position -> position>=cueStart && position<cueEnd }==true &&
                 it.initialSubtitleIndex in setOf(-1, sub.index) }==true }
         val firstSubtitleId=requireNotNull(trackReceipt("subtitle-selection")?.subtitleId)
         screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true }

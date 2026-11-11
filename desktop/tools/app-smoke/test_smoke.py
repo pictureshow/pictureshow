@@ -20,6 +20,24 @@ display = importlib.util.module_from_spec(display_spec)
 display_spec.loader.exec_module(display)
 
 
+class FixtureSubtitleTimingTest(unittest.TestCase):
+    def test_zero_origin_and_measured_aac_mux_offset(self):
+        for start in ["0.000000", "0.021000"]:
+            actual = smoke.fixture_subtitle_timing({"packets": [{"pts_time": start, "duration_time": "180.000000"}]})
+            self.assertEqual(float(start), actual["startSeconds"])
+            self.assertEqual(float(start) + 180, actual["endSeconds"])
+            self.assertEqual(.001, actual["comparisonToleranceSeconds"])
+
+    def test_missing_multiple_nonfinite_or_changed_cue_is_rejected(self):
+        for probe in [{}, {"packets": []}, {"packets": [{}, {}]},
+                      {"packets": [{"pts_time": "NaN", "duration_time": "180"}]},
+                      {"packets": [{"pts_time": "0", "duration_time": "inf"}]},
+                      {"packets": [{"pts_time": "0.1", "duration_time": "180"}]},
+                      {"packets": [{"pts_time": "0", "duration_time": "179"}]}]:
+            with self.subTest(probe=probe), self.assertRaisesRegex(RuntimeError, "one 180-second subtitle cue"):
+                smoke.fixture_subtitle_timing(probe)
+
+
 class NativeMetadataEvidenceTest(unittest.TestCase):
     def test_decoder_envelope_copies_only_codec_names(self):
         with tempfile.TemporaryDirectory() as directory:

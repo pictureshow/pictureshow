@@ -253,6 +253,24 @@ class API:
         return response["User"]["Id"]
 
 
+def fixture_subtitle_timing(probe: dict) -> dict:
+    """Bind cue assertions to the muxed fixture, including AAC priming offsets."""
+    try:
+        packets = probe["packets"]
+        if not isinstance(packets, list) or len(packets) != 1:
+            raise ValueError()
+        start = float(packets[0]["pts_time"])
+        duration = float(packets[0]["duration_time"])
+        if not (math.isfinite(start) and math.isfinite(duration)
+                and 0 <= start <= 1 / 24 and abs(duration - 180) <= .001):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise RuntimeError("CC0 fixture must have one 180-second subtitle cue starting within its first video frame") from None
+    return {"source": "ffprobe subtitle packet in generated source.mkv",
+            "startSeconds": start, "endSeconds": start + duration,
+            "durationSeconds": duration, "comparisonToleranceSeconds": .001}
+
+
 def generate_media(root: Path, ffmpeg: str) -> dict:
     """All pixels, audio samples, captions and posters originate in this script."""
     root.mkdir(parents=True, exist_ok=True)
@@ -907,6 +925,9 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     environment["PICTURESHOW_DATA_DIR"] = str(args.work.resolve() / "viewer-data")
     environment["SPIKE_NULL_AUDIO"] = "1"
     environment["PICTURESHOW_SMOKE"] = "1"
+    timing = json.loads((evidence / "fixture-subtitle-timing.json").read_text())
+    environment["PICTURESHOW_SMOKE_SUBTITLE_START"] = str(timing["startSeconds"])
+    environment["PICTURESHOW_SMOKE_SUBTITLE_END"] = str(timing["endSeconds"])
     raw_log = args.work / "app.log"
     samples, qc_codes = [], set()
     uncaught = []
@@ -1012,6 +1033,7 @@ def main():
     parser.add_argument("--runtime", type=Path, default=Path("desktop/build/spike-runtime"))
     parser.add_argument("--java", default="java")
     parser.add_argument("--ffmpeg", default=shutil.which("ffmpeg"))
+    parser.add_argument("--ffprobe", default=shutil.which("ffprobe"))
     parser.add_argument("--timeout", type=int, default=240)
     parser.add_argument("--gui-lock", type=Path, help="Optional POSIX GUI coordination lock; no default path")
     parser.add_argument("--wait-gui-seconds", type=float, default=0,
@@ -1025,6 +1047,8 @@ def main():
         parser.error("--wait-gui-seconds requires --gui-lock")
     if not args.ffmpeg:
         parser.error("FFmpeg is required to generate the original CC0 fixture")
+    if not args.ffprobe:
+        parser.error("FFprobe is required to measure the muxed CC0 subtitle timing")
     if args.work.exists() or args.evidence.exists():
         parser.error("Use fresh work and evidence directories; stale artifacts cannot pass")
     if args.work.resolve().is_relative_to(args.evidence.resolve()):
@@ -1036,6 +1060,11 @@ def main():
     try:
         manifest = generate_media(args.work / "media", args.ffmpeg)
         write_json(args.evidence / "media-license.json", manifest)
+        packets = subprocess.run([args.ffprobe, "-v", "error", "-select_streams", "s:0",
+                                  "-show_packets", "-show_entries", "packet=pts_time,duration_time",
+                                  "-of", "json", str(args.work / "media" / "source.mkv")],
+                                 capture_output=True, text=True, check=True, timeout=20)
+        write_json(args.evidence / "fixture-subtitle-timing.json", fixture_subtitle_timing(json.loads(packets.stdout)))
         with owned_server(args.work / "fixture", args.work / "media", args.ffmpeg) as (admin, media_base, provenance):
             try:
                 viewer, password, ids = provision(admin, media_base)
