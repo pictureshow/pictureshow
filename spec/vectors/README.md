@@ -439,3 +439,5 @@ The future-Unpause state trace retains its new command immediately even when Pla
 `sync-clock` operation `timeline-playing` takes command and appliedPlaying; Unpause is playing, Pause is paused, and Seek retains its applied mode across independent StateUpdate notifications. Expected is boolean. These cases complement the separate-event host deadline regression.
 
 Operation `scheduled-playing` in `sync-clock` takes intended (retained command authority) and current phase. Output is playing only for intended=true and phase=Playing. Waiting/Paused holds output without erasing pending authority. Command acceptance uses `timeline-playing` with current playing context; after application it uses the retained applied mode, never a fresh phase reinterpretation.
+
+A Paused barrier is distinct from Waiting: pending playing output waits in either phase without repeatedly applying position, retaining its original command authority until the barrier permits output. Host regression cases must emit the selected phase, not merely name it.

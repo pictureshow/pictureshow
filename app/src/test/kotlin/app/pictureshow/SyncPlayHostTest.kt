@@ -293,7 +293,7 @@ class SyncPlayHostTest {
                 rig.update(
                     "StateUpdate",
                     buildJsonObject {
-                        put("State", "Waiting")
+                        put("State", barrier)
                         put("Reason", "Buffering")
                     }
                 )
