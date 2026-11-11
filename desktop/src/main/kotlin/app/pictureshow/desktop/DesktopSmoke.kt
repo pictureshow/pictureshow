@@ -162,8 +162,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val first=c.state.value.playback!!.positionSeconds
         waitFor("advancing playback",30){(c.state.value.playback?.positionSeconds?:0.0)>first+3};checks["progress"]=true
         screenshot("06-player");screenshot("06b-player-minimum",listOf(800 to 600))
-        val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};checks["audio"]=true;screenshot("07-audio-selected")
-        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index};screenshot("08c-subtitles-on");click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};checks["subtitles"]=true
+        fun trackReceipt(name:String): DesktopSelectedTracks? = c.nativeTrackSelection().also { selected ->
+            selected?.let { File(out,"$name.json").writeText(buildJsonObject { put("audioId",it.audioId?.let(::JsonPrimitive) ?: JsonNull);put("subtitleId",it.subtitleId?.let(::JsonPrimitive) ?: JsonNull);put("subtitleText",it.subtitleText);put("subtitleVisible",it.subtitleVisible) }.toString()+"\n") }
+        }
+        val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
+        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
+        waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") }==true }
+        screenshot("08c-subtitles-on");click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)
         click("nav:library:${library.id}");ready(DesktopRoute.Library)

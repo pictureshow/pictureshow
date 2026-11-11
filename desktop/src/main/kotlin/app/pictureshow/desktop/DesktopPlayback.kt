@@ -41,9 +41,12 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun fullscreen(enabled: Boolean)
     fun viewport(topRatio: Double, bottomRatio: Double) {}
     fun viewportReceipt(): String? = null
+    fun selectedTracks(): DesktopSelectedTracks? = null
     fun selectAudio(index: Int): Boolean = false
     fun selectSubtitle(index: Int): Boolean = false
 }
+data class DesktopSelectedTracks(val audioId: Int?, val subtitleId: Int?, val subtitleText: String, val subtitleVisible: Boolean)
+
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
     val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false)
 
@@ -292,6 +295,10 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (!topRatio.isFinite() || !bottomRatio.isFinite() || topRatio < 0 || bottomRatio < 0 || topRatio + bottomRatio >= 1) return
         viewportMargins.set(topRatio to bottomRatio)
         applyViewport()
+    }
+    override fun selectedTracks(): DesktopSelectedTracks? {
+        val player=mpv ?: return null
+        return DesktopSelectedTracks(player.get("aid")?.toIntOrNull(),player.get("sid")?.toIntOrNull(),player.get("sub-text").orEmpty(),player.get("sub-visibility")=="yes")
     }
     override fun viewportReceipt(): String? {
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null

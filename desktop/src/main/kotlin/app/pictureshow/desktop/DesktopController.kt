@@ -440,6 +440,7 @@ class DesktopController(
     fun fullscreen(enabled: Boolean) { engine?.fullscreen(enabled) }
     fun videoViewport(topRatio: Double, bottomRatio: Double) { engine?.viewport(topRatio,bottomRatio) }
     fun videoViewportReceipt(): String? = engine?.viewportReceipt()
+    fun nativeTrackSelection(): DesktopSelectedTracks? = engine?.selectedTracks()
     fun pauseForBackground() {
         val active = engine ?: return
         if (mutable.value.route == DesktopRoute.Player && runCatching { !active.snapshot().paused }.getOrDefault(false)) {
