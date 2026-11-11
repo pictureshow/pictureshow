@@ -101,13 +101,17 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             if(name=="02b-sign-in-error" && w==1920) {
                 val username=DesktopUiProbe.bounds.getValue("username")
                 val passwordBounds=DesktopUiProbe.bounds.getValue("password")
+                val transform=window.graphicsConfiguration.defaultTransform
+                val scaleX=transform.scaleX
+                val scaleY=transform.scaleY
                 val pad=24
-                val left=(minOf(username.left,passwordBounds.left).toInt()-pad).coerceAtLeast(0)
-                val top=(minOf(username.top,passwordBounds.top).toInt()-pad).coerceAtLeast(0)
-                val right=(maxOf(username.right,passwordBounds.right).toInt()+pad).coerceAtMost(original.width)
-                val bottom=(maxOf(username.bottom,passwordBounds.bottom).toInt()+pad).coerceAtMost(original.height)
-                val crop=original.getSubimage(left,top,(right-left).coerceAtLeast(1),(bottom-top).coerceAtLeast(1))
-                val cropScale=900.0/crop.width.coerceAtLeast(crop.height)
+                val left=((minOf(username.left,passwordBounds.left).toDouble()/scaleX).roundToInt()-pad).coerceAtLeast(0)
+                val top=((minOf(username.top,passwordBounds.top).toDouble()/scaleY).roundToInt()-pad).coerceAtLeast(0)
+                val right=((maxOf(username.right,passwordBounds.right).toDouble()/scaleX).roundToInt()+pad).coerceAtMost(original.width)
+                val bottom=((maxOf(username.bottom,passwordBounds.bottom).toDouble()/scaleY).roundToInt()+pad).coerceAtMost(original.height)
+                check(right>left && bottom>top) { "Authentication crop is outside Robot image: rect=$left,$top,$right,$bottom image=${original.width}x${original.height} transform=${scaleX}x$scaleY" }
+                val crop=original.getSubimage(left,top,right-left,bottom-top)
+                val cropScale=(900.0/crop.width.coerceAtLeast(crop.height)).coerceAtMost(1.0)
                 val cropSmall=BufferedImage((crop.width*cropScale).roundToInt().coerceAtLeast(1),(crop.height*cropScale).roundToInt().coerceAtLeast(1),BufferedImage.TYPE_INT_RGB)
                 cropSmall.createGraphics().let { g->g.drawImage(crop,0,0,cropSmall.width,cropSmall.height,null);g.dispose() }
                 val cropFile=File(screens,"$name-${w}x${h}-crop-auth-fields.jpg")
@@ -115,9 +119,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 File(screens,"$name-${w}x${h}-crop-auth-fields.geometry.json").writeText(buildJsonObject {
                     put("source", "Robot BufferedImage before full-window resize")
                     put("originalWidth", original.width); put("originalHeight", original.height)
+                    put("defaultTransformScaleX", scaleX); put("defaultTransformScaleY", scaleY)
                     put("usernameBounds", buildJsonObject { put("left",username.left);put("top",username.top);put("right",username.right);put("bottom",username.bottom) })
                     put("passwordBounds", buildJsonObject { put("left",passwordBounds.left);put("top",passwordBounds.top);put("right",passwordBounds.right);put("bottom",passwordBounds.bottom) })
-                    put("crop", buildJsonObject { put("left",left);put("top",top);put("right",right);put("bottom",bottom);put("width",right-left);put("height",bottom-top) })
+                    put("crop", buildJsonObject { put("coordinateSpace", "Robot BufferedImage logical pixels");put("left",left);put("top",top);put("right",right);put("bottom",bottom);put("width",right-left);put("height",bottom-top) })
                     put("outputWidth",cropSmall.width);put("outputHeight",cropSmall.height);put("scale",cropScale)
                 }.toString()+"\n")
             }
@@ -256,7 +261,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key
-        click("remove:$removeKey");waitFor("removal dialog initially focuses Cancel") { DesktopUiProbe.focus["remove-cancel"]==true };screenshot("12b-remove-confirmation");key(KeyEvent.VK_TAB);waitFor("Tab focuses remove confirmation") { DesktopUiProbe.focus["remove-confirm"]==true };screenshot("12c-remove-confirm-focused");key(KeyEvent.VK_ESCAPE)
+        click("remove:$removeKey");waitFor("removal dialog initially focuses Cancel") { DesktopUiProbe.focus["remove-cancel"]==true };screenshot("12b-remove-confirmation");waitFor("Cancel remains focused after capture") { DesktopUiProbe.focus["remove-cancel"]==true }
+        key(KeyEvent.VK_LEFT);key(KeyEvent.VK_DOWN)
+        waitFor("arrows keep removal focus in modal") { DesktopUiProbe.focus["remove-cancel"]==true && DesktopUiProbe.bounds.containsKey("remove-cancel") && c.state.value.route==DesktopRoute.Accounts }
+        key(KeyEvent.VK_TAB);waitFor("Tab focuses remove confirmation") { DesktopUiProbe.focus["remove-confirm"]==true }
+        key(KeyEvent.VK_RIGHT);key(KeyEvent.VK_UP)
+        waitFor("arrows keep confirmation focus in modal") { DesktopUiProbe.focus["remove-confirm"]==true && DesktopUiProbe.bounds.containsKey("remove-confirm") && c.state.value.route==DesktopRoute.Accounts }
+        screenshot("12c-remove-confirm-focused");key(KeyEvent.VK_ESCAPE)
         waitFor("Escape dismisses removal without changing accounts") { !DesktopUiProbe.bounds.containsKey("remove-cancel") && c.state.value.route==DesktopRoute.Accounts && c.state.value.accounts.any{it.key==removeKey} }
         waitFor("removal dialog returns focus to opener") { DesktopUiProbe.focus["remove:$removeKey"]==true }
         // Voluntary sign-out is tested before the second authentication method.
@@ -273,7 +284,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val code=c.state.value.quickCode!!
         val temp=File(out,"quick-connect-request.tmp");temp.writeText("{\"code\":\"$code\"}\n");java.nio.file.Files.move(temp.toPath(),File(out,"quick-connect-request.json").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         screenshot("13-quick-connect");ready(DesktopRoute.Home);checks["quickConnect"]=true
-        click("shortcuts");waitFor("keyboard help focuses Close") { DesktopUiProbe.focus["help-close"]==true };screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
+        click("shortcuts");waitFor("keyboard help focuses Close") { DesktopUiProbe.focus["help-close"]==true }
+        key(KeyEvent.VK_LEFT);key(KeyEvent.VK_UP);key(KeyEvent.VK_RIGHT);key(KeyEvent.VK_DOWN)
+        waitFor("arrows keep keyboard help focus in modal") { DesktopUiProbe.focus["help-close"]==true && DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
+        screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
         waitFor("Escape dismisses keyboard help without navigating") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
         // Traverse real controls after the dialog restores its opener. A key
         // injection without observing focus is not keyboard-navigation evidence.
