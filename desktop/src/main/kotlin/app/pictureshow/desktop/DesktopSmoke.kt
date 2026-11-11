@@ -78,9 +78,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 window.focusTraversalPolicy.getDefaultComponent(window)?.requestFocusInWindow()
             }
             robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
-            Thread.sleep(900)
+            waitFor("requested ${w}x${h} window contained on its display",5) {
+                val observed=window.bounds
+                observed.width==w && observed.height==h && window.graphicsConfiguration.bounds.contains(observed)
+            }
+            Thread.sleep(400) // Allow the final native resize and Compose layout to paint.
             val bounds=window.bounds
-            check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested window is not fully visible on its display" }
+            check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested ${w}x${h} window not visible; actual=$bounds display=${window.graphicsConfiguration.bounds}" }
             val original=robot.createScreenCapture(bounds)
             val scale=900.0/original.width.coerceAtLeast(original.height)
             val small=BufferedImage((original.width*scale).roundToInt(),(original.height*scale).roundToInt(),BufferedImage.TYPE_INT_RGB)
