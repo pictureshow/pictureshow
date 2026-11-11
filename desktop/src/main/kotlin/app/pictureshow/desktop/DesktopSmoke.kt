@@ -45,7 +45,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         robot.mouseMove(x,y);robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
         Thread.sleep(220)
     }
-    fun key(code:Int) {robot.keyPress(code);robot.keyRelease(code)}
+    fun key(code:Int) {
+        if(code==KeyEvent.VK_ESCAPE || code==KeyEvent.VK_F11) {
+            val manager=java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+            println("SMOKE key=$code activeViewer=${manager.activeWindow===window} focusedViewer=${manager.focusedWindow===window} focusOwner=${manager.focusOwner?.javaClass?.simpleName} composeFocus=${DesktopUiProbe.focus.filterValues{it}.keys}")
+        }
+        robot.keyPress(code);robot.keyRelease(code)
+    }
     fun type(value:String) {
         value.forEach { ch ->
             val shifted = ch.isUpperCase() || ch in ":_?+!@#\"<>"

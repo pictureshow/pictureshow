@@ -60,7 +60,7 @@ private fun Modifier.focusOutline(): Modifier {
 }
 
 @Composable
-fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean) {
+fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit) {
     val state by controller.state.collectAsState()
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
@@ -91,12 +91,14 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     PictureshowTheme {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density * if (state.settings.largeInterface) 1.25f else 1f, density.fontScale)) {
-            Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)
-                .onPreviewKeyEvent { e ->
+            // Window shortcuts remain active when resize or pointer input clears a
+            // child's focus, and when focus is in the custom title bar.
+            SideEffect { windowKeys { e ->
                     if (e.type != KeyEventType.KeyDown) false
                     else when {
                         e.key == Key.F11 || (e.key == Key.Enter && e.isAltPressed) -> { onFullscreen(); true }
                         e.key == Key.Escape && help -> { help = false; true }
+                        e.key == Key.Escape && remove != null -> { remove = null; true }
                         e.key == Key.Escape && fullscreen -> { onFullscreen(); true }
                         e.key == Key.Escape -> { controller.back(); true }
                         state.route == DesktopRoute.Player && e.key == Key.Spacebar -> { controller.playerToggle(); true }
@@ -107,7 +109,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         }
                         else -> false
                     }
-                }) {
+            } }
+            Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
