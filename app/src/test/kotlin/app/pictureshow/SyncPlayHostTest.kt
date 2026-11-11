@@ -294,10 +294,15 @@ class SyncPlayHostTest {
     @Test fun diagnosticsLinkRequestsAuthorityBindingsAndApplicationsWithoutPrivateText() = runTest {
         val rig = Rig(this)
         rig.join()
-        rig.snapshot()
+        // Distinct private sentinel: "entry-a" also prefixes the fixed "trace-entry-ack" event name.
+        val privateEntry = "private-playlist-entry-731"
+        rig.joined()
+        rig.queue(entry = privateEntry)
+        runCurrent()
+        rig.preparedEntry()
         rig.host.transport("play")
         runCurrent()
-        rig.host.receive(rig.command("Pause", delayMs = 1_000, ticks = 55_000_000L, id = "secret-message"))
+        rig.host.receive(rig.command("Pause", delayMs = 1_000, ticks = 55_000_000L, id = "secret-message", entry = privateEntry))
         runCurrent()
         advanceTimeBy(1_000)
         runCurrent()
@@ -333,7 +338,7 @@ class SyncPlayHostTest {
         assertTrue(rig.diagnostics.any { it.startsWith("trace-lifecycle ") && it.contains("source=background") })
         assertTrue(rig.diagnostics.any { it.startsWith("trace-clock-reset ") && it.contains("reason=leave") })
         val text = rig.diagnostics.joinToString("\n")
-        listOf("https://", "media.example.test", "token-a", "Ana", "Bea", "Evening", "local-item", "entry-a", "secret-message")
+        listOf("https://", "media.example.test", "token-a", "Ana", "Bea", "Evening", "local-item", privateEntry, "secret-message")
             .forEach { assertFalse(text.contains(it), "private value leaked: $it") }
     }
 
