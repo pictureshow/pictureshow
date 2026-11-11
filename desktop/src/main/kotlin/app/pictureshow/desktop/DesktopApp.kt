@@ -49,6 +49,9 @@ fun Modifier.probe(tag: String): Modifier = composed {
     val scope = rememberCoroutineScope()
     DisposableEffect(tag) {
         DesktopUiProbe.owners.register(tag, owner) {
+            DesktopUiProbe.bounds.remove(tag)
+            DesktopUiProbe.focus[tag] = false
+            DesktopUiProbe.pageOfTag[tag] = page
             DesktopUiProbe.requestFocus[tag] = focusRequester
             DesktopUiProbe.reveal[tag] = { scope.launch { requester.bringIntoView() } }
         }

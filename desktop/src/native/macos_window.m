@@ -54,6 +54,10 @@ int ps_window_desktop_chrome(void *ptr) {
   w.backgroundColor=NSColor.clearColor;
   [w setFrame:frame display:YES];
   configured=(w.styleMask&NSWindowStyleMaskTitled)!=0;
+  for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) {
+   NSButton *button=[w standardWindowButton:kind.unsignedIntegerValue];
+   if(!button || button.hidden || button.superview.hidden) configured=0;
+  }
  });
  return configured;
 }

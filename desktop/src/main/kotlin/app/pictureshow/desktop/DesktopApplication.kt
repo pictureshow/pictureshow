@@ -54,6 +54,10 @@ fun desktopMain(args: Array<String>) {
                 window.minimumSize=Dimension(800,600)
                 if(com.sun.jna.Platform.isMac()) {
                     macChrome = runCatching { configureDesktopMacChrome() }.getOrElse { recordDesktopPlayerFailure("window-chrome", it); false }
+                    if(smoke) {
+                        java.io.File(args[4]).mkdirs()
+                        java.io.File(args[4], "window-chrome.json").writeText("{\"nativeMacChrome\":$macChrome}\n")
+                    }
                 }
                 controller.attachWindow(window)
                 controller.start()

@@ -107,6 +107,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     }
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
     try {
+        if(com.sun.jna.Platform.isMac()) check(File(out,"window-chrome.json").readText().contains("\"nativeMacChrome\":true")) { "Mac smoke requires visible standard window controls" }
         ready(DesktopRoute.Servers);screenshot("01-server")
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in")
         click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
@@ -189,8 +190,17 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         screenshot("13-quick-connect");ready(DesktopRoute.Home);checks["quickConnect"]=true
         click("shortcuts");screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
         waitFor("Escape dismisses keyboard help without navigating") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
-        // Native Tab and Escape must act on the same viewer window after authentication.
-        key(KeyEvent.VK_TAB);key(KeyEvent.VK_ESCAPE)
+        // Traverse real controls after the dialog restores its opener. A key
+        // injection without observing focus is not keyboard-navigation evidence.
+        waitFor("help opener focus restored") { DesktopUiProbe.focus["shortcuts"]==true }
+        key(KeyEvent.VK_TAB)
+        waitFor("Tab reaches fullscreen") { DesktopUiProbe.focus["fullscreen"]==true }
+        robot.keyPress(KeyEvent.VK_SHIFT);key(KeyEvent.VK_TAB);robot.keyRelease(KeyEvent.VK_SHIFT)
+        waitFor("Shift Tab restores shortcuts") { DesktopUiProbe.focus["shortcuts"]==true }
+        key(KeyEvent.VK_ENTER)
+        waitFor("Enter opens keyboard help") { DesktopUiProbe.bounds.containsKey("help-close") }
+        key(KeyEvent.VK_ESCAPE)
+        waitFor("keyboard help closes with Escape") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
         successful=checks.size==18&&checks.values.all{it}
         File(out,"app-smoke-result.json").writeText("{\"pass\":$successful,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         check(successful)
