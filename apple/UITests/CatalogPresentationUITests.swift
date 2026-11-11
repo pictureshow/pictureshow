@@ -131,23 +131,12 @@ final class CatalogPresentationUITests: XCTestCase {
             // yet have a focused element and currentSpeech can throw noSpeech.
             attachSpeech("132 VoiceOver enabled actual system state before first speech")
             #if os(iOS)
-            // A real single touch explores this visible control with VoiceOver
-            // enabled. It establishes reader focus without activating it. The
-            // speech below still comes solely from the OS service, and all
-            // subsequent backward/forward and selected-state checks remain.
+            // Keep the requested native target visible, but establish reader
+            // focus through the service itself. Enabled state alone does not
+            // prove a coordinate tap will route as exploration rather than
+            // activating the control. The bounded RunLoop poll below permits
+            // actual reader events to arrive without another input operation.
             XCTAssertTrue(anchor.exists && anchor.isHittable)
-            // A multiline native Toggle exposes a row-sized Switch containing
-            // its actual switch thumb. The row centre can land on descriptive
-            // text and explore the following footer instead of the control.
-            let nativeSwitches = anchor.descendants(matching: .switch)
-            let explorationTarget = anchor.elementType == .switch && nativeSwitches.count == 1
-                ? nativeSwitches.firstMatch : anchor
-            let valueBeforeExploration = anchor.value as? String
-            XCTAssertTrue(explorationTarget.exists && explorationTarget.isHittable)
-            XCTAssertTrue(anchor.frame.contains(explorationTarget.frame), "Explore only this control's contained native switch")
-            explorationTarget.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            XCTAssertTrue(anchor.exists, "Reader exploration must not activate or leave the current screen")
-            XCTAssertEqual(anchor.value as? String, valueBeforeExploration, "One reader exploration touch must not change the control's value")
             #endif
             var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
             if output == nil {

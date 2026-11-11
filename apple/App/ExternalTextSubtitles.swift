@@ -101,7 +101,10 @@ import PictureshowCore
                     self.attemptCount += 1
                     let data = try await self.fetch(asset.url)
                     try Task.checkCancellation()
-                    let parsed = try await Task.detached(priority: .utility) { try TextSubtitles.parse(data: data, format: asset.format) }.value
+                    // This is the selected track's visible caption work, not a
+                    // speculative preload. Keep parsing off the UI actor without
+                    // demoting delivery behind unrelated utility work.
+                    let parsed = try await Task.detached(priority: .userInitiated) { try TextSubtitles.parse(data: data, format: asset.format) }.value
                     guard self.revision == version else { return }
                     self.cues = parsed; self.loading = false; self.unavailable = false
                     self.emit("subtitle-loaded", asset: asset)
