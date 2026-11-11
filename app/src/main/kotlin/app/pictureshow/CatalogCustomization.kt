@@ -30,6 +30,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -184,20 +185,23 @@ private fun HomeSaveStatus(state: CatalogHomeState, retry: () -> Unit) {
     if (!usesTvInterface(LocalContext.current)) {
         val message = if (state.saving) "Saving layout…" else state.preferenceStatus
         if (message != null) {
-            Snackbar(action = {
-                if (state.preferenceRetryable && !state.saving) TextButton(retry, Modifier.testTag("home:retry-save")) { Text("Retry") }
-            }) {
-                Text(
-                    message,
-                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    color = if (state.preferenceRetryable &&
-                        !state.saving
-                    ) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.inverseOnSurface
+            val failed = state.preferenceRetryable && !state.saving
+            val foreground = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface
+            Snackbar(
+                modifier = Modifier.testTag("home:save-notice"),
+                containerColor = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface,
+                contentColor = foreground,
+                action = {
+                    if (failed) {
+                        TextButton(
+                            retry,
+                            Modifier.testTag("home:retry-save"),
+                            colors = ButtonDefaults.textButtonColors(contentColor = foreground)
+                        ) { Text("Retry") }
                     }
-                )
+                }
+            ) {
+                Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
         }
         return
@@ -929,9 +933,9 @@ internal fun NamedCatalogPicker(
                     initial + (if (selectAny != null) 2 else 1)
                 }
             )
+            keyboard?.hide()
             withFrameNanos { }
             if (hasChoice) choiceFocus.requestFocus() else first.requestFocus()
-            keyboard?.hide()
         }
     }
 }

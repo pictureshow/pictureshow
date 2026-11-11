@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -189,7 +190,7 @@ class TvSettingsComponentsTest {
         compose.setContent {
             PictureshowTheme {
                 val first = remember { FocusRequester() }
-                Column {
+                Column(Modifier.background(CatalogBackground)) {
                     TvSettingsActionRow(
                         "Find by name",
                         Modifier.focusRequester(first).testTag("search"),

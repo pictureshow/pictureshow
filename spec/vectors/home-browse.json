@@ -2169,6 +2169,36 @@
       "expected": {
         "personIds": "alice"
       }
+    },
+    {
+      "id": "remove-person-clears-id-and-display-name",
+      "operation": "library-filter-remove",
+      "input": {
+        "filters": {
+          "personId": "alice",
+          "personName": "Alice Marcolino",
+          "genre": "Animation"
+        },
+        "key": "person"
+      },
+      "expected": {
+        "genre": "Animation"
+      }
+    },
+    {
+      "id": "display-name-alone-does-not-count",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "personName": "Alice Marcolino"
+        },
+        "collectionType": "movies"
+      },
+      "expected": {
+        "keys": [],
+        "active": false,
+        "empty": "No movies match these filters"
+      }
     }
   ]
 }

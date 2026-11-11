@@ -11,6 +11,8 @@ import androidx.activity.ComponentDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -88,6 +91,46 @@ class CatalogCustomizationTest {
         compose.runOnIdle {
             val dialog = requireNotNull(ShadowDialog.getLatestDialog()) as ComponentDialog
             dialog.onBackPressedDispatcher.onBackPressed()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun failedSaveSnackbarTextContrastsWithItsActualContainer() {
+        val message = "Couldn't save to your server. Saved on this device."
+        compose.setContent {
+            TouchTheme {
+                HomeCustomization(
+                    CatalogHomeState(
+                        loading = false,
+                        preferenceStatus = message,
+                        preferenceRetryable = true
+                    ),
+                    account,
+                    service,
+                    {},
+                    {}
+                )
+            }
+        }
+        val bitmap = compose.onNodeWithTag("home:save-notice").captureToImage().asAndroidBitmap()
+        val frequencies = mutableMapOf<Int, Int>()
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                val color = bitmap.getPixel(x, y)
+                frequencies[color] = (frequencies[color] ?: 0) + 1
+            }
+        }
+        val container = frequencies.maxBy { it.value }.key
+        for (label in listOf(message, "Retry")) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithText(label, useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
+                it(layouts)
+            }
+            val foreground = layouts.single().layoutInput.style.color.toArgb()
+            val contrast = androidx.core.graphics.ColorUtils.calculateContrast(foreground, container)
+            assertTrue(contrast >= 4.5, "$label contrast against drawn container: $contrast")
         }
     }
 
@@ -286,7 +329,7 @@ class CatalogCustomizationTest {
             screen =
                 screen.copy(preferenceStatus = "Couldn’t save to your server. Saved on this device.", preferenceRetryable = true)
         }
-        compose.onNodeWithTag("home:retry-save").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("home:retry-save").assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle {
             assertTrue(retried)
             screen = screen.copy(preferenceStatus = null, preferenceRetryable = false, saving = true)

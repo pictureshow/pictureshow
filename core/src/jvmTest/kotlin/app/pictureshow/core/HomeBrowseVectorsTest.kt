@@ -35,6 +35,11 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "library-filter-remove" -> Json.encodeToJsonElement(
+                    Json.decodeFromJsonElement<LibraryFilters>(
+                        input.getValue("filters")
+                    ).withoutConstraint(input.getValue("key").jsonPrimitive.content)
+                )
                 "filter-constraint-label" -> Json.encodeToJsonElement(
                     Json.decodeFromJsonElement<LibraryFilters>(
                         input.getValue("filters")
