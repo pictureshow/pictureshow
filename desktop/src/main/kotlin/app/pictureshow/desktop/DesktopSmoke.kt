@@ -36,7 +36,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     fun ready(route:DesktopRoute) = waitFor(route.name) { c.state.value.route==route && !c.state.value.busy }
     fun click(tag:String) {
         waitFor("composed control $tag") { DesktopUiProbe.reveal.containsKey(tag) }
-        DesktopUiProbe.reveal[tag]?.invoke()
+        SwingUtilities.invokeAndWait { DesktopUiProbe.reveal[tag]?.invoke() }
         Thread.sleep(350)
         waitFor("control $tag") { DesktopUiProbe.bounds[tag]?.let{it.width>0&&it.height>0}==true }
         val b=DesktopUiProbe.bounds.getValue(tag)
@@ -214,9 +214,15 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             }.toString()+"\n") }
         }
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
-        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
+        val sub=c.state.value.playback!!.subtitleTracks.first()
+        val deliveryUrl=requireNotNull(sub.deliveryUrl) { "Fixture subtitle has no negotiated full-text delivery URL" }
+        check(sub.deliveryMethod==app.pictureshow.core.playback.SubtitleDeliveryMethod.External) { "Fixture subtitle was not negotiated as external delivery" }
+        val sameOrigin=app.pictureshow.core.playback.PlayDecisions.isSameOrigin(c.state.value.account!!.server, app.pictureshow.core.playback.PlayDecisions.resolve(c.state.value.account!!.server,deliveryUrl))
+        check(sameOrigin) { "Fixture subtitle delivery left the server origin" }
+        File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",sub.deliveryMethod!!.name);put("sourceFileIsExternal",sub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
+        click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
         waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
-                it.subtitleCodec in setOf("srt", "subrip") &&
+                it.subtitleCodec in setOf("srt", "subrip", "webvtt", "ass", "ssa") &&
                 it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
                 it.positionSeconds?.let { position -> position>=0.0 && position<180.0 }==true &&
                 it.initialSubtitleIndex in setOf(-1, sub.index) }==true }
@@ -310,8 +316,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         if(c.state.value.detail?.isWatched!=true) { click("watched");waitFor("watched server state") { c.state.value.detail?.isWatched==true } }
         if(c.state.value.detail?.userData?.isFavorite!=true) { click("favorite");waitFor("favorite server state") { c.state.value.detail?.userData?.isFavorite==true } }
         screenshot("15-detail-selected-states")
-        DesktopUiProbe.requestFocus["watched"]?.requestFocus();waitFor("watched toggle keyboard focus"){DesktopUiProbe.focus["watched"]==true};screenshot("15c-watched-keyboard-focus",listOf(1280 to 800))
-        DesktopUiProbe.requestFocus["favorite"]?.requestFocus();waitFor("favorite toggle keyboard focus"){DesktopUiProbe.focus["favorite"]==true};screenshot("15d-favorite-keyboard-focus",listOf(1280 to 800))
+        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["watched"]?.requestFocus() };waitFor("watched toggle keyboard focus"){DesktopUiProbe.focus["watched"]==true};screenshot("15c-watched-keyboard-focus",listOf(1280 to 800))
+        SwingUtilities.invokeAndWait { DesktopUiProbe.requestFocus["favorite"]?.requestFocus() };waitFor("favorite toggle keyboard focus"){DesktopUiProbe.focus["favorite"]==true};screenshot("15d-favorite-keyboard-focus",listOf(1280 to 800))
         screenshot("15b-favorite-tooltip",hoverTag="favorite")
         click("watched");waitFor("unwatched server state") { c.state.value.detail?.isWatched==false }
         click("favorite");waitFor("unfavorite server state") { c.state.value.detail?.userData?.isFavorite==false }
