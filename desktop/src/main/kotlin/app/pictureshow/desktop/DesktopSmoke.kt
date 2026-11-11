@@ -30,7 +30,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     var nativeCloseRequested=false
     fun waitFor(label:String,seconds:Long=45,predicate:()->Boolean) {
         val until=System.nanoTime()+seconds*1_000_000_000L
-        while(!predicate()) { check(System.nanoTime()<until) { "SMOKE timed out: $label; route=${c.state.value.route}; busy=${c.state.value.busy}; error=${c.state.value.error != null}; window=${window.bounds}; display=${window.graphicsConfiguration.bounds}" };Thread.sleep(60) }
+        while(!predicate()) { check(System.nanoTime()<until) { "SMOKE timed out: $label; route=${c.state.value.route}; busy=${c.state.value.busy}; error=${c.state.value.error != null}; window=${window.bounds}; stateSize=${windowState.size}; display=${window.graphicsConfiguration.bounds}" };Thread.sleep(60) }
         Thread.sleep(250)
     }
     fun ready(route:DesktopRoute) = waitFor(route.name) { c.state.value.route==route && !c.state.value.busy }
@@ -73,8 +73,14 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 val wantedY=System.getenv("PICTURESHOW_SMOKE_WINDOW_Y")?.toInt() ?: window.y
                 val display=java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }.firstOrNull { it.contains(wantedX,wantedY) } ?: window.graphicsConfiguration.bounds
                 check(display.width>=w && display.height>=h) { "Smoke needs a display at least ${w}x${h}; got ${display.width}x${display.height}" }
-                windowState.position=WindowPosition.Absolute((display.x+minOf(100,display.width-w)).dp,(display.y+minOf(60,display.height-h)).dp)
-                windowState.size=DpSize(w.dp,h.dp);window.toFront()
+                val targetX=display.x+minOf(100,display.width-w)
+                val targetY=display.y+minOf(60,display.height-h)
+                windowState.position=WindowPosition.Absolute(targetX.dp,targetY.dp)
+                windowState.size=DpSize(w.dp,h.dp)
+                // Drive the native resize on the EDT as a real window-manager
+                // resize does; do not rely only on declarative state propagation.
+                window.setBounds(targetX,targetY,w,h)
+                window.toFront()
                 window.focusTraversalPolicy.getDefaultComponent(window)?.requestFocusInWindow()
             }
             robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
@@ -129,7 +135,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             File(screens,"$name-${w}x${h}.geometry.txt").writeText("requested=${w}x${h}\nactual=${bounds.width}x${bounds.height}\n$geometry\n")
             File(screens,"index.md").appendText("- [$name · ${w}×${h}](${target.name}) — actual window ${bounds.width}×${bounds.height}, reader off.\n")
         }
-        SwingUtilities.invokeAndWait {windowState.size=DpSize(1280.dp,800.dp)}
+        SwingUtilities.invokeAndWait {windowState.size=DpSize(1280.dp,800.dp);window.setSize(1280,800)}
         waitFor("restore standard window after capture",5) { window.width==1280 && window.height==800 }
     }
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
