@@ -26,7 +26,7 @@ fun desktopMain(args: Array<String>) {
     if(smoke) require(args.size == 5) { "Usage: app-smoke SERVER USER PASSWORD EVIDENCE" }
     val controller = DesktopController()
     application {
-        val state = rememberWindowState(width=1280.dp,height=800.dp)
+        val state = rememberWindowState(width=1280.dp,height=800.dp,position=if(smoke && System.getenv("PICTURESHOW_SMOKE_WINDOW_X")!=null) WindowPosition.Absolute(System.getenv("PICTURESHOW_SMOKE_WINDOW_X").toInt().dp,(System.getenv("PICTURESHOW_SMOKE_WINDOW_Y") ?: "0").toInt().dp) else WindowPosition.PlatformDefault)
         var closing by remember { mutableStateOf(false) }
         var full by remember { mutableStateOf(false) }
         var restore by remember { mutableStateOf<java.awt.Rectangle?>(null) }

@@ -59,10 +59,19 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     }
     fun screenshot(name:String) {
         for((w,h) in listOf(1280 to 800,1920 to 1080)) {
-            SwingUtilities.invokeAndWait { if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); windowState.position=WindowPosition.Absolute(100.dp,60.dp);windowState.size=DpSize(w.dp,h.dp);window.toFront();window.requestFocus() }
+            SwingUtilities.invokeAndWait {
+                if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
+                val wantedX=System.getenv("PICTURESHOW_SMOKE_WINDOW_X")?.toInt() ?: window.x
+                val wantedY=System.getenv("PICTURESHOW_SMOKE_WINDOW_Y")?.toInt() ?: window.y
+                val display=java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }.firstOrNull { it.contains(wantedX,wantedY) } ?: window.graphicsConfiguration.bounds
+                check(display.width>=w && display.height>=h) { "Smoke needs a display at least ${w}x${h}; got ${display.width}x${display.height}" }
+                windowState.position=WindowPosition.Absolute((display.x+minOf(100,display.width-w)).dp,(display.y+minOf(60,display.height-h)).dp)
+                windowState.size=DpSize(w.dp,h.dp);window.toFront();window.requestFocus()
+            }
             robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
             Thread.sleep(900)
             val bounds=window.bounds
+            check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested window is not fully visible on its display" }
             val original=robot.createScreenCapture(bounds)
             val scale=900.0/original.width.coerceAtLeast(original.height)
             val small=BufferedImage((original.width*scale).roundToInt(),(original.height*scale).roundToInt(),BufferedImage.TYPE_INT_RGB)
@@ -179,6 +188,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         println("SMOKE all 18 viewer flows passed")
     } catch(error:Throwable) {
         File(out,"app-smoke-result.json").writeText("{\"pass\":false,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
+        runCatching { screenshot("99-failure") }
         System.err.println("SMOKE ${error.message}")
     } finally {
         SwingUtilities.invokeLater{close()}

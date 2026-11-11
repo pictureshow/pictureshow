@@ -102,7 +102,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         state.route == DesktopRoute.Player && e.key == Key.Spacebar -> { controller.playerToggle(); true }
                         state.route == DesktopRoute.Player && e.key == Key.DirectionLeft && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) - 10); true }
                         state.route == DesktopRoute.Player && e.key == Key.DirectionRight && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) + 10); true }
-                        state.route !in listOf(DesktopRoute.Servers, DesktopRoute.SignIn, DesktopRoute.Player) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> {
+                        state.route in listOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> {
                             focus.moveFocus(when(e.key) { Key.DirectionLeft -> FocusDirection.Left; Key.DirectionRight -> FocusDirection.Right; Key.DirectionUp -> FocusDirection.Up; else -> FocusDirection.Down }); true
                         }
                         else -> false
@@ -192,6 +192,7 @@ private fun FormPage(title: String, subtitle: String, content: @Composable Colum
 }
 @Composable
 private fun ServerPage(state: DesktopState, c: DesktopController) {
+    LaunchedEffect(Unit) { c.discover() }
     var address by remember { mutableStateOf("") }
     FormPage("Your library, on your desktop", "Connect to your Jellyfin server to start watching.") {
         OutlinedTextField(address, { address = it }, label = { Text("Server address") }, placeholder = { Text("https://jellyfin.example.org") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("server-address"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if(address.isNotBlank()) c.connect(address) }))
@@ -261,16 +262,16 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
     LazyColumn(Modifier.fillMaxSize().probe("detail"), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.Top) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 CatalogArtwork(item,account,false,Modifier.width(180.dp).height(270.dp))
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                     CatalogHeading(item.name)
                     Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier=Modifier.heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
                         if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.probe("play-start")) { Text("Play from start") }
                     }
-                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected=item.isWatched,onClick=c::toggleWatched,label={Text(if(item.isWatched) "Mark unwatched" else "Mark watched")},modifier=Modifier.probe("watched"))
                         FilterChip(selected=item.userData.isFavorite,onClick=c::toggleFavorite,label={Text(if(item.userData.isFavorite) "Remove favorite" else "Favorite")},modifier=Modifier.probe("favorite"))
                     }
@@ -311,14 +312,13 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     Slider(value=p.positionSeconds.toFloat().coerceIn(0f,p.durationSeconds.coerceAtLeast(1.0).toFloat()),onValueChange={c.seek(it.toDouble())},valueRange=0f..p.durationSeconds.coerceAtLeast(1.0).toFloat(),modifier=Modifier.weight(1f).probe("seek").semantics { contentDescription="Playback position" })
                     Text(clock(p.durationSeconds),Modifier.width(60.dp))
                 }
-                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Button(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Text(if(p.paused) "Play" else "Pause") }
                     TextButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Text("−10 s") }
                     TextButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Text("+10 s") }
                     Choice("Audio",p.audioTracks.map{it.index to trackLabel(it)},p.audioIndex,"audio",c::selectAudio)
                     Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.map{it.index to trackLabel(it)},p.subtitleIndex,"subtitles",c::selectSubtitle)
                     if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.probe("next-episode")) { Text("Next episode") }
-                    Spacer(Modifier.weight(1f))
                     TextButton(onClick=fullscreen) { Text("Fullscreen") }
                     OutlinedButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Text("Stop") }
                 }
@@ -353,7 +353,7 @@ private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,o
 private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick={expanded=true},modifier=Modifier.probe(tag)) { Text("$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis) }
+        OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=260.dp).probe(tag)) { Text("$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis) }
         DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.probe("$tag:$key")) } }
     }
 }
