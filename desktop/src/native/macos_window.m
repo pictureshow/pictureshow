@@ -61,11 +61,17 @@ int ps_window_desktop_chrome(void *ptr) {
     button.target=w;
     button.action=NSSelectorFromString(actions[i]);
     [content addSubview:button positioned:NSWindowAbove relativeTo:nil];
+    button.translatesAutoresizingMaskIntoConstraints=NO;
+    [NSLayoutConstraint activateConstraints:@[
+     [button.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:14+i*20],
+     [button.topAnchor constraintEqualToAnchor:content.topAnchor constant:19],
+     [button.widthAnchor constraintEqualToConstant:14],
+     [button.heightAnchor constraintEqualToConstant:14]
+    ]];
    }
-   button.frame=NSMakeRect(14+i*20,content.bounds.size.height-33,14,14);
-   button.autoresizingMask=NSViewMinYMargin;
    if(!button || button.hidden || button.superview.hidden) configured=0;
   }
+  [content layoutSubtreeIfNeeded];
  });
  return configured;
 }
