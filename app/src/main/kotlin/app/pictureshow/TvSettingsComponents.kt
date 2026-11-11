@@ -6,8 +6,8 @@ package app.pictureshow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.LocalContentColor
@@ -224,14 +226,45 @@ internal fun TvSettingsRow(
     supportingText: String?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    selected: Boolean = false,
+    selected: Boolean? = null,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
+    var focused by remember { mutableStateOf(false) }
     val supportingColor = if (focused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    if (selected == null) {
+        // tv-material1.1 ListItem always adds Selected semantics. Commands and value openers
+        // use its non-selectable Surface primitive, retaining the same shared row layout.
+        val shape = RoundedCornerShape(8.dp)
+        androidx.tv.material3.Surface(
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .onFocusChanged { focused = it.isFocused }
+                .semantics(mergeDescendants = true) { role = Role.Button }
+                .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, shape) else Modifier),
+            enabled = enabled,
+            interactionSource = interaction,
+            shape = ClickableSurfaceDefaults.shape(shape),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                leading?.invoke()
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.bodyLarge)
+                    supportingText?.let { Text(it, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
+                }
+                trailing?.invoke()
+            }
+        }
+        return
+    }
     ListItem(
         selected, onClick,
         headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
@@ -244,7 +277,7 @@ internal fun TvSettingsRow(
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).onFocusChanged { focused = it.isFocused },
         enabled = enabled,
         scale = ListItemDefaults.scale(focusedScale = 1f),
         interactionSource = interaction

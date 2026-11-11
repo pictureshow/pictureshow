@@ -146,6 +146,29 @@ class TvSettingsComponentsTest {
         compose.runOnIdle { assertEquals(1, actions) }
     }
 
+    @Test fun commandAndValueRowsDoNotExposeASelectionState() {
+        compose.setContent {
+            MaterialTheme {
+                val first = remember { FocusRequester() }
+                Column {
+                    TvSettingsActionRow("Unpin", Modifier.focusRequester(first).testTag("command")) {}
+                    TvSettingsValueRow("Genre", "Any", Modifier.testTag("value")) {}
+                }
+                LaunchedEffect(Unit) { first.requestFocus() }
+            }
+        }
+        for (tag in listOf("command", "value")) {
+            compose.onNodeWithTag(tag).assert(
+                SemanticsMatcher("Commands have no selected or toggle state") {
+                    !it.config.contains(SemanticsProperties.Selected) && !it.config.contains(SemanticsProperties.ToggleableState)
+                }
+            ).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        }
+        compose.onNodeWithTag("command").assertIsFocused()
+        key("command", Key.DirectionDown)
+        compose.onNodeWithTag("value").assertIsFocused()
+    }
+
     @Test fun longPickerArrivesAtCurrentOffscreenValueWithReadableSupportingText() {
         compose.setContent {
             MaterialTheme {
