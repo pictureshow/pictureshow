@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ctypes
+import functools
 import hashlib
 import json
 import math
@@ -494,6 +496,63 @@ def provision(api: API, media_base: str):
     return viewer_api, password, {"movieId": movie["Id"], "archiveMovieId": archive["Id"], "episodeIds": [item["Id"] for item in sorted(episodes, key=lambda item: item.get("IndexNumber", 0))], "userId": user_id}
 
 
+class MacProcessInfo(ctypes.Structure):
+    # Public proc_bsdshortinfo from the macOS SDK sys/proc_info.h. No argv/path.
+    _fields_ = [(name, ctypes.c_uint32) for name in ("pid", "ppid", "pgid", "status")]
+    _fields_ += [("comm", ctypes.c_char * 16)]
+    _fields_ += [(name, ctypes.c_uint32) for name in ("flags", "uid", "gid", "ruid", "rgid", "svuid", "svgid", "reserved")]
+
+
+@functools.lru_cache(maxsize=1)
+def mac_process_library():
+    library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    library.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+    library.proc_listpids.restype = ctypes.c_int
+    library.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    library.proc_pidinfo.restype = ctypes.c_int
+    return library
+
+
+def mac_encoder_process_count(server_pid: int) -> int:
+    """Walk only the owned PID tree through libproc; never launch ps or read argv."""
+    library = mac_process_library()
+    pending, seen, count = [server_pid], set(), 0
+    while pending:
+        parent = pending.pop()
+        if parent in seen:
+            continue
+        seen.add(parent)
+        if len(seen) > 4096:
+            raise RuntimeError("Owned fixture process tree exceeded observation bound")
+        required = library.proc_listpids(6, parent, None, 0)  # PROC_PPID_ONLY; byte count.
+        if required < 0:
+            raise RuntimeError("Owned fixture child PID enumeration failed")
+        for attempt in range(3):
+            size = max(32, required // ctypes.sizeof(ctypes.c_int) + 32) * (2 ** attempt)
+            children = (ctypes.c_int * size)()
+            used = library.proc_listpids(6, parent, children, ctypes.sizeof(children))
+            if used < 0:
+                raise RuntimeError("Owned fixture child PID enumeration failed")
+            if used < ctypes.sizeof(children):
+                break
+        else:
+            raise RuntimeError("Owned fixture child PID enumeration was truncated")
+        for pid in children[:used // ctypes.sizeof(ctypes.c_int)]:
+            info = MacProcessInfo()
+            ctypes.set_errno(0)
+            received = library.proc_pidinfo(pid, 13, 0, ctypes.byref(info), ctypes.sizeof(info))
+            if received != ctypes.sizeof(info):
+                if received == 0 and ctypes.get_errno() in (2, 3):
+                    continue  # A short-lived child exited between the two snapshots.
+                raise RuntimeError("Owned fixture process identity observation failed")
+            if info.pid != pid or info.ppid != parent:
+                continue  # PID reuse/reparenting must not attribute another tree.
+            pending.append(pid)
+            if info.comm.lower() == b"ffmpeg":
+                count += 1
+    return count
+
+
 def encoding_process_count(api: API) -> int:
     """Inspect only the owned server tree/container, never command arguments."""
     if api.fixture_container is not None:
@@ -503,6 +562,8 @@ def encoding_process_count(api: API) -> int:
         return sum(Path(fields[1]).name.lower() in ("ffmpeg", "ffmpeg.exe")
                    for line in rows.splitlines() if len(fields := line.split(None, 1)) == 2)
     server_pid = api.fixture_process.pid
+    if platform.system() == "Darwin":
+        return mac_encoder_process_count(server_pid)
     if platform.system() == "Windows":
         command = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress"
         records = json.loads(subprocess.check_output(["pwsh", "-NoProfile", "-Command", command], text=True, timeout=10))
@@ -536,6 +597,7 @@ class EncoderObserver:
         self.stopping = threading.Event()
         self.process = None
         self.thread = None
+        self.snapshot_stats = {"backend": "libproc" if platform.system() == "Darwin" and api.fixture_container is None else "process-list", "count": 0, "maxDurationMs": 0.0}
 
     def start(self):
         if platform.system() == "Windows" and self.api.fixture_container is None:
@@ -575,7 +637,11 @@ while ($true) {{
     def _portable(self):
         try:
             while not self.stopping.is_set():
-                self._record(encoding_process_count(self.api))
+                started = time.monotonic()
+                count = encoding_process_count(self.api)
+                self.snapshot_stats["count"] += 1
+                self.snapshot_stats["maxDurationMs"] = round(max(self.snapshot_stats["maxDurationMs"], (time.monotonic() - started) * 1000), 3)
+                self._record(count)
                 self.stopping.wait(.1)
         except Exception as error:
             self.error = type(error).__name__
@@ -682,11 +748,16 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                 raw_output, password, viewer.token), encoding="utf-8")
             uncaught = uncaught_app_exceptions(raw_output)
             write_json(evidence / "uncaught-app-exceptions.json", {"exceptions": uncaught})
+            native_receipt = Path(environment["PICTURESHOW_DATA_DIR"]) / "playback" / "native-surface.json"
+            if native_receipt.exists():
+                # Native metadata only: renderer/format/geometry/counters, no media URL.
+                write_json(evidence / "playback" / "native-surface.json", json.loads(native_receipt.read_text(encoding="utf-8")))
             # Keep the independent observations even when the app fails before
             # its receipt. A failure must not discard the only server evidence.
             write_json(evidence / "server-session-observations.json", {"samples": samples,
                                                                       "encoderSamples": observer.samples,
                                                                       "encoderObserverError": observer.error,
+                                                                      "encoderSnapshotStats": observer.snapshot_stats,
                                                                       "cleanup": None,
                                                                       "quickConnectApproved": bool(qc_codes)})
     cleanup_deadline = time.monotonic() + 20
@@ -701,6 +772,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
         time.sleep(.5)
     write_json(evidence / "server-session-observations.json", {"samples": samples, "encoderSamples": observer.samples,
                                                               "encoderObserverError": observer.error,
+                                                              "encoderSnapshotStats": observer.snapshot_stats,
                                                               "cleanup": cleanup, "quickConnectApproved": bool(qc_codes)})
     receipt_path = evidence / "app-smoke-result.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))

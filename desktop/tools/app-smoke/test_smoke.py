@@ -91,6 +91,49 @@ class UncaughtExceptionVerdictTest(unittest.TestCase):
         smoke.require_no_uncaught_exceptions(exceptions)
 
 
+class MacEncoderProcessTest(unittest.TestCase):
+    def library(self, inaccessible=False):
+        class Library:
+            children = {123: [201, 202], 201: [203], 999: [204]}
+            records = {201: (123, b'ffmpeg'), 202: (123, b'ffprobe'),
+                       203: (201, b'ffmpeg'), 204: (999, b'ffmpeg')}
+
+            def proc_listpids(self, kind, parent, buffer, size):
+                assert kind == 6
+                rows = self.children.get(parent, [])
+                if buffer is not None:
+                    for index, pid in enumerate(rows):
+                        buffer[index] = pid
+                return len(rows) * smoke.ctypes.sizeof(smoke.ctypes.c_int)
+
+            def proc_pidinfo(self, pid, flavor, arg, pointer, size):
+                assert flavor == 13 and size == 64
+                if inaccessible:
+                    smoke.ctypes.set_errno(1)
+                    return 0
+                info = pointer._obj
+                info.pid = pid
+                info.ppid, info.comm = self.records[pid]
+                return size
+        return Library()
+
+    def test_owned_tree_counts_real_names_and_excludes_other_processes(self):
+        with patch.object(smoke, 'mac_process_library', return_value=self.library()):
+            self.assertEqual(2, smoke.mac_encoder_process_count(123))
+
+    def test_inaccessible_owned_process_cannot_invent_zero_encoders(self):
+        with patch.object(smoke, 'mac_process_library', return_value=self.library(inaccessible=True)):
+            with self.assertRaisesRegex(RuntimeError, 'identity observation failed'):
+                smoke.mac_encoder_process_count(123)
+
+    def test_truncated_process_list_cannot_invent_zero_encoders(self):
+        library = self.library()
+        library.proc_listpids = lambda kind, parent, buffer, size: size if buffer is not None else 4
+        with patch.object(smoke, 'mac_process_library', return_value=library):
+            with self.assertRaisesRegex(RuntimeError, 'truncated'):
+                smoke.mac_encoder_process_count(123)
+
+
 class SmokeVerdictTest(unittest.TestCase):
     def receipt(self):
         return {"pass": True, "checks": dict.fromkeys(smoke.REQUIRED_CHECKS, True)}
