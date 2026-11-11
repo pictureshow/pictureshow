@@ -303,10 +303,10 @@ internal fun TouchChoiceOptions(panel: TouchChoicePanel, onSelected: (Int) -> Un
                 onClick = { onSelected(index) },
                 alignToFirstLine = note != null
             ) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).then(if (note != null) Modifier.alignBy(TouchRadioLabelCenter) else Modifier)) {
                     Text(
                         panel.labels[index],
-                        modifier = Modifier.testTag("touch:choice-label:$index"),
+                        modifier = Modifier.testTag("touch:choice-label:$index").touchRadioLabelCenter(),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )

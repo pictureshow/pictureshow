@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
@@ -40,6 +39,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.HorizontalAlignmentLine
+import androidx.compose.ui.layout.LastBaseline
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -253,6 +256,19 @@ internal fun TouchSwitchRow(title: String, caption: String?, checked: Boolean, t
     }
 }
 
+/** The measured first label line, propagated through its column to the radio row. */
+internal val TouchRadioLabelCenter = HorizontalAlignmentLine { old, new -> minOf(old, new) }
+
+internal fun Modifier.touchRadioLabelCenter(): Modifier = layout { measurable, constraints ->
+    val label = measurable.measure(constraints)
+    // Removing the span between first and last baselines leaves one measured line,
+    // including the font's actual outer padding even when the label wraps.
+    val lineHeight = label.height - (label[LastBaseline] - label[FirstBaseline])
+    layout(label.width, label.height, mapOf(TouchRadioLabelCenter to lineHeight / 2)) {
+        label.placeRelative(0, 0)
+    }
+}
+
 /**
  * The one choice row, in sheets and dialogs: a ring on the content's left edge, plain text, and no button colour or
  * padding leaking in. [content] is the label, and may lead with a thumbnail. The ring's box carries 2 dp of its own.
@@ -284,8 +300,7 @@ internal fun TouchRadioRow(
             )
         }
         if (alignToFirstLine) {
-            val lineHeight = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.lineHeight.toDp() }
-            Box(Modifier.height(lineHeight), contentAlignment = Alignment.Center) { radio() }
+            Box(Modifier.alignBy { it.measuredHeight / 2 }) { radio() }
         } else {
             radio()
         }

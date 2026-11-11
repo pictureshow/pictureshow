@@ -61,10 +61,10 @@ internal fun PlayerQualityMenu(
                         },
                         alignToFirstLine = note != null
                     ) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f).then(if (note != null) Modifier.alignBy(TouchRadioLabelCenter) else Modifier)) {
                             Text(
                                 PlaybackQualityPresentation.choiceLabel(choice),
-                                modifier = Modifier.testTag("player:quality-label:${choice ?: "auto"}"),
+                                modifier = Modifier.testTag("player:quality-label:${choice ?: "auto"}").touchRadioLabelCenter(),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
