@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,16 @@ class LiveScheduleRefreshUiTest {
         val channel = compose.onNodeWithText("Test B", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val range = compose.onNodeWithTag("live:schedule:range:t", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(range.left >= channel.right && range.left - channel.right <= 1.dp, "Range follows the channel without a weighted void")
+        val channelLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Test B", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(channelLayouts) }
+        val channelLayout = channelLayouts.single()
+        val channelTextRight = channel.left +
+            (channel.right - channel.left) * (channelLayout.getLineRight(0) / channelLayout.size.width)
+        assertTrue(
+            range.left - channelTextRight in 0.dp..1.dp,
+            "The range follows the actual short channel text, without empty width inside its node: $channelTextRight / $range"
+        )
         assertEquals(channel.top, range.top)
         assertTrue(range.bottom - range.top <= 24.dp, "The complete range stays on one line")
     }

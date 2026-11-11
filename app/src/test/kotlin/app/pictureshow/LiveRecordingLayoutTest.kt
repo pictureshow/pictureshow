@@ -7,8 +7,12 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -28,6 +32,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import app.pictureshow.core.livetv.LivePolicy
+import coil3.asImage
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
@@ -57,6 +62,45 @@ class LiveRecordingLayoutTest {
         overview = "An original generated recording description."
     )
 
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+    @Test
+    fun squareHorizontalItemsRetainThePlatformScrollPolicy() {
+        val platform = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = 17f
+        }
+        val focus = LiveRecordingFocus(platform, 8f, 12f)
+        var horizontal: androidx.compose.foundation.gestures.BringIntoViewSpec? = null
+        compose.setContent {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier.fillMaxSize().onGloballyPositioned(focus::onViewportPositioned)
+            ) {
+                androidx.compose.foundation.layout.Column(
+                    androidx.compose.ui.Modifier.padding(top = 80.dp).onGloballyPositioned { focus.onShelfPositioned("s", it) }
+                ) {
+                    androidx.compose.foundation.layout.Box(
+                        androidx.compose.ui.Modifier.size(20.dp).onSizeChanged { focus.onHeadingSize("s", it.height) }
+                    )
+                    focus.HorizontalContent {
+                        val current = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+                        androidx.compose.runtime.SideEffect { horizontal = current }
+                        androidx.compose.foundation.layout.Box(
+                            androidx.compose.ui.Modifier.size(240.dp).onGloballyPositioned { focus.onCardPositioned("r", it) }
+                        )
+                    }
+                }
+            }
+        }
+        compose.runOnIdle {
+            focus.onCardFocused("s", "r")
+            val expected = platform.calculateScrollDistance(0f, 240f, 900f)
+            assertTrue(
+                focus.verticalSpec.calculateScrollDistance(0f, 240f, 900f) != expected,
+                "Square measured items exercise the dimension collision instead of the vertical fallback"
+            )
+            assertEquals(expected, horizontal!!.calculateScrollDistance(0f, 240f, 900f))
+        }
+    }
+
     @Test fun dpadDownRevealsEachRecordingShelfHeadingIncludingTheLastShelf() {
         val fake = LiveFake().apply {
             recordingRows = (1..3).map { index ->
@@ -85,18 +129,48 @@ class LiveRecordingLayoutTest {
         }
     }
 
-    @Test fun recordingBackdropUsesTheViewportAndLeavesOrdinaryDetailsAlone() {
-        compose.setContent {
-            PictureshowTheme {
-                CatalogDetail(CatalogDetailState(account, recording, loading = false), {}, {}, {}, {}, {}, recordingContext = true)
+    @OptIn(coil3.annotation.DelicateCoilApi::class)
+    @Test
+    fun recordingBackdropUsesTheViewportAndLeavesOrdinaryDetailsAlone() {
+        val image = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
+        image.eraseColor(android.graphics.Color.RED)
+        val loader = coil3.ImageLoader.Builder(compose.activity).components {
+            add(coil3.intercept.Interceptor { chain -> coil3.request.SuccessResult(image.asImage(), chain.request) })
+        }.build()
+        coil3.SingletonImageLoader.setUnsafe(loader)
+        try {
+            compose.setContent {
+                PictureshowTheme {
+                    CatalogDetail(
+                        CatalogDetailState(account, recording.copy(imageTags = mapOf("Primary" to "generated")), loading = false),
+                        {},
+                        {},
+                        {},
+                        {},
+                        {},
+                        recordingContext = true
+                    )
+                }
             }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+            val viewport = compose.onRoot().getUnclippedBoundsInRoot()
+            val backdrop = compose.onNodeWithTag("detail:recording-backdrop", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertEquals(viewport.left, backdrop.left)
+            assertEquals(viewport.right, backdrop.right)
+            assertEquals(viewport.top, backdrop.top, "A recording backdrop belongs to the viewport, not the padded action body")
+            assertTrue(kotlin.math.abs((backdrop.bottom - backdrop.top).value - (viewport.bottom - viewport.top).value * .64f) <= 1f)
+            val pixels = compose.onRoot().captureToImage().toPixelMap()
+            val visibleArt = pixels[900, 20]
+            assertTrue(
+                visibleArt.red > LiveBackground.red + .08f && visibleArt.red > visibleArt.blue + .08f,
+                "The loaded red artwork remains visible through the detail body: $visibleArt"
+            )
+        } finally {
+            coil3.SingletonImageLoader.reset()
+            loader.shutdown()
+            image.recycle()
         }
-        val viewport = compose.onRoot().getUnclippedBoundsInRoot()
-        val backdrop = compose.onNodeWithTag("detail:recording-backdrop", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertEquals(viewport.left, backdrop.left)
-        assertEquals(viewport.right, backdrop.right)
-        assertEquals(viewport.top, backdrop.top, "A recording backdrop belongs to the viewport, not the padded action body")
-        assertTrue(kotlin.math.abs((backdrop.bottom - backdrop.top).value - (viewport.bottom - viewport.top).value * .64f) <= 1f)
     }
 
     @Test fun backdropWithoutAnImageDoesNotPaintTheOrdinaryArtworkPlaceholder() {
@@ -148,6 +222,19 @@ class LiveRecordingLayoutTest {
         assertTrue(
             meta.top - title.bottom in 0.dp..5.dp,
             "Title and metadata retain the4dp gap, including native focus scaling; title=$title metadata=$meta"
+        )
+        val titleLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onAllNodesWithTag("live:recording:title", useUnmergedTree = true)[0]
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
+        val titleLayout = titleLayouts.single()
+        assertEquals(1, titleLayout.lineCount, "The short episode title has one actual text line")
+        // Normalize the native text layout into the root coordinates, including real focus scaling.
+        val lastTitleLineBottom = title.top +
+            (title.bottom - title.top) * (titleLayout.getLineBottom(0) / titleLayout.size.height)
+        assertTrue(
+            meta.top - lastTitleLineBottom in 0.dp..5.dp,
+            "Metadata follows the actual title line, without a blank line inside its text box: " +
+                "title=$title lineBottom=$lastTitleLineBottom metadata=$meta"
         )
         val status = compose.onNodeWithTag("live:recording:status:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(status.bottom <= caption.top, "Recording state belongs on the artwork")

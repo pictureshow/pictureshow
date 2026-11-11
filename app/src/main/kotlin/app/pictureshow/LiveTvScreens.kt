@@ -164,7 +164,9 @@ internal fun LiveTvScreen(
     ) {
         if (tv) {
             Row(
-                Modifier.fillMaxWidth().height(if (!detail) (60 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 24.dp),
+                Modifier.fillMaxWidth().height(
+                    if (!detail) (60 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 48.dp
+                ).testTag("live:toolbar"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

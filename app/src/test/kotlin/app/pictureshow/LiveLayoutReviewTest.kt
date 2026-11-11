@@ -88,6 +88,14 @@ class LiveLayoutReviewTest {
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("live:p:p").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("live:program:watch").assertIsDisplayed().assertIsNotEnabled()
+        if (tv) {
+            val toolbar = compose.onNodeWithTag("live:toolbar").getUnclippedBoundsInRoot()
+            val refresh = compose.onNodeWithContentDescription("Refresh").getUnclippedBoundsInRoot()
+            assertTrue(
+                refresh.top >= toolbar.top && refresh.bottom <= toolbar.bottom,
+                "The native refresh target and focus paint fit inside the detail toolbar: $refresh / $toolbar"
+            )
+        }
         compose.onNodeWithText("Guide is out of date. Refresh before scheduling or tuning.").assertIsDisplayed()
         compose.runOnIdle { fetchedAt = System.currentTimeMillis() - 1_000 }
         compose.onNodeWithContentDescription("Refresh").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
@@ -138,6 +146,26 @@ class LiveLayoutReviewTest {
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithText(NO_LIVE_GUIDE).assertIsDisplayed()
         compose.onNodeWithText("Guide unavailable").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun phoneGridStartsAtItsOwnFirstRowAfterLeavingAScrolledGuide() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            channelRows = (1..14).map { LiveChannel("c$it", "Channel $it", "$it") }
+            show = show.copy(channelId = "c1", startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        compose.setContent {
+            TouchTheme { LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, false, {}, {}, {}) }
+        }
+        compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithTag("live:guide-rows").performScrollToNode(hasTestTag("live:guide-row:c14"))
+        compose.onNodeWithTag("live:guide-row:c14").assertIsDisplayed()
+        compose.onNodeWithTag("live:tab:Channels").performClick()
+        compose.onNodeWithTag("live:c:c1").assertIsDisplayed()
+        compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithTag("live:guide-row:c1").assertIsDisplayed()
     }
 
     @Test fun tvLinearGuideKeepsTimeControlsAboveTheListAfterAnotherTabScrolled() {
