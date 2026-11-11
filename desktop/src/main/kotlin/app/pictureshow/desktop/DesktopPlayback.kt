@@ -135,6 +135,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var offset = 0.0
     private var sourceDecision: PlayDecision? = null
     private var sourceAccount: Account? = null
+    @Volatile private var pendingExternalSubtitle: String? = null
     override fun profile(settings: DesktopSettings): DeviceProfile {
         // decoder-list is a documented read-only native property; query the loaded bytes,
         // with no media, audio or video surface, before advertising a server profile.
@@ -215,28 +216,33 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.isExternal }?.deliveryUrl?.let { delivery ->
             val url = PlayDecisions.resolve(account.server, delivery)
             require(PlayDecisions.isSameOrigin(account.server, url))
-            player.command("sub-add", proxy!!.url(url), "select")
+            pendingExternalSubtitle = proxy!!.url(url)
         }
     }
-    override fun snapshot(): EngineSnapshot {
+    @Synchronized override fun snapshot(): EngineSnapshot {
         val p = mpv ?: return EngineSnapshot()
+        val ready = p.get("vo-configured") == "yes" && p.get("time-pos") != null
+        if (ready) pendingExternalSubtitle?.let { url ->
+            p.command("sub-add", url, "select"); pendingExternalSubtitle = null
+        }
         return EngineSnapshot(
             positionSeconds = (p.get("time-pos")?.toDoubleOrNull() ?: 0.0) + offset,
             durationSeconds = (p.get("duration")?.toDoubleOrNull() ?: 0.0) + offset,
-            paused = p.get("pause") == "yes", ready = p.get("vo-configured") == "yes" && p.get("time-pos") != null,
+            paused = p.get("pause") == "yes", ready = ready,
             ended = p.get("eof-reached") == "yes", error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true
         )
     }
-    override fun selectAudio(index: Int): Boolean {
+    @Synchronized override fun selectAudio(index: Int): Boolean {
         val d = sourceDecision ?: return false
         if (d.method == PlayMethod.Transcode) return false
         val ordinal = d.mediaSource.mediaStreams.filter { it.type == MediaStreamType.Audio && !it.isExternal }.indexOfFirst { it.index == index }
         if (ordinal < 0) return false
         mpv?.set("aid", (ordinal + 1).toString()); return true
     }
-    override fun selectSubtitle(index: Int): Boolean {
+    @Synchronized override fun selectSubtitle(index: Int): Boolean {
         val d = sourceDecision ?: return false
         if (d.method == PlayMethod.Transcode) return false
+        pendingExternalSubtitle = null
         if (index == -1) { mpv?.set("sid", "no"); return true }
         val stream = d.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return false
         if (stream.isExternal) {
@@ -244,7 +250,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             val delivery = stream.deliveryUrl ?: return false
             val url = PlayDecisions.resolve(account.server, delivery)
             if (!PlayDecisions.isSameOrigin(account.server, url)) return false
-            mpv?.command("sub-add", requireNotNull(proxy).url(url), "select")
+            pendingExternalSubtitle = requireNotNull(proxy).url(url)
         } else {
             val ordinal = d.mediaSource.mediaStreams.filter { it.type == MediaStreamType.Subtitle && !it.isExternal }.indexOfFirst { it.index == index }
             if (ordinal < 0) return false
