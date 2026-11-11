@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -166,11 +167,17 @@ internal fun LiveGuide(
                                     onFocus(key)
                                 }.semantics { contentDescription = label }
                             val content: @Composable () -> Unit = {
-                                Box(Modifier.fillMaxHeight()) {
+                                Box(Modifier.fillMaxSize()) {
                                     Column(
                                         Modifier.fillMaxHeight().padding(
-                                            horizontal = if (liveGuideShowsText(width)) 8.dp else 0.dp,
-                                            vertical = if (tv) 4.dp else 8.dp
+                                            start = if (liveGuideShowsText(width)) 8.dp else 0.dp,
+                                            end = if (liveGuideShowsText(width)) {
+                                                if (show.hasRecordingTimer()) 14.dp else 8.dp
+                                            } else {
+                                                0.dp
+                                            },
+                                            top = if (tv) 4.dp else 8.dp,
+                                            bottom = if (tv) 4.dp else 8.dp
                                         ),
                                         verticalArrangement = Arrangement.Center
                                     ) {
@@ -190,8 +197,12 @@ internal fun LiveGuide(
                                         }
                                     }
                                     if (show.hasRecordingTimer()) {
-                                        Box(Modifier.align(Alignment.TopEnd).padding(2.dp)) {
-                                            LiveRecordingDot(tv)
+                                        Box(
+                                            Modifier.align(
+                                                Alignment.TopEnd
+                                            ).padding(top = 6.dp, end = 6.dp).testTag("live:cell-recording:${show.id}")
+                                        ) {
+                                            LiveRecordingDot()
                                         }
                                     }
                                 }

@@ -3,12 +3,14 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -269,11 +272,6 @@ internal fun LiveFavorite(checked: Boolean, onClick: () -> Unit, enabled: Boolea
 }
 
 @Composable
-internal fun LiveRecordingDot(tv: Boolean) {
-    val color = Color(0xFFFF6B6B)
-    if (tv) {
-        androidx.tv.material3.Text("●", color = color, style = androidx.tv.material3.MaterialTheme.typography.labelSmall)
-    } else {
-        androidx.compose.material3.Text("●", color = color, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-    }
+internal fun LiveRecordingDot() {
+    Box(Modifier.size(6.dp).background(Color(0xFFFF6B6B), CircleShape).clearAndSetSemantics {})
 }

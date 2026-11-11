@@ -7,7 +7,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveGuideCell.kt",
     "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt",
     "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveRecordingFocus.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingFocus.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideNavigation.kt"
   ],
   "cases": [
     {
@@ -865,6 +866,67 @@
         "contentPadding": 12
       },
       "expected": 12
+    },
+    {
+      "id": "channel-gap-has-future-guide",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": true
+      },
+      "expected": "Nothing on now"
+    },
+    {
+      "id": "channel-no-programmes-in-window",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": false
+      },
+      "expected": "No guide data"
+    },
+    {
+      "id": "scroll-owner-guide-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Guide",
+        "linear": false
+      },
+      "expected": "Guide:Grid"
+    },
+    {
+      "id": "scroll-owner-guide-true",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Guide",
+        "linear": true
+      },
+      "expected": "Guide:List"
+    },
+    {
+      "id": "scroll-owner-recordings-true",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Recordings",
+        "linear": true
+      },
+      "expected": "Recordings"
+    },
+    {
+      "id": "scroll-owner-schedules-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Schedules",
+        "linear": false
+      },
+      "expected": "Schedules"
+    },
+    {
+      "id": "scroll-owner-channels-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Channels",
+        "linear": false
+      },
+      "expected": "Channels"
     }
   ]
 }

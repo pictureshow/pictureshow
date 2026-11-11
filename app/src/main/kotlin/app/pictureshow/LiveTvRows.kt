@@ -100,18 +100,20 @@ internal fun LiveChannelRow(
     val next = programs.firstOrNull { liveInstant(it.startDate) > now }
     val support: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            LiveText(current?.name ?: "No guide data", tv, maxLines = 1)
-            current?.let {
-                val duration = liveInstant(it.endDate) - liveInstant(it.startDate)
-                if (duration > 0) {
-                    val fraction = ((now - liveInstant(it.startDate)).toFloat() / duration).coerceIn(0f, 1f)
-                    val progressColor = if (tv) {
-                        androidx.tv.material3.LocalContentColor.current
-                    } else {
-                        androidx.compose.material3.LocalContentColor.current
-                    }
-                    Box(Modifier.fillMaxWidth().height(2.dp).background(progressColor.copy(alpha = .24f))) {
-                        Box(Modifier.fillMaxWidth(fraction).height(2.dp).background(progressColor))
+            LiveText(current?.name ?: liveChannelIdleLabel(programs.isNotEmpty()), tv, maxLines = 1)
+            Box(Modifier.fillMaxWidth().height(2.dp)) {
+                current?.let {
+                    val duration = liveInstant(it.endDate) - liveInstant(it.startDate)
+                    if (duration > 0) {
+                        val fraction = ((now - liveInstant(it.startDate)).toFloat() / duration).coerceIn(0f, 1f)
+                        val progressColor = if (tv) {
+                            androidx.tv.material3.LocalContentColor.current
+                        } else {
+                            androidx.compose.material3.LocalContentColor.current
+                        }
+                        Box(Modifier.fillMaxWidth().height(2.dp).background(progressColor.copy(alpha = .24f))) {
+                            Box(Modifier.fillMaxWidth(fraction).height(2.dp).background(progressColor))
+                        }
                     }
                 }
             }
@@ -368,3 +370,6 @@ internal fun LiveMenu(
         }
     }
 }
+
+/** Missing current coverage is not the same as an absent guide. */
+internal fun liveChannelIdleLabel(hasPrograms: Boolean): String = if (hasPrograms) "Nothing on now" else "No guide data"

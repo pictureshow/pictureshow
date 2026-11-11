@@ -169,3 +169,10 @@ private fun LiveQuietIcon(kind: String, label: String, tv: Boolean, enabled: Boo
         }
     }
 }
+
+/** Incompatible lazy-item layouts never consume another destination’s saved index or pixel offset. */
+internal fun liveScrollOwner(tab: String, linear: Boolean): String = if (tab == "Guide") {
+    if (linear) "Guide:List" else "Guide:Grid"
+} else {
+    tab
+}

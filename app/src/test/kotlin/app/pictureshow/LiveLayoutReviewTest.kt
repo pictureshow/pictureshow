@@ -22,11 +22,13 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -55,6 +57,112 @@ class LiveLayoutReviewTest {
 
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
+
+    @Test fun tvLinearGuideKeepsTimeControlsAboveTheListAfterAnotherTabScrolled() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            channelRows = (1..14).map { LiveChannel("c$it", "Channel $it", "$it") }
+            show = show.copy(channelId = "c1", startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        compose.setContent {
+            PictureshowTheme {
+                LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
+            }
+        }
+        compose.onNodeWithTag("live:c:c14").performScrollTo()
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("List").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        val bar = compose.onNodeWithTag("live:guide-time").assertIsDisplayed().getUnclippedBoundsInRoot()
+        val list = compose.onNodeWithTag("live:content-list").getUnclippedBoundsInRoot()
+        assertTrue(bar.top >= compose.onNodeWithTag("live:navigation").getUnclippedBoundsInRoot().bottom)
+        assertTrue(
+            list.top >= bar.bottom,
+            "Time navigation and linear guide content must be sequential children, not overlapping Box siblings"
+        )
+        compose.onNodeWithTag("live:p:p").assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun phoneFiltersHaveTheSameCentreAndLinearTimeNavigationNeverOverlaysRows() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            show = show.copy(startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        compose.setContent {
+            TouchTheme { LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, false, {}, {}, {}) }
+        }
+        val channels = compose.onNodeWithText("Favorites", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("live:tab:Guide").performClick()
+        val guide = compose.onNodeWithText("Favorites", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(channels.top, guide.top, "A filter does not jump when a view switch joins the row")
+        assertEquals(channels.bottom, guide.bottom)
+        compose.onNodeWithText("List").performClick()
+        val bar = compose.onNodeWithTag("live:guide-time").getUnclippedBoundsInRoot()
+        val list = compose.onNodeWithTag("live:content-list").getUnclippedBoundsInRoot()
+        assertTrue(list.top >= bar.bottom)
+        compose.onNodeWithTag("live:p:p").assertIsDisplayed()
+    }
+
+    @Test fun programmeGapNamesTheGapInBothTheChannelAndFocusedPreview() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            show = show.copy(startDate = now.plusSeconds(120).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        compose.setContent {
+            PictureshowTheme {
+                LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
+            }
+        }
+        compose.onNodeWithTag("live:c:c").assertIsFocused()
+        assertEquals(2, compose.onAllNodesWithText("Nothing on now", useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onNodeWithText("No guide data").assertDoesNotExist()
+    }
+
+    @Test fun recordingDotsStayInTheCellCornerAndDoNotBecomeReaderGlyphsAtLargeFont() {
+        compose.setContent {
+            PictureshowTheme {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 1.3f)) {
+                    LiveGuide(
+                        listOf(LiveChannel("c", "Generated", "1")),
+                        listOf(
+                            LiveProgram(
+                                "short",
+                                "A",
+                                "c",
+                                startDate = "1970-01-01T00:00:00Z",
+                                endDate = "1970-01-01T00:30:00Z",
+                                timerId = "t1"
+                            ),
+                            LiveProgram(
+                                "long",
+                                "A deliberately longer title that wraps",
+                                "c",
+                                startDate = "1970-01-01T00:30:00Z",
+                                endDate = "1970-01-01T01:00:00Z",
+                                timerId = "t2"
+                            )
+                        ),
+                        account, true, 0, 0,
+                        androidx.compose.foundation.rememberScrollState(), androidx.compose.foundation.lazy.rememberLazyListState(),
+                        "no-initial-focus", false, {}, onOpen = {}
+                    )
+                }
+            }
+        }
+        listOf("short", "long").forEach { id ->
+            val cell = compose.onNodeWithTag("live:p:$id").getUnclippedBoundsInRoot()
+            val dot = compose.onNodeWithTag("live:cell-recording:$id", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertEquals(6.dp, dot.right - dot.left)
+            assertEquals(6.dp, dot.bottom - dot.top)
+            assertTrue(
+                kotlin.math.abs((cell.right - dot.right).value - 7f) <= 1f,
+                "The badge anchors to the cell corner regardless of title length"
+            )
+            assertEquals(6.dp, dot.top - cell.top)
+        }
+        compose.onNodeWithText("●", useUnmergedTree = true).assertDoesNotExist()
+    }
 
     @Test
     fun tvNavigationLabelsShareOneCentreAndTheFiltersUseTheTrailingEdge() {

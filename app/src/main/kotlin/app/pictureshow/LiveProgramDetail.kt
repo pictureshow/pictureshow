@@ -144,7 +144,7 @@ internal fun LiveProgramRow(program: LiveProgram, tv: Boolean, modifier: Modifie
             { LiveText(program.name, tv) },
             modifier.fillMaxWidth(),
             supportingContent = supporting,
-            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) },
+            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot() },
             scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
         )
     } else {
@@ -152,7 +152,7 @@ internal fun LiveProgramRow(program: LiveProgram, tv: Boolean, modifier: Modifie
             headlineContent = { LiveText(program.name, tv) },
             modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
             supportingContent = supporting,
-            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) }
+            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot() }
         )
     }
 }

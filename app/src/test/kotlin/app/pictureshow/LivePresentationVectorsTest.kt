@@ -31,13 +31,23 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(65, cases.size)
+        assertEquals(72, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "channel-idle-label" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveChannelIdleLabel(c.getValue("hasPrograms").jsonPrimitive.boolean),
+                    id
+                )
+                "scroll-owner" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScrollOwner(value("tab"), c.getValue("linear").jsonPrimitive.boolean),
+                    id
+                )
                 "recording-shelf-pivot" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveRecordingScrollDistance(
