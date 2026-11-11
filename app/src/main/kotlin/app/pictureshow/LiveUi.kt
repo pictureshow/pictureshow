@@ -3,13 +3,17 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -23,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal val LiveBackground = Color(0xFF10131C)
@@ -74,6 +79,17 @@ internal fun LiveText(
     }
 }
 
+/** ListItem owns its inset; standalone list headings and states use that same text keyline. */
+@Composable
+internal fun LiveListText(text: String, tv: Boolean, heading: Boolean = false) {
+    LiveText(
+        text,
+        tv,
+        Modifier.padding(horizontal = 16.dp, vertical = if (heading) 4.dp else 0.dp),
+        heading = heading
+    )
+}
+
 /** Requests only an attached target, including the first item after a load and the exact Back destination. */
 @Composable
 internal fun Modifier.liveFocus(key: String, wanted: Boolean, enabled: Boolean = true, onFocused: () -> Unit = {}): Modifier {
@@ -116,14 +132,20 @@ internal fun LiveChip(
     tv: Boolean,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    controlHeight: Dp? = null,
     onClick: () -> Unit
 ) {
+    val target = modifier.then(controlHeight?.let { Modifier.height(it) } ?: Modifier)
     if (tv) {
-        androidx.tv.material3.FilterChip(selected, onClick, modifier = modifier, enabled = enabled) { androidx.tv.material3.Text(label) }
+        androidx.tv.material3.FilterChip(selected, onClick, modifier = target, enabled = enabled) {
+            Box(controlHeight?.let { Modifier.height(it - 16.dp) } ?: Modifier, contentAlignment = Alignment.Center) {
+                androidx.tv.material3.Text(label, maxLines = 1)
+            }
+        }
     } else {
         androidx.compose.material3.FilterChip(selected, onClick, label = {
             androidx.compose.material3.Text(label)
-        }, modifier = modifier, enabled = enabled)
+        }, modifier = target, enabled = enabled)
     }
 }
 

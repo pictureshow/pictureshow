@@ -43,9 +43,9 @@ internal fun LazyListScope.liveRecordingShelves(
     onRecording: (MediaItem) -> Unit,
     onOptions: (MediaItem) -> Unit
 ) {
-    if (!state.loading && state.recordings.isEmpty()) item { LiveText("No recordings available.", tv) }
+    if (!state.loading && state.recordings.isEmpty()) item { LiveListText("No recordings available.", tv) }
     state.recordings.groupBy { it.seriesName?.takeIf(String::isNotBlank) ?: "Recordings" }.forEach { (group, recordings) ->
-        item("recording-heading:$group") { LiveText(group, tv, heading = true) }
+        item("recording-heading:$group") { LiveListText(group, tv, heading = true) }
         item("recording-cards:$group") {
             // Native TV cards scale around the entire artwork/caption. Keep their raised bounds inside the shelf.
             LazyRow(

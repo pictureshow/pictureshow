@@ -53,6 +53,94 @@ class LiveLayoutReviewTest {
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
 
     @Test
+    fun tvNavigationLabelsShareOneCentreAndTheFiltersUseTheTrailingEdge() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            show =
+                show.copy(
+                    startDate = now.minusSeconds(60).toString(),
+                    endDate = now.plusSeconds(1800).toString(),
+                    overview = "Generated overview"
+                )
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { PictureshowTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Guide").performClick()
+        val labels = listOf("Channels", "Guide", "Recordings", "Schedules", "Favorites", "Grid", "List").map {
+            compose.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        }
+        val centres = labels.map { (it.top.value + it.bottom.value) / 2 }
+        assertTrue(centres.max() - centres.min() <= 1f, "All native navigation labels share one centre: $labels")
+        val nav = compose.onNodeWithTag("live:navigation").getUnclippedBoundsInRoot()
+        assertEquals(nav.right - 16.dp, labels.last().right, "Native filter padding ends at the trailing content edge")
+        val preview = compose.onNodeWithTag("live:guide-preview").getUnclippedBoundsInRoot()
+        assertTrue(nav.top >= preview.bottom + 8.dp, "Preview and controls need a deliberate gap")
+    }
+
+    @Test
+    fun tvDateControlsAndRulerLabelsFitTheSameScaledBandWhenAwayFromNow() {
+        val now = 10_800_000L
+        compose.setContent {
+            PictureshowTheme {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 1.3f)) {
+                    LiveGuide(
+                        listOf(LiveChannel("c", "Generated", "1")), emptyList(), account, true, 0, now,
+                        androidx.compose.foundation.rememberScrollState(), androidx.compose.foundation.lazy.rememberLazyListState(),
+                        null, false, {}, channelHeader = { LiveGuideDateBar(0, now, true, true) {} }, onOpen = {}
+                    )
+                }
+            }
+        }
+        val ruler = compose.onNodeWithTag("live:guide-ruler").getUnclippedBoundsInRoot()
+        listOf("live:guide-earlier", "live:guide-later", "live:guide-day", "live:guide-now").forEach { tag ->
+            val bounds = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
+            assertTrue(bounds.top >= ruler.top && bounds.bottom <= ruler.bottom, "$tag must stay inside the ruler band: $bounds / $ruler")
+        }
+        val day = compose.onNodeWithTag("live:guide-day").getUnclippedBoundsInRoot()
+        val later = compose.onNodeWithTag("live:guide-later").getUnclippedBoundsInRoot()
+        assertTrue(day.right <= later.left, "The bounded Now action must leave a visible day picker")
+        val tick = compose.onNodeWithTag("live:tick-label:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val dayLabel = compose.onNodeWithText(
+            LiveTime(false, java.util.Locale.US, java.time.ZoneId.systemDefault(), now).day(0) + " ▾",
+            useUnmergedTree = true
+        )
+            .getUnclippedBoundsInRoot()
+        assertTrue(kotlin.math.abs((tick.top.value + tick.bottom.value) - (dayLabel.top.value + dayLabel.bottom.value)) <= 2f)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun phoneStandaloneListTextSharesTheRowInsetAndLargeClockTokensNeverWrap() {
+        val timer = app.pictureshow.core.livetv.LiveSchedule(
+            kotlinx.serialization.json.buildJsonObject {
+                put("Id", kotlinx.serialization.json.JsonPrimitive("t"))
+                put("Name", kotlinx.serialization.json.JsonPrimitive("Generated programme"))
+                put("ChannelName", kotlinx.serialization.json.JsonPrimitive("A deliberately very long channel name"))
+                put("StartDate", kotlinx.serialization.json.JsonPrimitive("2026-11-10T22:00:00Z"))
+                put("EndDate", kotlinx.serialization.json.JsonPrimitive("2026-11-10T23:00:00Z"))
+                put("Status", kotlinx.serialization.json.JsonPrimitive("Error"))
+            }
+        )
+        compose.setContent {
+            TouchTheme {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 1.3f)) {
+                    androidx.compose.foundation.layout.Column {
+                        LiveListText("Upcoming", false, heading = true)
+                        LiveScheduleRow(timer, false, Modifier) {}
+                    }
+                }
+            }
+        }
+        assertEquals(16.dp, compose.onNodeWithText("Upcoming").getUnclippedBoundsInRoot().left)
+        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithTag("live:schedule:range:t", useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertEquals(1, results.single().lineCount)
+        assertTrue(!results.single().isLineEllipsized(0), "The channel name yields width before the unbroken clock token")
+        assertTrue(results.single().getLineRight(0) <= results.single().size.width, "Every clock glyph must fit its allocated width")
+    }
+
+    @Test
     fun tvEditorWithNoPaddingFieldsHasARealInitialReviewFocus() {
         val schedule = app.pictureshow.core.livetv.LiveSchedule(
             kotlinx.serialization.json.buildJsonObject {
@@ -61,7 +149,7 @@ class LiveLayoutReviewTest {
             }
         )
         val current = androidx.compose.runtime.mutableStateOf(schedule)
-        compose.setContent { androidx.tv.material3.MaterialTheme { LiveScheduleEditor(current.value, true, true, false, false) {} } }
+        compose.setContent { PictureshowTheme { LiveScheduleEditor(current.value, true, true, false, false) {} } }
         compose.onNodeWithTag("live:editor:review").assertIsDisplayed().assertIsFocused()
         compose.runOnIdle {
             current.value = app.pictureshow.core.livetv.LiveSchedule(
@@ -85,7 +173,7 @@ class LiveLayoutReviewTest {
             }
         )
         compose.setContent {
-            androidx.tv.material3.MaterialTheme {
+            PictureshowTheme {
                 expected = androidx.tv.material3.MaterialTheme.colorScheme.onErrorContainer
                 LiveScheduleRow(schedule, true, Modifier.liveFocus("test-error", true)) { }
             }
@@ -106,7 +194,7 @@ class LiveLayoutReviewTest {
             show = show.copy(startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
         }
         compose.setContent {
-            androidx.tv.material3.MaterialTheme {
+            PictureshowTheme {
                 LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
             }
         }
@@ -199,7 +287,7 @@ class LiveLayoutReviewTest {
     @Test
     fun focusedGuideCellPaintStaysInsideBothTheChannelBoundaryAndItsLane() {
         compose.setContent {
-            androidx.tv.material3.MaterialTheme {
+            PictureshowTheme {
                 Box(Modifier.fillMaxSize().background(LiveBackground)) {
                     LiveGuide(
                         listOf(LiveChannel("c", "Generated channel", "1")),

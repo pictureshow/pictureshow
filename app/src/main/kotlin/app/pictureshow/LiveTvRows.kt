@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
@@ -191,13 +192,22 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
             modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
             supportingContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LiveText(
-                        "${schedule.channelName ?: "Channel ${schedule.channelId}"} · " +
-                            time.range(schedule.startDate, schedule.endDate).replace(" – ", "\u00a0–\u00a0"),
-                        false,
-                        small = true,
-                        maxLines = 1
-                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        LiveText(
+                            schedule.channelName ?: "Channel ${schedule.channelId}",
+                            false,
+                            Modifier.weight(1f),
+                            small = true,
+                            maxLines = 1
+                        )
+                        LiveText(
+                            " · " + time.range(schedule.startDate, schedule.endDate).replace(' ', '\u00a0'),
+                            false,
+                            Modifier.testTag("live:schedule:range:${schedule.id}"),
+                            small = true,
+                            maxLines = 1
+                        )
+                    }
                     badge()
                 }
             }

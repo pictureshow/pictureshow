@@ -708,6 +708,33 @@
         "metadata": "Today \u00b7 6:00 PM",
         "progress": null
       }
+    },
+    {
+      "id": "live-presentation.ruler-height-true-1",
+      "operation": "ruler-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1
+      },
+      "expected": 48
+    },
+    {
+      "id": "live-presentation.ruler-height-true-1.3",
+      "operation": "ruler-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1.3
+      },
+      "expected": 62.4
+    },
+    {
+      "id": "live-presentation.ruler-height-false-1.3",
+      "operation": "ruler-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1.3
+      },
+      "expected": 36
     }
   ]
 }

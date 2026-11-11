@@ -45,6 +45,7 @@ internal const val LIVE_GUIDE_TEXT_MIN = 72f
 internal fun liveGuideTickX(tick: Int): Float = tick * (LIVE_GUIDE_WIDTH / 6)
 internal fun liveGuideShowsText(width: Float): Boolean = width >= LIVE_GUIDE_TEXT_MIN
 internal fun liveGuideLaneHeight(tv: Boolean, fontScale: Float): Float = (if (tv) 56 else 60) * fontScale.coerceAtLeast(1f)
+internal fun liveGuideRulerHeight(tv: Boolean, fontScale: Float): Float = if (tv) 48 * fontScale.coerceAtLeast(1f) else 36f
 
 /** All rows share the same scroll position and mapping, including the single sticky ruler. */
 @Composable
@@ -76,19 +77,28 @@ internal fun LiveGuide(
         programs.groupBy { it.channelId }.mapValues { (_, shows) -> liveGuideCells(shows, start, end) }
     }
     val firstChannel = channels.firstOrNull { rows[it.id].orEmpty().isNotEmpty() }?.id
-    Row(Modifier.fillMaxWidth().height(36.dp)) {
-        Box(Modifier.width(channelWidth).height(36.dp), contentAlignment = Alignment.TopStart) { if (tv) channelHeader() }
+    val rulerHeight = liveGuideRulerHeight(tv, density.fontScale).dp
+    Row(Modifier.fillMaxWidth().height(rulerHeight).testTag("live:guide-ruler")) {
+        Box(Modifier.width(channelWidth).height(rulerHeight), contentAlignment = Alignment.CenterStart) { if (tv) channelHeader() }
         Box(Modifier.weight(1f)) {
-            Box(Modifier.horizontalScroll(scroll).width(canvasWidth.dp).height(36.dp)) {
+            Box(Modifier.horizontalScroll(scroll).width(canvasWidth.dp).height(rulerHeight)) {
                 (0..6).forEach { tick ->
-                    Column(Modifier.offset(x = (inset + liveGuideTickX(tick)).dp).testTag("live:tick:$tick")) {
-                        LiveText(time.clock(start + tick * 30 * 60_000L), tv, small = true, maxLines = 1)
-                        Box(Modifier.width(1.dp).height(6.dp).background(LiveMuted))
+                    Box(Modifier.offset(x = (inset + liveGuideTickX(tick)).dp).height(rulerHeight).testTag("live:tick:$tick")) {
+                        LiveText(
+                            time.clock(start + tick * 30 * 60_000L),
+                            tv,
+                            Modifier.align(Alignment.CenterStart),
+                            small = true,
+                            maxLines = 1
+                        )
+                        Box(Modifier.align(Alignment.BottomStart).width(1.dp).height(6.dp).background(LiveMuted))
                     }
                 }
                 if (nowX in 0f..LIVE_GUIDE_WIDTH) {
                     Box(
-                        Modifier.offset(x = (inset + nowX).dp).width(2.dp).height(36.dp).background(LiveAccent).testTag("live:ruler-now")
+                        Modifier.offset(
+                            x = (inset + nowX).dp
+                        ).width(2.dp).height(rulerHeight).background(LiveAccent).testTag("live:ruler-now")
                     )
                 }
             }

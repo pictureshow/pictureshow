@@ -10,14 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -140,13 +141,22 @@ internal fun LiveTvScreen(
     ) {
         if (tv && program == null) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = if (!detail) (64 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 24.dp),
+                Modifier.fillMaxWidth().height(if (!detail) (60 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (guideHeader) {
-                    Column(Modifier.weight(1f).testTag("live:guide-preview")) {
-                        LiveText(preview?.name ?: focusedChannel?.name ?: "Live TV guide", true, heading = true, maxLines = 1)
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().testTag("live:guide-preview"),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        androidx.tv.material3.Text(
+                            preview?.name ?: focusedChannel?.name ?: "Live TV guide",
+                            Modifier.semantics { heading() },
+                            style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                         if (preview == null && focusedChannel != null) LiveText("No guide data", true, small = true)
                         preview?.let { show ->
                             LiveText(
@@ -214,11 +224,13 @@ internal fun LiveTvScreen(
                                 ).testTag("live:tab:$next"),
                                 colors = androidx.tv.material3.TabDefaults.pillIndicatorTabColors(inactiveContentColor = LiveMuted)
                             ) {
-                                androidx.tv.material3.Text(
-                                    next,
-                                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                    style = androidx.tv.material3.MaterialTheme.typography.labelLarge
-                                )
+                                Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                    androidx.tv.material3.Text(
+                                        next,
+                                        maxLines = 1,
+                                        style = androidx.tv.material3.MaterialTheme.typography.labelLarge
+                                    )
+                                }
                             }
                         }
                     }
@@ -242,7 +254,7 @@ internal fun LiveTvScreen(
                         }
                     }
                     if (LocalDensity.current.fontScale > 1.1f) {
-                        androidx.compose.material3.PrimaryScrollableTabRow(tabs.indexOf(tab), edgePadding = 8.dp) { touchTabs() }
+                        androidx.compose.material3.PrimaryScrollableTabRow(tabs.indexOf(tab), edgePadding = 16.dp) { touchTabs() }
                     } else {
                         androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) { touchTabs() }
                     }
@@ -265,60 +277,49 @@ internal fun LiveTvScreen(
             }
             val filters: @Composable () -> Unit = {
                 if (tab in listOf("Channels", "Guide")) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 16.dp),
+                    Row(
+                        Modifier.padding(horizontal = if (tv) 0.dp else 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item {
-                            LiveChip(
-                                "Favorites",
-                                favorites,
-                                tv,
-                                modifier = if (tv) {
-                                    Modifier.height(
-                                        (
-                                            36 *
-                                                LocalDensity.current.fontScale.coerceAtLeast(1f)
-                                            ).dp
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            ) {
-                                favorites = !favorites
-                                returnFocus = null
-                            }
+                        LiveChip(
+                            "Favorites",
+                            favorites,
+                            tv,
+                            controlHeight = if (tv) (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 40.dp
+                        ) {
+                            favorites = !favorites
+                            returnFocus = null
                         }
                         if (tab == "Guide") {
-                            item {
-                                LiveGuideViewMode(linear, tv) {
-                                    linear = it
-                                    returnFocus = null
-                                }
+                            LiveGuideViewMode(linear, tv) {
+                                linear = it
+                                returnFocus = null
                             }
                         } else if (!tv) {
-                            item {
-                                state.fetchedAt?.let {
-                                    LiveText(
-                                        "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
-                                        false,
-                                        small = true
-                                    )
-                                }
+                            state.fetchedAt?.let {
+                                LiveText(
+                                    "${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}",
+                                    false,
+                                    Modifier.weight(1f),
+                                    small = true,
+                                    maxLines = 1
+                                )
                             }
                         }
                     }
                 }
             }
             if (tv) {
+                Spacer(Modifier.height(8.dp))
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().testTag("live:navigation"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(Modifier.width((410 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp)) { navigation() }
-                    Box(Modifier.weight(1f)) { filters() }
+                    navigation()
+                    Spacer(Modifier.weight(1f))
+                    filters()
                 }
             } else {
                 navigation()
@@ -456,7 +457,7 @@ internal fun LiveTvScreen(
                         tab in listOf("Channels", "Guide") -> {
                             if (!state.loading && state.channels.isEmpty() && state.error == null) {
                                 item {
-                                    LiveText(
+                                    LiveListText(
                                         if (state.tunerEnabled ==
                                             false
                                         ) {
@@ -475,7 +476,7 @@ internal fun LiveTvScreen(
                                 state.channels.isNotEmpty() &&
                                 state.programs.isEmpty()
                             ) {
-                                item { LiveText(NO_LIVE_GUIDE, tv) }
+                                item { LiveListText(NO_LIVE_GUIDE, tv) }
                             }
                             itemsIndexed(channels, key = { _, channel -> "channel:${channel.id}" }) { index, channel ->
                                 val key = "c:${channel.id}"
@@ -527,7 +528,7 @@ internal fun LiveTvScreen(
                                 state.channels.isNotEmpty() &&
                                 channels.isEmpty()
                             ) {
-                                item { LiveText("No matching channels.", tv) }
+                                item { LiveListText("No matching channels.", tv) }
                             }
                         }
                         tab == "Recordings" -> {
@@ -548,7 +549,7 @@ internal fun LiveTvScreen(
                                 true
                             ) {
                                 item {
-                                    LiveText(
+                                    LiveListText(
                                         "Recording schedules require Live TV management permission. Ask your server administrator.",
                                         tv
                                     )
@@ -558,10 +559,10 @@ internal fun LiveTvScreen(
                                     state.timers.isEmpty() &&
                                     state.series.isEmpty()
                                 ) {
-                                    item { LiveText("No scheduled recordings.", tv) }
+                                    item { LiveListText("No scheduled recordings.", tv) }
                                 }
                                 listOf("Series rules" to state.series, "Upcoming" to state.timers).forEach { (group, schedules) ->
-                                    if (schedules.isNotEmpty()) item("schedule-heading:$group") { LiveText(group, tv, heading = true) }
+                                    if (schedules.isNotEmpty()) item("schedule-heading:$group") { LiveListText(group, tv, heading = true) }
                                     itemsIndexed(schedules, key = { _, timer -> "$group:${timer.id}" }) { index, timer ->
                                         val key = "s:$group:${timer.id}"
                                         LiveScheduleRow(

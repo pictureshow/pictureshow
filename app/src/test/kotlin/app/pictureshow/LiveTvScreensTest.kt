@@ -148,8 +148,12 @@ class LiveTvScreensTest {
     @Test
     @Config(qualifiers = "w960dp-h540dp-mdpi")
     fun compactTvHeaderShowsContentAndRequestsRealInitialFocus() {
-        val vm = LiveTvViewModel(account, LiveFake())
-        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            show = show.copy(startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { PictureshowTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
         compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
         val row = compose.onNodeWithTag("live:c:c").assertIsDisplayed().assertIsFocused().getUnclippedBoundsInRoot()

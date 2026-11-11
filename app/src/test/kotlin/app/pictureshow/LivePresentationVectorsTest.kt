@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(53, cases.size)
+        assertEquals(56, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -93,6 +93,12 @@ class LivePresentationVectorsTest {
                     Instant.ofEpochMilli(
                         liveGuideWindowStart(Instant.parse(value("now")).toEpochMilli(), ZoneId.of(value("zone")))
                     ).toString(),
+                    id
+                )
+                "ruler-height" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveGuideRulerHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
+                    0.001f,
                     id
                 )
                 "lane-height" -> assertEquals(
