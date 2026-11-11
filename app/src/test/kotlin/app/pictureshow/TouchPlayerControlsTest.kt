@@ -1985,10 +1985,19 @@ class TouchPlayerControlsTest {
         val before = compose.runOnIdle { decoder.seeks.size }
         gestures.performTouchInput { doubleClick(Offset(width * .8f, height * .5f)) }
         compose.runOnIdle { assertEquals(before, decoder.seeks.size, "An edge double tap must not request an ineffective seek") }
-        compose.runOnIdle { host.position = 10_000 }
+        compose.runOnIdle {
+            decoder.pause()
+            decoder.seekTo(10_000)
+            decoder.seeks.clear()
+            host.position = 10_000
+            host.seekPreview = null
+            assertEquals(10_000, decoder.currentPosition, "The decoder and displayed position must describe the same measured window")
+        }
         settled()
         compose.onNodeWithTag("touch:forward10").assertIsEnabled().performClick()
-        compose.runOnIdle { assertEquals(20_000, decoder.seeks.last()) }
+        compose.runOnIdle {
+            assertEquals(listOf(20_000L), decoder.seeks, "The enabled transport performs exactly one measured forward step")
+        }
     }
 
     private fun launch(

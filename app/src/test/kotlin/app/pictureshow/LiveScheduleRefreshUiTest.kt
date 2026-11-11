@@ -6,6 +6,7 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
@@ -75,10 +76,11 @@ class LiveScheduleRefreshUiTest {
         compose.setContent {
             TouchTheme {
                 expected = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
-                Box(Modifier.testTag("badge")) { LiveStatus("Cancelled", false, "Cancelled") }
+                Box(Modifier.wrapContentSize().testTag("badge")) { LiveStatus("Cancelled", false, "Cancelled") }
             }
         }
         val pixels = compose.onNodeWithTag("badge").captureToImage().toPixelMap()
+        assertTrue(pixels.height in 16..48, "Capture the badge itself rather than its full-screen theme surface")
         assertEquals(expected, pixels[3, pixels.height / 2], "The inset label has a visible native container")
     }
 
@@ -87,10 +89,11 @@ class LiveScheduleRefreshUiTest {
         compose.setContent {
             PictureshowTheme {
                 expected = androidx.tv.material3.MaterialTheme.colorScheme.surfaceVariant
-                Box(Modifier.testTag("badge")) { LiveStatus("Cancelled", true, "Cancelled") }
+                Box(Modifier.wrapContentSize().testTag("badge")) { LiveStatus("Cancelled", true, "Cancelled") }
             }
         }
         val pixels = compose.onNodeWithTag("badge").captureToImage().toPixelMap()
+        assertTrue(pixels.height in 16..48, "Capture the badge itself rather than its full-screen theme surface")
         assertEquals(expected, pixels[3, pixels.height / 2])
     }
 
