@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -2043,10 +2045,18 @@ fun CatalogDetail(
                 }.focusTarget()
             )
         }
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(CatalogBackground)) {
+            if (recordingContext && headerItem != null) {
+                RecordingDetailBackdrop(
+                    headerItem,
+                    state.account,
+                    Modifier.align(Alignment.TopStart).fillMaxWidth().fillMaxHeight(.64f).testTag("detail:recording-backdrop")
+                )
+            }
             LazyColumn(
                 state = list,
-                modifier = reveal.fillMaxSize().background(CatalogBackground).testTag("detail").semantics { testTagsAsResourceId = true }
+                modifier = reveal.fillMaxSize().background(if (recordingContext) Color.Transparent else CatalogBackground)
+                    .testTag("detail").semantics { testTagsAsResourceId = true }
                     // A returning page must expose its restored input target before TalkBack can
                     // choose a heading or overview as a replacement for the departing player.
                     .then(
@@ -2140,9 +2150,6 @@ fun CatalogDetail(
             ) {
                 item(key = "body") {
                     Box(Modifier.fillMaxWidth()) {
-                        if (recordingContext && headerItem != null) {
-                            RecordingDetailBackdrop(headerItem, state.account, Modifier.matchParentSize())
-                        }
                         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
                             if (item != null && headerItem != null) {
@@ -3331,7 +3338,8 @@ internal fun CatalogCard(
     onLongClick: (() -> Unit)? = null,
     caption: (@Composable () -> Unit)? = null,
     artworkProgress: Float? = null,
-    showProgress: Boolean = true
+    showProgress: Boolean = true,
+    artworkOverlay: (@Composable BoxScope.() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
@@ -3399,8 +3407,14 @@ internal fun CatalogCard(
                     )
                 }
                 if (item.userData.isFavorite) {
-                    Text("♥", modifier = Modifier.align(Alignment.TopStart).background(Color(0xDD202635)).padding(5.dp))
+                    Text(
+                        "♥",
+                        modifier = Modifier.align(if (artworkOverlay == null) Alignment.TopStart else Alignment.BottomEnd)
+                            .then(if (artworkOverlay == null) Modifier else Modifier.padding(bottom = 8.dp))
+                            .background(Color(0xDD202635)).padding(5.dp)
+                    )
                 }
+                artworkOverlay?.invoke(this)
                 val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
                 if (showProgress && fraction > 0f && (artworkProgress != null || !item.isWatched) && !item.isEmptyContainer) {
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
@@ -3439,13 +3453,19 @@ internal fun CatalogArtwork(
     account: Account,
     wide: Boolean,
     modifier: Modifier = Modifier,
-    alignment: Alignment = Alignment.Center
+    alignment: Alignment = Alignment.Center,
+    showPlaceholder: Boolean = true
 ) {
-    BoxWithConstraints(modifier.clearAndSetSemantics {}.background(Color(0xFF262D3D)), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(
+        modifier.clearAndSetSemantics {}.then(if (showPlaceholder) Modifier.background(Color(0xFF262D3D)) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         val url = imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
-        if (!loaded) Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
+        if (!loaded && showPlaceholder) {
+            Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
+        }
         if (url != null) {
             AsyncImage(
                 model = url,
