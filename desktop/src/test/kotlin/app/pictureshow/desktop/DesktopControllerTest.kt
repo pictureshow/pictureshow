@@ -317,6 +317,25 @@ class DesktopControllerTest {
         assertFailsWith<IllegalArgumentException> { store.write(settings.copy(bitrateMbps = 17)) }
         assertEquals(settings, store.read())
     }
+    @Test fun failedNativeCleanupStillClosesTheRealLoopbackMediaCapability() {
+        val a = Account(Server("s", "Demo", "http://127.0.0.1:8096", "12.4.0"), User("u", "Viewer"), "secret")
+        val decision = PlayDecision("movie", MediaSourceInfo(id = "source"), PlayMethod.DirectPlay,
+            "http://127.0.0.1:8096/Videos/movie/stream", mapOf("Authorization" to "private"), "session")
+        val proxy = DesktopMediaProxy(a, decision)
+        val url = proxy.url()
+        var restoredWindow = false
+        val failures = runDesktopCleanupActions(
+            { error("native GPU drain failed") },
+            { restoredWindow = true },
+            { proxy.close() }
+        )
+        assertEquals(1, failures.size); assertTrue(restoredWindow)
+        java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(1)).build().use { client ->
+            assertFailsWith<java.io.IOException> {
+                client.send(java.net.http.HttpRequest.newBuilder(java.net.URI(url)).timeout(java.time.Duration.ofSeconds(1)).build(), java.net.http.HttpResponse.BodyHandlers.discarding())
+            }
+        }
+    }
     @Test fun mediaProxyRejectsExternalReferencesBeforeForwardingAuthorization() {
         val a = Account(Server("s", "Demo", "http://127.0.0.1:8096", "12.4.0"), User("u", "Viewer"), "secret")
         val decision = PlayDecision("movie", MediaSourceInfo(id="source"), PlayMethod.DirectPlay, "http://127.0.0.1:8096/Videos/movie/stream", mapOf("Authorization" to "private"), "session")

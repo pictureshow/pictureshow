@@ -123,7 +123,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var mpv: Mpv? = null
     private var proxy: DesktopMediaProxy? = null
     private var layer: NativeLayer? = null
-    private var surface: Pointer? = null
+    @Volatile private var surface: Pointer? = null
+    private var creationTask: Future<Pointer>? = null
     private val stopped = AtomicBoolean(false)
     private val failure = AtomicReference<String?>(null)
     private val pixels = AtomicReference(Dimension(1280, 800))
@@ -193,7 +194,16 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
                 player.option("glsl-shaders", shader.absolutePath)
             }
             player.initialize()
-            surface = render.submit<Pointer> { requireNotNull(bridge.ps_create(view, player.handle)) { "Native video surface could not be created" } }.get(40, TimeUnit.SECONDS)
+            creationTask = render.submit<Pointer> {
+                val created = requireNotNull(bridge.ps_create(view, player.handle)) { "Native video surface could not be created" }
+                if (stopped.get()) {
+                    try { bridge.ps_finish(created) } finally { bridge.ps_destroy(created); player.close() }
+                    throw CancellationException("The viewing ended during native initialization")
+                }
+                surface = created
+                created
+            }
+            creationTask!!.get(40, TimeUnit.SECONDS)
             fun sync() { if (stopped.get()) return; val t = w.graphicsConfiguration.defaultTransform; pixels.set(Dimension((w.width * t.scaleX).toInt(), (w.height * t.scaleY).toInt())); surface?.let(bridge::ps_sync) }
             onEdt {
                 listener = object : ComponentAdapter() { override fun componentMoved(e: ComponentEvent) = sync(); override fun componentResized(e: ComponentEvent) = sync() }
@@ -264,16 +274,59 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun fullscreen(enabled: Boolean) { if (stopped.get()) return; linux?.fullscreen(enabled); surface?.let { layer?.ps_fullscreen(it, if (enabled) 1 else 0) } }
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return
-        window?.let { w -> onEdt { listener?.let(w::removeComponentListener); listener = null } }
-        linux?.close(); linux = null
-        renderTask?.get(35, TimeUnit.SECONDS)
-        surface?.let { s -> render.submit { try { check(layer!!.ps_finish(s) >= 0) } finally { layer!!.ps_destroy(s) } }.get(35, TimeUnit.SECONDS) }; surface = null
-        window?.let { w -> onEdt { listener?.let(w::removeComponentListener); savedTitle?.let { (w as? java.awt.Frame)?.title = it } } }
-        render.shutdown()
-        mpv?.close(); mpv = null; proxy?.close(); proxy = null
+        var linuxReleased = linux == null
+        var rendererStopped = renderTask == null
+        var creationStopped = creationTask == null
+        var nativeReleased = surface == null && creationStopped
+        val errors = runDesktopCleanupActions(
+            { window?.let { w -> onEdt { listener?.let(w::removeComponentListener); listener = null } } },
+            { linux?.close(); linux = null; linuxReleased = true },
+            { try { renderTask?.get(35, TimeUnit.SECONDS) } finally { rendererStopped = renderTask?.isDone != false } },
+            { try { creationTask?.get(35, TimeUnit.SECONDS) } finally { creationStopped = creationTask?.isDone != false } },
+            {
+                if (rendererStopped && creationStopped) {
+                    val target = surface
+                    if (target == null) nativeReleased = true
+                    else {
+                        val destroyed = AtomicBoolean(false)
+                        try {
+                            render.submit {
+                                try { check(layer!!.ps_finish(target) >= 0) { "Native GPU drain failed" } }
+                                finally {
+                                    layer!!.ps_destroy(target)
+                                    destroyed.set(true); surface = null
+                                    // If a GPU drain outlives the caller's wait, completion still
+                                    // owns this final release. Never free mpv under a live context.
+                                    mpv?.close()
+                                }
+                            }.get(35, TimeUnit.SECONDS)
+                        } finally { nativeReleased = destroyed.get() }
+                    }
+                }
+            },
+            { window?.let { w -> onEdt { savedTitle?.let { (w as? java.awt.Frame)?.title = it } } } },
+            { render.shutdown() },
+            {
+                if (linuxReleased && rendererStopped && creationStopped && nativeReleased) { mpv?.close(); mpv = null }
+                else error("Native rendering is still active; libmpv release is deferred until its owning context completes")
+            },
+            { proxy?.close(); proxy = null }
+        )
+        if (errors.isNotEmpty()) throw IllegalStateException("The player could not complete every native cleanup step", errors.first())
     }
     private fun onEdt(block: () -> Unit) { if (SwingUtilities.isEventDispatchThread()) block() else SwingUtilities.invokeAndWait(block) }
 }
+/** Run every resource release; one native failure cannot leave an authenticated HTTP capability alive. */
+internal fun runDesktopCleanupActions(vararg actions: () -> Unit): List<Throwable> = buildList {
+    actions.forEach { action ->
+        try { action() }
+        catch (e: Throwable) {
+            if (e is VirtualMachineError) throw e
+            add(e)
+        }
+    }
+}
+
 private fun Mpv.optionIfInitialized(name: String, value: String) = set(name, value)
 
 private interface DesktopWaylandApi : Library {
@@ -383,7 +436,13 @@ private class LinuxPlayerWindow(
                     Thread.sleep(5)
                 }
             } catch (_: Exception) { failure.set("The native Wayland player could not continue. Check libmpv and compositor support."); initialized.completeExceptionally(IllegalStateException("Wayland player could not initialize")) }
-            finally { scene?.close(); context?.let { Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE") ?: "pictureshow_wayland", DesktopWaylandApi::class.java).ps_wayland_close(it) } }
+            finally {
+                scene?.close()
+                context?.let { Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE") ?: "pictureshow_wayland", DesktopWaylandApi::class.java).ps_wayland_close(it) }
+                // A timed-out caller must not free mpv while this native context is live.
+                // Its owning thread completes the deferred release after context destruction.
+                if (!running.get()) mpv.close()
+            }
         }
         initialized.get(40, TimeUnit.SECONDS)
     }
