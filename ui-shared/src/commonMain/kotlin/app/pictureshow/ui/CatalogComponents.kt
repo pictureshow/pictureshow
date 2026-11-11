@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -56,12 +57,14 @@ fun CatalogCard(
                 LinearProgressIndicator(progress = { progress(item) }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
             }
         }
-        Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Two title lines and a subtitle line are always reserved: cards in a row share one height whatever the data.
+        val bodyHeight = with(LocalDensity.current) { MaterialTheme.typography.titleSmall.lineHeight.toDp() * 2 + MaterialTheme.typography.bodySmall.lineHeight.toDp() } + 4.dp
+        Column(Modifier.padding(12.dp).heightIn(min = if(reserveLines) bodyHeight else 0.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Reserve the whole body height, leaving spare space below metadata.
+            // A short title stays next to its subtitle while row heights match.
             Text(
                 item.name,
                 style = MaterialTheme.typography.titleSmall,
-                minLines = if (reserveLines) 2 else 1,
+                minLines = 1,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )

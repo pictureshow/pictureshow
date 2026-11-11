@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) Legitimate LLC.
  */
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.*
@@ -25,8 +27,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.TooltipArea
-import androidx.compose.ui.window.TooltipPlacement
+import androidx.compose.ui.text.TextRange
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 import app.pictureshow.ui.*
@@ -131,8 +132,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     Spacer(Modifier.width(20.dp))
                     if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { help = true }, modifier = Modifier.probe("shortcuts")) { Text("Keyboard shortcuts") }
-                    TextButton(onClick = onFullscreen, modifier = Modifier.probe("fullscreen")) { Text(if (fullscreen) "Exit fullscreen" else "Fullscreen") }
+                    DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { help = true }
+                    DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
                     windowControls()
                 }
                 }
@@ -140,7 +141,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     if (state.account != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         Column(Modifier.width(184.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(state.account!!.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(state.account!!.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint) {
+                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(state.account!!.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint()) {
                                 Text(state.account!!.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = state.account!!.server.name })
                             }
                             NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.probe("nav:home"))
@@ -157,7 +158,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             Card(Modifier.fillMaxWidth().widthIn(max = 560.dp).align(Alignment.CenterHorizontally).padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                                    if (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Loading, DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect)) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.probe("retry")) { Text("Retry") }
+                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.probe("retry")) { Text("Retry") }
                                 }
                             }
                         }
@@ -398,5 +399,12 @@ private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:St
     Box {
         OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=260.dp).probe(tag)) { Text("$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis) }
         DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.probe("$tag:$key")) } }
+    }
+}
+
+@Composable
+private fun DesktopUtility(label: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, tag: String, action: () -> Unit) {
+    TooltipArea(tooltip = { Surface(color=MaterialTheme.colorScheme.inverseSurface, shape=RoundedCornerShape(4.dp)) { Text(label, Modifier.padding(8.dp), color=MaterialTheme.colorScheme.inverseOnSurface) } }) {
+        IconButton(onClick=action, modifier=Modifier.probe(tag)) { Icon(glyph, label, tint=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }

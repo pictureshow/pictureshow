@@ -88,10 +88,16 @@ class DesktopController(
         return when (response) {
             is ClientResult.Success -> response.value
             is ClientResult.Failure -> {
-                if (account != null && response.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+                if (account != null && response.error.kind in setOf(ErrorKind.INVALID_CREDENTIALS, ErrorKind.EXPIRED)) {
                     store.expire(account.key, account.accessToken)
-                    if (mutable.value.account?.accessToken == account.accessToken) mutable.update { it.copy(account = null, server = account.server, route = DesktopRoute.SignIn) }
+                    if (mutable.value.account?.accessToken == account.accessToken) {
+                        synchronized(history) { history.clear() }
+                        mutable.update { it.copy(account = null, server = account.server, route = DesktopRoute.SignIn,
+                            homeRows = emptyList(), items = emptyList(), library = null, detail = null,
+                            seasons = emptyList(), episodes = emptyList(), selectedSeason = null, playback = null) }
+                    }
                     snapshotAccounts()
+                    throw DesktopFailure("Your session ended. Sign in again.", ErrorKind.EXPIRED)
                 }
                 throw DesktopFailure(response.error.message, response.error.kind)
             }

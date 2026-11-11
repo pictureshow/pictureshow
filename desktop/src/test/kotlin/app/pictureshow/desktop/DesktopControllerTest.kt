@@ -43,6 +43,7 @@ class DesktopControllerTest {
         var failLatest = false
         var slowMovie = false
         var unauthorized = false
+        var itemUnauthorized = false
         var transcode = false
         @Volatile var holdStart = false
         val startEntered = java.util.concurrent.CountDownLatch(1)
@@ -56,6 +57,7 @@ class DesktopControllerTest {
                 requests.add(path to request)
                 var status = 200
                 val body = when {
+                    itemUnauthorized && path in setOf("/Users/viewer/Items/movie", "/Items/movie") -> { status = 401; "" }
                     path == "/System/Info/Public" -> """{"Id":"server","ServerName":"Demo cinema","ProductName":"Jellyfin Server","Version":"12.4.0"}"""
                     path == "/Users/Public" -> "[]"
                     path == "/QuickConnect/Enabled" -> "true"
@@ -118,6 +120,23 @@ class DesktopControllerTest {
             assertNull(c.state.value.error, "Credential refusal should be corrected in the fields, not resubmitted by Retry")
             assertEquals(DesktopRoute.SignIn, c.state.value.route)
             c.signIn("Viewer", "correct"); c.await { it.route == DesktopRoute.Home && !it.busy }
+        } }
+    }
+    @Test fun expiredSavedTokenIsNotReportedAsWrongTypedPassword(): Unit = runBlocking {
+        Fixture().use { f -> DesktopController(directory()).use { c ->
+            c.login(f)
+            f.itemUnauthorized = true
+            c.detail(MediaItem("movie", "The first picture", "Movie"))
+            c.await { it.route == DesktopRoute.SignIn && !it.busy && it.error != null }
+            assertNull(c.state.value.account)
+            assertEquals(ErrorKind.EXPIRED, c.state.value.errorKind)
+            assertEquals("Your session ended. Sign in again.", c.state.value.error)
+            assertTrue(c.state.value.homeRows.isEmpty())
+            assertNull(c.state.value.detail)
+            c.back(); c.await { !it.busy }
+            assertNull(c.state.value.account, "Back cannot restore the expired viewer from catalog history")
+            assertTrue(c.state.value.homeRows.isEmpty())
+            assertFalse(c.state.value.route in setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Player))
         } }
     }
     @Test fun unreadableAccountStoreOffersRetryWithoutOverwritingData(): Unit = runBlocking {

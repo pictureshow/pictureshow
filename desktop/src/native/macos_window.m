@@ -39,23 +39,31 @@ void ps_window_activate(void *ptr) {
  onMain(^{[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[(__bridge NSWindow*)ptr makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];});
 }
 
-/* Add the standard macOS titlebar to the existing alpha-capable AWT window.
- * Full-size content preserves the qualified transparent video overlay geometry. */
+/* AppKit supplies the standard traffic-light buttons on our existing borderless
+ * alpha window. Changing its titled style behind AWT changes frame insets and
+ * breaks restore geometry, so keep the qualified overlay's window style intact. */
 int ps_window_desktop_chrome(void *ptr) {
  if (!ptr) return 0;
  __block int configured=0;
  onMain(^{
   NSWindow *w=(__bridge NSWindow*)ptr;
-  NSRect frame=w.frame;
-  w.styleMask=NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable|NSWindowStyleMaskFullSizeContentView;
-  w.titleVisibility=NSWindowTitleHidden;
-  w.titlebarAppearsTransparent=YES;
-  w.opaque=NO;
-  w.backgroundColor=NSColor.clearColor;
-  [w setFrame:frame display:YES];
-  configured=(w.styleMask&NSWindowStyleMaskTitled)!=0;
-  for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) {
-   NSButton *button=[w standardWindowButton:kind.unsignedIntegerValue];
+  w.styleMask |= NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable;
+  NSView *content=w.contentView;
+  NSArray *kinds=@[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)];
+  NSArray *actions=@[NSStringFromSelector(@selector(performClose:)), NSStringFromSelector(@selector(miniaturize:)), NSStringFromSelector(@selector(zoom:))];
+  configured=1;
+  for (NSUInteger i=0;i<kinds.count;i++) {
+   NSInteger tag=13700+i;
+   NSButton *button=(NSButton*)[content viewWithTag:tag];
+   if(!button) {
+    button=[NSWindow standardWindowButton:[kinds[i] unsignedIntegerValue] forStyleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable];
+    button.tag=tag;
+    button.target=w;
+    button.action=NSSelectorFromString(actions[i]);
+    [content addSubview:button positioned:NSWindowAbove relativeTo:nil];
+   }
+   button.frame=NSMakeRect(14+i*20,content.bounds.size.height-33,14,14);
+   button.autoresizingMask=NSViewMinYMargin;
    if(!button || button.hidden || button.superview.hidden) configured=0;
   }
  });

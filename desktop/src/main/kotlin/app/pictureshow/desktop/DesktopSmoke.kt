@@ -182,8 +182,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         // Voluntary sign-out is tested before the second authentication method.
         click("account:${c.state.value.accounts.first().key}");ready(DesktopRoute.Home);click("nav:settings");ready(DesktopRoute.Settings);click("sign-out")
         waitFor("signed out"){c.state.value.account==null&&!c.state.value.busy}
-        if(c.state.value.route==DesktopRoute.Accounts) click("add-server")
-        ready(DesktopRoute.Servers);click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);click("quick-connect")
+        if(c.state.value.route==DesktopRoute.SignIn) {
+            check(c.state.value.server?.url?.trimEnd('/')==server.trimEnd('/')) { "Sign-out did not retain the selected server" }
+        } else {
+            if(c.state.value.route==DesktopRoute.Accounts) click("add-server")
+            ready(DesktopRoute.Servers);click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn)
+        }
+        click("quick-connect")
         waitFor("Quick Connect code"){c.state.value.route==DesktopRoute.QuickConnect&&c.state.value.quickCode!=null}
         val code=c.state.value.quickCode!!
         val temp=File(out,"quick-connect-request.tmp");temp.writeText("{\"code\":\"$code\"}\n");java.nio.file.Files.move(temp.toPath(),File(out,"quick-connect-request.json").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING)
