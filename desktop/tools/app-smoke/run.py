@@ -496,7 +496,8 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
         episodes = [item for item in items if item["Type"] == "Episode"]
         leaves = movies + episodes
         ordered_episodes = fixture_episode_order(episodes)
-        if len(movies) == 2 and len(episodes) == 2 and all(fixture_video_codecs(item) for item in leaves):
+        movie_titles_ready = len(movies) == 2 and {item.get("Name") for item in movies} == {"Signal One", "Archive Signal"}
+        if movie_titles_ready and len(episodes) == 2 and all(fixture_video_codecs(item) for item in leaves):
             archive = next(item for item in movies if item["Name"] == "Archive Signal")
             if "ffv1" not in fixture_video_codecs(archive):
                 raise RuntimeError("Archive Signal was not probed as the intended FFV1 conversion fixture")
@@ -509,6 +510,7 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
                 return movies, ordered_episodes
         now = time.monotonic()
         incomplete = [item for item in leaves if not fixture_video_codecs(item)
+                      or (item["Type"] == "Movie" and not movie_titles_ready)
                       or (item["Type"] == "Episode" and ordered_episodes is None)]
         for item in incomplete:
             incomplete_since.setdefault(item["Id"], now)
@@ -518,7 +520,7 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
             if scans and all(task.get("State") == "Idle" and (task.get("LastExecutionResult") or {}).get("Status") == "Completed" for task in scans):
                 for item in candidates:
                     retried.add(item["Id"])
-                    reason = "missing-video-stream-after-completed-scan" if not fixture_video_codecs(item) else "incomplete-episode-metadata-after-completed-scan"
+                    reason = "missing-video-stream-after-completed-scan" if not fixture_video_codecs(item) else "incomplete-item-metadata-after-completed-scan"
                     attempt = {"itemId": item["Id"], "name": item["Name"], "reason": reason, "queued": False}
                     api.fixture_probe_completion["refreshAttempts"].append(attempt)
                     api.request("POST", f"/Items/{item['Id']}/Refresh", query={
@@ -526,7 +528,7 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
                         "replaceAllMetadata": "false", "replaceAllImages": "false"})
                     attempt["queued"] = True
         time.sleep(1)
-    raise RuntimeError("Generated two movies and two episodes did not complete video stream probing and episode metadata")
+    raise RuntimeError("Generated two movies and two episodes did not complete video stream probing and movie/episode metadata")
 
 
 def provision(api: API, media_base: str):

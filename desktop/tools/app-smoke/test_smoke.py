@@ -383,6 +383,24 @@ class FixtureProbeCompletionTest(unittest.TestCase):
         self.assertEqual([1, 2], [item['episode'] for item in api.fixture_probe_completion['episodes']])
         self.assertEqual(['2', '3'], [item['itemId'] for item in api.fixture_probe_completion['episodes']])
 
+    def test_movie_titles_must_finish_before_fixture_lookup(self):
+        class PendingMovieAPI(self.API):
+            calls = 0
+            def request(self, method, endpoint, body=None, query=None):
+                result = super().request(method, endpoint, body, query)
+                if endpoint == '/Items':
+                    self.calls += 1
+                    if self.calls == 1:
+                        result['Items'][0]['Name'] = 'Signal One (2026)'
+                        result['Items'][1]['Name'] = 'Archive Signal (2026)'
+                return result
+        api = PendingMovieAPI(scanning=True)
+        api.refreshes.append({'alreadyProbed': True})
+        movies, _ = self.wait(api)
+        self.assertGreater(api.calls, 1)
+        self.assertEqual({'Signal One', 'Archive Signal'}, {item['Name'] for item in movies})
+        self.assertTrue(api.fixture_probe_completion['complete'])
+
     def test_episode_order_rejects_missing_duplicate_or_wrong_metadata(self):
         episodes = [{'Id': 'first', 'Name': 'First Light', 'IndexNumber': 1, 'ParentIndexNumber': 1},
                     {'Id': 'second', 'Name': 'Second Light', 'IndexNumber': 2, 'ParentIndexNumber': 1}]
