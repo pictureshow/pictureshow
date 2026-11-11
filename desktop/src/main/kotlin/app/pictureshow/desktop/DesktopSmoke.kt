@@ -21,6 +21,12 @@ import kotlin.math.roundToInt
 import kotlin.math.abs
 
 /** The owned fixture's delivered SRT is an independent clock witness for libmpv. */
+internal fun fixtureSubtitleText(stream: java.io.InputStream): String {
+    val bytes = stream.readNBytes(1025)
+    require(bytes.size <= 1024) { "Fixture subtitle delivery exceeds its byte limit" }
+    return bytes.toString(java.nio.charset.StandardCharsets.UTF_8)
+}
+
 internal fun fixtureDeliveredCue(text: String, sourceStart: Double, sourceEnd: Double): Pair<Double, Double> {
     val lines = text.removePrefix("\uFEFF").replace("\r\n", "\n").trim().lines()
     require(lines.size == 3 && lines[0] == "1" && lines[2] == "Pictureshow original CC0 subtitle") { "Fixture delivery must contain exactly the original cue" }
@@ -257,12 +263,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val deliveredText = runCatching {
             DesktopMediaProxy(c.state.value.account!!, c.state.value.playback!!.decision).use { proxy ->
                 val remote = app.pictureshow.core.playback.PlayDecisions.resolve(c.state.value.account!!.server, deliveryUrl)
-                val request = java.net.http.HttpRequest.newBuilder(java.net.URI(proxy.url(remote))).timeout(java.time.Duration.ofSeconds(20)).GET().build()
-                java.net.http.HttpClient.newHttpClient().use { client ->
-                    val response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8))
-                    check(response.statusCode() == 200 && response.body().length <= 1024)
-                    response.body()
-                }
+                val connection = java.net.URI(proxy.url(remote)).toURL().openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 20_000; connection.readTimeout = 20_000
+                connection.instanceFollowRedirects = false
+                try {
+                    check(connection.responseCode == 200)
+                    connection.inputStream.use(::fixtureSubtitleText)
+                } finally { connection.disconnect() }
             }
         }.getOrElse { error("Fixture subtitle delivery request failed") }
         val (deliveredCueStart, deliveredCueEnd) = fixtureDeliveredCue(deliveredText, cueStart, cueEnd)

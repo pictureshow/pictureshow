@@ -11,6 +11,13 @@ class DesktopSmokeTimingTest {
     private fun cue(start: String = "00:00:00,000", end: String = "00:03:00,000") =
         "1\n$start --> $end\nPictureshow original CC0 subtitle\n"
 
+    @Test fun deliveryByteLimitIsAppliedBeforeDecodingOrReadingWholeBody() {
+        assertEquals(cue(), fixtureSubtitleText(java.io.ByteArrayInputStream(cue().toByteArray())))
+        val oversized = java.io.ByteArrayInputStream(ByteArray(10_000))
+        assertFailsWith<IllegalArgumentException> { fixtureSubtitleText(oversized) }
+        assertEquals(10_000 - 1025, oversized.available())
+    }
+
     @Test fun nativeClockUsesActualDeliveredZeroOrAudioPrimingOffset() {
         assertEquals(0.0 to 180.0, fixtureDeliveredCue(cue(), 0.0, 180.0))
         assertEquals(.021 to 180.021, fixtureDeliveredCue(cue("00:00:00,021", "00:03:00,021"), 0.0, 180.0))
