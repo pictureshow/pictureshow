@@ -2330,7 +2330,7 @@
           },
           "expected": {
             "phase": "Playing",
-            "command": "Seek"
+            "command": null
           }
         },
         {

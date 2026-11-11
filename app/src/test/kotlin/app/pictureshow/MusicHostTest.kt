@@ -74,6 +74,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
+import org.robolectric.shadows.ShadowSystemClock
 
 /**
  * A real ExoPlayer, real files over HTTP and the real store and reducers. The only stand-ins are the audio renderer, which
@@ -173,9 +174,9 @@ class MusicHostTest {
 
     // Real HTTP loaders cannot follow an auto clock racing through future player messages.
     // Only the revocation fixture uses a clock paced by actual elapsed time; retries stay unchanged.
-    private fun advanceNetworkClocks() {
+    private fun advanceNetworkClocks(nowNs: Long = System.nanoTime()) {
         pacedClocks.forEach { pace ->
-            val targetMs = (System.nanoTime() - pace.originNs) / 1_000_000L
+            val targetMs = (nowNs - pace.originNs) / 1_000_000L
             val delta = (targetMs - pace.advancedMs).coerceAtLeast(0)
             if (delta > 0) {
                 pace.clock.advanceTime(delta)
@@ -184,9 +185,15 @@ class MusicHostTest {
         }
     }
 
-    private fun player(context: Context): ExoPlayer {
-        val clock = FakeClock(!paceNetworkClock)
+    private fun playerClock(): FakeClock {
+        // Loader's native Handler uses Robolectric uptime. Its clock cannot be set backwards to zero.
+        val clock = if (paceNetworkClock) FakeClock(android.os.SystemClock.uptimeMillis(), false) else FakeClock(true)
         if (paceNetworkClock) pacedClocks += ClockPace(clock, System.nanoTime())
+        return clock
+    }
+
+    private fun player(context: Context): ExoPlayer {
+        val clock = playerClock()
         return TestExoPlayerBuilder(context)
             .setClock(clock)
             .setRenderersFactory { handler, _, audio, _, _ ->
@@ -294,6 +301,9 @@ class MusicHostTest {
                 "Waited for: $what. Log: $log. Ui: ${hosts.lastOrNull()?.state?.value?.let {
                     it.message to it.queue?.order
                 }}. Player: ${lastPlayer?.let { it.playbackState to it.playWhenReady }}. " +
+                    "Clocks: fakeMs=${pacedClocks.map { it.clock.elapsedRealtime() }} " +
+                    "androidUptimeMs=${android.os.SystemClock.uptimeMillis()} " +
+                    "pacedMs=${pacedClocks.map { it.advancedMs }}. " +
                     "Errors: ${synchronized(playerErrors) { playerErrors.takeLast(8) }}. " +
                     "HTTP counts: ${synchronized(fixtureHttp) { fixtureHttp.groupingBy { it }.eachCount() }}"
             )
@@ -436,6 +446,23 @@ class MusicHostTest {
         music.request(album("broken", "b"))
         until("the next track") { "start b" in log }
         assertEquals("b", music.state.value.current!!.track.id)
+    }
+
+    @Test fun theNetworkClockPreservesExistingAndroidUptimeAndPacesBothRetryAndPlayerTime() {
+        paceNetworkClock = true
+        ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(1))
+        val base = android.os.SystemClock.uptimeMillis()
+        val clock = playerClock()
+        assertTrue(base >= 60_000)
+        assertEquals(base, clock.elapsedRealtime())
+        assertEquals(base, android.os.SystemClock.uptimeMillis())
+        val origin = pacedClocks.single().originNs
+        advanceNetworkClocks(origin + 1_500_999_999L)
+        assertEquals(base + 1_500, clock.elapsedRealtime())
+        assertEquals(base + 1_500, android.os.SystemClock.uptimeMillis())
+        advanceNetworkClocks(origin + 1_501_000_000L)
+        assertEquals(base + 1_501, clock.elapsedRealtime())
+        assertEquals(base + 1_501, android.os.SystemClock.uptimeMillis())
     }
 
     /** As with video: the account is marked expired, so a sign-in replaces its token, and the same viewer's queue waits. */

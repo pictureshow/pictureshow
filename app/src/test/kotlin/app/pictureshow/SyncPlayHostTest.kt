@@ -258,6 +258,11 @@ class SyncPlayHostTest {
                 }
             )
         )
+        // StateUpdate and transport are separate socket events; the ticker can run between them.
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null || it.playing == true })
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
         rig.host.receive(rig.command("Unpause", delayMs = 1_000, ticks = 50_000_000L))
         rig.host.tick()
         runCurrent()

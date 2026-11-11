@@ -435,3 +435,5 @@ For `sync-clock` operation `scheduled-position`, input `command`, exact decimal-
 
 The `sync-state` suite also executes `access-presentation`: unknown/loading/failed access differs from a confirmed denial, all unknown or failed permissions stay closed, and an idle denied viewer can refresh after a server policy change. Platform chooser presentation and dispatch must both consume this decision.
 The future-Unpause state trace retains its new command immediately even when Playing is published before When; renderer adapters must honor the existing future-target delay cases rather than advancing an older paused Seek through the wait.
+
+`sync-clock` operation `timeline-playing` takes command and appliedPlaying; Unpause is playing, Pause is paused, and Seek retains its applied mode across independent StateUpdate notifications. Expected is boolean. These cases complement the separate-event host deadline regression.

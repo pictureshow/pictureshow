@@ -93,6 +93,9 @@ fun syncScheduledPosition(command: String, currentTicks: Long, targetTicks: Long
         targetTicks
     }
 
+/** A phase notification cannot turn an already-applied paused Seek into a playing timeline. */
+fun syncTimelinePlaying(command: String, appliedPlaying: Boolean): Boolean = command == "Unpause" || (command == "Seek" && appliedPlaying)
+
 data class SyncDriftState(val lastSeekMonotonicMillis: Long? = null, val rateStartedMonotonicMillis: Long? = null, val rate: Double = 1.0)
 
 enum class SyncDriftAction { NONE, RATE, SEEK, WAIT, RESET_RATE }

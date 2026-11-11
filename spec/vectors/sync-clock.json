@@ -280,6 +280,42 @@
         "target": "9223372036854775807"
       },
       "expected": "9223372036854775807"
+    },
+    {
+      "id": "timeline-paused-seek",
+      "op": "timeline-playing",
+      "input": {
+        "command": "Seek",
+        "appliedPlaying": false
+      },
+      "expected": false
+    },
+    {
+      "id": "timeline-playing-seek",
+      "op": "timeline-playing",
+      "input": {
+        "command": "Seek",
+        "appliedPlaying": true
+      },
+      "expected": true
+    },
+    {
+      "id": "timeline-unpause",
+      "op": "timeline-playing",
+      "input": {
+        "command": "Unpause",
+        "appliedPlaying": false
+      },
+      "expected": true
+    },
+    {
+      "id": "timeline-pause",
+      "op": "timeline-playing",
+      "input": {
+        "command": "Pause",
+        "appliedPlaying": true
+      },
+      "expected": false
     }
   ]
 }

@@ -39,6 +39,7 @@ import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
 import app.pictureshow.core.sync.syncTarget
+import app.pictureshow.core.sync.syncTimelinePlaying
 import app.pictureshow.core.sync.syncTransport
 import app.pictureshow.core.sync.syncTransportApplied
 import kotlinx.coroutines.CompletableDeferred
@@ -128,6 +129,7 @@ internal class SyncPlayHost(
     private var ticker: Job? = null
     private var scheduled: Job? = null
     private var timeline: SyncCommand? = null
+    private var timelinePlaying = false
     private var drift = SyncDriftState()
     private var readyEntry: String? = null
     private var stoppedEntry: String? = null
@@ -651,7 +653,7 @@ internal class SyncPlayHost(
         }
         val command = timeline ?: return
         if (!ready || command.playlistItemId != current.playlistItemId || membership.phase !in setOf("Playing", "Paused")) return
-        val playing = command.command == "Unpause" || (command.command == "Seek" && membership.phase == "Playing")
+        val playing = syncTimelinePlaying(command.command, timelinePlaying)
         val target = syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, now, playing, r.durationTicks) ?: return
         if (target.delayMillis > 0) return
         val decision = syncDrift(
@@ -691,6 +693,7 @@ internal class SyncPlayHost(
         // Acceptance can publish Playing before When. The ticker must wait on this command,
         // rather than extrapolating a previous paused Seek through the wait interval.
         timeline = command
+        timelinePlaying = false
         scheduled = scope.launch {
             val generation = membership.generation
             val now = anchor?.serverNowTicks(wall(), monotonic()) ?: run {
@@ -723,6 +726,7 @@ internal class SyncPlayHost(
             diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
             val position = syncScheduledPosition(command.command, r.positionTicks, execution.positionTicks)
             val positionChanged = renderer?.apply(position, playing) == true
+            timelinePlaying = playing
             // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
             drift = syncTransportApplied(drift, monotonic(), positionChanged)
         }
@@ -741,6 +745,7 @@ internal class SyncPlayHost(
         anchor = null
         calibration = SyncClockCalibration()
         timeline = null
+        timelinePlaying = false
         drift = stopSyncDrift()
         readyEntry = null
         stoppedEntry = null

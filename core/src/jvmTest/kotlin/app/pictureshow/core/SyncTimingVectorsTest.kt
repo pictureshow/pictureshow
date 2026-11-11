@@ -11,6 +11,7 @@ import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncDrift
 import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncTarget
+import app.pictureshow.core.sync.syncTimelinePlaying
 import app.pictureshow.core.sync.syncTransportApplied
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -66,6 +67,15 @@ class SyncTimingVectorsTest {
                     val i = row.getValue("input").jsonObject
                     val value = syncScheduledPosition(i.getValue("command").jsonPrimitive.content, i.long("current"), i.long("target"))
                     assertEquals(if (expected is JsonNull) null else expected.jsonPrimitive.long, value, row.toString())
+                }
+
+                "timeline-playing" -> {
+                    val i = row.getValue("input").jsonObject
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        syncTimelinePlaying(i.getValue("command").jsonPrimitive.content, i.bool("appliedPlaying")),
+                        row.toString()
+                    )
                 }
 
                 else -> error("Unknown clock operation")
