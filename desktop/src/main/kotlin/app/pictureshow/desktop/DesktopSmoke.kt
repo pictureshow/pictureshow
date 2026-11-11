@@ -69,6 +69,19 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             small.createGraphics().let { g->g.drawImage(original,0,0,small.width,small.height,null);g.dispose() }
             val target=File(screens,"$name-${w}x${h}.jpg")
             ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
+            val accessibleRows=mutableListOf<String>()
+            SwingUtilities.invokeAndWait {
+                fun visit(a: javax.accessibility.Accessible?, depth:Int) {
+                    if(a==null || depth>40) return
+                    val ctx=a.accessibleContext ?: return
+                    val role=ctx.accessibleRole.toDisplayString()
+                    val name=if(ctx.accessibleRole==javax.accessibility.AccessibleRole.PASSWORD_TEXT) "<hidden>" else (ctx.accessibleName ?: "").replace(password,"<hidden>").replace(server,"<test-server>")
+                    accessibleRows += "  ".repeat(depth)+role+" | "+name
+                    if(ctx.accessibleRole!=javax.accessibility.AccessibleRole.PASSWORD_TEXT) for(i in 0 until ctx.accessibleChildrenCount) visit(ctx.getAccessibleChild(i),depth+1)
+                }
+                visit(window,0)
+            }
+            File(screens,"$name-${w}x${h}.accessibility.txt").writeText(accessibleRows.joinToString("\n")+"\n")
             val geometry=DesktopUiProbe.bounds.entries.sortedBy{it.key}.joinToString("\n"){(tag,b)->"$tag ${b.left},${b.top},${b.right},${b.bottom}"}
             File(screens,"$name-${w}x${h}.geometry.txt").writeText("requested=${w}x${h}\nactual=${bounds.width}x${bounds.height}\n$geometry\n")
             File(screens,"index.md").appendText("- [$name · ${w}×${h}](${target.name}) — actual window ${bounds.width}×${bounds.height}, reader off.\n")

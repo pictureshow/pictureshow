@@ -553,7 +553,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     command = [args.java, "--enable-native-access=ALL-UNNAMED"]
     if platform.system() == "Darwin":
         command += ["--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED"]
-    command += ["-Dcompose.interop.blending=true", "-cp", str(args.runtime.resolve() / "lib" / "*"), "app.pictureshow.desktop.MainKt", "app-smoke", viewer.url, "desktop-viewer", password, str(evidence.resolve())]
+    command += ["-Dcompose.interop.blending=true", "-Dcompose.accessibility.enable=true", "-cp", str(args.runtime.resolve() / "lib" / "*"), "app.pictureshow.desktop.MainKt", "app-smoke", viewer.url, "desktop-viewer", password, str(evidence.resolve())]
     environment = dict(os.environ)
     environment["PICTURESHOW_DATA_DIR"] = str(args.work.resolve() / "viewer-data")
     environment["SPIKE_NULL_AUDIO"] = "1"
