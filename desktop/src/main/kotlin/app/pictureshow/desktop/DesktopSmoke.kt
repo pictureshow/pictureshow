@@ -171,8 +171,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         }
         screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
-        click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
-        check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error");screenshot("02b-sign-in-error-minimum",listOf(800 to 600))
+        click("username");waitFor("username has actual keyboard focus") { DesktopUiProbe.focus["username"]==true };type(user);click("password");waitFor("password has actual keyboard focus") { DesktopUiProbe.focus["password"]==true };type("wrong-password");click("sign-in")
+        waitFor("recoverable password rejection") { c.state.value.route==DesktopRoute.SignIn && !c.state.value.busy && c.state.value.errorKind==ErrorKind.INVALID_CREDENTIALS }
+        key(KeyEvent.VK_RIGHT);Thread.sleep(250)
+        check(c.state.value.errorKind==ErrorKind.INVALID_CREDENTIALS) { "Cursor movement cleared the credential rejection" };screenshot("02b-sign-in-error");screenshot("02b-sign-in-error-minimum",listOf(800 to 600))
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
         waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("03c-home-4k",listOf(3840 to 2160))
