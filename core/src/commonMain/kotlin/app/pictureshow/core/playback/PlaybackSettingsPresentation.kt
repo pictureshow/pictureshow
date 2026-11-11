@@ -5,6 +5,15 @@ package app.pictureshow.core.playback
 
 /** Viewer-facing labels; stored protocol and enum identifiers never become UI choices. */
 object PlaybackSettingsPresentation {
+    private val passthroughOrder = listOf(
+        PassthroughEncoding.AC3,
+        PassthroughEncoding.EAC3,
+        PassthroughEncoding.EAC3_JOC,
+        PassthroughEncoding.TRUEHD,
+        PassthroughEncoding.DTS,
+        PassthroughEncoding.DTS_HD
+    )
+
     fun canConfigurePassthrough(passthrough: Boolean, downmix: Boolean, supported: Boolean) = passthrough && !downmix && supported
 
     /** The saved permission and current receiver detection are different facts. */
@@ -18,7 +27,7 @@ object PlaybackSettingsPresentation {
         val capability = when {
             checking -> "Checking connected receiver support."
             supported.isEmpty() -> if (enabled) "None detected now." else "No compatible receiver detected now."
-            else -> "Detected now: ${PassthroughEncoding.entries.filter {
+            else -> "Detected now: ${passthroughOrder.filter {
                 it in supported
             }.joinToString(", ", transform = ::passthroughLabel)}."
         }
