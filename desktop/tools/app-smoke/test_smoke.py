@@ -66,6 +66,31 @@ class NativeCloseVerdictTest(unittest.TestCase):
                     smoke.validate_native_close(evidence, True)
 
 
+class UncaughtExceptionVerdictTest(unittest.TestCase):
+    def test_uncaught_exception_is_retained_without_message_or_paths(self):
+        raw = '\n'.join([
+            'Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: https://example.invalid/?api_key=private',
+            '\tat java.desktop@21.0.13/java.awt.Component.requestFocusHelper(Component.java:8049)',
+            '\tat app.pictureshow.desktop.DesktopSmokeKt.smoke(DesktopSmoke.kt:123)',
+            '\tat app.bad.Frame(/tmp/private/token:42)',
+            'SMOKE all 18 viewer flows passed',
+            '\tat app.unrelated.Frame(Unrelated.java:7)',
+        ])
+        exceptions = smoke.uncaught_app_exceptions(raw)
+        self.assertEqual([{'type': 'java.lang.NullPointerException', 'frames': [
+            {'method': 'java.awt.Component.requestFocusHelper', 'line': 8049},
+            {'method': 'app.pictureshow.desktop.DesktopSmokeKt.smoke', 'line': 123}]}], exceptions)
+        with self.assertRaisesRegex(RuntimeError, 'uncaught exception'):
+            smoke.require_no_uncaught_exceptions(exceptions)
+        for private in ['example.invalid', 'private', '/tmp', 'api_key', 'unrelated']:
+            self.assertNotIn(private, json.dumps(exceptions))
+
+    def test_handled_player_diagnostic_does_not_count_as_uncaught(self):
+        exceptions = smoke.uncaught_app_exceptions('DESKTOP_PLAYER_FAILURE stage=open type=java.lang.IllegalArgumentException')
+        self.assertEqual([], exceptions)
+        smoke.require_no_uncaught_exceptions(exceptions)
+
+
 class SmokeVerdictTest(unittest.TestCase):
     def receipt(self):
         return {"pass": True, "checks": dict.fromkeys(smoke.REQUIRED_CHECKS, True)}

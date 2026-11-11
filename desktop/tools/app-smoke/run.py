@@ -101,6 +101,30 @@ def selected_app_output(text: str, *private_values: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def uncaught_app_exceptions(text: str) -> list:
+    """Retain JVM exception identity and code locations, never raw messages."""
+    result, current = [], None
+    for line in text.splitlines():
+        header = re.match(r'^Exception in thread "[^"\r\n]*" ([A-Za-z0-9_.$]+)(?::|$)', line)
+        if header:
+            current = {"type": header[1], "frames": []}
+            result.append(current)
+            continue
+        if current is None:
+            continue
+        frame = re.fullmatch(r'\s+at (?:[A-Za-z0-9_.@+-]+/)?([A-Za-z0-9_.$<>]+)\((?:[A-Za-z0-9_.$-]+\.(?:java|kt):([0-9]+)|Native Method|Unknown Source)\)', line)
+        if frame:
+            current["frames"].append({"method": frame[1], "line": int(frame[2]) if frame[2] else None})
+        elif not line.startswith(("\tat ", "\t... ", "Caused by:", "\tSuppressed:")):
+            current = None
+    return result
+
+
+def require_no_uncaught_exceptions(exceptions: list) -> None:
+    if exceptions:
+        raise RuntimeError("Desktop app emitted an uncaught exception; inspect uncaught-app-exceptions.json")
+
+
 def fixture_diagnostics(api: "API", evidence: Path, error: Exception) -> None:
     """Publish enough to diagnose a probe failure, without raw logs or tokens."""
     result = {"errorType": type(error).__name__, "error": sanitized(str(error), api.token)}
@@ -610,6 +634,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     environment["PICTURESHOW_SMOKE"] = "1"
     raw_log = args.work / "app.log"
     samples, qc_codes = [], set()
+    uncaught = []
     observer = EncoderObserver(viewer)
     with raw_log.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
@@ -652,8 +677,11 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                     process.wait(timeout=10)
             # Logs may carry app URL tokens, passwords or native server paths. Keep
             # raw logs local; publish only expected progress and failure messages.
+            raw_output = raw_log.read_text(encoding="utf-8", errors="replace")
             (evidence / "app-output.txt").write_text(selected_app_output(
-                raw_log.read_text(encoding="utf-8", errors="replace"), password, viewer.token), encoding="utf-8")
+                raw_output, password, viewer.token), encoding="utf-8")
+            uncaught = uncaught_app_exceptions(raw_output)
+            write_json(evidence / "uncaught-app-exceptions.json", {"exceptions": uncaught})
             # Keep the independent observations even when the app fails before
             # its receipt. A failure must not discard the only server evidence.
             write_json(evidence / "server-session-observations.json", {"samples": samples,
@@ -678,6 +706,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     if observer.error:
         raise RuntimeError("Owned fixture encoder observation failed: " + observer.error)
+    require_no_uncaught_exceptions(uncaught)
     result = validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
     result.update(validate_native_close(evidence, environment.get("PICTURESHOW_SMOKE_NATIVE_CLOSE") == "1"))
     return result
