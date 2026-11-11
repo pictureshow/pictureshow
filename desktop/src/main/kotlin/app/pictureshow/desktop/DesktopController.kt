@@ -320,9 +320,10 @@ class DesktopController(
     private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null) {
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
-        catch (_: LinkageError) { publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
+        catch (e: LinkageError) { recordDesktopPlayerFailure("factory", e); publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
         val profile = try { player.profile(mutable.value.settings) }
         catch (e: Throwable) {
+            recordDesktopPlayerFailure("profile", e)
             runCatching { player.close() }
             if (e is CancellationException || e is VirtualMachineError) throw e
             publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
@@ -356,6 +357,7 @@ class DesktopController(
         catch (e: Throwable) {
             if (e is CancellationException) throw e
             if (e is VirtualMachineError || e is ThreadDeath) throw e
+            recordDesktopPlayerFailure("open", e)
             runCatching { player.close() }
             withContext(NonCancellable) { releaseEncoding(v) }
             v.stopped = true

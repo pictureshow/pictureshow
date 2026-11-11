@@ -38,3 +38,22 @@ void *ps_window_find(const char *title) {
 void ps_window_activate(void *ptr) {
  onMain(^{[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[(__bridge NSWindow*)ptr makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];});
 }
+
+/* Add the standard macOS titlebar to the existing alpha-capable AWT window.
+ * Full-size content preserves the qualified transparent video overlay geometry. */
+int ps_window_desktop_chrome(void *ptr) {
+ if (!ptr) return 0;
+ __block int configured=0;
+ onMain(^{
+  NSWindow *w=(__bridge NSWindow*)ptr;
+  NSRect frame=w.frame;
+  w.styleMask=NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable|NSWindowStyleMaskFullSizeContentView;
+  w.titleVisibility=NSWindowTitleHidden;
+  w.titlebarAppearsTransparent=YES;
+  w.opaque=NO;
+  w.backgroundColor=NSColor.clearColor;
+  [w setFrame:frame display:YES];
+  configured=(w.styleMask&NSWindowStyleMaskTitled)!=0;
+ });
+ return configured;
+}

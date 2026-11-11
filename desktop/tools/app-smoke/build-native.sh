@@ -66,6 +66,7 @@ PY
   -I"$prefix/include" -L"$prefix/lib" -lmpv -Wl,-rpath,"$prefix/lib" \
   -framework Cocoa -framework OpenGL -framework Metal -framework QuartzCore -framework IOSurface \
   -o "$build/libpictureshow_layer.dylib"
+ clang -O2 -fobjc-arc -dynamiclib desktop/src/native/macos_window.m -framework Cocoa -o "$build/libpictureshow_window.dylib"
  clang -O2 -fobjc-arc desktop/tools/app-smoke/macos-preflight.m \
   -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics \
   -o "$build/macos-native-preflight"

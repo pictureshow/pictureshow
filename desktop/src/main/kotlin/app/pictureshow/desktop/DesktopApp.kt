@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** Geometry of real controls, used by the finite Robot smoke driver, never by normal input handling. */
 private val LocalDesktopPage = staticCompositionLocalOf { "" }
 object DesktopUiProbe {
+    internal val owners = DesktopControlOwners()
     val bounds = ConcurrentHashMap<String, androidx.compose.ui.geometry.Rect>()
     val focus = ConcurrentHashMap<String, Boolean>()
     val pageOfTag = ConcurrentHashMap<String, String>()
@@ -41,17 +42,22 @@ object DesktopUiProbe {
     val reveal = ConcurrentHashMap<String, () -> Unit>()
 }
 fun Modifier.probe(tag: String): Modifier = composed {
+    val owner = remember { Any() }
     val requester = remember { BringIntoViewRequester() }
     val focusRequester = remember { FocusRequester() }
     val page = LocalDesktopPage.current
     val scope = rememberCoroutineScope()
     DisposableEffect(tag) {
-        DesktopUiProbe.requestFocus[tag] = focusRequester
-        DesktopUiProbe.reveal[tag] = { scope.launch { requester.bringIntoView() } }
-        onDispose { DesktopUiProbe.bounds.remove(tag); DesktopUiProbe.focus.remove(tag); DesktopUiProbe.reveal.remove(tag); DesktopUiProbe.requestFocus.remove(tag); DesktopUiProbe.pageOfTag.remove(tag) }
+        DesktopUiProbe.owners.register(tag, owner) {
+            DesktopUiProbe.requestFocus[tag] = focusRequester
+            DesktopUiProbe.reveal[tag] = { scope.launch { requester.bringIntoView() } }
+        }
+        onDispose { DesktopUiProbe.owners.release(tag, owner) {
+            DesktopUiProbe.bounds.remove(tag); DesktopUiProbe.focus.remove(tag); DesktopUiProbe.reveal.remove(tag); DesktopUiProbe.requestFocus.remove(tag); DesktopUiProbe.pageOfTag.remove(tag)
+        } }
     }
-    focusRequester(focusRequester).bringIntoViewRequester(requester).testTag(tag).onGloballyPositioned { DesktopUiProbe.bounds[tag] = it.boundsInWindow(); DesktopUiProbe.pageOfTag[tag] = page }
-        .onFocusChanged { DesktopUiProbe.focus[tag] = it.isFocused; if(it.isFocused && page.isNotBlank()) DesktopUiProbe.lastFocus[page] = tag }
+    focusRequester(focusRequester).bringIntoViewRequester(requester).testTag(tag).onGloballyPositioned { DesktopUiProbe.owners.update(tag, owner) { DesktopUiProbe.bounds[tag] = it.boundsInWindow(); DesktopUiProbe.pageOfTag[tag] = page } }
+        .onFocusChanged { DesktopUiProbe.owners.update(tag, owner) { DesktopUiProbe.focus[tag] = it.isFocused; if(it.isFocused && page.isNotBlank()) DesktopUiProbe.lastFocus[page] = tag } }
 }
 @Composable
 private fun Modifier.focusOutline(): Modifier {
@@ -60,7 +66,10 @@ private fun Modifier.focusOutline(): Modifier {
 }
 
 @Composable
-fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit) {
+fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit,
+    macChrome: Boolean = false,
+    chrome: @Composable (@Composable () -> Unit) -> Unit = { it() },
+    windowControls: @Composable RowScope.() -> Unit = {}) {
     val state by controller.state.collectAsState()
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
@@ -111,13 +120,16 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     }
             } }
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                chrome {
+                Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
                     if (state.route !in listOf(DesktopRoute.Servers, DesktopRoute.Loading)) TextButton(onClick = controller::back, modifier = Modifier.probe("back")) { Text("‹ Back") }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { help = true }, modifier = Modifier.probe("shortcuts")) { Text("Keyboard shortcuts") }
                     TextButton(onClick = onFullscreen, modifier = Modifier.probe("fullscreen")) { Text(if (fullscreen) "Exit fullscreen" else "Fullscreen") }
+                    windowControls()
+                }
                 }
                 Row(Modifier.weight(1f)) {
                     if (state.account != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
@@ -319,8 +331,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     Button(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Text(if(p.paused) "Play" else "Pause") }
                     TextButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Text("−10 s") }
                     TextButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Text("+10 s") }
-                    Choice("Audio",p.audioTracks.map{it.index to trackLabel(it)},p.audioIndex,"audio",c::selectAudio)
-                    Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.map{it.index to trackLabel(it)},p.subtitleIndex,"subtitles",c::selectSubtitle)
+                    Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",c::selectAudio)
+                    Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",c::selectSubtitle)
                     if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.probe("next-episode")) { Text("Next episode") }
                     TextButton(onClick=fullscreen) { Text("Fullscreen") }
                     OutlinedButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Text("Stop") }

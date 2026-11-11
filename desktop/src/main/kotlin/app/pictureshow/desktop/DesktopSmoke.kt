@@ -28,7 +28,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     var successful=false
     fun waitFor(label:String,seconds:Long=45,predicate:()->Boolean) {
         val until=System.nanoTime()+seconds*1_000_000_000L
-        while(!predicate()) { check(System.nanoTime()<until) { "SMOKE timed out: $label; route=${c.state.value.route}; busy=${c.state.value.busy}; error=${c.state.value.error != null}" };Thread.sleep(60) }
+        while(!predicate()) { check(System.nanoTime()<until) { "SMOKE timed out: $label; route=${c.state.value.route}; busy=${c.state.value.busy}; error=${c.state.value.error != null}; window=${window.bounds}; display=${window.graphicsConfiguration.bounds}" };Thread.sleep(60) }
         Thread.sleep(250)
     }
     fun ready(route:DesktopRoute) = waitFor(route.name) { c.state.value.route==route && !c.state.value.busy }
@@ -63,8 +63,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             if(shifted) robot.keyRelease(KeyEvent.VK_SHIFT)
         }
     }
-    fun screenshot(name:String) {
-        for((w,h) in listOf(1280 to 800,1920 to 1080)) {
+    fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080)) {
+        for((w,h) in sizes) {
             SwingUtilities.invokeAndWait {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
                 val wantedX=System.getenv("PICTURESHOW_SMOKE_WINDOW_X")?.toInt() ?: window.x
@@ -113,10 +113,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
-        waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home")
+        waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600))
         val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library")
         click("sort");click("sort:DateCreated");waitFor("sort applied"){c.state.value.sortBy=="DateCreated"&&!c.state.value.busy};checks["sort"]=true
-        val movie=c.state.value.items.first{it.name=="Signal One"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail")
+        val movie=c.state.value.items.first{it.name=="Signal One"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail");screenshot("05b-detail-minimum",listOf(800 to 600))
         key(KeyEvent.VK_ESCAPE);ready(DesktopRoute.Library)
         waitFor("keyboard Back restores opener") { DesktopUiProbe.focus["grid:${movie.id}"]==true }
         key(KeyEvent.VK_ENTER);ready(DesktopRoute.Detail)
@@ -124,8 +124,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("decoded playback",60){c.state.value.playback?.ready==true};checks["playback"]=true
         check(c.state.value.playback!!.positionSeconds>=10){"Resume did not use fixture server progress"};checks["resume"]=true
         val beforeFull=java.awt.Rectangle(window.bounds)
-        key(KeyEvent.VK_F11);waitFor("keyboard fullscreen"){window.bounds==window.graphicsConfiguration.bounds}
-        key(KeyEvent.VK_F11);waitFor("fullscreen restore"){window.bounds==beforeFull}
+        robot.keyPress(KeyEvent.VK_ALT);key(KeyEvent.VK_ENTER);robot.keyRelease(KeyEvent.VK_ALT);waitFor("keyboard fullscreen"){window.bounds==window.graphicsConfiguration.bounds}
+        robot.keyPress(KeyEvent.VK_ALT);key(KeyEvent.VK_ENTER);robot.keyRelease(KeyEvent.VK_ALT);waitFor("fullscreen restore"){window.bounds==beforeFull}
         val first=c.state.value.playback!!.positionSeconds
         waitFor("advancing playback",30){(c.state.value.playback?.positionSeconds?:0.0)>first+3};checks["progress"]=true
         screenshot("06-player")
@@ -172,7 +172,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val ratio=((duration-12)/duration).coerceIn(0.0,1.0)
         robot.mouseMove(origin.x+((slider.left+slider.width*ratio)/pixelScale).roundToInt(),origin.y+(slider.center.y/pixelScale).roundToInt());robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
         waitFor("natural EOF autoplay",35){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["autoplayNext"]=true
-        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);screenshot("11-settings")
+        click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600))
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key

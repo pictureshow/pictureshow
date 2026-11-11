@@ -29,6 +29,7 @@ fun desktopMain(args: Array<String>) {
         val state = rememberWindowState(width=1280.dp,height=800.dp,position=if(smoke && System.getenv("PICTURESHOW_SMOKE_WINDOW_X")!=null) WindowPosition.Absolute(System.getenv("PICTURESHOW_SMOKE_WINDOW_X").toInt().dp,(System.getenv("PICTURESHOW_SMOKE_WINDOW_Y") ?: "0").toInt().dp) else WindowPosition.PlatformDefault)
         var closing by remember { mutableStateOf(false) }
         var full by remember { mutableStateOf(false) }
+        var macChrome by remember { mutableStateOf(false) }
         val keys = remember { java.util.concurrent.atomic.AtomicReference<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
         var restore by remember { mutableStateOf<java.awt.Rectangle?>(null) }
         fun close() {
@@ -51,6 +52,9 @@ fun desktopMain(args: Array<String>) {
             LaunchedEffect(Unit) {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
                 window.minimumSize=Dimension(800,600)
+                if(com.sun.jna.Platform.isMac()) {
+                    macChrome = runCatching { configureDesktopMacChrome() }.getOrElse { recordDesktopPlayerFailure("window-chrome", it); false }
+                }
                 controller.attachWindow(window)
                 controller.start()
                 if(smoke) Thread { runDesktopSmoke(controller,window,state,args.drop(1),::close) }.apply { name="desktop-ui-smoke";isDaemon=true;start() }
@@ -63,19 +67,27 @@ fun desktopMain(args: Array<String>) {
                 onDispose { window.removeWindowListener(listener);controller.detachWindow() }
             }
             PictureshowTheme {
-                Column(Modifier.fillMaxSize()) {
-                    WindowDraggableArea(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)) {
-                        Row(Modifier.fillMaxWidth().height(32.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text("Pictureshow",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick={state.isMinimized=true},contentPadding=PaddingValues(horizontal=16.dp),modifier=Modifier.height(32.dp)) { Text("—",Modifier.clearAndSetSemantics { contentDescription="Minimize window" }) }
-                            TextButton(onClick={state.placement=if(state.placement==WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized},contentPadding=PaddingValues(horizontal=16.dp),modifier=Modifier.height(32.dp)) { Text("□",Modifier.clearAndSetSemantics { contentDescription="Maximize or restore window" }) }
-                            TextButton(onClick=::close,contentPadding=PaddingValues(horizontal=16.dp),modifier=Modifier.height(32.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
+                DesktopApp(controller, ::fullscreen, full, { keys.set(it) }, macChrome,
+                    chrome = { content -> WindowDraggableArea(Modifier.fillMaxWidth()) { content() } },
+                    windowControls = {
+                        if (!macChrome) {
+                            TextButton(onClick={state.isMinimized=true},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("—",Modifier.clearAndSetSemantics { contentDescription="Minimize window" }) }
+                            TextButton(onClick={state.placement=if(state.placement==WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("□",Modifier.clearAndSetSemantics { contentDescription="Maximize or restore window" }) }
+                            TextButton(onClick=::close,contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
                         }
-                    }
-                    Box(Modifier.weight(1f)) { DesktopApp(controller,::fullscreen,full) { keys.set(it) } }
-                }
+                    })
             }
         }
     }
+}
+
+private interface DesktopMacChrome : com.sun.jna.Library {
+    fun ps_window_find(title: String): com.sun.jna.Pointer?
+    fun ps_window_desktop_chrome(window: com.sun.jna.Pointer): Int
+}
+private fun configureDesktopMacChrome(): Boolean {
+    val layer = System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")
+    val path = layer?.let { java.io.File(java.io.File(it).parentFile, "libpictureshow_window.dylib").absolutePath } ?: "pictureshow_window"
+    val bridge = com.sun.jna.Native.load(path, DesktopMacChrome::class.java)
+    return bridge.ps_window_find("Pictureshow")?.let { bridge.ps_window_desktop_chrome(it) == 1 } ?: false
 }
