@@ -217,6 +217,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             waitFor("native close source playing",60) { c.state.value.playback?.ready==true }
             Thread.sleep(1500)
             File(out,"native-close-request.json").writeText("{\"ready\":true}\n")
+            recordDesktopMacChrome(File(out,"native-close-chrome.json"),window)
             nativeCloseRequested=true
             // The standard AppKit close button is anchored at (14,19), 14×14.
             robot.mouseMove(window.x+21,window.y+26)

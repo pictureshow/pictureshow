@@ -39,6 +39,7 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun seek(seconds: Double)
     fun volume(value: Int)
     fun fullscreen(enabled: Boolean)
+    fun viewport(topRatio: Double, bottomRatio: Double) {}
     fun selectAudio(index: Int): Boolean = false
     fun selectSubtitle(index: Int): Boolean = false
 }
@@ -129,6 +130,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private val stopped = AtomicBoolean(false)
     private val failure = AtomicReference<String?>(null)
     private val pixels = AtomicReference(Dimension(1280, 800))
+    private val viewportMargins = AtomicReference(0.0 to 0.0)
+    private val viewportReady = AtomicBoolean(false)
     private val render = Executors.newSingleThreadExecutor { r -> Thread(r, "pictureshow-native-render").apply { isDaemon = true } }
     private var listener: ComponentAdapter? = null
     private var linux: LinuxPlayerWindow? = null
@@ -164,6 +167,9 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         player.option("loop-file", "no")
         player.option("volume", volume.toString())
         player.option("keep-open", "yes")
+        player.option("sub-use-margins", "no")
+        player.option("sub-pos", "100")
+        player.option("sub-margin-y", "24")
         proxy = DesktopMediaProxy(account, decision)
         if (Platform.isLinux()) {
             val hdr = decision.mediaSource.mediaStreams.any { it.type == MediaStreamType.Video && it.videoRangeType !in listOf(null, VideoRangeType.Unknown, VideoRangeType.SDR) }
@@ -222,6 +228,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
                 w.addComponentListener(listener); sync()
             }
         }
+        viewportReady.set(true)
+        applyViewport()
         // mpv's stream IDs are per-type ordinals, while Jellyfin's indices span all media types.
         val streams = decision.mediaSource.mediaStreams
         fun ordinal(index: Int, type: MediaStreamType) = streams.filter { it.type == type && !it.isExternal }.indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
@@ -279,6 +287,17 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun togglePause() { mpv?.command("cycle", "pause") }
     override fun seek(seconds: Double) { mpv?.command("seek", (seconds - offset).coerceAtLeast(0.0).toString(), "absolute+exact") }
     override fun volume(value: Int) { mpv?.set("volume", value.coerceIn(0, 100).toString()) }
+    override fun viewport(topRatio: Double, bottomRatio: Double) {
+        if (!topRatio.isFinite() || !bottomRatio.isFinite() || topRatio < 0 || bottomRatio < 0 || topRatio + bottomRatio >= 1) return
+        viewportMargins.set(topRatio to bottomRatio)
+        applyViewport()
+    }
+    private fun applyViewport() {
+        if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return
+        val (top,bottom)=viewportMargins.get()
+        mpv?.set("video-margin-ratio-top", top.toString())
+        mpv?.set("video-margin-ratio-bottom", bottom.toString())
+    }
     override fun fullscreen(enabled: Boolean) { if (stopped.get()) return; linux?.fullscreen(enabled); surface?.let { layer?.ps_fullscreen(it, if (enabled) 1 else 0) } }
     override fun close() {
         if (!stopped.compareAndSet(false, true)) return

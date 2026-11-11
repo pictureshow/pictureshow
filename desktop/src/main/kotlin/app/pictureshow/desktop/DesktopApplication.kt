@@ -91,10 +91,18 @@ fun desktopMain(args: Array<String>) {
 private interface DesktopMacChrome : com.sun.jna.Library {
     fun ps_window_find(title: String): com.sun.jna.Pointer?
     fun ps_window_desktop_chrome(window: com.sun.jna.Pointer): Int
+    fun ps_window_info(window: com.sun.jna.Pointer): String
 }
 private fun configureDesktopMacChrome(): Boolean {
     val layer = System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")
     val path = layer?.let { java.io.File(java.io.File(it).parentFile, "libpictureshow_window.dylib").absolutePath } ?: "pictureshow_window"
     val bridge = com.sun.jna.Native.load(path, DesktopMacChrome::class.java)
     return bridge.ps_window_find("Pictureshow")?.let { bridge.ps_window_desktop_chrome(it) == 1 } ?: false
+}
+
+internal fun recordDesktopMacChrome(file: java.io.File, window: java.awt.Window) {
+    val layer = System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge") ?: return
+    val path = java.io.File(java.io.File(layer).parentFile, "libpictureshow_window.dylib").absolutePath
+    val bridge = com.sun.jna.Native.load(path, DesktopMacChrome::class.java)
+    bridge.ps_window_find((window as? java.awt.Frame)?.title ?: "Pictureshow")?.let { file.writeText(bridge.ps_window_info(it)) }
 }

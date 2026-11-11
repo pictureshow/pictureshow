@@ -438,6 +438,7 @@ class DesktopController(
         if (r is ClientResult.Failure && viewing === v) mutable.update { it.copy(error = "Progress could not be saved. ${r.error.message}") }
     }
     fun fullscreen(enabled: Boolean) { engine?.fullscreen(enabled) }
+    fun videoViewport(topRatio: Double, bottomRatio: Double) { engine?.viewport(topRatio,bottomRatio) }
     fun pauseForBackground() {
         val active = engine ?: return
         if (mutable.value.route == DesktopRoute.Player && runCatching { !active.snapshot().paused }.getOrDefault(false)) {

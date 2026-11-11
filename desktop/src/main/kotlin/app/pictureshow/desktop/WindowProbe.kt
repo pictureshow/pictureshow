@@ -21,7 +21,7 @@ fun windowMain(args:Array<String>) {
  val native=Native.load(System.getenv("SPIKE_WINDOW_BRIDGE") ?: System.getProperty("spike.window.bridge"),WindowNative::class.java)
  application {
  val state=rememberWindowState(width=740.dp,height=500.dp)
- Window(onCloseRequest={exitApplication()},title="Pictureshow fullscreen isolation",state=state,undecorated=method in setOf("borderless","chrome"),transparent=method=="chrome") {
+ Window(onCloseRequest={File(out,"close-request.txt").writeText("AWT window closing delivered\n");exitApplication()},title="Pictureshow fullscreen isolation",state=state,undecorated=method in setOf("borderless","chrome"),transparent=method=="chrome") {
   MaterialTheme(colors=darkColors()) {Box(Modifier.fillMaxSize().background(Color(0xFF174E72))){Text("Pictureshow fullscreen isolation · $method",Modifier.padding(24.dp))}}
   LaunchedEffect(Unit){Thread {Thread.sleep(90000);Runtime.getRuntime().halt(3)}.apply{isDaemon=true}.start();Thread {
    try {
@@ -42,7 +42,10 @@ fun windowMain(args:Array<String>) {
       stage("chrome-${w}x${h}-${System.nanoTime()}")
      }
      File(out,"complete.txt").writeText("native controls resize sequence complete\n")
-     kotlin.system.exitProcess(0)
+     val bounds=window.bounds
+     Robot().apply { mouseMove(bounds.x+21,bounds.y+26);mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK) }
+     Thread.sleep(4000)
+     check(File(out,"close-request.txt").exists()) { "Native button did not deliver AWT close request" }
     }
     if(method.contains("active")) native.ps_window_activate(requireNotNull(native.ps_window_find("Pictureshow fullscreen isolation")))
     stage("01-before")

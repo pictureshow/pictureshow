@@ -5,6 +5,21 @@
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
 static char desktopChromeObserverKey;
+static char desktopChromeActionsKey;
+@interface PSChromeActions:NSObject
+@property(weak) NSWindow *window;
+-(void)close:(id)sender;
+@end
+@implementation PSChromeActions
+-(void)close:(id)sender {
+ NSWindow *window=self.window;
+ // AWT owns disposal. Its delegate delivers WINDOW_CLOSING and returns NO;
+ // Compose can then stop playback/report progress before disposing the window.
+ // performClose: on our borderless window does not deliver that delegate call.
+ id<NSWindowDelegate> delegate=window.delegate;
+ if([delegate respondsToSelector:@selector(windowShouldClose:)]) [delegate windowShouldClose:window];
+}
+@end
 @interface PSChromeObservers:NSObject
 @property(strong) id updated;
 @property(strong) id closed;
@@ -32,7 +47,12 @@ const char *ps_window_info(void *ptr) {
  NSMutableArray *buttons=[NSMutableArray array];
  for(NSInteger tag=13700;tag<13703;tag++) {
   NSView *v=[w.contentView viewWithTag:tag];
-  if(v) [buttons addObject:@{@"tag":@(tag),@"frame":NSStringFromRect(v.frame),@"hidden":@(v.hidden),@"superHidden":@(v.superview.hidden)}];
+  if(v) {
+   NSPoint point=NSMakePoint(NSMidX(v.frame),NSMidY(v.frame));
+   NSView *hit=[w.contentView hitTest:point];
+   NSButton *button=(NSButton*)v;
+   [buttons addObject:@{@"tag":@(tag),@"frame":NSStringFromRect(v.frame),@"hidden":@(v.hidden),@"superHidden":@(v.superview.hidden),@"hitClass":hit?NSStringFromClass(hit.class):@"nil",@"hitTag":@(hit.tag),@"targetClass":button.target?NSStringFromClass([button.target class]):@"nil",@"action":NSStringFromSelector(button.action)}];
+  }
  }
  NSDictionary *d=@{@"customButtons":buttons,@"contentFlipped":@(w.contentView.isFlipped),@"contentBounds":NSStringFromRect(w.contentView.bounds),@"contentFrame":NSStringFromRect(w.contentView.frame),@"class":NSStringFromClass(w.class),@"frame":NSStringFromRect(w.frame),@"screen":NSStringFromRect(w.screen.frame),@"styleMask":@(w.styleMask),@"collectionBehavior":@(w.collectionBehavior),@"level":@(w.level),@"active":@(NSApp.isActive),@"activationPolicy":@(NSApp.activationPolicy),@"nativeFullscreen":@((w.styleMask&NSWindowStyleMaskFullScreen)!=0),@"borderless":@((w.styleMask&NSWindowStyleMaskTitled)==0),@"appDelegate":NSStringFromClass(NSApp.delegate.class),@"mainRunLoopMode":NSRunLoop.currentRunLoop.currentMode?:@"nil",@"maxEDR":@(w.screen.maximumExtendedDynamicRangeColorComponentValue)};
  NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
@@ -65,6 +85,11 @@ int ps_window_desktop_chrome(void *ptr) {
   NSView *content=w.contentView;
   NSArray *kinds=@[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)];
   NSArray *actions=@[NSStringFromSelector(@selector(performClose:)), NSStringFromSelector(@selector(miniaturize:)), NSStringFromSelector(@selector(zoom:))];
+  PSChromeActions *actionsOwner=objc_getAssociatedObject(w,&desktopChromeActionsKey);
+  if(!actionsOwner) {
+   actionsOwner=[PSChromeActions new];actionsOwner.window=w;
+   objc_setAssociatedObject(w,&desktopChromeActionsKey,actionsOwner,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
   configured=1;
   for (NSUInteger i=0;i<kinds.count;i++) {
    NSInteger tag=13700+i;
@@ -72,8 +97,8 @@ int ps_window_desktop_chrome(void *ptr) {
    if(!button) {
     button=[NSWindow standardWindowButton:[kinds[i] unsignedIntegerValue] forStyleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable];
     button.tag=tag;
-    button.target=w;
-    button.action=NSSelectorFromString(actions[i]);
+    button.target=i==0?actionsOwner:w;
+    button.action=i==0?@selector(close:):NSSelectorFromString(actions[i]);
     [content addSubview:button positioned:NSWindowAbove relativeTo:nil];
     button.translatesAutoresizingMaskIntoConstraints=NO;
     [NSLayoutConstraint activateConstraints:@[
