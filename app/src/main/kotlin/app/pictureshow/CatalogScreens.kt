@@ -141,6 +141,7 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
+import app.pictureshow.core.sortDirectionLabel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -910,13 +911,17 @@ fun CatalogGrid(
                                 }
                                 Button(
                                     onClick = { sorting = true },
-                                    modifier = Modifier.focusRequester(firstSort).then(sortControl(0)).testTag("grid:sort:${state.sortBy}")
+                                    modifier = Modifier.focusRequester(
+                                        firstSort
+                                    ).then(sortControl(0)).testTag("grid:sort:${state.sortBy}").semantics {
+                                        stateDescription = sortDirectionLabel(state.descending)
+                                    }
                                 ) {
                                     SortChipContent(
                                         "${GridSorts.firstOrNull {
                                             it.first == state.sortBy
-                                        }?.second ?: "Name"} ${if (state.descending) "↓" else "↑"}",
-                                        "chevron-down"
+                                        }?.second ?: "Name"}",
+                                        if (state.descending) "arrow-down" else "arrow-up"
                                     )
                                 }
                                 if (onFilters != null) {

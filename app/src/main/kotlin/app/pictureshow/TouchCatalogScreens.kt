@@ -106,6 +106,7 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
+import app.pictureshow.core.sortDirectionLabel
 import coil3.compose.AsyncImage
 import kotlin.math.ceil
 
@@ -406,11 +407,13 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
             OutlinedButton(
                 onClick = { expanded = true },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("touch:sort")
-                    .touchMenuButton(expanded, "Show sort options") { expanded = true },
+                    .touchMenuButton(expanded, "Show sort options", sortDirectionLabel(state.descending)) { expanded = true },
                 border = touchOutlineBorder(),
                 contentPadding = PaddingValues(start = 16.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp)
             ) {
-                Text("$label ${if (state.descending) "↓" else "↑"}")
+                Text(label)
+                Spacer(Modifier.width(6.dp))
+                Icon(touchActionIcon(if (state.descending) "arrow-down" else "arrow-up"), null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp))
             }
@@ -867,8 +870,8 @@ private val TOUCH_CHEVRON_END = 16.dp
 private val TOUCH_CHEVRON_ROOM = 22.dp
 
 /** A button that opens a menu says so: a reader hears whether it is open and what a double tap will do. */
-private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open: () -> Unit) = semantics {
-    stateDescription = if (expanded) "Expanded" else "Collapsed"
+private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, statePrefix: String? = null, open: () -> Unit) = semantics {
+    stateDescription = listOfNotNull(statePrefix, if (expanded) "Expanded" else "Collapsed").joinToString(", ")
     onClick(label = openLabel) {
         open()
         true

@@ -2018,6 +2018,22 @@
         "editing": true
       },
       "expected": "search-field"
+    },
+    {
+      "id": "sort-direction-ascending",
+      "operation": "sort-direction-label",
+      "input": {
+        "descending": false
+      },
+      "expected": "Ascending"
+    },
+    {
+      "id": "sort-direction-descending",
+      "operation": "sort-direction-label",
+      "input": {
+        "descending": true
+      },
+      "expected": "Descending"
     }
   ]
 }

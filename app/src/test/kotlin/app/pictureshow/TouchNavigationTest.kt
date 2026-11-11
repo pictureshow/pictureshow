@@ -531,7 +531,7 @@ class TouchNavigationTest {
         launch(signedIn = true, landing = "libraries")
         compose.onNodeWithText("Home").performClick()
         waitFor("What would you like to watch?")
-        compose.onNodeWithText("Customize home").assertExists()
+        compose.onNodeWithContentDescription("Home options").assertExists()
         compose.onNodeWithText("Libraries").performClick()
         waitFor("No libraries are available for this account.")
         restoration.emulateSavedInstanceStateRestore()

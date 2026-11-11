@@ -93,3 +93,6 @@ fun namedPickerFocusTarget(hasChoices: Boolean, hasAny: Boolean, hasSelection: B
     hasAny && (!hasSelection || !hasChoices) -> "any"
     else -> "choice"
 }
+
+/** Announce the direction once; visual arrows remain decorative. */
+fun sortDirectionLabel(descending: Boolean): String = if (descending) "Descending" else "Ascending"

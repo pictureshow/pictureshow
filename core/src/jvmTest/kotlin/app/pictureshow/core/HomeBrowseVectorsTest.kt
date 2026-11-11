@@ -253,6 +253,9 @@ class HomeBrowseVectorsTest {
                         }
                     }
                 }
+                "sort-direction-label" -> JsonPrimitive(
+                    sortDirectionLabel(input.getValue("descending").jsonPrimitive.content.toBooleanStrict())
+                )
                 else -> error("Unknown operation")
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)

@@ -38,3 +38,5 @@ TV Back leaves named search editing before closing the picker. The current/Any t
 During explicit TV search editing, the shared panel’s focus target is the attached editable search field; the replaced search action is not a valid focus target until editing ends. Eight further focus cases cover editing with every combination of results, Any and current selection.
 
 Named single-value choices (including Person Any) expose the radio role on their row. Home pin commands expose the button role with the visible “On your home” check/status; decorative check icons do not repeat the spoken label.
+
+The combined sort/direction control announces its sort name once and Ascending/Descending as its state. Direction arrows are decorative icons with no spoken label; opening the picker exposes the current sort/direction as a selected radio choice. Two direction-label vectors cover both states.

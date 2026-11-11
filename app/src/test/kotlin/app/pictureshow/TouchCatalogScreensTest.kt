@@ -9,6 +9,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -16,6 +19,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -160,19 +164,27 @@ class TouchCatalogScreensTest {
 
     @Test fun gridOffersAnEmptyStateAndReportsSortAndBackActions() {
         var sorted: Pair<String, Boolean>? = null
+        var gridState by mutableStateOf(CatalogGridState(account, MediaItem("library", "A Library")))
         var backs = 0
         compose.setContent {
             MaterialTheme {
-                TouchCatalogGrid(CatalogGridState(account, MediaItem("library", "A Library")), {}, {}, { key, descending ->
-                    sorted =
-                        key to descending
+                TouchCatalogGrid(gridState, {}, {}, { key, descending ->
+                    sorted = key to descending
+                    gridState = gridState.copy(sortBy = key, descending = descending)
                 }, {}, { backs++ })
             }
         }
-        compose.onNodeWithText("No titles are available.").assertExists()
-        compose.onNodeWithText("Ascending").performClick()
+        compose.onNodeWithText("Nothing here yet.").assertExists()
+        compose.onNodeWithTag("touch:sort").assertTextEquals("Title")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ascending, Collapsed")).performClick()
+        compose.onNodeWithTag(
+            "touch:sort"
+        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ascending, Expanded"))
+        compose.onNodeWithText("Descending").performClick()
         assertEquals("SortName" to true, sorted)
-        compose.onNodeWithText("‹ Back").performClick()
+        compose.onNodeWithTag("touch:sort").assertTextEquals("Title")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Descending, Collapsed"))
+        compose.onNodeWithContentDescription("Back").performClick()
         assertEquals(1, backs)
     }
 

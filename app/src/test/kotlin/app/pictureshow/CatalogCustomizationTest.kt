@@ -364,6 +364,8 @@ class CatalogCustomizationTest {
     }
 
     @Test fun unresolvedCurrentPersonStillOffersAnyAsAFocusTargetWithoutClearing() {
+        val pending = CompletableDeferred<ClientResult<ItemPage>>()
+        service.named = { pending.await() }
         service.detail = { ClientResult.Failure(ClientError(ErrorKind.SERVER, "Not found")) }
         var cleared = false
         compose.setContent {
@@ -377,6 +379,12 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:choice:any").assertIsFocused()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
         compose.onNodeWithText("Untitled").assertDoesNotExist()
+        compose.runOnIdle {
+            assertFalse(cleared)
+            pending.complete(ClientResult.Success(ItemPage(emptyList(), 0)))
+        }
+        compose.onNodeWithTag("catalog:choice:any").assertIsFocused()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
         compose.runOnIdle { assertFalse(cleared) }
     }
 
