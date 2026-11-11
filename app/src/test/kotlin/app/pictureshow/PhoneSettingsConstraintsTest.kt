@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
@@ -109,6 +110,68 @@ class PhoneSettingsConstraintsTest {
         compose.onNodeWithTag("touch:choice-option:0").assertIsSelected()
         compose.onNodeWithText("Cancel").performClick()
         compose.onNode(hasText("Font size") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h842dp-port-mdpi")
+    fun allocatedPortraitDialogIgnoresStaleLandscapeWindowHints() {
+        val case = vector("settings-allocated-viewport-wins")
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val hints = input.getValue("outerHintSequence").jsonArray.map {
+            val hint = it.jsonObject
+            IntSize(hint.getValue("widthDp").jsonPrimitive.int, hint.getValue("heightDp").jsonPrimitive.int)
+        }
+        val hint = mutableStateOf(hints.first())
+        compose.setContent {
+            val actual = LocalWindowInfo.current
+            assertEquals(
+                IntSize(input.getValue("widthDp").jsonPrimitive.int, input.getValue("heightDp").jsonPrimitive.int),
+                actual.containerSize,
+                "The real portrait allocation must be verified before injecting a stale outer hint"
+            )
+            // Controlled fault injection: this models the stale activity hint while
+            // the native dialog still receives its real portrait allocation.
+            val outer = object : WindowInfo by actual {
+                override val containerSize: IntSize get() = hint.value
+            }
+            CompositionLocalProvider(
+                LocalWindowInfo provides outer,
+                LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)
+            ) {
+                TouchTheme {
+                    AdvancedPlaybackSettings(input.getValue("group").jsonPrimitive.content, PlaybackPreferences(), true, {}, {})
+                }
+            }
+        }
+        hints.forEach { next ->
+            compose.runOnIdle { hint.value = next }
+            val preview = compose.onNodeWithTag("settings:subtitle-preview").getUnclippedBoundsInRoot()
+            val list = compose.onNodeWithTag("settings:touch-list").getUnclippedBoundsInRoot()
+            assertEquals(
+                expected.getValue("previewAboveChoices").jsonPrimitive.boolean,
+                preview.bottom <= list.top,
+                "$next: $preview / $list"
+            )
+            val tolerance = expected.getValue("maximumHorizontalEdgeOffsetDp").jsonPrimitive.float
+            val fullWidth = abs(preview.left.value - list.left.value) <= tolerance &&
+                abs(preview.right.value - list.right.value) <= tolerance
+            assertEquals(expected.getValue("listFillsContentWidth").jsonPrimitive.boolean, fullWidth, "$next: $preview / $list")
+            val first = compose.onNode(hasText("Font size") and hasClickAction())
+            val row = first.getUnclippedBoundsInRoot()
+            val visible = row.top >= list.top && row.bottom <= list.bottom && row.bottom > row.top
+            assertEquals(expected.getValue("firstRowFullyVisible").jsonPrimitive.boolean, visible, "$next: $row / $list")
+            val texts = first.fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text }
+            assertEquals(
+                expected.getValue("currentValueFullyVisible").jsonPrimitive.boolean,
+                visible && input.getValue("currentValue").jsonPrimitive.content in texts,
+                "$next: $texts"
+            )
+            val done = compose.onNodeWithText("Done").getUnclippedBoundsInRoot()
+            val panel = compose.onNodeWithTag("settings:touch-panel").getUnclippedBoundsInRoot()
+            val doneVisible = done.top >= panel.top && done.bottom <= panel.bottom && done.bottom > done.top
+            assertEquals(expected.getValue("doneFullyVisible").jsonPrimitive.boolean, doneVisible, "$next: $done / $panel")
+        }
     }
 
     @Test fun previewCaptionsFollowTheTextAndImageCueCentersOnBothSurfaces() {

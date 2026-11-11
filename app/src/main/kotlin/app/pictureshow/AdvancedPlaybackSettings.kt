@@ -14,6 +14,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -41,8 +42,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
@@ -87,59 +86,62 @@ internal fun AdvancedPlaybackSettings(
     if (touch) {
         var picker by remember { mutableStateOf<TouchChoicePanel?>(null) }
         val groupScroll = rememberScrollState()
-        val compact = isShortTouchWindow()
-        val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
-        val besidePreview = compact && wide && group == "Subtitle appearance" && picker == null
         val closePanel = { if (picker != null) picker = null else onClose() }
         val rows: @Composable () -> Unit = {
             CompositionLocalProvider(LocalTouchChoicePanel provides { picker = it }) { content() }
         }
         Dialog(onDismissRequest = closePanel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            // Keep transparent window insets separate from the painted, width-capped dialog.
-            Box(Modifier.padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)) {
-                androidx.compose.material3.Surface(
-                    modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth().testTag("settings:touch-panel")
-                        .semantics { paneTitle = picker?.title ?: group },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
-                        .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
-                    val currentPicker = picker
-                    if (currentPicker != null) {
-                        Column(panelModifier) {
-                            TouchSettingsHeading(currentPicker.title)
-                            Box(Modifier.weight(1f, fill = false)) {
-                                TouchChoiceOptions(currentPicker) { index ->
-                                    currentPicker.onSelect(index)
-                                    picker = null
+            // The covered Activity's window hint can lag live rotation. Measure the dialog's
+            // own allocation so a portrait window cannot retain the two-pane landscape layout.
+            BoxWithConstraints {
+                val compact = maxHeight < 480.dp
+                val besidePreview = compact && maxWidth >= 600.dp && group == "Subtitle appearance" && picker == null
+                // Keep transparent window insets separate from the painted, width-capped dialog.
+                Box(Modifier.padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)) {
+                    androidx.compose.material3.Surface(
+                        modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth().testTag("settings:touch-panel")
+                            .semantics { paneTitle = picker?.title ?: group },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        val panelModifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
+                            .padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)
+                        val currentPicker = picker
+                        if (currentPicker != null) {
+                            Column(panelModifier) {
+                                TouchSettingsHeading(currentPicker.title)
+                                Box(Modifier.weight(1f, fill = false)) {
+                                    TouchChoiceOptions(currentPicker) { index ->
+                                        currentPicker.onSelect(index)
+                                        picker = null
+                                    }
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    androidx.compose.material3.TextButton(onClick = {
+                                        picker = null
+                                    }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                        androidx.compose.material3.Text("Cancel")
+                                    }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                androidx.compose.material3.TextButton(onClick = {
-                                    picker = null
-                                }, modifier = Modifier.heightIn(min = 48.dp)) {
-                                    androidx.compose.material3.Text("Cancel")
+                        } else if (besidePreview) {
+                            Row(
+                                panelModifier,
+                                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
+                                Column(Modifier.weight(1f)) {
+                                    TouchSettingsHeading(group)
+                                    TouchSettingsList(onClose, groupScroll, rows)
                                 }
                             }
-                        }
-                    } else if (besidePreview) {
-                        Row(
-                            panelModifier,
-                            horizontalArrangement = Arrangement.spacedBy(24.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
-                            Column(Modifier.weight(1f)) {
+                        } else {
+                            Column(panelModifier) {
                                 TouchSettingsHeading(group)
+                                if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
                                 TouchSettingsList(onClose, groupScroll, rows)
                             }
-                        }
-                    } else {
-                        Column(panelModifier) {
-                            TouchSettingsHeading(group)
-                            if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
-                            TouchSettingsList(onClose, groupScroll, rows)
                         }
                     }
                 }

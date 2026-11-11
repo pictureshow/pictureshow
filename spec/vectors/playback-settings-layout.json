@@ -72,6 +72,39 @@
         "choicePickerWindowCount": 1,
         "maximumScrollReturnOffsetDp": 1
       }
+    },
+    {
+      "id": "playback-settings-layout.allocated-portrait-supersedes-stale-window-hint",
+      "operation": "settings-allocated-viewport-wins",
+      "input": {
+        "widthDp": 411,
+        "heightDp": 842,
+        "fontScale": 1.3,
+        "group": "Subtitle appearance",
+        "currentValue": "Default",
+        "outerHintSequence": [
+          {
+            "widthDp": 800,
+            "heightDp": 360
+          },
+          {
+            "widthDp": 411,
+            "heightDp": 842
+          },
+          {
+            "widthDp": 800,
+            "heightDp": 360
+          }
+        ]
+      },
+      "expected": {
+        "previewAboveChoices": true,
+        "listFillsContentWidth": true,
+        "maximumHorizontalEdgeOffsetDp": 1,
+        "firstRowFullyVisible": true,
+        "currentValueFullyVisible": true,
+        "doneFullyVisible": true
+      }
     }
   ]
 }
