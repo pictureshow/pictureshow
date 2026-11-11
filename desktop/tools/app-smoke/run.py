@@ -94,7 +94,7 @@ def selected_app_output(text: str, *private_values: str) -> str:
     for line in text.splitlines():
         # These smoke diagnostics contain only stage/class/app-frame identity.
         # Reject malformed additions instead of admitting arbitrary messages.
-        native_type = re.fullmatch(r"DESKTOP_PLAYER_FAILURE stage=(?:factory|profile|open) type=[A-Za-z0-9_.$]+", line)
+        native_type = re.fullmatch(r"DESKTOP_PLAYER_FAILURE stage=(?:factory|profile|open|window-chrome) type=[A-Za-z0-9_.$]+", line)
         native_frame = re.fullmatch(r"DESKTOP_PLAYER_FRAME app\.pictureshow\.desktop\.[A-Za-z0-9_.$]+(?:<init>|<clinit>)?:-?[0-9]+", line)
         if line.startswith(prefixes) or native_type or native_frame:
             lines.append(sanitized(line, *private_values))

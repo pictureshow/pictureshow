@@ -151,6 +151,7 @@ class SmokeVerdictTest(unittest.TestCase):
     def test_player_failure_keeps_class_and_app_frame_without_raw_messages(self):
         text = "\n".join([
             "DESKTOP_PLAYER_FAILURE stage=open type=java.lang.UnsatisfiedLinkError",
+            "DESKTOP_PLAYER_FAILURE stage=window-chrome type=java.lang.IllegalStateException",
             "DESKTOP_PLAYER_FRAME app.pictureshow.desktop.NativeDesktopPlayback.open:188",
             "DESKTOP_PLAYER_FRAME app.pictureshow.desktop.Mpv.<init>:50",
             "DESKTOP_PLAYER_FAILURE stage=open type=java.lang.Exception https://example.invalid/private?api_key=abc",
@@ -160,9 +161,10 @@ class SmokeVerdictTest(unittest.TestCase):
         ])
         cleaned = smoke.selected_app_output(text, "pw", "abc")
         self.assertIn("type=java.lang.UnsatisfiedLinkError", cleaned)
+        self.assertIn("stage=window-chrome type=java.lang.IllegalStateException", cleaned)
         self.assertIn("NativeDesktopPlayback.open:188", cleaned)
         self.assertIn("Mpv.<init>:50", cleaned)
-        self.assertEqual(1, cleaned.count("DESKTOP_PLAYER_FAILURE"))
+        self.assertEqual(2, cleaned.count("DESKTOP_PLAYER_FAILURE"))
         self.assertEqual(2, cleaned.count("DESKTOP_PLAYER_FRAME"))
         for private in ["example.invalid", "abc", "private", "password", "Raw mpv"]:
             self.assertNotIn(private, cleaned)
