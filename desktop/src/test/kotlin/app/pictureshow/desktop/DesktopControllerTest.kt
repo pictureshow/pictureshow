@@ -370,6 +370,14 @@ class DesktopControllerTest {
         assertFalse(MediaStream(type = MediaStreamType.Subtitle, deliveryMethod = SubtitleDeliveryMethod.Embed).isDeliveredExternally())
     }
 
+    @Test fun knownTextCodecRequiresExternalDeliveryBeforePlaybackInfoProvidesAUrl() {
+        val stream = MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "SubRip")
+        assertFalse(stream.isDeliveredExternally(), "The raw Jellyfin delivery metadata is still absent")
+        assertTrue(stream.requiresExternalSubtitleDelivery(), "Desktop text delivery policy is based on the same profile codec allowlist")
+        assertNull(nativeSubtitleOrdinal(listOf(stream), 3), "Do not silently select the Matroska copy while requesting URL negotiation")
+        assertFalse(MediaStream(type = MediaStreamType.Subtitle, index = 9, codec = "hdmv_pgs_subtitle").requiresExternalSubtitleDelivery())
+    }
+
     @Test fun externalDeliverySkipsSelectionButStillCountsItsPhysicalEmbeddedTrackOrdinal() {
         val streams = listOf(
             MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "subrip",

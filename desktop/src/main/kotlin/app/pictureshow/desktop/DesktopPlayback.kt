@@ -56,10 +56,15 @@ data class DesktopSelectedTracks(
 internal fun MediaStream.isDeliveredExternally(): Boolean =
     isExternal || deliveryMethod == SubtitleDeliveryMethod.External
 
-/** Return mpv's embedded subtitle ordinal unless Jellyfin negotiated URL delivery for this track. */
+/** External URL delivery is the desktop's supported path for text formats, including before Jellyfin supplies a URL. */
+internal fun MediaStream.requiresExternalSubtitleDelivery(): Boolean =
+    type == MediaStreamType.Subtitle &&
+        (isDeliveredExternally() || codec?.lowercase() in DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS)
+
+/** Return mpv's embedded subtitle ordinal unless this track follows the desktop's external delivery policy. */
 internal fun nativeSubtitleOrdinal(streams: List<MediaStream>, index: Int): Int? {
     val selected = streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return null
-    if (selected.isDeliveredExternally()) return null
+    if (selected.requiresExternalSubtitleDelivery()) return null
     val embedded = streams.filter { it.type == MediaStreamType.Subtitle && !it.isExternal }
     return embedded.indexOfFirst { it.index == index }.takeIf { it >= 0 }?.plus(1)
 }
@@ -262,7 +267,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (decision.method != PlayMethod.Transcode && position > 0) player.set("start", position.toString())
         player.command("loadfile", proxy!!.url())
         // External subtitle responses receive the same origin checks and headers as media.
-        streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.isDeliveredExternally() }?.deliveryUrl?.let { delivery ->
+        streams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == subtitle && it.requiresExternalSubtitleDelivery() }?.deliveryUrl?.let { delivery ->
             val url = PlayDecisions.resolve(account.server, delivery)
             require(PlayDecisions.isSameOrigin(account.server, url))
             pendingExternalSubtitle = proxy!!.url(url)
@@ -295,7 +300,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         pendingExternalSubtitle = null
         if (index == -1) { mpv?.set("sid", "no"); return true }
         val stream = d.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return false
-        if (stream.isDeliveredExternally()) {
+        if (stream.requiresExternalSubtitleDelivery()) {
             val account = sourceAccount ?: return false
             val delivery = stream.deliveryUrl ?: return false
             val url = PlayDecisions.resolve(account.server, delivery)

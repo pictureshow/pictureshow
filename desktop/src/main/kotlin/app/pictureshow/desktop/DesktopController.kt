@@ -531,6 +531,7 @@ class DesktopController(
 }
 
 /** mpv's bundled FFmpeg demuxes these originals; output adaptation remains with the qualified native renderer. */
+internal val DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS = setOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt")
 fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? = null): DeviceProfile {
     val bitrate = settings.preferences().deviceSettings().maxStreamingBitrate
     // Decoder codec names are FFmpeg's names used by Jellyfin. Lists match the source's
@@ -541,9 +542,7 @@ fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? =
     // mpv's decoder-list reports FFmpeg video/audio decoders, not the separate
     // libass/text-subtitle pipeline. Negotiate known text tracks as URL delivery
     // and bitmap tracks only when embedded in a format mpv can render.
-    val subtitleDeliveryProfiles = listOf(
-        "srt", "subrip", "ass", "ssa", "vtt", "webvtt"
-    ).map { SubtitleProfile(it, SubtitleDeliveryMethod.External) } + listOf(
+    val subtitleDeliveryProfiles = DESKTOP_EXTERNAL_TEXT_SUBTITLE_FORMATS.sorted().map { SubtitleProfile(it, SubtitleDeliveryMethod.External) } + listOf(
         "pgssub", "dvdsub", "dvbsub"
     ).map { SubtitleProfile(it, SubtitleDeliveryMethod.Embed) }
     return DeviceProfile(
