@@ -41,6 +41,8 @@ class ResourceLeakProvider : ContentProvider() {
         requireNotNull(context).enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, "Debug leak checkpoint requires DUMP")
         val result = Bundle()
         when (method) {
+            // Same boot clock as SyncPlay trace; shell brackets this DUMP-protected debug call.
+            "monotonic" -> result.putLong("elapsedRealtimeNanos", android.os.SystemClock.elapsedRealtimeNanos())
             "collect" -> collect()
             "closed-canary" -> {
                 FileInputStream("/dev/null").use { it.read() }
@@ -57,7 +59,7 @@ class ResourceLeakProvider : ContentProvider() {
                     "${thread.name} [${thread.state}]\n" + stack.joinToString("\n") { "    at $it" }
                 }
             )
-            else -> throw IllegalArgumentException("Use collect, counts, threads, closed-canary or self-test")
+            else -> throw IllegalArgumentException("Use collect, counts, threads, monotonic, closed-canary or self-test")
         }
         return result.apply { putInt("violations", violations.get()) }
     }

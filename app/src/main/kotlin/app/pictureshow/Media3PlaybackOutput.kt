@@ -28,6 +28,8 @@ import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+private val syncNativeVideoGenerations = java.util.concurrent.atomic.AtomicLong()
+
 /** The only layer that owns a decoder. Replacing a source releases the old player and its callbacks first. */
 internal class Media3PlaybackOutput(
     private val context: Context,
@@ -72,6 +74,35 @@ internal class Media3PlaybackOutput(
     var onStop: () -> Unit = {}
     private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
+    private var nativeGeneration = 0L
+
+    /** Actual decoder facts, read only on its application thread; wrappers can retain different pause intent. */
+    internal fun syncNativeSnapshot(): SyncNativeRendererState? {
+        if (!BuildConfig.DEBUG) return null
+        val p = activePlayer ?: return null
+        return SyncNativeRendererState(
+            nativeGeneration,
+            p.playbackState,
+            p.playWhenReady,
+            p.playbackSuppressionReason,
+            p.isLoading,
+            p.currentPosition,
+            p.bufferedPosition,
+            p.totalBufferedDuration
+        )
+    }
+
+    internal fun traceNative(event: String, fields: String = "") {
+        if (!BuildConfig.DEBUG) return
+        val p = syncNativeSnapshot()
+        Log.d(
+            "PictureshowSyncNative",
+            "trace-native-$event elapsedMs=${SystemClock.elapsedRealtime()} generation=$nativeGeneration " +
+                "state=${p?.playbackState ?: 0} pwr=${p?.playWhenReady} suppression=${p?.suppressionReason ?: -1} " +
+                "loading=${p?.isLoading} positionMs=${p?.positionMs ?: -1} bufferedPositionMs=${p?.bufferedPositionMs ?: -1} " +
+                "bufferedDurationMs=${p?.bufferedDurationMs ?: -1} foreground=${mutableForeground.value} $fields"
+        )
+    }
     private var loadDiagnostics: PlaybackLoadDiagnostics? = null
     private val loadHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val loadSummary = object : Runnable {
@@ -105,6 +136,7 @@ internal class Media3PlaybackOutput(
 
     /** Stop belongs to the viewing, including opens that have not published a player yet. */
     fun setForeground(value: Boolean) {
+        traceNative("foreground", "requested=$value")
         if (!value && mutableForeground.value) stopGeneration++
         mutableForeground.value = value
         if (!value) pauseForApp()
@@ -113,6 +145,7 @@ internal class Media3PlaybackOutput(
     }
 
     internal fun playIntent(requested: Boolean): Boolean {
+        traceNative("play-intent", "requested=$requested accepted=${!requested || mutableForeground.value}")
         if (requested && !mutableForeground.value) return false
         if (requested) {
             mutablePauseIntent.value = false
@@ -148,6 +181,8 @@ internal class Media3PlaybackOutput(
 
     override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
         releasePlayer(closeSession = false)
+        nativeGeneration = syncNativeVideoGenerations.incrementAndGet()
+        traceNative("open", "requestedMs=$positionMs requestedPaused=$paused")
         current = decision
         val captions = SubtitleCueDiagnostics(decision)
         subtitleDiagnostics = captions
@@ -220,7 +255,11 @@ internal class Media3PlaybackOutput(
             null
         }
         physicalEnd = detector
-        val loads = PlaybackLoadDiagnostics()
+        val sourceGeneration = nativeGeneration
+        val loads = PlaybackLoadDiagnostics(trace = { message ->
+            // Transfer callbacks run on a loader thread. Never read Player fields here.
+            if (BuildConfig.DEBUG) Log.d("PictureshowSyncNative", "trace-load generation=$sourceGeneration $message")
+        })
         loadDiagnostics = loads
         val sourceData = PlaybackMedia.dataSourceFactory(
             server,
@@ -366,6 +405,7 @@ internal class Media3PlaybackOutput(
 
             override fun onEvents(player: Player, events: Player.Events) {
                 if (activePlayer === next) {
+                    traceNative("events", "eventCount=${events.size()}")
                     playing.set(player.isPlaying)
                     onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
                 }
@@ -373,6 +413,7 @@ internal class Media3PlaybackOutput(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (activePlayer !== next) return
+                traceNative("state", "reportedState=$playbackState")
                 if (playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_READY) {
                     PlaybackDiagnostics.write(
                         decision,
@@ -412,6 +453,7 @@ internal class Media3PlaybackOutput(
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (activePlayer === next) {
+                    traceNative("pwr", "reportedPwr=$playWhenReady reason=$reason")
                     // Another app took the audio for good and the player stopped itself. It was playing, so the viewer hadn't paused.
                     if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS && !playWhenReady) pausedBeforeApp = false
                     onProgress(decision)
@@ -422,6 +464,7 @@ internal class Media3PlaybackOutput(
             }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 if (activePlayer === next) {
+                    traceNative("discontinuity", "oldMs=${oldPosition.positionMs} newMs=${newPosition.positionMs} reason=$reason")
                     if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                         detector?.invalidate()
                         if (!serverSeek) {
@@ -447,6 +490,7 @@ internal class Media3PlaybackOutput(
             }
             override fun onPlayerError(error: PlaybackException) {
                 if (activePlayer === next) {
+                    traceNative("error", "code=${error.errorCode} type=${(error as? ExoPlaybackException)?.type ?: -1}")
                     detector?.invalidate()
                     // Never display/log the exception: upstream source errors include request URLs.
                     val retryable = error is ExoPlaybackException &&
@@ -591,12 +635,14 @@ internal class Media3PlaybackOutput(
     }
 
     override fun pauseForApp() {
+        traceNative("pause-for-app")
         val viewer = viewerPaused()
         pause()
         pausedBeforeApp = viewer
     }
 
     override fun pause() {
+        traceNative("pause-request")
         pausedBeforeApp = null
         mutablePauseIntent.value = true
         saved = saved.copy(paused = true)
@@ -606,6 +652,7 @@ internal class Media3PlaybackOutput(
     }
 
     override fun beginSeek() {
+        traceNative("begin-seek")
         physicalEnd?.invalidate()
         reopenState?.beginReopen()
         activePlayer?.stop()
@@ -614,6 +661,7 @@ internal class Media3PlaybackOutput(
     override fun release() = releasePlayer(closeSession = true)
 
     private fun releasePlayer(closeSession: Boolean) {
+        traceNative("release", "closeSession=$closeSession")
         loadHandler.removeCallbacks(loadSummary)
         loadDiagnostics?.summary(final = true)
         loadDiagnostics = null

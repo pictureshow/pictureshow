@@ -72,11 +72,23 @@ internal fun SyncPlayCoordinator(
         remote.syncConnection = sync::socket
         sync.socket(remote.socketConnected)
         val observer = LifecycleEventObserver { _, event ->
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(
+                    "PictureshowSyncNative",
+                    "trace-coordinator elapsedMs=${android.os.SystemClock.elapsedRealtime()} lifecycle=$event"
+                )
+            }
             if (event == Lifecycle.Event.ON_STOP) sync.background()
         }
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(
+                    "PictureshowSyncNative",
+                    "trace-coordinator elapsedMs=${android.os.SystemClock.elapsedRealtime()} lifecycle=dispose"
+                )
+            }
             sync.background()
             sync.membershipSocket = null
             remote.syncMessages = {}
@@ -142,7 +154,8 @@ internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
         ),
         // Media3's generic speed command does not advertise these exact rates for encoded output.
         // Until separately qualified, use the required bounded seek fallback.
-        rateSupported = false
+        rateSupported = false,
+        native = output.syncNativeSnapshot()
     )
 }
 
@@ -158,6 +171,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
                 var positionChanged = false
                 host.output.applySync {
+                    host.output.traceNative("sync-before", "requestedTicks=$positionTicks requestedPlaying=$playing rate=$rate")
                     if (positionTicks != null && kotlin.math.abs(host.output.position().milliseconds - positionTicks / 10_000) > 1) {
                         host.seekToLocal(positionTicks / 10_000, revealControls = false)
                         positionChanged = true
@@ -166,12 +180,17 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
                         if (it.playbackParameters.speed != rate.toFloat()) it.setPlaybackSpeed(rate.toFloat())
                         if (playing != null && it.playWhenReady != playing) it.playWhenReady = playing
                     }
+                    host.output.traceNative(
+                        "sync-after",
+                        "requestedTicks=$positionTicks requestedPlaying=$playing sought=$positionChanged rate=$rate"
+                    )
                 }
                 return positionChanged
             }
         }
     }
     DisposableEffect(sync, host, opening) {
+        host.output.traceNative("binding-install", "localCopy=${host.localCopy}")
         host.output.syncRequest = sync::transport
         host.output.syncParticipating = { sync.participating }
         val expected = sync.membership.queue?.current
@@ -186,6 +205,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             host.output.applySync { host.output.pause() }
         }
         onDispose {
+            host.output.traceNative("binding-dispose")
             sync.clearRenderer(token)
             host.output.syncRequest = null
             host.output.syncParticipating = { false }

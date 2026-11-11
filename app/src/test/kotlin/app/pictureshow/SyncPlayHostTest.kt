@@ -71,6 +71,7 @@ class SyncPlayHostTest {
         val sent = mutableListOf<Pair<Account, SyncRequest>>()
         val renderer = Renderer()
         val opens = mutableListOf<SyncOpen>()
+        val diagnostics = mutableListOf<String>()
         var policy = "CreateAndJoinGroups"
         var httpStatus = 204
         var sendGate: CompletableDeferred<Unit>? = null
@@ -79,7 +80,7 @@ class SyncPlayHostTest {
         var failClock = false
         val epoch = 1_762_776_000_000L
         fun wall() = epoch + scope.testScheduler.currentTime
-        val host = SyncPlayHost(scope.backgroundScope, this, ::wall, { scope.testScheduler.currentTime })
+        val host = SyncPlayHost(scope.backgroundScope, this, ::wall, { scope.testScheduler.currentTime }, diagnostics::add)
 
         init {
             scope.backgroundScope.launch { host.opens.collect { opens += it } }
@@ -195,6 +196,172 @@ class SyncPlayHostTest {
                 }
             )
         }.toString()
+    }
+
+    @Test fun diagnosticSnapshotsIncludeTheNoRendererGateWithoutRepeatingWithinOneSecond() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.host.clearRenderer(rig.renderer)
+        rig.diagnostics.clear()
+        repeat(20) { rig.host.tick() }
+        assertEquals(1, rig.diagnostics.count { it.startsWith("trace-snapshot ") })
+        val first = rig.diagnostics.single { it.startsWith("trace-snapshot ") }
+        assertTrue(first.contains("gate=no-renderer"))
+        assertTrue(first.contains("elapsedMs=0"))
+        assertTrue(first.contains("renderer=false"))
+        assertTrue(first.contains("generation=${rig.host.membership.generation}"))
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(2, rig.diagnostics.count { it.startsWith("trace-snapshot ") })
+    }
+
+    @Test fun diagnosticClockFailureKeepsPendingCommandAndReportsActualNativePauseFacts() = runTest {
+        val rig = Rig(this)
+        rig.failClock = true
+        rig.renderer.value = rig.renderer.value.copy(
+            native = SyncNativeRendererState(17, 3, false, 0, false, 12345, 99999, 87654)
+        )
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        rig.host.receive(rig.command("Unpause", ticks = rig.renderer.value.positionTicks))
+        runCurrent()
+        assertEquals(5, rig.diagnostics.count { it.startsWith("trace-clock-sample ") && it.contains("outcome=request-failed") })
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-clock-end ") &&
+                    it.contains("validSamples=0 oldAnchor=false") &&
+                    it.contains("newAnchor=false")
+            }
+        )
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-snapshot ") &&
+                    it.contains("gate=clock-unavailable") &&
+                    it.contains("nativeGeneration=17") &&
+                    it.contains("nativeState=3") &&
+                    it.contains("nativePwr=false") &&
+                    it.contains("nativePositionMs=12345") &&
+                    it.contains("nativeBufferedDurationMs=87654")
+            }
+        )
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-schedule-pending ") &&
+                    it.contains("command=Unpause") &&
+                    it.contains("whenMs=${rig.wall()}") &&
+                    it.contains("pending=true") &&
+                    it.contains("applied=false")
+            }
+        )
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-schedule-abort ") && it.contains("reason=clock-before-wait") })
+        assertFalse(rig.renderer.value.playing)
+    }
+
+    @Test fun diagnosticRefreshReportsAnchorLossWithoutChangingTheExistingRetryPolicy() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.failClock = true
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-clock-end ") &&
+                    it.contains("validSamples=0 oldAnchor=true") &&
+                    it.contains("newAnchor=false")
+            }
+        )
+        val attempts = rig.diagnostics.count { it.startsWith("trace-clock-begin ") }
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(
+            attempts,
+            rig.diagnostics.count {
+                it.startsWith("trace-clock-begin ")
+            },
+            "instrumentation must not repair the null-anchor retry path"
+        )
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-snapshot ") &&
+                    it.contains("gate=clock-unavailable") &&
+                    it.contains("anchor=false")
+            }
+        )
+    }
+
+    @Test fun diagnosticsLinkRequestsAuthorityBindingsAndApplicationsWithoutPrivateText() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.transport("play")
+        runCurrent()
+        rig.host.receive(rig.command("Pause", delayMs = 1_000, ticks = 55_000_000L, id = "secret-message"))
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-receive ") &&
+                    it.contains("event=queue accepted=true") &&
+                    it.contains("afterEntry=")
+            }
+        )
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-request-begin ") && it.contains("operation=Unpause") })
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-request-end ") &&
+                    it.contains("operation=Unpause") &&
+                    it.contains("status=204 current=true")
+            }
+        )
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-apply-before ") && it.contains("source=scheduled") })
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-apply-after ") &&
+                    it.contains("source=scheduled") &&
+                    it.contains("applied=true")
+            }
+        )
+        // Preserve the historical event used by measurement count filters.
+        assertTrue(rig.diagnostics.any { it.startsWith("scheduled-apply uptimeMs=") })
+        rig.host.clearRenderer(Any())
+        rig.host.background()
+        runCurrent()
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-clear ") && it.contains("accepted=false") })
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-lifecycle ") && it.contains("source=background") })
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-clock-reset ") && it.contains("reason=leave") })
+        val text = rig.diagnostics.joinToString("\n")
+        listOf("https://", "media.example.test", "token-a", "Ana", "Bea", "Evening", "local-item", "entry-a", "secret-message")
+            .forEach { assertFalse(text.contains(it), "private value leaked: $it") }
+    }
+
+    @Test fun diagnosticStormsAreBoundedAndExplicitlyReportDroppedRecords() = runTest {
+        val rig = Rig(this)
+        rig.diagnostics.clear()
+        repeat(100) { rig.host.transport("private-command-https://hidden.invalid/token") }
+        assertTrue(rig.diagnostics.size <= 64)
+        assertTrue(rig.diagnostics.all { it.contains("command=unknown") })
+        advanceTimeBy(1_000)
+        rig.host.transport("private-command-https://hidden.invalid/token")
+        val last = rig.diagnostics.last()
+        assertTrue(Regex("suppressed=([1-9][0-9]*)").containsMatchIn(last))
+        assertFalse(rig.diagnostics.any { it.contains("hidden.invalid") || it.contains("private-command") })
+    }
+
+    @Test fun diagnosticScheduleDistinguishesRendererLossFromClockFailure() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.receive(rig.command("Pause", delayMs = 1_000))
+        runCurrent()
+        rig.host.clearRenderer(rig.renderer)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-schedule-abort ") && it.contains("reason=no-renderer-after-wait") })
+        assertFalse(rig.diagnostics.any { it.startsWith("trace-schedule-abort ") && it.contains("reason=clock-before-wait") })
+        assertTrue(rig.diagnostics.any { it.startsWith("trace-schedule-end ") && it.contains("outcome=no-renderer-after-wait") })
     }
 
     @Test fun joinUsesTheServerQueueAndNeverTheUnrelatedLocalTitle() = runTest {

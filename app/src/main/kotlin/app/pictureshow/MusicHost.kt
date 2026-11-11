@@ -1105,11 +1105,24 @@ internal class MusicHost(
                     matches && running?.isCurrentMediaItemSeekable == true && preparedTrack?.decision?.mediaSource != null,
                     preparedTrack?.decision?.mediaSource?.liveStreamId != null,
                     preparedTrack?.decision?.mediaSource?.isInfiniteStream == true,
+                    // This gateway negotiates server sources; downloaded Audio uses the local video host.
                     offline = false
                 ),
                 // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
                 rateSupported = false,
-                playlistItemId = running?.currentMediaItem?.mediaId
+                playlistItemId = running?.currentMediaItem?.mediaId,
+                native = running?.takeIf { BuildConfig.DEBUG }?.let {
+                    SyncNativeRendererState(
+                        System.identityHashCode(it).toLong(),
+                        it.playbackState,
+                        it.playWhenReady,
+                        it.playbackSuppressionReason,
+                        it.isLoading,
+                        it.currentPosition,
+                        it.bufferedPosition,
+                        it.totalBufferedDuration
+                    )
+                }
             )
         }
 
