@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Desktop owns lifecycle and I/O; server policy, catalog rules and playback decisions come directly from core. */
 class DesktopController(
@@ -31,23 +33,25 @@ class DesktopController(
     private val identity = ClientIdentity("Pictureshow Desktop", installationId())
     private val client = JellyfinClient(http, identity)
     private val playbackClient = PlaybackClient(http, identity)
+    private val extras = PlaybackExtrasClient(http, identity)
     private val generation = AtomicLong()
     private var pageJob: Job? = null
     private var discoveryJob: Job? = null
     private val history = mutableListOf<DesktopState>()
     private var pendingQuick: PendingQuickConnect? = null
     private var quickOwner: Server? = null
-    private var window: Window? = null
-    private var engine: DesktopPlaybackEngine? = null
+    @Volatile private var window: Window? = null
+    @Volatile private var engine: DesktopPlaybackEngine? = null
     private var reportJob: Job? = null
-    private var viewing: Viewing? = null
-    private var closing = false
-    private var nextPageIndex = 0
+    @Volatile private var viewing: Viewing? = null
+    @Volatile private var closing = false
+    @Volatile private var nextPageIndex = 0
     private val viewingMutex = kotlinx.coroutines.sync.Mutex()
     private data class Viewing(
         val account: Account, val item: MediaItem, val decision: PlayDecision, val engine: DesktopPlaybackEngine,
         var startReported: Boolean = false, var startAttempted: Boolean = false, var audioChosen: Boolean = false, var subtitleChosen: Boolean = false,
-        var stopped: Boolean = false
+        @Volatile var stopped: Boolean = false, @Volatile var closing: Boolean = false,
+        val reports: Mutex = Mutex()
     )
 
     private fun installationId(): String {
@@ -57,7 +61,7 @@ class DesktopController(
     }
     private fun identityClient() = JellyfinClient(http, identity.copy(deviceId = UUID.randomUUID().toString()))
     private fun snapshotAccounts() { val s = store.snapshots.value; mutable.update { it.copy(accounts = s.accounts, rememberedServers = s.rememberedServers) } }
-    private fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
+    @Synchronized private fun page(route: DesktopRoute, remember: Boolean = false, block: suspend (Long) -> Unit) {
         val before = mutable.value
         if (remember && before.route !in setOf(DesktopRoute.Loading, DesktopRoute.Player)) synchronized(history) { history.add(before) }
         val g = generation.incrementAndGet()
@@ -71,7 +75,7 @@ class DesktopController(
             finally { publish(g) { it.copy(busy = false) } }
         }
     }
-    private fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) mutable.update(change) }
+    @Synchronized private fun publish(g: Long, change: (DesktopState) -> DesktopState) { if (generation.get() == g && !closing) mutable.update(change) }
     private suspend fun <T> result(account: Account? = null, call: suspend () -> ClientResult<T>): T {
         val response = call()
         currentCoroutineContext().ensureActive()
@@ -308,22 +312,43 @@ class DesktopController(
         }
     }
     private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null) {
-        val outcome = attempt(g, a) { playbackClient.prepareFor(a, item.id, desktopMpvProfile(mutable.value.settings), mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate,
-            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) } ?: return
-        if (outcome !is PlayOutcome.Play) { publish(g) { it.copy(error = (outcome as PlayOutcome.Unplayable).message) }; return }
+        val player = try { playbackFactory(File(directory, "playback")) }
+        catch (_: LinkageError) { publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
+        val profile = try { player.profile(mutable.value.settings) }
+        catch (e: Throwable) {
+            runCatching { player.close() }
+            if (e is CancellationException || e is VirtualMachineError) throw e
+            publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
+        }
+        val outcome = try { attempt(g, a) { playbackClient.prepareFor(a, item.id, profile, mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate,
+            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) } }
+        catch (e: Throwable) { runCatching { player.close() }; throw e }
+        if (outcome !is PlayOutcome.Play) {
+            player.close()
+            if (outcome is PlayOutcome.Unplayable) publish(g) { it.copy(error = outcome.message) }
+            return
+        }
         val decision = outcome.decision
         val streams = decision.mediaSource.mediaStreams
         val ai = audio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
         val si = subtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
-        val player = playbackFactory(File(directory, "playback"))
         window?.let(player::attach)
         engine = player
         val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
         publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000), error = null) }
-        try { player.open(a, decision, start, ai, si, mutable.value.settings.volume) }
-        catch (e: Exception) {
+        try {
+            viewingMutex.withLock {
+                currentCoroutineContext().ensureActive()
+                if (viewing !== v) return
+                player.open(a, decision, start, ai, si, mutable.value.settings.volume)
+            }
+            currentCoroutineContext().ensureActive()
+        }
+        catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e is VirtualMachineError || e is ThreadDeath) throw e
             runCatching { player.close() }; if (viewing === v) viewing = null; if (engine === player) engine = null
             publish(g) { it.copy(error = "The video player could not start. Check that the matching libmpv and native surface adapter are installed.") }
             return
@@ -331,24 +356,31 @@ class DesktopController(
         reportJob = scope.launch {
             try {
                 var elapsed = 0
-                while (isActive && viewing === v && !v.stopped) {
+                while (isActive && viewing === v && !v.closing && !v.stopped) {
                     delay(500)
+                    if (v.closing || viewing !== v) break
                     val snap = player.snapshot()
                     mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
                         paused = snap.paused, ready = snap.ready)) else s }
                     if (snap.error != null) { mutable.update { it.copy(error = snap.error) }; break }
                     if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
-                    if (snap.ready && !v.startAttempted) {
-                        v.startAttempted = true
-                        val p = mutable.value.playback ?: break
-                        val report = PlaybackReports(decision).progress(snap.positionSeconds.seconds, snap.paused, ai.takeIf { v.audioChosen }, si.takeIf { v.subtitleChosen })
-                        when (val sent = playbackClient.reportStart(a, report)) {
-                            is ClientResult.Failure -> mutable.update { it.copy(error = sent.error.message) }
-                            is ClientResult.Success -> v.startReported = true
+                    if (snap.ready && !v.startAttempted) v.reports.withLock {
+                        if (!v.closing && !v.startAttempted) {
+                            val p = mutable.value.playback
+                            if (p != null && viewing === v) {
+                                val observed = v.engine.snapshot()
+                                v.startAttempted = true
+                                val report = PlaybackReports(decision).progress(observed.positionSeconds.seconds, observed.paused,
+                                    p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen })
+                                when (val sent = playbackClient.reportStart(a, report)) {
+                                    is ClientResult.Failure -> if (viewing === v) mutable.update { it.copy(error = sent.error.message) }
+                                    is ClientResult.Success -> v.startReported = true
+                                }
+                            }
                         }
                     }
                     elapsed++
-                    if (v.startReported && elapsed % 10 == 0) sendProgress(v)
+                    if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
                     if (snap.ended) {
                         if (mutable.value.settings.autoplayNext) nextEpisode() else stopPlayback()
@@ -359,15 +391,15 @@ class DesktopController(
             catch (_: Exception) { if (viewing === v) mutable.update { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") } }
         }
         if (item.type == "Episode" && item.seriesId != null) {
-            val next = attempt(g, a) { client.items(a, BrowseQuery(requireNotNull(item.seriesId), includeItemTypes = "Episode", recursive = true, sortBy = "SortName", limit = 10000)) }?.items.orEmpty()
-            val index = next.indexOfFirst { it.id == item.id }
-            publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = next.getOrNull(index + 1).takeIf { index >= 0 })) }
+            val next = attempt(g, a) { extras.nextEpisode(a, item) }
+            publish(g) { it.copy(playback = it.playback?.copy(nextEpisode = next)) }
         }
     }
-    private suspend fun sendProgress(v: Viewing) {
-        if (!v.startAttempted || v.stopped) return
-        val p = mutable.value.playback ?: return
-        val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(p.positionSeconds.seconds, p.paused,
+    private suspend fun sendProgress(v: Viewing) = v.reports.withLock {
+        if (!v.startAttempted || v.stopped || v.closing || viewing !== v) return@withLock
+        val p = mutable.value.playback ?: return@withLock
+        val observed = v.engine.snapshot()
+        val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(observed.positionSeconds.seconds, observed.paused,
             p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }))
         if (r is ClientResult.Failure && viewing === v) mutable.update { it.copy(error = "Progress could not be saved. ${r.error.message}") }
     }
@@ -379,8 +411,8 @@ class DesktopController(
             viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } }
         }
     }
-    fun playerToggle() { engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
-    fun seek(seconds: Double) { if (seconds.isFinite()) engine?.seek(seconds.coerceAtLeast(0.0)) }
+    fun playerToggle() { if (viewing?.closing == true) return; engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
+    fun seek(seconds: Double) { if (viewing?.closing == true) return; if (seconds.isFinite()) engine?.seek(seconds.coerceAtLeast(0.0)) }
     fun selectAudio(index: Int) = changeTrack(index, null)
     fun selectSubtitle(index: Int) = changeTrack(null, index)
     private fun changeTrack(audio: Int?, subtitle: Int?) {
@@ -388,6 +420,7 @@ class DesktopController(
         if (audio != null && p.audioTracks.none { it.index == audio }) return
         if (subtitle != null && subtitle != -1 && p.subtitleTracks.none { it.index == subtitle }) return
         val current = viewing ?: return
+        if (current.closing || current.stopped) return
         val applied = if (audio != null) engine?.selectAudio(audio) == true else engine?.selectSubtitle(requireNotNull(subtitle)) == true
         if (applied) {
             if (audio != null) current.audioChosen = true else current.subtitleChosen = true
@@ -419,16 +452,22 @@ class DesktopController(
         try {
         val v = viewing ?: return@withContext
         if (v.stopped) return@withContext
-        v.stopped = true
-        reportJob?.cancelAndJoin(); reportJob = null
+        v.closing = true
+        if (!v.engine.snapshot().paused) v.engine.togglePause()
+        // Let an in-flight report finish its bounded core request before Stop. Waiting progress
+        // commands see closing under the report mutex and are discarded before opening transport.
+        reportJob?.join(); reportJob = null
         val snap = runCatching { v.engine.snapshot() }.getOrNull()
         // Render context is drained/destroyed before libmpv, then Stop, then this session's encode release.
         val cleanup = runCatching { v.engine.close() }; if (engine === v.engine) engine = null
         if (cleanup.isFailure) mutable.update { it.copy(error = "The player could not finish cleanup. Close and reopen Pictureshow before playing again.") }
-        if (v.startAttempted) {
-            val position = snap?.positionSeconds ?: mutable.value.playback?.positionSeconds ?: 0.0
-            val stopped = playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds))
-            if (stopped is ClientResult.Failure) mutable.update { it.copy(error = "Playback ended, but progress could not be saved. ${stopped.error.message}") }
+        v.reports.withLock {
+            if (v.startAttempted) {
+                val position = snap?.positionSeconds ?: mutable.value.playback?.positionSeconds ?: 0.0
+                val stopped = playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds))
+                if (stopped is ClientResult.Failure) mutable.update { it.copy(error = "Playback ended, but progress could not be saved. ${stopped.error.message}") }
+            }
+            v.stopped = true
         }
         v.decision.playSessionId?.let { if (v.decision.method == PlayMethod.Transcode) playbackClient.stopEncoding(v.account, it) }
         if (viewing === v) viewing = null
@@ -439,13 +478,16 @@ class DesktopController(
 }
 
 /** mpv's bundled FFmpeg demuxes these originals; output adaptation remains with the qualified native renderer. */
-fun desktopMpvProfile(settings: DesktopSettings): DeviceProfile {
+fun desktopMpvProfile(settings: DesktopSettings, availableCodecs: Set<String>? = null): DeviceProfile {
     val bitrate = settings.preferences().deviceSettings().maxStreamingBitrate
+    val video = listOf("h264", "hevc", "vp8", "vp9", "av1", "mpeg2video", "mpeg4", "vc1").filter { availableCodecs == null || it in availableCodecs }.joinToString(",")
+    val audio = listOf("aac", "ac3", "eac3", "truehd", "dts", "flac", "alac", "opus", "vorbis", "mp3", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le").filter { availableCodecs == null || it in availableCodecs }.joinToString(",")
+    val subtitleCodecs = mapOf("srt" to "subrip", "subrip" to "subrip", "ass" to "ass", "ssa" to "ass", "vtt" to "webvtt", "webvtt" to "webvtt", "pgssub" to "hdmv_pgs_subtitle", "dvdsub" to "dvd_subtitle", "dvbsub" to "dvb_subtitle")
     return DeviceProfile(
         name = "Pictureshow Desktop libmpv", maxStreamingBitrate = bitrate, maxStaticBitrate = bitrate,
-        directPlayProfiles = listOf(DirectPlayProfile("mkv,matroska,mp4,m4v,mov,avi,ts,mpegts,m2ts,webm,mpg,mpeg,ogv,asf,wmv", "aac,ac3,eac3,truehd,dts,flac,alac,opus,vorbis,mp3,mp2,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le", "h264,hevc,vp8,vp9,av1,mpeg2video,mpeg4,vc1", DlnaProfileType.Video)),
-        transcodingProfiles = listOf(TranscodingProfile("ts", DlnaProfileType.Video, "h264", "aac,ac3,mp3", MediaStreamProtocol.Hls, maxAudioChannels = "8", minSegments = 1, segmentLength = 3)),
+        directPlayProfiles = listOf(DirectPlayProfile("mkv,matroska,mp4,m4v,mov,avi,ts,mpegts,m2ts,webm,mpg,mpeg,ogv,asf,wmv", audio, video, DlnaProfileType.Video)),
+        transcodingProfiles = listOf(TranscodingProfile("ts", DlnaProfileType.Video, "h264", listOf("aac", "ac3", "mp3").filter { availableCodecs == null || it in availableCodecs }.joinToString(","), MediaStreamProtocol.Hls, maxAudioChannels = "8", minSegments = 1, segmentLength = 3)),
         codecProfiles = listOf(CodecProfile(CodecType.Video, conditions = listOf(ProfileCondition(ProfileConditionType.EqualsAny, ProfileConditionValue.VideoRangeType, "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR")))),
-        subtitleProfiles = listOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt", "pgssub", "dvdsub", "dvbsub").flatMap { format -> listOf(SubtitleProfile(format, SubtitleDeliveryMethod.Embed), SubtitleProfile(format, SubtitleDeliveryMethod.External)) }
+        subtitleProfiles = subtitleCodecs.filter { (_, codec) -> availableCodecs == null || codec in availableCodecs }.keys.flatMap { format -> listOf(SubtitleProfile(format, SubtitleDeliveryMethod.Embed), SubtitleProfile(format, SubtitleDeliveryMethod.External)) }
     )
 }

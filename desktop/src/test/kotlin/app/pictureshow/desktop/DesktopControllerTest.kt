@@ -22,13 +22,15 @@ class DesktopControllerTest {
         override suspend fun write(value: String) { if (failure) error("write refused"); this.value = value }
     }
     private class Engine : DesktopPlaybackEngine {
-        var opened = false; var closed = false; var position = 12.0; var paused = false
+        var opened = false; var closed = false; var position = 12.0; var paused = false; var ready = true
         override fun attach(window: java.awt.Window) {}
         override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; this.position = position }
-        override fun snapshot() = EngineSnapshot(position, 180.0, paused, opened && !closed)
+        override fun snapshot() = EngineSnapshot(position, 180.0, paused, opened && !closed && ready)
         override fun togglePause() { paused = !paused }
         override fun seek(seconds: Double) { position = seconds }
         override fun volume(value: Int) {}
+        override fun selectAudio(index: Int) = true
+        override fun selectSubtitle(index: Int) = true
         override fun fullscreen(enabled: Boolean) {}
         override fun close() { closed = true }
     }
@@ -40,6 +42,10 @@ class DesktopControllerTest {
         var failLatest = false
         var slowMovie = false
         var unauthorized = false
+        @Volatile var holdStart = false
+        val startEntered = java.util.concurrent.CountDownLatch(1)
+        val startRelease = java.util.concurrent.CountDownLatch(1)
+        val reportCompletions = CopyOnWriteArrayList<String>()
         init {
             server.executor = executor
             server.createContext("/") { e ->
@@ -67,9 +73,11 @@ class DesktopControllerTest {
                     path.startsWith("/Sessions/") || path.startsWith("/Videos/ActiveEncodings") -> ""
                     else -> { status = 404; "" }
                 }
+                if (path == "/Sessions/Playing" && holdStart) { startEntered.countDown(); check(startRelease.await(10, java.util.concurrent.TimeUnit.SECONDS)) }
                 e.responseHeaders.set("Content-Type", "application/json")
                 if (body.isEmpty()) e.sendResponseHeaders(status, -1) else { val bytes = body.toByteArray(); e.sendResponseHeaders(status, bytes.size.toLong()); e.responseBody.write(bytes) }
                 e.close()
+                if (path.startsWith("/Sessions/Playing")) reportCompletions.add(path)
             }
             server.start()
         }
@@ -147,6 +155,57 @@ class DesktopControllerTest {
             }
         }
     }
+    @Test fun delayedStartChoiceAndStopAreSerializedWithoutLateProgress(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.holdStart = true
+            val engine = Engine().apply { ready = false }
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.route == DesktopRoute.Player && it.playback != null && !it.busy }
+                c.selectSubtitle(2); engine.ready = true
+                assertTrue(f.startEntered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                c.selectSubtitle(-1); c.playerToggle(); c.stopPlayback()
+                delay(150)
+                assertEquals(listOf("/Sessions/Playing"), f.requests.filter { it.first.startsWith("/Sessions/Playing") }.map { it.first })
+                f.startRelease.countDown()
+                c.await { it.route == DesktopRoute.Detail && !it.busy }
+                val reports = f.requests.filter { it.first.startsWith("/Sessions/Playing") }
+                assertEquals(listOf("/Sessions/Playing", "/Sessions/Playing/Stopped"), reports.map { it.first })
+                assertTrue(reports.first().second.contains("\"SubtitleStreamIndex\":2"))
+                assertEquals(listOf("/Sessions/Playing", "/Sessions/Playing/Stopped"), f.reportCompletions.toList())
+                delay(200)
+                assertEquals(2, f.requests.count { it.first.startsWith("/Sessions/Playing") })
+            }
+        }
+    }
+    @Test fun progressWaitsForStartAndReadsLatestViewerSelection(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.holdStart = true
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+                assertTrue(f.startEntered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                c.selectSubtitle(2)
+                delay(100)
+                assertFalse(f.requests.any { it.first == "/Sessions/Playing/Progress" })
+                f.startRelease.countDown()
+                withTimeout(10000) { while (f.requests.none { it.first == "/Sessions/Playing/Progress" }) delay(20) }
+                val progress = f.requests.first { it.first == "/Sessions/Playing/Progress" }
+                assertTrue(progress.second.contains("\"SubtitleStreamIndex\":2"))
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                val order = f.reportCompletions.toList()
+                assertEquals("/Sessions/Playing", order.first()); assertEquals("/Sessions/Playing/Stopped", order.last())
+            }
+        }
+    }
+    @Test fun missingNativeLibraryIsARecoverablePlayerError(): Unit = runBlocking {
+        Fixture().use { f -> DesktopController(directory(), playbackFactory = { throw UnsatisfiedLinkError("test native absent") }).use { c ->
+            c.login(f); c.play(MediaItem("movie", "The first picture", "Movie"))
+            c.await { it.route == DesktopRoute.Player && it.error != null && !it.busy }
+            assertNull(c.state.value.playback)
+            c.back(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+        } }
+    }
     @Test fun signingOutKeepsPublicServerButDeletesToken(): Unit = runBlocking {
         Fixture().use { f ->
             val dir = directory()
@@ -190,6 +249,13 @@ class DesktopControllerTest {
                 }
             }
         } finally { origin.stop(0); destination.stop(0) }
+    }
+    @Test fun deviceProfileAdvertisesOnlyActualDecoderEnvelope() {
+        val profile = desktopMpvProfile(DesktopSettings(), setOf("h264", "hevc", "aac", "subrip"))
+        assertEquals("h264,hevc", profile.directPlayProfiles.single().videoCodec)
+        assertEquals("aac", profile.directPlayProfiles.single().audioCodec)
+        assertTrue(profile.subtitleProfiles.all { it.format in listOf("srt", "subrip") })
+        assertEquals("aac", profile.transcodingProfiles.single().audioCodec)
     }
     @Test fun settingsPersistAndInvalidBitrateCannotCommit() {
         val dir = directory(); val store = DesktopSettingsStore(File(dir, "settings.properties"))

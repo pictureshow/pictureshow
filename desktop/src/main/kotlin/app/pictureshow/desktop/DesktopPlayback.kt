@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.playback.*
+import kotlinx.serialization.json.*
 import com.sun.jna.*
 import com.sun.net.httpserver.HttpServer
 import java.awt.Window
@@ -30,6 +31,7 @@ import javax.swing.SwingUtilities
 
 /** Only platform effects sit behind this seam; controller tests use a deterministic fake. */
 interface DesktopPlaybackEngine : AutoCloseable {
+    fun profile(settings: DesktopSettings): DeviceProfile = desktopMpvProfile(settings)
     fun attach(window: Window)
     fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int)
     fun snapshot(): EngineSnapshot
@@ -133,6 +135,23 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var offset = 0.0
     private var sourceDecision: PlayDecision? = null
     private var sourceAccount: Account? = null
+    override fun profile(settings: DesktopSettings): DeviceProfile {
+        // decoder-list is a documented read-only native property; query the loaded bytes,
+        // with no media, audio or video surface, before advertising a server profile.
+        val probe = Mpv(directory, probe = true)
+        try {
+            probe.option("vo", "null"); probe.option("ao", "null"); probe.option("terminal", "no")
+            probe.initialize()
+            val text = requireNotNull(probe.get("decoder-list")) { "libmpv did not report its decoders" }
+            val codecs = Json.parseToJsonElement(text).jsonArray.map { it.jsonObject.getValue("codec").jsonPrimitive.content }.toSet()
+            require("h264" in codecs && "aac" in codecs) { "This libmpv build cannot play the H.264/AAC conversion fallback" }
+            File(directory, "decoder-envelope.json").writeText(buildJsonObject {
+                put("source", "actual loaded libmpv decoder-list")
+                put("codecs", JsonArray(codecs.sorted().map(::JsonPrimitive)))
+            }.toString())
+            return desktopMpvProfile(settings, codecs)
+        } finally { probe.close() }
+    }
     override fun attach(window: Window) { this.window = window }
     override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) {
         check(mpv == null)
