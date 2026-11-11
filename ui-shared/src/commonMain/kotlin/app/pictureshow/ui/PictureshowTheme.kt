@@ -26,5 +26,7 @@ fun PictureshowTheme(content: @Composable () -> Unit) {
         primary = Color(0xFFD0BCFF), secondary = Color(0xFFCCC2DC),
         background = Color(0xFF10131C), surface = Color(0xFF10131C),
         surfaceContainer = Color(0xFF202330)
-    ), content = content)
+    )) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, content = content)
+    }
 }

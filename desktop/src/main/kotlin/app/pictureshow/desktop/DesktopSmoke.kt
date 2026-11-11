@@ -82,7 +82,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in")
         click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
         check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
-        click("password");robot.keyPress(if(com.sun.jna.Platform.isMac()) KeyEvent.VK_META else KeyEvent.VK_CONTROL);key(KeyEvent.VK_A);robot.keyRelease(if(com.sun.jna.Platform.isMac()) KeyEvent.VK_META else KeyEvent.VK_CONTROL);type(password)
+        click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
         waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home")
         val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library")

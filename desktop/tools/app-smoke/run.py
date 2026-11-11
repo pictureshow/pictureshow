@@ -366,6 +366,9 @@ def provision(api: API, media_base: str):
     api.request("POST", "/Startup/RemoteAccess", {"EnableRemoteAccess": False, "EnableAutomaticPortMapping": False})
     api.request("POST", "/Startup/Complete")
     api.login("fixture-admin", admin_password)
+    configuration = api.request("GET", "/System/Configuration")
+    configuration["ServerName"] = "Pictureshow test server"
+    api.request("POST", "/System/Configuration", configuration)
     encoding = api.request("GET", "/System/Configuration/encoding")
     # Keep a short conversion observable while the player consumes it, rather
     # than letting FFmpeg finish the entire signal before the next process poll.
@@ -630,7 +633,7 @@ def main():
         with owned_server(args.work / "fixture", args.work / "media", args.ffmpeg) as (admin, media_base, provenance):
             try:
                 viewer, password, ids = provision(admin, media_base)
-                quality_witness = platform.system() == "Windows" or bool(os.getenv("SMOKE_FORCE_QUALITY"))
+                quality_witness = platform.system() == "Windows" or os.getenv("PICTURESHOW_SMOKE_FORCE_QUALITY") == "1"
                 witness = {"reason": "viewer-bitrate-cap" if quality_witness else "unavailable-decoder",
                            "bitrateCapMbps": 4 if quality_witness else None,
                            "conversionNoticeExpected": not quality_witness}
