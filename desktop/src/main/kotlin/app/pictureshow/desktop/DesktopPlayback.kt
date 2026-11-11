@@ -49,7 +49,8 @@ data class DesktopSelectedTracks(
     val audioId: Int?, val subtitleId: Int?, val subtitleText: String, val subtitleVisible: Boolean,
     val nativeVersion: String? = null, val ffmpegVersion: String? = null, val subtitleCodec: String? = null,
     val subtitleStartSeconds: Double? = null, val subtitleEndSeconds: Double? = null,
-    val positionSeconds: Double? = null, val initialSubtitleIndex: Int? = null
+    val positionSeconds: Double? = null, val initialSubtitleIndex: Int? = null,
+    val subtitleExternal: Boolean? = null
 )
 
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
@@ -309,7 +310,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             player.get("sub-text").orEmpty(), player.get("sub-visibility") == "yes",
             player.get("mpv-version"), player.get("ffmpeg-version"), player.get("current-tracks/sub/codec") ?: player.get("sub-codec"),
             player.get("sub-start")?.toDoubleOrNull(), player.get("sub-end")?.toDoubleOrNull(),
-            player.get("time-pos")?.toDoubleOrNull(), initialSubtitleIndex
+            player.get("time-pos")?.toDoubleOrNull(), initialSubtitleIndex,
+            player.get("current-tracks/sub/external")?.let { it == "yes" }
         )
     }
     override fun viewportReceipt(): String? {

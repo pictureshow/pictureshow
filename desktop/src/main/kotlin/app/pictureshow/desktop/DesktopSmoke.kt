@@ -211,6 +211,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 put("subtitleEndSeconds",it.subtitleEndSeconds?.let(::JsonPrimitive) ?: JsonNull)
                 put("positionSeconds",it.positionSeconds?.let(::JsonPrimitive) ?: JsonNull)
                 put("initialSubtitleIndex",it.initialSubtitleIndex?.let(::JsonPrimitive) ?: JsonNull)
+                put("subtitleExternal",it.subtitleExternal?.let(::JsonPrimitive) ?: JsonNull)
             }.toString()+"\n") }
         }
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};waitFor("native audio selection") { trackReceipt("audio-selection")?.audioId==c.state.value.playback!!.audioTracks.filter { !it.isExternal }.indexOfFirst { it.index==audio.index }+1 };checks["audio"]=true;screenshot("07-audio-selected")
@@ -221,7 +222,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         check(sameOrigin) { "Fixture subtitle delivery left the server origin" }
         File(out,"subtitle-delivery.json").writeText(buildJsonObject { put("serverDeliveryMethod",sub.deliveryMethod!!.name);put("sourceFileIsExternal",sub.isExternal);put("deliveryUrlPresent",true);put("sameOrigin",sameOrigin) }.toString()+"\n")
         click("subtitles");screenshot("08-subtitle-menu");screenshot("08b-subtitle-menu-minimum",listOf(800 to 600));click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index}
-        waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
+        waitFor("native decoded subtitle cue",20) { trackReceipt("subtitle-selection")?.let { it.subtitleId!=null && it.subtitleVisible && it.subtitleExternal==true && it.subtitleText.contains("Pictureshow original CC0 subtitle") &&
                 it.subtitleCodec in setOf("srt", "subrip", "webvtt", "ass", "ssa") &&
                 it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
                 it.positionSeconds?.let { position -> position>=0.0 && position<180.0 }==true &&
