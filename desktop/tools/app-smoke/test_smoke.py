@@ -178,6 +178,29 @@ class SmokeVerdictTest(unittest.TestCase):
                 self.assertEqual(1, launches)
                 self.assertFalse(releaser.is_alive())
 
+    def test_fixture_library_uses_explicit_path_and_confirms_registration(self):
+        class FixtureAPI:
+            def request(self, method, endpoint, body=None, query=None):
+                if endpoint == "/Environment/DirectoryContents":
+                    return [{"Name": "Signal One", "Type": "Directory"}]
+                if method == "POST":
+                    self.registered = query.get("paths")
+                    return None
+                return [{"Name": "Movies", "Locations": [self.registered] if self.registered else []}]
+        api = FixtureAPI()
+        smoke.add_fixture_library(api, "Movies", "movies", "/fixture/movies")
+        self.assertEqual("/fixture/movies", api.registered)
+        self.assertTrue(api.fixture_library_receipts[0]["registeredLocation"])
+
+    def test_fixture_empty_virtual_folder_fails_before_scan_timeout(self):
+        class FixtureAPI:
+            def request(self, method, endpoint, body=None, query=None):
+                if endpoint == "/Environment/DirectoryContents":
+                    return [{"Name": "Signal One", "Type": "Directory"}]
+                return [{"Name": "Movies", "Locations": []}] if method == "GET" else None
+        with self.assertRaisesRegex(RuntimeError, "did not retain"):
+            smoke.add_fixture_library(FixtureAPI(), "Movies", "movies", "/fixture/movies")
+
 
 if __name__ == "__main__":
     unittest.main()

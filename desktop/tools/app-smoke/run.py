@@ -92,6 +92,12 @@ def fixture_diagnostics(api: "API", evidence: Path, error: Exception) -> None:
     """Publish enough to diagnose a probe failure, without raw logs or tokens."""
     result = {"errorType": type(error).__name__, "error": sanitized(str(error), api.token)}
     try:
+        folders = api.request("GET", "/Library/VirtualFolders")
+        result["libraries"] = [{"name": folder.get("Name"),
+                                 "locationCount": len(folder.get("Locations") or []),
+                                 "hasItemId": bool(folder.get("ItemId"))}
+                                for folder in folders]
+        result["libraryProvisionReceipts"] = getattr(api, "fixture_library_receipts", [])
         catalog = api.request("GET", "/Items", query={"Recursive": "true", "Fields": "MediaSources,MediaStreams"})
         items = catalog.get("Items", [])
         result["itemCount"] = len(items)
@@ -296,6 +302,11 @@ def native_server(root: Path) -> Path:
 
 @contextlib.contextmanager
 def owned_server(root: Path, media: Path, ffmpeg: str):
+    # Jellyfin can change its working directory internally. Native data and
+    # encoder paths must remain valid independently of the launcher's cwd.
+    root = root.resolve()
+    media = media.resolve()
+    ffmpeg = str(Path(shutil.which(ffmpeg) or ffmpeg).resolve())
     root.mkdir(parents=True)
     port = free_port()
     url = f"http://127.0.0.1:{port}"
@@ -321,7 +332,7 @@ def owned_server(root: Path, media: Path, ffmpeg: str):
             # pair. A Chocolatey shim can obscure the sibling FFprobe location.
             server_ffmpeg = str(exe.with_name("ffmpeg.exe")) if platform.system() == "Windows" else ffmpeg
             command = [str(exe), "--nowebclient", "--nonetchange", "--datadir", str(root / "data"), "--cachedir", str(root / "cache"), "--configdir", str(root / "config"), "--logdir", str(root / "logs"), "--ffmpeg", server_ffmpeg]
-            process = subprocess.Popen(command, stdout=server_log, stderr=subprocess.STDOUT)
+            process = subprocess.Popen(command, stdout=server_log, stderr=subprocess.STDOUT, cwd=exe.parent)
             media_base = str(media.resolve())
             provenance = {"kind": "native-portable", "version": VERSION, "sha256": ARCHIVES[(platform.system(), platform.machine().lower())][3]}
         api = API(url)
@@ -357,6 +368,31 @@ def owned_server(root: Path, media: Path, ffmpeg: str):
             server_log.close()
 
 
+def add_fixture_library(api: API, name: str, kind: str, path: str):
+    # Validate through Jellyfin itself, then supply the documented explicit paths
+    # query. An empty virtual folder can otherwise report a completed scan while
+    # never seeing media, which obscures fixture-path errors as probe timeouts.
+    entries = api.request("GET", "/Environment/DirectoryContents",
+                          query={"path": path, "includeFiles": "true", "includeDirectories": "true"})
+    if not entries:
+        raise RuntimeError(f"Fixture {name} directory is empty from the server's perspective")
+    api.request("POST", "/Library/VirtualFolders", {"LibraryOptions": {
+        "EnableRealtimeMonitor": False, "EnableInternetProviders": False,
+        "PathInfos": [{"Path": path}], "MetadataSavers": [],
+        "TypeOptions": [{"Type": item_type, "MetadataFetchers": [], "ImageFetchers": []}
+                        for item_type in ["Movie", "Series", "Season", "Episode"]]}},
+        {"name": name, "collectionType": kind, "paths": path, "refreshLibrary": "false"})
+    folder = next((folder for folder in api.request("GET", "/Library/VirtualFolders")
+                   if folder.get("Name") == name), None)
+    if folder is None or os.path.normcase(os.path.normpath(path)) not in {
+            os.path.normcase(os.path.normpath(location)) for location in folder.get("Locations") or []}:
+        raise RuntimeError(f"Fixture {name} virtual folder did not retain its requested media location")
+    receipt = {"name": name, "serverDirectoryEntryCount": len(entries), "registeredLocation": True}
+    if not hasattr(api, "fixture_library_receipts"):
+        api.fixture_library_receipts = []
+    api.fixture_library_receipts.append(receipt)
+
+
 def provision(api: API, media_base: str):
     admin_password, password = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
     api.request("GET", "/Startup/Configuration")
@@ -376,7 +412,7 @@ def provision(api: API, media_base: str):
     api.request("POST", "/System/Configuration/encoding", encoding)
     viewer = api.request("POST", "/Users/New", {"Name": "desktop-viewer", "Password": password})
     for name, kind, path in [("Movies", "movies", "movies"), ("Shows", "tvshows", "shows")]:
-        api.request("POST", "/Library/VirtualFolders", {"LibraryOptions": {"EnableRealtimeMonitor": False, "EnableInternetProviders": False, "PathInfos": [{"Path": media_base + "/" + path}], "MetadataSavers": [], "TypeOptions": [{"Type": item_type, "MetadataFetchers": [], "ImageFetchers": []} for item_type in ["Movie", "Series", "Season", "Episode"]]}}, {"name": name, "collectionType": kind, "refreshLibrary": "false"})
+        add_fixture_library(api, name, kind, os.path.join(media_base, path))
     api.request("POST", "/Library/Refresh")
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
@@ -637,7 +673,7 @@ def main():
                 witness = {"reason": "viewer-bitrate-cap" if quality_witness else "unavailable-decoder",
                            "bitrateCapMbps": 4 if quality_witness else None,
                            "conversionNoticeExpected": not quality_witness}
-                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
+                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "libraries": admin.fixture_library_receipts, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
                 result["conversionWitness"] = witness
                 with gui_lease(args.gui_lock, args.wait_gui_seconds):
                     result.update(run_app(args, viewer, password, ids, args.evidence))
