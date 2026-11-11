@@ -418,8 +418,10 @@ fun CatalogHome(
                             Button(
                                 enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
                                 onClick = {
-                                    selectedRow = "customize"
-                                    onCustomize()
+                                    if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) {
+                                        selectedRow = "customize"
+                                        onCustomize()
+                                    }
                                 },
                                 modifier = target(Modifier, restoreAction == "customize").focusRequester(customizeFocus)
                                     .testTag("home:customize").staysInRow(first = false, last = onDownloads == null)

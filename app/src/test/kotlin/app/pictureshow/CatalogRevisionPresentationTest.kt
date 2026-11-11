@@ -163,12 +163,12 @@ class CatalogRevisionPresentationTest {
             }
         }
         val entry = compose.onNodeWithTag(if (tv) "home:customize" else "touch:home-menu")
-        entry.assertIsNotEnabled().performClick()
+        entry.assertIsNotEnabled().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle {
             assertEquals(0, opens, "Pending read must not open an editor populated with defaults")
             state.value = state.value.copy(preferencesReady = true, loading = false)
         }
-        entry.assertIsEnabled().performClick()
+        entry.assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
         if (!tv) compose.onNodeWithTag("touch:customize").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1, opens) }
     }

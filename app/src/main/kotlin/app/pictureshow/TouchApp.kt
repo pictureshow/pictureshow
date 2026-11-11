@@ -356,7 +356,7 @@ internal fun TouchPictureshow(
                             },
                             onResume = vm::resumed,
                             librariesOnly = destination == "libraries",
-                            onCustomize = { editing = true },
+                            onCustomize = { if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) editing = true },
                             onWatchDownloads = watchDownloads
                         )
                     }
