@@ -204,9 +204,9 @@ class SettingsShortcutParityTest {
             assertEquals(true, state.local.passthrough)
             assertEquals(true, state.local.tuning.downmix)
         }
-        compose.onNodeWithText("Downmix is on, so passthrough is not used.", substring = true).assertExists()
+        panelChoice("Audio passthrough").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
         verifyDisabledRows()
         closePanel()
-        compose.onNodeWithText("Downmix is on, so passthrough is not used.", substring = true).assertExists()
+        compose.onNodeWithTag("settings:passthrough").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
     }
 }

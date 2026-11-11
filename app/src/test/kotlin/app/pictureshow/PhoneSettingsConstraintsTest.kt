@@ -44,9 +44,11 @@ import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** Executes the portable UI case at the measured 360dp landscape / 1.3x font clipping boundary. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [30], application = Application::class, qualifiers = "w800dp-h360dp-land-mdpi")
 class PhoneSettingsConstraintsTest {
     @get:Rule val compose = createComposeRule()

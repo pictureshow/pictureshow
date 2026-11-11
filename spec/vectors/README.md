@@ -459,3 +459,5 @@ select that visual text, while separate native AccessibilityNodeInfo checks veri
 Centering permits at most one physical pixel of glyph-position rounding; row height and radio alignment remain exact.
 
 The native settings layout suite also checks that a consequence stays inside its row's click target, multiline radio options align on their first label line at 1.3x font scale, and closing a group picker returns to the same scrolled opener. The first-line case runs against both settings and the actual player Quality menu; each platform supplies equivalent native geometry evidence.
+
+Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
