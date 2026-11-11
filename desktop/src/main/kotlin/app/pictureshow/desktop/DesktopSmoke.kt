@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.window.*
 import app.pictureshow.core.*
+import kotlinx.serialization.json.*
 import java.awt.Robot
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
@@ -86,6 +87,21 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             small.createGraphics().let { g->g.drawImage(original,0,0,small.width,small.height,null);g.dispose() }
             val target=File(screens,"$name-${w}x${h}.jpg")
             ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
+            if(c.state.value.route==DesktopRoute.Player && c.state.value.playback?.ready==true && !com.sun.jna.Platform.isLinux()) {
+                var receipt:String?=null
+                waitFor("whole video clears header and controls") {
+                    receipt=c.videoViewportReceipt()
+                    receipt?.let {
+                        val data=Json.parseToJsonElement(it).jsonObject
+                        val top=data.getValue("topRatio").jsonPrimitive.double
+                        val bottom=data.getValue("bottomRatio").jsonPrimitive.double
+                        val dimensions=data.getValue("dimensions").jsonObject
+                        val height=dimensions.getValue("h").jsonPrimitive.double
+                        top>0 && bottom>0 && height>0 && dimensions.getValue("mt").jsonPrimitive.double>=top*height-2 && dimensions.getValue("mb").jsonPrimitive.double>=bottom*height-2
+                    } ?: false
+                }
+                File(screens,"$name-${w}x${h}.viewport.json").writeText(requireNotNull(receipt)+"\n")
+            }
             val accessibleRows=mutableListOf<String>()
             SwingUtilities.invokeAndWait {
                 fun visit(a: javax.accessibility.Accessible?, depth:Int) {
@@ -109,14 +125,14 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
     try {
         if(com.sun.jna.Platform.isMac()) check(File(out,"window-chrome.json").readText().contains("\"nativeMacChrome\":true")) { "Mac smoke requires visible standard window controls" }
-        ready(DesktopRoute.Servers);screenshot("01-server")
-        click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in")
+        ready(DesktopRoute.Servers);screenshot("01-server");screenshot("01b-server-minimum",listOf(800 to 600))
+        click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in");screenshot("02c-sign-in-minimum",listOf(800 to 600))
         click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
         check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
         click("password");repeat(32) { key(KeyEvent.VK_RIGHT) };repeat(32) { key(KeyEvent.VK_BACK_SPACE) };type(password)
         click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
         waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home");screenshot("03b-home-minimum",listOf(800 to 600))
-        val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library")
+        val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library");screenshot("04b-library-minimum",listOf(800 to 600))
         click("sort");click("sort:DateCreated");waitFor("sort applied"){c.state.value.sortBy=="DateCreated"&&!c.state.value.busy};checks["sort"]=true
         val movie=c.state.value.items.first{it.name=="Signal One"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail");screenshot("05b-detail-minimum",listOf(800 to 600))
         key(KeyEvent.VK_ESCAPE);ready(DesktopRoute.Library)
@@ -130,9 +146,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         robot.keyPress(KeyEvent.VK_ALT);key(KeyEvent.VK_ENTER);robot.keyRelease(KeyEvent.VK_ALT);waitFor("fullscreen restore"){window.bounds==beforeFull}
         val first=c.state.value.playback!!.positionSeconds
         waitFor("advancing playback",30){(c.state.value.playback?.positionSeconds?:0.0)>first+3};checks["progress"]=true
-        screenshot("06-player")
+        screenshot("06-player");screenshot("06b-player-minimum",listOf(800 to 600))
         val audio=c.state.value.playback!!.audioTracks.last();click("audio");click("audio:${audio.index}");waitFor("audio choice"){c.state.value.playback?.audioIndex==audio.index};checks["audio"]=true;screenshot("07-audio-selected")
-        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index};click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};checks["subtitles"]=true
+        val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index};screenshot("08c-subtitles-on");click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)
         click("nav:library:${library.id}");ready(DesktopRoute.Library)
@@ -146,7 +162,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("converted video decoded",60){c.state.value.playback?.ready==true}
         check(c.state.value.playback!!.decision.method==app.pictureshow.core.playback.PlayMethod.Transcode) { "Unsupported codec was not converted" }
         check((c.state.value.playback!!.notice!=null) != qualityConversion) { "Conversion notice must explain a device limit, never a viewer quality cap" }
-        screenshot("08b-conversion-notice")
+        screenshot(if(qualityConversion) "08b-quality-conversion" else "08b-conversion-notice")
         waitFor("converted progress"){(c.state.value.playback?.positionSeconds?:0.0)>=3}
         click("seek-forward")
         waitFor("converted seek full timeline"){(c.state.value.playback?.positionSeconds?:0.0)>=13}

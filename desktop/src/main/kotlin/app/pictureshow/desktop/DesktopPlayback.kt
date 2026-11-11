@@ -40,6 +40,7 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun volume(value: Int)
     fun fullscreen(enabled: Boolean)
     fun viewport(topRatio: Double, bottomRatio: Double) {}
+    fun viewportReceipt(): String? = null
     fun selectAudio(index: Int): Boolean = false
     fun selectSubtitle(index: Int): Boolean = false
 }
@@ -291,6 +292,12 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (!topRatio.isFinite() || !bottomRatio.isFinite() || topRatio < 0 || bottomRatio < 0 || topRatio + bottomRatio >= 1) return
         viewportMargins.set(topRatio to bottomRatio)
         applyViewport()
+    }
+    override fun viewportReceipt(): String? {
+        if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null
+        val dimensions=mpv?.get("osd-dimensions")?.let { Json.parseToJsonElement(it) } ?: return null
+        val (top,bottom)=viewportMargins.get()
+        return buildJsonObject { put("topRatio",top);put("bottomRatio",bottom);put("dimensions",dimensions) }.toString()
     }
     private fun applyViewport() {
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return
