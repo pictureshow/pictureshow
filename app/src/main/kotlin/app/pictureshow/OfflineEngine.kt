@@ -90,6 +90,7 @@ internal interface OfflineForeground {
 
     /** Something still has to finish without the viewer touching it, so a restart must stay booked. */
     fun unfinished(any: Boolean) = Unit
+    fun viewerReturned() = Unit
 }
 
 private const val OFFLINE_RETRIES = 3
@@ -109,9 +110,9 @@ internal class OfflineEngine(
     private val accounts: AccountStore,
     private val identity: suspend () -> ClientIdentity,
     private val foreground: OfflineForeground,
-    private val http: OfflineHttp = offlineOkHttp(),
+    http: OfflineHttp? = null,
     private val apiClient: okhttp3.OkHttpClient = PlaybackMedia.createPlaybackHttpClient(),
-    private val networkState: () -> OfflineNetwork = { measuredNetwork(context) },
+    networkState: (() -> OfflineNetwork)? = null,
     private val freeBytes: (File) -> Long? = { dir -> runCatching { StatFs(dir.existingParent().path).availableBytes }.getOrNull() },
     private val quotaBytes: (File) -> Long? = { dir -> runCatching { StatFs(dir.existingParent().path).totalBytes }.getOrNull() },
     private val retryDelayMs: (Int) -> Long = { attempt -> 5_000L * (1L shl (attempt * 2)) },
@@ -122,6 +123,13 @@ internal class OfflineEngine(
     private val restartTrustedBytes: (Long) -> Long = ::offlineDurableOffset,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
+    private val jobNetwork = OfflineJobNetwork()
+    private val http = http ?: offlineOkHttp(
+        jobNetwork.calls(apiClient.newBuilder().readTimeout(180, java.util.concurrent.TimeUnit.SECONDS).build())
+    )
+    private val apiCalls = jobNetwork.calls(apiClient)
+    private val networkState = networkState ?: { measuredNetwork(context, jobNetwork.network) }
+
     /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
     private val onlineViewingReadLock = Any()
     private var lastOnlineViewingRead: Job? = null
@@ -158,7 +166,7 @@ internal class OfflineEngine(
 
     val libraries: StateFlow<Map<String, OfflineLibrary>> = mutableLibraries
 
-    private suspend fun api(): OfflineApi = api ?: OfflineApi(apiClient, identity()).also { api = it }
+    private suspend fun api(): OfflineApi = api ?: OfflineApi(apiCalls, identity()).also { api = it }
 
     private suspend fun sessions(): OfflineSessionOwner = sessionOwner ?: OfflineSessionOwner(
         files.sessions(),
@@ -167,6 +175,11 @@ internal class OfflineEngine(
 
     /** Runs once per process. Everything here works with the network off. */
     fun start(): Job {
+        foreground.viewerReturned()
+        return loadOnce()
+    }
+
+    private fun loadOnce(): Job {
         started?.let { return it }
         val job = scope.launch {
             emptyTrashSoon()
@@ -188,8 +201,27 @@ internal class OfflineEngine(
 
     /** The next booked job run. Starting is once per process, and a warm process still has rows nothing else will move. */
     suspend fun wake() {
-        start().join()
+        loadOnce().join()
         networkChanged()
+    }
+
+    /** The scheduler's network may differ from the default (VPN, simultaneous Wi-Fi/cellular). */
+    suspend fun useJobNetwork(owner: Any, network: Network?) {
+        mutex.withLock {
+            if (jobNetwork.network != network) suspendTransfersLocked()
+            jobNetwork.owner = owner
+            jobNetwork.network = network
+        }
+    }
+
+    fun releaseJobNetwork(owner: Any, suspendTransfers: Boolean = true): Job = scope.launch {
+        mutex.withLock {
+            // A late stop from the previous run cannot clear the new run's route or cancel its IO.
+            if (jobNetwork.owner !== owner) return@withLock
+            if (suspendTransfers) suspendTransfersLocked()
+            jobNetwork.owner = null
+            jobNetwork.network = null
+        }
     }
 
     /** However much is in there, deleting it holds nobody up: a cold start offline waits on nothing here. */
@@ -650,16 +682,16 @@ internal class OfflineEngine(
     }
 
     fun foregroundTimedOut() {
-        scope.launch {
-            mutex.withLock {
-                lastAccountKeys.forEach { key ->
-                    library(key)?.manifest?.entries?.filter {
-                        it.job.phase == OfflinePhase.preparing ||
-                            it.job.phase == OfflinePhase.transferring ||
-                            it.job.phase == OfflinePhase.verifying
-                    }?.forEach { eventLocked(key, it.id, OfflineJobEvent("network-lost")) }
-                }
-            }
+        scope.launch { mutex.withLock { suspendTransfersLocked() } }
+    }
+
+    private fun suspendTransfersLocked() {
+        lastAccountKeys.forEach { key ->
+            library(key)?.manifest?.entries?.filter {
+                it.job.phase == OfflinePhase.preparing ||
+                    it.job.phase == OfflinePhase.transferring ||
+                    it.job.phase == OfflinePhase.verifying
+            }?.forEach { eventLocked(key, it.id, OfflineJobEvent("network-lost")) }
         }
     }
 
@@ -1047,7 +1079,7 @@ internal class OfflineEngine(
 
     /** Waits for the first load, for callers that need a settled answer (cold start). */
     suspend fun ready(): Map<String, OfflineLibrary> {
-        start().join()
+        loadOnce().join()
         return libraries.first()
     }
 
@@ -1100,9 +1132,9 @@ internal fun offlineForegroundTitles(libraries: Map<String, OfflineLibrary>, cur
 
 private data class OfflineUnreachable(val tries: Int, val untilMs: Long)
 
-internal fun measuredNetwork(context: Context): OfflineNetwork {
+internal fun measuredNetwork(context: Context, network: Network? = null): OfflineNetwork {
     val manager = context.getSystemService(ConnectivityManager::class.java) ?: return OfflineNetwork.none
-    val capabilities = manager.activeNetwork?.let(manager::getNetworkCapabilities) ?: return OfflineNetwork.none
+    val capabilities = (network ?: manager.activeNetwork)?.let(manager::getNetworkCapabilities) ?: return OfflineNetwork.none
     if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return OfflineNetwork.none
     val free = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) ||
         capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||

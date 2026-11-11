@@ -18,7 +18,10 @@ import org.robolectric.annotation.Config
 class OfflineRestartBookingTest {
     private val log = mutableListOf<String>()
     private val booking = OfflineRestartBooking(
-        book = { log += "book:$it" },
+        book = {
+            log += "book:$it"
+            true
+        },
         cancel = { log += "cancel" }
     )
 
@@ -80,7 +83,7 @@ class OfflineRestartBookingTest {
     }
 
     @Test
-    fun `the booked restart asks for no network, so the system's batching can't hold it past the kill`() {
+    fun `the legacy restart has no network constraint and a bounded batching deadline`() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         offlineScheduleJob(context, 60_000)
         val job = context.getSystemService(android.app.job.JobScheduler::class.java).allPendingJobs.single()
@@ -88,5 +91,6 @@ class OfflineRestartBookingTest {
         assertEquals(android.app.job.JobInfo.NETWORK_TYPE_NONE, job.networkType)
         assertEquals(60_000L, job.minLatencyMillis)
         assertEquals(true, job.isPersisted)
+        assertEquals(120_000L, job.maxExecutionDelayMillis)
     }
 }

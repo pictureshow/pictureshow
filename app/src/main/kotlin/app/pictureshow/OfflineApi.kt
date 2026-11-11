@@ -19,9 +19,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -137,7 +137,7 @@ private data class OfflineApiAuth(
 internal class OfflineApiException(val status: Int) : IOException("HTTP $status")
 
 /** A small, explicit client: every call here names the token it uses, because two different ones are in play. */
-internal class OfflineApi(private val client: OkHttpClient, private val identity: ClientIdentity) {
+internal class OfflineApi(private val client: Call.Factory, private val identity: ClientIdentity) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun authorization(deviceId: String, token: String?): String = AuthorizationHeader.build(identity.copy(deviceId = deviceId), token)

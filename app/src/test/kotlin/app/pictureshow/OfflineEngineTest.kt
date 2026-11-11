@@ -83,6 +83,7 @@ class OfflineEngineTest {
     private var restMs = 1L
     private var recheckMs = 30_000L
     private var revocationMs = 60_000L
+    private var viewerReturns = 0
     private val unfinishedReports = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
 
     @Volatile
@@ -215,6 +216,16 @@ class OfflineEngineTest {
         return response
     }
 
+    @Test
+    fun `background wake and ready never claim that the viewer reopened the app`() = runBlocking {
+        val engine = engine()
+        engine.wake()
+        engine.ready()
+        assertEquals(0, viewerReturns)
+        engine.start().join()
+        assertEquals(1, viewerReturns)
+    }
+
     private fun engine(): OfflineEngine {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scopes += scope
@@ -223,6 +234,10 @@ class OfflineEngineTest {
             accounts,
             { ClientIdentity("Test", "install-id", "1") },
             object : OfflineForeground {
+                override fun viewerReturned() {
+                    viewerReturns++
+                }
+
                 override fun unfinished(any: Boolean) {
                     unfinishedReports += any
                 }
@@ -398,6 +413,51 @@ class OfflineEngineTest {
         delay(100)
         assertTrue(engine.libraries.value[viewerA.key]!!.manifest.entries.isEmpty())
         assertTrue(engine.files.inventory(viewerA.key).isEmpty())
+    }
+
+    @Test
+    fun `a stopped job suspends its transfer and wake resumes the saved work`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val owner = Any()
+        engine.useJobNetwork(owner, null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(owner).join()
+        assertEquals(OfflinePhase.waitingNetwork, engine.entry(viewerA, "1")!!.job.phase)
+        hold = false
+        engine.wake()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `a late stop from an older job cannot suspend its replacement`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val old = Any()
+        engine.useJobNetwork(old, null)
+        engine.useJobNetwork(Any(), null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(old).join()
+        assertEquals(OfflinePhase.transferring, engine.entry(viewerA, "1")!!.job.phase)
+        engine.delete(viewerA.key, entryId("1"))
+    }
+
+    @Test
+    fun `ending a watchdog does not pause work still owned by the foreground service`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val owner = Any()
+        engine.useJobNetwork(owner, null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(owner, suspendTransfers = false).join()
+        assertEquals(OfflinePhase.transferring, engine.entry(viewerA, "1")!!.job.phase)
+        engine.delete(viewerA.key, entryId("1"))
     }
 
     @Test

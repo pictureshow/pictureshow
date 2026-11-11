@@ -17,6 +17,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -32,20 +34,21 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 private const val OFFLINE_CHANNEL = "downloads"
-private const val OFFLINE_NOTIFICATION = 4801
-private const val OFFLINE_JOB = 4802
+internal const val OFFLINE_NOTIFICATION = 4801
+internal const val OFFLINE_JOB = 4802
 private const val OFFLINE_CHANNEL_NAME = "Downloads"
 
 internal const val OFFLINE_EXTRA_TITLES = "titles"
 internal const val OFFLINE_FOREGROUND_SETTLE_MS = 400L
 internal const val OFFLINE_JOB_TRANSFER_MS = 2 * 60_000L
 internal const val OFFLINE_JOB_WAITING_MS = 15 * 60_000L
+internal const val OFFLINE_RECOVERY_RETRY_MS = 60_000L
 private const val OFFLINE_JOB_HOLD_LOOK_MS = 2_000L
 
 /** Another viewer's download counts but has no name here: see [offlineForegroundTitles]. */
 internal fun offlineNotificationTitle(titles: List<String>): String = titles.firstOrNull { it.isNotEmpty() } ?: OFFLINE_CHANNEL_NAME
 
-private fun offlineNotification(context: Context, titles: List<String>): Notification {
+internal fun offlineNotification(context: Context, titles: List<String>): Notification {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         manager?.createNotificationChannel(NotificationChannel(OFFLINE_CHANNEL, OFFLINE_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW))
@@ -67,6 +70,7 @@ private fun offlineNotification(context: Context, titles: List<String>): Notific
 class OfflineTransferService : Service() {
     private val engine: OfflineEngine by inject()
     private val foreground: AndroidOfflineForeground by inject()
+    private var waking: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -86,11 +90,17 @@ class OfflineTransferService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        foreground.serviceStarted()
-        return START_NOT_STICKY
+        // A sticky restart has no Activity to start the engine. Answer Android first, then load off Main.
+        waking?.cancel()
+        waking = CoroutineScope(Dispatchers.Main.immediate).launch {
+            engine.wake()
+            foreground.serviceStarted()
+        }
+        return START_STICKY
     }
 
     override fun onDestroy() {
+        waking?.cancel()
         foreground.serviceGone()
         super.onDestroy()
     }
@@ -102,47 +112,122 @@ class OfflineTransferService : Service() {
     }
 }
 
-/**
- * Restarts unfinished work after a kill or reboot, with no Google services involved. While the service can't be
- * foreground (Android refuses a start from the background), this job's own running time carries the bytes.
- */
+/** The OS owns the lifetime of the transfer, including process death and persisted reboot recovery. */
 class OfflineJobService : JobService() {
     private val engine: OfflineEngine by inject()
     private val foreground: AndroidOfflineForeground by inject()
     private var holding: Job? = null
+    private var networkOwner: Any? = null
 
-    override fun onStartJob(params: JobParameters?): Boolean {
-        foreground.jobStarted()
+    override fun onStartJob(params: JobParameters): Boolean {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val permit = offlineStoredRecoveryPermit(params.extras)
+            if (permit == null || offlineUserStoppedAfter(this, permit)) return false
+        }
+        val userInitiated = Build.VERSION.SDK_INT >= 34 && params.isUserInitiatedJob
+        foreground.jobStarted(userInitiated)
+        if (userInitiated) showTransferNotification(params)
+        val owner = Any()
+        networkOwner = owner
         holding = CoroutineScope(Dispatchers.Main.immediate).launch {
+            engine.useJobNetwork(owner, if (Build.VERSION.SDK_INT >= 28) params.network else null)
             engine.wake()
             delay(OFFLINE_FOREGROUND_SETTLE_MS * 3)
-            while (foreground.transferringUnderJobOnly()) delay(OFFLINE_JOB_HOLD_LOOK_MS)
-            jobFinished(params, false)
-            foreground.jobEnded()
+            while (foreground.transferringUnderJobOnly() || (userInitiated && foreground.transferring())) {
+                if (userInitiated) showTransferNotification(params)
+                delay(OFFLINE_JOB_HOLD_LOOK_MS)
+            }
+            // Preserve the OS's accepted user request while waiting for network/storage. Never recreate it
+            // from the background, where a new UIDT would be refused. Backoff prevents an idle retry loop.
+            val retry = userInitiated && foreground.hasUnfinished
+            jobFinished(params, retry)
+            engine.releaseJobNetwork(owner, suspendTransfers = false)
+            networkOwner = null
+            foreground.jobEnded(retry)
         }
         return true
     }
 
-    /** The system's time for this run is up. Book the next one, since the booked one is this one. */
-    override fun onStopJob(params: JobParameters?): Boolean {
+    private fun showTransferNotification(params: JobParameters) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            setNotification(
+                params,
+                OFFLINE_NOTIFICATION,
+                offlineNotification(this, foreground.titles()),
+                JOB_END_NOTIFICATION_POLICY_REMOVE
+            )
+        }
+    }
+
+    @androidx.annotation.RequiresApi(28)
+    override fun onNetworkChanged(params: JobParameters) {
+        val owner = networkOwner ?: return
+        val job = holding ?: return
+        CoroutineScope(Dispatchers.Main.immediate + job).launch {
+            engine.useJobNetwork(owner, params.network)
+            engine.wake()
+        }
+    }
+
+    override fun onStopJob(params: JobParameters): Boolean {
         holding?.cancel()
-        foreground.jobEnded()
-        return false
+        // A stopped job no longer licenses background network IO. Keep the partial and let the system retry.
+        networkOwner?.let { engine.releaseJobNetwork(it, suspendTransfers = foreground.transferringUnderJobOnly()) }
+        networkOwner = null
+        foreground.jobEnded(true)
+        return true
     }
 }
 
-internal fun offlineScheduleJob(context: Context, delayMs: Long) {
-    val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
-    runCatching {
+/** Returns acceptance, so a refused schedule is never remembered as a durable booking. */
+internal fun offlineScheduleJob(context: Context, delayMs: Long, viewerReturned: Boolean = false): Boolean {
+    val scheduler = context.getSystemService(JobScheduler::class.java) ?: return false
+    val component = ComponentName(context, OfflineJobService::class.java)
+    if (Build.VERSION.SDK_INT >= 34) {
+        // Do not replace an already accepted UIDT (including its system retry/backoff after a kill).
+        if (scheduler.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true && offlineRecoveryPermit(context) != null) return true
+        val accepted = runCatching {
+            scheduler.schedule(
+                JobInfo.Builder(OFFLINE_JOB, component)
+                    .setExtras(offlineNewRecoveryPermit(context).extras())
+                    .setUserInitiated(true)
+                    // Builder defaults exclude VPNs. A private server may only be reachable through
+                    // the viewer's VPN, so allow that route just as JobInfo's standard requests do.
+                    .setRequiredNetwork(
+                        NetworkRequest.Builder()
+                            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                            .build()
+                    )
+                    .setPersisted(true)
+                    .setBackoffCriteria(30_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+                    .build()
+            ) == JobScheduler.RESULT_SUCCESS
+        }.getOrDefault(false)
+        if (accepted) return true
+    }
+    // API 23–33, or a new background request the OS refused. Deadline also wakes a boot recovery
+    // that is otherwise merely READY. Doze, force-stop and system health can still defer execution.
+    return runCatching {
         scheduler.schedule(
-            // No network requirement on purpose. The engine looks at the network itself, and a job waiting on a network can be
-            // held back by the system's batching for half an hour, which outlasts the kill or reboot this job is for.
-            JobInfo.Builder(OFFLINE_JOB, ComponentName(context, OfflineJobService::class.java))
+            JobInfo.Builder(OFFLINE_JOB, component)
+                .setExtras(
+                    (
+                        if (viewerReturned ||
+                            Build.VERSION.SDK_INT < 24
+                        ) {
+                            null
+                        } else {
+                            offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)?.extras)
+                        }
+                        )
+                        ?.extras() ?: offlineNewRecoveryPermit(context).extras()
+                )
                 .setMinimumLatency(delayMs)
+                .setOverrideDeadline(delayMs * 2)
                 .setPersisted(true)
                 .build()
-        )
-    }
+        ) == JobScheduler.RESULT_SUCCESS
+    }.getOrDefault(false)
 }
 
 /**
@@ -151,7 +236,7 @@ internal fun offlineScheduleJob(context: Context, delayMs: Long) {
  * and booked again each time it runs. Scheduling the same id ends a running job, so nothing is booked until it ends.
  * Main thread only.
  */
-internal class OfflineRestartBooking(private val book: (Long) -> Unit, private val cancel: () -> Unit) {
+internal class OfflineRestartBooking(private val book: (Long) -> Boolean, private val cancel: () -> Unit) {
     private var transferring = false
     private var unfinished = false
     private var booked: Long? = null
@@ -172,21 +257,35 @@ internal class OfflineRestartBooking(private val book: (Long) -> Unit, private v
         booked = null
     }
 
-    fun ended() {
+    fun ended(systemRetry: Boolean = false) {
         running = false
+        if (systemRetry) booked = wantedDelay()
         settle()
+    }
+
+    fun viewerReturned() {
+        if (!running) {
+            booked = null
+            settle()
+        }
+    }
+
+    private fun wantedDelay(): Long? = when {
+        !unfinished -> null
+        transferring -> OFFLINE_JOB_TRANSFER_MS
+        else -> OFFLINE_JOB_WAITING_MS
     }
 
     private fun settle() {
         if (running) return
-        val want = when {
-            !unfinished -> null
-            transferring -> OFFLINE_JOB_TRANSFER_MS
-            else -> OFFLINE_JOB_WAITING_MS
-        }
+        val want = wantedDelay()
         if (want == booked) return
-        if (want == null) cancel() else book(want)
-        booked = want
+        if (want == null) {
+            cancel()
+            booked = null
+        } else if (book(want)) {
+            booked = want
+        }
     }
 }
 
@@ -208,6 +307,8 @@ internal class OfflineForegroundGate(private val start: (List<String>) -> Boolea
     }
 
     fun started() {
+        // A sticky recreation did not pass through start(), so adopt the real service too.
+        alive = true
         if (unanswered > 0) unanswered--
         settle()
     }
@@ -236,16 +337,26 @@ internal class OfflineForegroundGate(private val start: (List<String>) -> Boolea
     }
 }
 
-internal class AndroidOfflineForeground(private val context: Context) : OfflineForeground {
+internal class AndroidOfflineForeground(
+    private val context: Context,
+    private val bookRecovery: (Int?, Boolean, Boolean) -> Boolean = { owner, refreshUnknown, viewerReturned ->
+        offlineBookRecovery(context, owner = owner, refreshUnknown = refreshUnknown, viewerReturned = viewerReturned)
+    }
+) : OfflineForeground {
+    val recovery = OfflineRecoveryGate()
     private val main = Handler(Looper.getMainLooper())
+    private val recoveryRetry = Runnable { maintainRecovery() }
     private var latest = emptyList<String>()
     private var posted = false
+    private var userInitiatedRunning = false
+    var hasUnfinished = false
+        private set
     private val gate = OfflineForegroundGate(
         start = ::startService,
         stop = { context.stopService(Intent(context, OfflineTransferService::class.java)) }
     )
     private val restart = OfflineRestartBooking(
-        book = { delayMs -> offlineScheduleJob(context, delayMs) },
+        book = { delayMs -> offlineScheduleJob(context, delayMs, recovery.viewerReturned) },
         cancel = { context.getSystemService(JobScheduler::class.java)?.cancel(OFFLINE_JOB) }
     )
     private val apply = Runnable {
@@ -253,8 +364,9 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
             posted = false
             latest
         }
-        gate.want(titles)
         restart.transferring(titles.isNotEmpty())
+        // UIDT owns both notification and execution; a parallel FGS would add a six-hour limit.
+        gate.want(if (userInitiatedRunning || userInitiatedBooked() || recovery.owner != null) emptyList() else titles)
     }
 
     /** Called from the engine at every phase change. A flurry settles into one look at where things ended up. */
@@ -268,14 +380,60 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
     }
 
     override fun unfinished(any: Boolean) {
-        main.post { restart.unfinished(any) }
+        main.post {
+            hasUnfinished = any
+            restart.unfinished(any)
+            maintainRecovery()
+        }
     }
 
-    fun jobStarted() = restart.started()
+    override fun viewerReturned() {
+        main.post {
+            recovery.viewerReturned = true
+            recovery.timerKnown = false
+            restart.viewerReturned()
+            if (hasUnfinished) maintainRecovery()
+        }
+    }
 
-    fun jobEnded() = restart.ended()
+    fun jobStarted(userInitiated: Boolean = false) {
+        recovery.primaryRunning = true
+        userInitiatedRunning = userInitiated
+        restart.started()
+        if (userInitiated) gate.want(emptyList())
+        if (hasUnfinished) maintainRecovery()
+    }
 
-    fun transferringUnderJobOnly() = synchronized(this) { latest.isNotEmpty() } && !gate.serviceUp
+    fun jobEnded(systemRetry: Boolean = false) {
+        recovery.primaryRunning = false
+        userInitiatedRunning = false
+        restart.ended(systemRetry)
+        if (hasUnfinished) maintainRecovery()
+    }
+
+    fun titles(): List<String> = synchronized(this) { latest }
+
+    fun transferring() = titles().isNotEmpty()
+
+    fun transferringUnderJobOnly() = transferring() && !gate.serviceUp
+
+    fun serviceUp() = gate.serviceUp
+
+    private fun userInitiatedBooked(): Boolean = Build.VERSION.SDK_INT >= 34 &&
+        context.getSystemService(JobScheduler::class.java)?.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true
+
+    private fun maintainRecovery() {
+        main.removeCallbacks(recoveryRetry)
+        if (!hasUnfinished || offlineRecoveryPermit(context, recovery.viewerReturned) == null) {
+            recovery.timerKnown = false
+            offlineCancelRecovery(context)
+        } else if (!bookRecovery(recovery.owner, !recovery.timerKnown, recovery.viewerReturned)) {
+            // A rejected booking remains owed. Retry once later, without spinning or moving an accepted deadline.
+            main.postDelayed(recoveryRetry, OFFLINE_RECOVERY_RETRY_MS)
+        } else {
+            recovery.timerKnown = true
+        }
+    }
 
     fun serviceStarted() = gate.started()
 
