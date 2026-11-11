@@ -130,7 +130,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             File(screens,"index.md").appendText("- [$name · ${w}×${h}](${target.name}) — actual window ${bounds.width}×${bounds.height}, reader off.\n")
         }
         SwingUtilities.invokeAndWait {windowState.size=DpSize(1280.dp,800.dp)}
-        Thread.sleep(250)
+        waitFor("restore standard window after capture",5) { window.width==1280 && window.height==800 }
     }
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
     try {
