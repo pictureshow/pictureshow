@@ -27,6 +27,7 @@ import javax.swing.SwingUtilities
 
 interface NativeLayer : Library {
     fun ps_find_window(title: String): Pointer?
+    fun ps_edr_reference_white(view: Pointer): Double
     fun ps_create(view: Pointer, mpv: Pointer): Pointer?
     fun ps_frame(surface: Pointer, width: Int, height: Int): Int
     fun ps_receipt(surface: Pointer): String
@@ -45,6 +46,8 @@ fun layerMain(args: Array<String>) {
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
     val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
+    val numericPosition=System.getenv("SPIKE_HDR_WINDOW_X")?.let { x -> WindowPosition.Absolute(x.toInt().dp,(System.getenv("SPIKE_HDR_WINDOW_Y") ?: "40").toInt().dp) } ?: WindowPosition.PlatformDefault
+    val hdrHold=System.getenv("SPIKE_HDR_HOLD_SECONDS")?.toInt()?.also { require(it in 1..60) } ?: 0
     val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")),NativeLayer::class.java)
     val mpv=Mpv(out)
     val executor=Executors.newSingleThreadScheduledExecutor { r -> Thread(r,"native-video") }
@@ -59,7 +62,7 @@ fun layerMain(args: Array<String>) {
     val controlBounds=AtomicReference<androidx.compose.ui.geometry.Rect?>(null)
     Thread { Thread.sleep((sustain+120L)*1000); Runtime.getRuntime().halt(3) }.apply {isDaemon=true}.start()
     application {
-        val state=rememberWindowState(width=960.dp,height=640.dp)
+        val state=rememberWindowState(width=960.dp,height=640.dp,position=numericPosition)
         var clicks by remember { mutableStateOf(0) }
         var full by remember { mutableStateOf(false) }
         var restoreBounds by remember { mutableStateOf<java.awt.Rectangle?>(null) }
@@ -77,8 +80,8 @@ fun layerMain(args: Array<String>) {
                     }.get(30,TimeUnit.SECONDS)
                     executor.shutdown(); mpv.close()
                     check(finishResult>=0) {"Native final GPU operation failed: $finishResult"}
-                    failure.get()?.let { throw it }
                     File(out,"teardown.txt").writeText("native render freed before mpv destroy; executor stopped\n")
+                    failure.get()?.let { throw it }
                     if(rc==0) File(out,"sequence.txt").writeText("overlayClicks=$clicks\n")
                 } catch(e:Throwable) { File(out,"failure.txt").writeText(e.stackTraceToString()); rc=2 }
                 kotlin.system.exitProcess(rc)
@@ -124,10 +127,21 @@ fun layerMain(args: Array<String>) {
                             val ahead=Platform.isMac() && System.getenv("SPIKE_MAC_IMMEDIATE")==null && System.getenv("SPIKE_MAC_SINGLE_SURFACE")==null
                             mpv.option("video-timing-offset",if(ahead) (System.getenv("SPIKE_MAC_HEADROOM") ?: "0.050") else "0")
                         }
-                        // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
-                        mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
+                        // Preserve the full PQ domain on Mac; WindowServer owns display adaptation.
+                        mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak",if(Platform.isMac()) "10000" else "1000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
                         mpv.option("dither-depth","no") // Float output must not be quantized as an 8-bit window framebuffer.
+                        if(Platform.isMac()) {
+                            // mpv linear light uses 203-nit units. HDR reference output uses 100; SDR keeps relative white.
+                            // Convert units in the actual app, never normalize captured observations.
+                            val edrWindow=requireNotNull(bridge.ps_find_window("Pictureshow native HDR surface"))
+                            val reference=bridge.ps_edr_reference_white(edrWindow)
+                            check(reference==100.0 || reference==203.0) { "Unknown EDR reference" }
+                            File(out,"edr-reference.json").writeText("{\"referenceWhiteNits\":$reference}\n")
+                            val shader=File(out,"edr-reference.glsl")
+                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / $reference), c.a); }\n")
+                            mpv.option("glsl-shaders",shader.absolutePath)
+                        }
                         if(Platform.isWindows()) {
                             val shader=File(out,"scrgb-reference.glsl")
                             shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
@@ -183,6 +197,15 @@ fun layerMain(args: Array<String>) {
                             }
                         }
                         stage("01-window")
+                        if(hdrHold>0) {
+                            // Numeric OS capture gate: hold the real app's video layer stationary.
+                            // No input injection, resize, subtitle assertions or screenshots needed.
+                            mpv.dump("hdr-source", "numeric capture hold")
+                            Thread.sleep(hdrHold*1000L)
+                            failure.get()?.let {throw it}
+                            File(out,"hdr-final-native.json").writeText(bridge.ps_receipt(surface!!))
+                            stop(); return@Thread
+                        }
                         SwingUtilities.invokeAndWait {overlayBounds.get()?.let { b ->
                             val origin=window.contentPane.locationOnScreen; val d=window.graphicsConfiguration.defaultTransform
                             Robot().apply { mouseMove(origin.x+(b.center.x/d.scaleX).toInt(),origin.y+(b.center.y/d.scaleY).toInt()); mousePress(InputEvent.BUTTON1_DOWN_MASK); mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
@@ -224,6 +247,12 @@ fun layerMain(args: Array<String>) {
                             check(sustain>=125) {"Sustained gate requires at least 125 seconds"}
                             check(mpv.get("video-params/w")=="1920" && mpv.get("video-params/h")=="1080") {"Sustained fixture must be native 1080p"}
                             check(kotlin.math.abs(mpv.get("container-fps")!!.toDouble()-60)<0.01) {"Sustained fixture must be 60 fps"}
+                            // Diagnostic A/B mode: measure fullscreen separately rather
+                            // than count a brief transition as a fullscreen soak.
+                            if(System.getenv("SPIKE_SOAK_FULLSCREEN")=="1") {
+                                SwingUtilities.invokeAndWait { toggleFullscreen() }
+                                Thread.sleep(2000)
+                            }
                             mpv.set("loop-file","no"); mpv.command("loadfile",media); Thread.sleep(1000)
                             mpv.command("seek","0","absolute+exact"); mpv.set("pause","no"); stage("07-sustain-start")
                             File(out,"soak-start-native.json").writeText(bridge.ps_receipt(surface!!))

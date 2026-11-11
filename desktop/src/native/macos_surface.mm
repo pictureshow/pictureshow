@@ -21,6 +21,8 @@
 #include <cstdlib>
 #include <array>
 #include <deque>
+#include <fstream>
+#include "macos_frame_trace.h"
 
 @interface PSMainCall : NSObject
 @property(copy) void (^block)(void);
@@ -35,6 +37,12 @@ static void mainCall(void (^block)(void)) {
     [call performSelectorOnMainThread:@selector(run) withObject:nil waitUntilDone:YES
         modes:@[NSRunLoopCommonModes, @"AWTRunLoopMode", NSDefaultRunLoopMode]];
 }
+static double referenceWhite(NSWindow *window) {
+    return window.screen.maximumExtendedDynamicRangeColorComponentValue>1.0 ? 100.0 : 203.0;
+}
+extern "C" double ps_edr_reference_white(void *window) {
+    __block double result=203; mainCall(^{ result=referenceWhite((__bridge NSWindow*)window); }); return result;
+}
 using Clock = std::chrono::steady_clock;
 static double ms(Clock::time_point a) { return std::chrono::duration<double,std::milli>(Clock::now()-a).count(); }
 struct Timing { std::atomic<double> total{0}, maximum{0}; void add(double v) { total.store(total.load()+v); maximum.store(std::max(maximum.load(),v)); } };
@@ -45,6 +53,7 @@ struct FrameSlot {
     GLuint texture=0, fbo=0;
     GLsync ready=nullptr;
     int64_t targetTime=0;
+    uint64_t frameID=0;
 };
 struct Surface {
     NSWindow *overlay, *video;
@@ -80,6 +89,11 @@ struct Surface {
     bool renderAhead=buffered && std::getenv("SPIKE_MAC_IMMEDIATE")==nullptr;
     std::atomic<unsigned long> timedPresents{0}, latePresents{0};
     std::array<Clock::time_point,3> issued;
+    std::shared_ptr<MacFrameTrace> trace;
+    NSMutableArray *visibilityObservers;
+    uint64_t nextFrameID=0;
+    double referenceWhiteNits=203;
+    std::atomic<bool> diagnosticCaptured{false};
 
     std::mutex updateMutex; std::condition_variable updateWake;
     std::atomic<bool> updatePending{true};
@@ -88,9 +102,12 @@ static void *getProc(void *, const char *name) { return dlsym(RTLD_DEFAULT,name)
 extern "C" void ps_destroy(void *ptr);
 extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     Surface *s = new Surface(); s->mpv=(mpv_handle*)mpvPtr;
+    if(const char *path=std::getenv("SPIKE_MAC_FRAME_TRACE"))
+        s->trace=std::make_shared<MacFrameTrace>(path);
     s->qosResult=pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE,0);
     mainCall(^{
         s->overlay = (__bridge NSWindow*)viewPtr;
+        s->referenceWhiteNits=referenceWhite(s->overlay);
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [s->overlay makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
         s->device = MTLCreateSystemDefaultDevice(); s->queue = [s->device newCommandQueue];
@@ -107,6 +124,31 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
         s->overlay.opaque=NO; s->overlay.backgroundColor=NSColor.clearColor;
         [s->overlay addChildWindow:s->video ordered:NSWindowBelow];
         [s->video orderWindow:NSWindowBelow relativeTo:s->overlay.windowNumber];
+        // Controlled-environment diagnostic, never a playback default. Match the
+        // native mpv control's --ontop flag when other GUI pilots share a display.
+        if(std::getenv("SPIKE_MAC_TEST_ONTOP")) s->overlay.level=NSFloatingWindowLevel;
+        if(s->trace) {
+            auto trace=s->trace;
+            NSWindow *overlay=s->overlay, *video=s->video;
+            void (^record)(NSNotification*)=^(NSNotification*) {
+                trace->add(MacFrameTrace::Visibility,0,
+                    (overlay.occlusionState&NSWindowOcclusionStateVisible)!=0,
+                    NSApp.active,NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier,
+                    overlay.windowNumber);
+                trace->add(MacFrameTrace::Visibility,0,
+                    (video.occlusionState&NSWindowOcclusionStateVisible)!=0,
+                    NSApp.active,NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier,
+                    video.windowNumber);
+            };
+            s->visibilityObservers=[NSMutableArray array];
+            for(NSString *name in @[NSWindowDidChangeOcclusionStateNotification,
+                    NSApplicationDidBecomeActiveNotification,NSApplicationDidResignActiveNotification]) {
+                id token=[NSNotificationCenter.defaultCenter addObserverForName:name object:nil
+                    queue:NSOperationQueue.mainQueue usingBlock:record];
+                [s->visibilityObservers addObject:token];
+            }
+            record(nil);
+        }
     });
     if(!s->overlay || !s->device || !s->video) { ps_destroy(s); return nullptr; }
     CGLPixelFormatAttribute attrs[]={kCGLPFAOpenGLProfile,(CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,kCGLPFAAccelerated,(CGLPixelFormatAttribute)0};
@@ -121,6 +163,7 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     if(mpv_render_context_create(&s->render,(mpv_handle*)mpvPtr,params)<0) { ps_destroy(s); return nullptr; }
     mpv_render_context_set_update_callback(s->render,[](void *p) {
         auto *surface=(Surface*)p;
+        if(surface->trace) surface->trace->add(MacFrameTrace::Wake,0);
         { std::lock_guard<std::mutex> lock(surface->updateMutex); surface->updatePending=true; }
         surface->updateWake.notify_one();
     },s);
@@ -128,6 +171,29 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
 }
 // A GLsync is not a Metal event. Submit a consumer only after the GL fence
 // signals; glFlush alone does not establish cross-API completion.
+static id<MTLBuffer> encodeDiagnostic(Surface *s,id<MTLBlitCommandEncoder> blit,id<CAMetalDrawable> drawable,int w,int h) {
+    if(!std::getenv("SPIKE_HDR_READBACK_DIR") || s->diagnosticCaptured.load() || s->frames.load()<10) return nil;
+    NSUInteger stride=((w*8+255)/256)*256;
+    id<MTLBuffer> buffer=[s->device newBufferWithLength:stride*h options:MTLResourceStorageModeShared];
+    if(buffer) [blit copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)
+        sourceSize:MTLSizeMake(w,h,1) toBuffer:buffer destinationOffset:0 destinationBytesPerRow:stride destinationBytesPerImage:stride*h];
+    return buffer;
+}
+static int writeDiagnostic(Surface *s,id<MTLCommandBuffer> cmd,id<MTLBuffer> buffer,int w,int h) {
+    if(!std::getenv("SPIKE_HDR_READBACK_DIR") || s->diagnosticCaptured.load() || s->frames.load()<10) return 0;
+    if(!buffer) return -9;
+    // One-shot numeric verification only. No wait/readback in normal playback.
+    [cmd waitUntilCompleted]; if(cmd.status==MTLCommandBufferStatusError) return -6;
+    NSUInteger stride=((w*8+255)/256)*256;
+    std::string prefix=std::string(std::getenv("SPIKE_HDR_READBACK_DIR"))+"/drawable";
+    std::ofstream raw(prefix+".rgba16f",std::ios::binary);
+    for(int row=0;row<h;row++) raw.write((const char*)buffer.contents+row*stride,w*8);
+    raw.close(); if(!raw) return -9;
+    std::ofstream meta(prefix+".json");
+    meta<<"{\"width\":"<<w<<",\"height\":"<<h<<",\"format\":\"RGBA16Float\",\"boundary\":\"actual CAMetalLayer drawable before WindowServer\",\"encoding\":\"linear\",\"primaries\":\"bt2020\",\"referenceWhiteNits\":"<<s->referenceWhiteNits<<"}\n";
+    meta.close(); if(!meta) return -9;
+    s->diagnosticCaptured.store(true); return 0;
+}
 static int presentReady(Surface *s) {
     while(!s->pending.empty()) {
         int index=s->pending.front(); auto &slot=s->slots[index];
@@ -136,20 +202,27 @@ static int presentReady(Surface *s) {
         if(state==GL_WAIT_FAILED) return -7;
         if(state==GL_TIMEOUT_EXPIRED) break;
         s->fenceLatency.add(ms(s->issued[index]));
+        if(s->trace) s->trace->add(MacFrameTrace::Fence,slot.frameID,
+            CACurrentMediaTime()-ms(s->issued[index])/1000.0,CACurrentMediaTime(),index);
         glDeleteSync(slot.ready); slot.ready=nullptr; s->pending.pop_front();
-        auto t=Clock::now(); id<CAMetalDrawable> drawable=[s->layer nextDrawable];
+        auto t=Clock::now(); double drawableBegin=CACurrentMediaTime();
+        id<CAMetalDrawable> drawable=[s->layer nextDrawable];
         s->drawableWait.add(ms(t)); if(!drawable) return -5;
+        double drawableEnd=CACurrentMediaTime();
         id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
         id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
         [blit copyFromTexture:slot.shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)
             sourceSize:MTLSizeMake(s->w,s->h,1) toTexture:drawable.texture destinationSlice:0
             destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+        id<MTLBuffer> diagnostic=encodeDiagnostic(s,blit,drawable,s->w,s->h);
         [blit endEncoding];
+        double targetHost=0;
         if(s->renderAhead && slot.targetTime>0) {
             // In pinned mpv 0.42 the implementation assigns vo_frame::pts (ns)
             // to target_time, despite the public header's stale microsecond text.
             // Fail on a clock/unit mismatch instead of queuing a distant drawable.
             int64_t remaining=slot.targetTime-mpv_get_time_ns(s->mpv);
+            targetHost=CACurrentMediaTime()+remaining/1e9;
             // Past deadlines can occur across seek/pause or host stalls. Present
             // them immediately and count them as late; only a far future time
             // could pin a drawable indefinitely.
@@ -159,7 +232,19 @@ static int presentReady(Surface *s) {
             else { [cmd presentDrawable:drawable]; s->latePresents++; }
             s->timedPresents++;
         } else [cmd presentDrawable:drawable];
+        if(s->trace) {
+            auto trace=s->trace; uint64_t frame=slot.frameID;
+            trace->add(MacFrameTrace::Submit,frame,targetHost,drawableBegin,drawableEnd,drawable.drawableID);
+            trace->expectPresentation();
+            [drawable addPresentedHandler:^(id<MTLDrawable> shown) {
+                trace->presented(frame,shown.presentedTime,shown.drawableID);
+            }];
+            [cmd addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+                trace->add(MacFrameTrace::Completed,frame,completed.GPUStartTime,completed.GPUEndTime,completed.status);
+            }];
+        }
         [cmd commit]; slot.inflight=cmd;
+        int diagnosticResult=writeDiagnostic(s,cmd,diagnostic,s->w,s->h); if(diagnosticResult<0) return diagnosticResult;
         mpv_render_context_report_swap(s->render); s->frames++;
     }
     return 0;
@@ -235,6 +320,7 @@ static int bufferedFrame(Surface *s,int w,int h) {
     uint64_t update=mpv_render_context_update(s->render);
     if(!(update & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
     auto &slot=s->slots[freeSlot];
+    slot.frameID=++s->nextFrameID;
     slot.targetTime=0;
     if(s->renderAhead) {
         mpv_render_frame_info info={};
@@ -246,7 +332,14 @@ static int bufferedFrame(Surface *s,int w,int h) {
     mpv_opengl_fbo fbo={(int)slot.fbo,w,h,GL_RGBA16F}; int flip=0, block=0;
     mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},
         {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
-    auto t=Clock::now(); rc=mpv_render_context_render(s->render,params);
+    auto t=Clock::now(); double renderBegin=CACurrentMediaTime();
+    rc=mpv_render_context_render(s->render,params);
+    if(s->trace) {
+        qos_class_t qos=QOS_CLASS_UNSPECIFIED;
+        pthread_get_qos_class_np(pthread_self(),&qos,nullptr);
+        s->trace->add(MacFrameTrace::Render,slot.frameID,renderBegin,CACurrentMediaTime(),
+            slot.targetTime?CACurrentMediaTime()+(slot.targetTime-mpv_get_time_ns(s->mpv))/1e9:0,qos);
+    }
     s->renderTime.add(ms(t)); if(rc<0) return rc;
     slot.ready=glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0); if(!slot.ready) return -7;
     s->issued[freeSlot]=Clock::now(); glFlush();
@@ -308,7 +401,9 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
     id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
     [blit copyFromTexture:s->shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+    id<MTLBuffer> diagnostic=encodeDiagnostic(s,blit,drawable,w,h);
     [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; s->inflight=cmd;
+    int diagnosticResult=writeDiagnostic(s,cmd,diagnostic,w,h); if(diagnosticResult<0) return diagnosticResult;
     mpv_render_context_report_swap(s->render); s->frames++; s->frameTime.add(ms(frameStarted)); return 0;
     }
 }
@@ -316,7 +411,7 @@ extern "C" const char *ps_receipt(void *ptr) {
     Surface *s=(Surface*)ptr;
     mainCall(^{
         NSScreen *screen=s->overlay.screen; NSRect a=s->overlay.frame,b=screen.frame,c=s->video.frame;
-        NSDictionary *d=@{@"applicationActive":@(NSApp.active),@"overlayVisible":@(s->overlay.visible),@"onActiveSpace":@(s->overlay.onActiveSpace),@"occlusionVisible":@((s->overlay.occlusionState&NSWindowOcclusionStateVisible)!=0),@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"renderAhead":@(s->renderAhead),@"timedPresents":@(s->timedPresents.load()),@"latePresents":@(s->latePresents.load()),@"targetLeadMsTotal":@(s->targetLead.total.load()),@"targetLeadMsMax":@(s->targetLead.maximum.load()),@"bufferedIOSurfaces":@(s->buffered?3:1),@"renderedFrames":@(s->rendered.load()),@"retiredOnResize":@(s->retiredOnResize.load()),@"fencePolls":@(s->fencePolls.load()),@"fenceLatencyMsTotal":@(s->fenceLatency.total.load()),@"fenceLatencyMsMax":@(s->fenceLatency.maximum.load()),@"updateDrivenNonblocking":@(s->paced),@"callbackWake":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
+        NSDictionary *d=@{@"testOntop":@(std::getenv("SPIKE_MAC_TEST_ONTOP")!=nullptr),@"overlayWindowNumber":@(s->overlay.windowNumber),@"videoWindowNumber":@(s->video.windowNumber),@"referenceWhiteNits":@(s->referenceWhiteNits),@"numericDrawableReadback":@(s->diagnosticCaptured.load()),@"displayID":screen.deviceDescription[@"NSScreenNumber"] ?: NSNull.null,@"maximumFramesPerSecond":@(screen.maximumFramesPerSecond),@"displaySyncEnabled":@(s->layer.displaySyncEnabled),@"maximumDrawableCount":@(s->layer.maximumDrawableCount),@"frameTraceEnabled":@(s->trace!=nullptr),@"applicationActive":@(NSApp.active),@"overlayVisible":@(s->overlay.visible),@"onActiveSpace":@(s->overlay.onActiveSpace),@"occlusionVisible":@((s->overlay.occlusionState&NSWindowOcclusionStateVisible)!=0),@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"renderAhead":@(s->renderAhead),@"timedPresents":@(s->timedPresents.load()),@"latePresents":@(s->latePresents.load()),@"targetLeadMsTotal":@(s->targetLead.total.load()),@"targetLeadMsMax":@(s->targetLead.maximum.load()),@"bufferedIOSurfaces":@(s->buffered?3:1),@"renderedFrames":@(s->rendered.load()),@"retiredOnResize":@(s->retiredOnResize.load()),@"fencePolls":@(s->fencePolls.load()),@"fenceLatencyMsTotal":@(s->fenceLatency.total.load()),@"fenceLatencyMsMax":@(s->fenceLatency.maximum.load()),@"updateDrivenNonblocking":@(s->paced),@"callbackWake":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
         NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
         s->receipt.assign((const char*)data.bytes,data.length);
     });
@@ -347,6 +442,11 @@ extern "C" void ps_destroy(void *ptr) {
     if(s->inflight) { [s->inflight waitUntilCompleted]; s->inflight=nil; }
     if(s->gl) { drainSlots(s); releaseSlots(s); }
     if(s->render) { mpv_render_context_set_update_callback(s->render,nullptr,nullptr); mpv_render_context_free(s->render); }
+    mainCall(^{
+        for(id token in s->visibilityObservers) [NSNotificationCenter.defaultCenter removeObserver:token];
+        s->visibilityObservers=nil;
+    });
+    if(s->trace) s->trace->write();
     if(s->texture) glDeleteTextures(1,&s->texture); if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
     s->shared=nil; if(s->io) CFRelease(s->io); CGLSetCurrentContext(nullptr); if(s->gl) CGLDestroyContext(s->gl);
     mainCall(^{NSApp.presentationOptions=NSApplicationPresentationDefault; [s->overlay removeChildWindow:s->video]; [s->video orderOut:nil]; [s->video close];});
