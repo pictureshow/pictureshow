@@ -40,7 +40,7 @@ fun cString(value: String) = Memory((value.toByteArray().size + 1).toLong()).app
 
 private interface NumericLocale : Library { fun setlocale(category: Int, locale: String): String? }
 
-class Mpv(val out: File) : AutoCloseable {
+class Mpv(val out: File, val probe: Boolean = true) : AutoCloseable {
     init {
         // libmpv rejects a JVM process with a non-C numeric locale.
         // LC_NUMERIC is 1 on Linux, 4 on Darwin/Windows; preserve other locale categories.
@@ -61,10 +61,10 @@ class Mpv(val out: File) : AutoCloseable {
         if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") option("gpu-sw", "yes")
         System.getenv("SPIKE_MPV_OPTIONS")?.split(';')?.filter { it.isNotBlank() }?.forEach { pair -> option(pair.substringBefore('='), pair.substringAfter('=')) }
         option("audio-channels", "auto")
-        option("volume", "0") // Never emit sound in an unattended probe.
+        option("volume", if (probe) "0" else "80") // Diagnostic entry points remain muted.
         if (System.getenv("SPIKE_NULL_AUDIO") == "1") option("ao", "null")
         option("keep-open", "yes")
-        option("loop-file", "inf")
+        option("loop-file", if (probe) "inf" else "no")
         option("input-default-bindings", "no")
         option("input-vo-keyboard", "no")
         // Lua-free LGPL builds have no OSC option or controller.

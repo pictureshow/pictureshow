@@ -34,7 +34,7 @@ struct Surface {
  xdg_surface*xdg=nullptr;xdg_toplevel*top=nullptr;wl_output*output=nullptr;
  wp_color_manager_v1*cm=nullptr;wp_image_description_v1*desc=nullptr;wp_color_management_surface_v1*cms=nullptr;
  weston_capture_v1*capture=nullptr;weston_capture_source_v1*shot=nullptr;weston_test*test=nullptr;
- wl_seat*seat=nullptr;wl_pointer*pointer=nullptr;wl_surface*pointerSurface=nullptr;
+ wl_seat*seat=nullptr;wl_keyboard*keyboard=nullptr;wl_pointer*pointer=nullptr;wl_surface*pointerSurface=nullptr;
  EGLDisplay ed=EGL_NO_DISPLAY;EGLContext ec=EGL_NO_CONTEXT;EGLSurface es=EGL_NO_SURFACE;wl_egl_window*ew=nullptr;
  mpv_render_context*render=nullptr;mpv_handle*mpv=nullptr;std::atomic<bool>update{true};
  bool legacy=false;bool configured=false,fullscreen=false,closed=false,ready=false,hdr=false,pq=false,bt2020=false,parametric=false;
@@ -64,8 +64,17 @@ static const wl_pointer_listener pointerListener={
  [](void*d,wl_pointer*,uint32_t,uint32_t,uint32_t button,uint32_t state){auto*s=(Surface*)d;if(s->pointerSurface==s->ui&&button==0x110){s->input.push_back(state?1:2);s->input.push_back((int)s->px);s->input.push_back((int)s->py);}},
  [](void*,wl_pointer*,uint32_t,uint32_t,wl_fixed_t){},[](void*,wl_pointer*){},[](void*,wl_pointer*,uint32_t){},[](void*,wl_pointer*,uint32_t,uint32_t){},[](void*,wl_pointer*,uint32_t,int32_t){},[](void*,wl_pointer*,uint32_t,int32_t){}
 };
+// Keyboard key codes are Linux evdev codes, translated by the desktop Compose adapter.
+static const wl_keyboard_listener keyboardListener={
+ [](void*,wl_keyboard*,uint32_t,int fd,uint32_t){close(fd);},
+ [](void*,wl_keyboard*,uint32_t,wl_surface*,wl_array*){},
+ [](void*,wl_keyboard*,uint32_t,wl_surface*){},
+ [](void*d,wl_keyboard*,uint32_t,uint32_t,uint32_t key,uint32_t state){auto*s=(Surface*)d;s->input.push_back(state?3:4);s->input.push_back(key);s->input.push_back(0);},
+ [](void*,wl_keyboard*,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t){},
+ [](void*,wl_keyboard*,int32_t,int32_t){}
+};
 static const wl_seat_listener seatListener={
- [](void*d,wl_seat*seat,uint32_t caps){auto*s=(Surface*)d;if((caps&WL_SEAT_CAPABILITY_POINTER)&&!s->pointer){s->pointer=wl_seat_get_pointer(seat);wl_pointer_add_listener(s->pointer,&pointerListener,s);}},[](void*,wl_seat*,const char*){}
+ [](void*d,wl_seat*seat,uint32_t caps){auto*s=(Surface*)d;if((caps&WL_SEAT_CAPABILITY_POINTER)&&!s->pointer){s->pointer=wl_seat_get_pointer(seat);wl_pointer_add_listener(s->pointer,&pointerListener,s);}if((caps&WL_SEAT_CAPABILITY_KEYBOARD)&&!s->keyboard){s->keyboard=wl_seat_get_keyboard(seat);wl_keyboard_add_listener(s->keyboard,&keyboardListener,s);}},[](void*,wl_seat*,const char*){}
 };
 static void global(void*d,wl_registry*r,uint32_t name,const char*i,uint32_t version){auto*s=(Surface*)d;
  if(!strcmp(i,"wl_compositor"))s->c=(wl_compositor*)wl_registry_bind(r,name,&wl_compositor_interface,std::min(version,4u));
@@ -81,6 +90,14 @@ static void global(void*d,wl_registry*r,uint32_t name,const char*i,uint32_t vers
 static void*getproc(void*,const char*n){return (void*)eglGetProcAddress(n);}
 static double seconds(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
 extern "C" {
+// The viewer can explain unsupported compositor support before the diagnostic creator's hard checks.
+int ps_wayland_preflight(int hdr){
+ Surface s;s.d=wl_display_connect(nullptr);if(!s.d)return -1;
+ auto*r=wl_display_get_registry(s.d);static const wl_registry_listener l={global,[](void*,wl_registry*,uint32_t){}};
+ wl_registry_add_listener(r,&l,&s);int rc=wl_display_roundtrip(s.d);if(rc>=0)rc=wl_display_roundtrip(s.d);
+ bool supported=rc>=0&&s.c&&s.sc&&s.wm&&s.shm&&(!hdr||(s.cm&&s.pq&&s.bt2020&&s.parametric));
+ wl_display_disconnect(s.d);return supported?0:-2;
+}
 void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  auto*s=new Surface;s->mpv=mpv;s->hdr=hdr;s->legacy=getenv("SPIKE_WAYLAND_LEGACY_PACING")!=nullptr;s->log=fopen(receipt,"w");s->d=wl_display_connect(nullptr);check(s->d,"wl_display_connect");
  auto*r=wl_display_get_registry(s->d);static const wl_registry_listener l={global,[](void*,wl_registry*,uint32_t){}};wl_registry_add_listener(r,&l,s);check(wl_display_roundtrip(s->d)>=0,"registry");check(wl_display_roundtrip(s->d)>=0,"capabilities");
@@ -179,6 +196,7 @@ int ps_wayland_pump(void*p){auto*s=(Surface*)p;
 }
 int ps_wayland_width(void*p){return ((Surface*)p)->width;}int ps_wayland_height(void*p){return ((Surface*)p)->height;}int ps_wayland_fullscreen(void*p){return ((Surface*)p)->fullscreen;}
 void ps_wayland_fullscreen_set(void*p,int fs){auto*s=(Surface*)p;if(fs)xdg_toplevel_set_fullscreen(s->top,nullptr);else xdg_toplevel_unset_fullscreen(s->top);wl_display_flush(s->d);}
+void ps_wayland_title(void*p,const char*title){auto*s=(Surface*)p;xdg_toplevel_set_title(s->top,title);wl_display_flush(s->d);}
 void ps_wayland_resize(void*p,int w,int h){auto*s=(Surface*)p;check(!s->fullscreen,"resize while fullscreen");s->width=w;s->height=h;s->update=true;}
 void ps_wayland_ui(void*p,const void*data,int w,int h){auto*s=(Surface*)p;Buffer*b=nullptr;for(auto*q:s->buffers)if(!q->busy&&q->n==(size_t)w*h*4){b=q;break;}if(!b)b=buffer(s,w,h,WL_SHM_FORMAT_ARGB8888);memcpy(b->data,data,b->n);b->busy=true;wl_surface_attach(s->ui,b->b,0,0);wl_surface_damage(s->ui,0,0,w,h);wl_surface_commit(s->ui);wl_display_flush(s->d);s->uiw=w;s->uih=h;}
 int ps_wayland_input(void*p,int*event){auto*s=(Surface*)p;if(s->input.size()<3)return 0;for(int n=0;n<3;n++)event[n]=s->input[n];s->input.erase(s->input.begin(),s->input.begin()+3);return 1;}
