@@ -546,7 +546,7 @@
       },
       "expected": {
         "title": "S1 E5",
-        "metadata": "Today \u00b7 6:00 PM \u00b7 2 min",
+        "metadata": "2 min",
         "progress": null
       }
     },

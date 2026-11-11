@@ -188,7 +188,7 @@ internal fun liveRecordingMetadata(item: MediaItem, time: LiveTime): String {
     val start = recordingInstant(item.recordingStartDate)
     val end = recordingInstant(item.recordingEndDate)
     val growing = item.isInProgress || item.recordingStatus == "InProgress"
-    val date = start ?: recordingInstant(item.premiereDate)
+    val date = start
     return listOfNotNull(
         recordingEpisode(item)?.takeUnless { it == liveRecordingTitle(item) },
         if (growing && start != null && end != null && end > start) {

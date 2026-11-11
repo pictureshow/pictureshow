@@ -140,3 +140,7 @@ for this destination. Native focused/selected colours remain distinct. A rendere
 
 TV recording editor focuses its first supplied padding option; if neither padding field is supplied, Review recording is
 its initial focus target. A provider omitting optional fields must not leave the screen without an attached focus target.
+
+A recording without StartDate does not substitute PremiereDate as its recording date/time. PremiereDate describes the
+original premiere, which may be years earlier or a date-only midnight value. Missing recording dates stay omitted; episode
+identity and real runtime remain available. The metadata vector with PremiereDate but no StartDate guards this distinction.
