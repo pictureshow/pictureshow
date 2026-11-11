@@ -241,7 +241,10 @@ class OfflineRecoveryTest {
         while (System.currentTimeMillis() <= permit.issuedAt && System.nanoTime() < wallClockDeadline) {
             Thread.sleep(1)
         }
-        assertTrue("Real wall clock did not advance beyond the original permit within one second", System.currentTimeMillis() > permit.issuedAt)
+        assertTrue(
+            "Real wall clock did not advance beyond the original permit within one second",
+            System.currentTimeMillis() > permit.issuedAt
+        )
         assertTrue(offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS, viewerReturned = true))
         val renewed = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
         assertTrue(renewed.issuedAt > permit.issuedAt)
