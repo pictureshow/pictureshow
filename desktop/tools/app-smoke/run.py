@@ -582,6 +582,23 @@ while ($true) {{
                 self.error = "Owned encoder observer did not stop"
 
 
+def validate_native_close(evidence: Path, enabled: bool) -> dict:
+    if not enabled:
+        return {}
+    try:
+        request = json.loads((evidence / "native-close-request.json").read_text(encoding="utf-8"))
+        lifecycle = json.loads((evidence / "close-lifecycle.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise RuntimeError("Native window close evidence missing or malformed") from None
+    if not isinstance(request, dict) or request.get("ready") is not True:
+        raise RuntimeError("Native window close did not start with ready playback")
+    if not isinstance(lifecycle, dict) or lifecycle.get("source") != "window":
+        raise RuntimeError("Native window close was not requested through the window")
+    if lifecycle.get("shutdownComplete") is not True:
+        raise RuntimeError("Native window close did not complete controller shutdown")
+    return {"nativeCloseVerified": True}
+
+
 def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     command = [args.java, "--enable-native-access=ALL-UNNAMED"]
     if platform.system() == "Darwin":
@@ -661,7 +678,9 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     if observer.error:
         raise RuntimeError("Owned fixture encoder observation failed: " + observer.error)
-    return validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
+    result = validate_receipt(receipt, samples, bool(qc_codes), ids, observer.samples, cleanup)
+    result.update(validate_native_close(evidence, environment.get("PICTURESHOW_SMOKE_NATIVE_CLOSE") == "1"))
+    return result
 
 
 def main():

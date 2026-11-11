@@ -9,6 +9,7 @@ import threading
 import os
 import tempfile
 import time
+import json
 
 spec = importlib.util.spec_from_file_location("app_smoke", Path(__file__).with_name("run.py"))
 smoke = importlib.util.module_from_spec(spec)
@@ -34,6 +35,35 @@ class DisplayBoundsTest(unittest.TestCase):
                 receipt[field] = value
                 with self.assertRaisesRegex(RuntimeError, "virtual display"):
                     display.smoke_origin(receipt)
+
+
+class NativeCloseVerdictTest(unittest.TestCase):
+    def test_normal_smoke_does_not_require_optional_close_receipts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual({}, smoke.validate_native_close(Path(folder), False))
+
+    def test_window_close_after_ready_playback_and_shutdown_passes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            evidence = Path(folder)
+            (evidence / "native-close-request.json").write_text(json.dumps({"ready": True}))
+            (evidence / "close-lifecycle.json").write_text(json.dumps({"source": "window", "shutdownComplete": True}))
+            self.assertEqual({"nativeCloseVerified": True}, smoke.validate_native_close(evidence, True))
+
+    def test_missing_or_incomplete_close_evidence_is_rejected(self):
+        cases = [(None, None), ({"ready": True}, None),
+                 ({"ready": False}, {"source": "window", "shutdownComplete": True}),
+                 ({"ready": True}, {"source": "smoke", "shutdownComplete": True}),
+                 ({"ready": True}, {"source": "window", "shutdownComplete": False}),
+                 ({"ready": True}, {"source": "window", "shutdownComplete": "true"})]
+        for request, lifecycle in cases:
+            with self.subTest(request=request, lifecycle=lifecycle), tempfile.TemporaryDirectory() as folder:
+                evidence = Path(folder)
+                if request is not None:
+                    (evidence / "native-close-request.json").write_text(json.dumps(request))
+                if lifecycle is not None:
+                    (evidence / "close-lifecycle.json").write_text(json.dumps(lifecycle))
+                with self.assertRaisesRegex(RuntimeError, "Native window close"):
+                    smoke.validate_native_close(evidence, True)
 
 
 class SmokeVerdictTest(unittest.TestCase):

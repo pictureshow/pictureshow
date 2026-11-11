@@ -93,6 +93,7 @@ jobs:
           export SPIKE_NULL_AUDIO=1
           export SPIKE_SOFTWARE_GPU=1
           export SKIKO_RENDER_API=SOFTWARE
+          export PICTURESHOW_SMOKE_NATIVE_CLOSE=1
           python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
       - name: Windows app against its disposable Jellyfin portable server
         if: runner.os == 'Windows'
