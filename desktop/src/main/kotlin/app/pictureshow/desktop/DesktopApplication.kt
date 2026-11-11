@@ -82,9 +82,9 @@ fun desktopMain(args: Array<String>) {
                     chrome = { content -> WindowDraggableArea(Modifier.fillMaxWidth()) { content() } },
                     windowControls = {
                         if (!macChrome) {
-                            TextButton(onClick={state.isMinimized=true},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("—",Modifier.clearAndSetSemantics { contentDescription="Minimize window" }) }
-                            TextButton(onClick={state.placement=if(state.placement==WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("□",Modifier.clearAndSetSemantics { contentDescription="Maximize or restore window" }) }
-                            TextButton(onClick={ close("window-button") },contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.widthIn(min=40.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
+                            TextButton(onClick={state.isMinimized=true},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.controlFocus().widthIn(min=40.dp)) { Text("—",Modifier.clearAndSetSemantics { contentDescription="Minimize window" }) }
+                            TextButton(onClick={state.placement=if(state.placement==WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized},contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.controlFocus().widthIn(min=40.dp)) { Text("□",Modifier.clearAndSetSemantics { contentDescription="Maximize or restore window" }) }
+                            TextButton(onClick={ close("window-button") },contentPadding=PaddingValues(horizontal=12.dp),modifier=Modifier.controlFocus().widthIn(min=40.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
                         }
                     })
             }

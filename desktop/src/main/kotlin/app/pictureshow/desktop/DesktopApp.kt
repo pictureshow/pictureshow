@@ -23,6 +23,11 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
@@ -78,6 +83,22 @@ private fun Modifier.focusOutline(): Modifier {
     return onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
+/** A focus ring outside the control fill stays visible on primary and tonal controls. */
+@Composable
+internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50)): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    val color = MaterialTheme.colorScheme.primary
+    return onFocusChanged { focused = it.isFocused }.drawWithContent {
+        drawContent()
+        if (focused) {
+            val gap = 4.dp.toPx()
+            inset(-gap, -gap, -gap, -gap) {
+                drawOutline(shape.createOutline(size, layoutDirection, this), color, style = Stroke(2.dp.toPx()))
+            }
+        }
+    }
+}
+
 @Composable
 internal fun DesktopTooltip(label: String, above: Boolean = false, content: @Composable () -> Unit) {
     TooltipArea(
@@ -87,10 +108,12 @@ internal fun DesktopTooltip(label: String, above: Boolean = false, content: @Com
             }
         },
         delayMillis = 500,
-        tooltipPlacement = TooltipPlacement.ComponentRect(
-            anchor = if (above) Alignment.TopCenter else Alignment.BottomCenter,
+        // Keep the cursor provider used by the qualified resize/hover flow. The
+        // component-coordinate provider reproduced a disposed popup scene on
+        // Windows; an explicit cursor gap preserves visibility without it.
+        tooltipPlacement = TooltipPlacement.CursorPoint(
             alignment = if (above) Alignment.TopCenter else Alignment.BottomCenter,
-            offset = DpOffset(0.dp, if (above) (-8).dp else 8.dp)
+            offset = DpOffset(0.dp, if (above) (-24).dp else 24.dp)
         ),
         content = content
     )
@@ -178,7 +201,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -194,13 +217,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
 
                                 Text(sidebarAccount.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = sidebarAccount.server.name })
                             }
-                            NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.probe("nav:home"))
+                            NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.controlFocus().probe("nav:home"))
                             state.homeRows.filter { it.library }.flatMap { it.items }.forEach { library ->
-                                NavigationDrawerItem(label = { Text(library.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.library?.id == library.id && state.route == DesktopRoute.Library, onClick = { controller.browse(library) }, modifier = Modifier.probe("nav:library:${library.id}"))
+                                NavigationDrawerItem(label = { Text(library.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.library?.id == library.id && state.route == DesktopRoute.Library, onClick = { controller.browse(library) }, modifier = Modifier.controlFocus().probe("nav:library:${library.id}"))
                             }
                             Spacer(Modifier.weight(1f))
-                            NavigationDrawerItem(label = { Text("Settings") }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.probe("nav:settings"))
-                            NavigationDrawerItem(label = { Text("Switch account") }, selected = false, onClick = controller::accounts, modifier = Modifier.probe("nav:accounts"))
+                            NavigationDrawerItem(label = { Text("Settings") }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.controlFocus().probe("nav:settings"))
+                            NavigationDrawerItem(label = { Text("Switch account") }, selected = false, onClick = controller::accounts, modifier = Modifier.controlFocus().probe("nav:accounts"))
                         }
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -208,7 +231,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             Card(Modifier.fillMaxWidth().widthIn(max = 560.dp).align(Alignment.CenterHorizontally).padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.probe("retry")) { Text("Retry") }
+                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.controlFocus().probe("retry")) { Text("Retry") }
                                 }
                             }
                         }
@@ -228,9 +251,9 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Accounts -> FormPage("Who's watching?", "Choose an account or add one.") {
                                     state.accounts.forEach { a ->
                                         Row(
-                                            Modifier.fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
+                                            Modifier.controlFocus(RoundedCornerShape(12.dp)).fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
                                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                                                .clickable { controller.selectAccount(a.key) }.probe("account:${a.key}")
+                                                .clickable(role = Role.Button) { controller.selectAccount(a.key) }.probe("account:${a.key}")
                                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -245,13 +268,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                                 Text(a.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                             DesktopTooltip("Remove account") {
-                                                IconButton(onClick = { remove = a }, modifier = Modifier.probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
+                                                IconButton(onClick = { remove = a }, modifier = Modifier.controlFocus().probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
                                                     Icon(DesktopGlyph.Remove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
                                         }
                                     }
-                                    OutlinedButton(onClick = controller::addServer, modifier = Modifier.heightIn(min = 48.dp).probe("add-server")) { Text("Add account") }
+                                    OutlinedButton(onClick = controller::addServer, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-server")) { Text("Add account") }
                                 }
                                 DesktopRoute.Home -> HomePage(state, controller)
                                 DesktopRoute.Library -> LibraryPage(state, controller)
@@ -277,11 +300,11 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 ShortcutRow("Space", "Pause or play")
                 ShortcutRow("← / →", "Seek 10 seconds")
                 Text("Playback actions are also available in the control bar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.probe("help-close")) { Text("Close") } })
+            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus().probe("help-close")) { Text("Close") } })
             remove?.let { a ->
                 val cancelFocus = remember(a.key) { FocusRequester() }
                 LaunchedEffect(a.key) { delay(100); cancelFocus.requestFocus() }
-                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove account") } }) }
+                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus().focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove account") } }) }
         }
     }
 }
@@ -306,10 +329,10 @@ private fun ServerPage(state: DesktopState, c: DesktopController) {
     var address by remember { mutableStateOf("") }
     FormPage("Your library, on your desktop", "Connect to your Jellyfin server to start watching.") {
         OutlinedTextField(address, { address = it }, label = { Text("Server address") }, supportingText = { Text("For example, https://jellyfin.example.org") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("server-address"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if(address.isNotBlank()) c.connect(address) }))
-        Button(onClick = { c.connect(address) }, enabled = address.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("connect")) { Text(if (state.busy) "Connecting…" else "Connect") }
+        Button(onClick = { c.connect(address) }, enabled = address.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("connect")) { Text(if (state.busy) "Connecting…" else "Connect") }
         Text("On your network", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }) { Text(s.name) } }
-        state.discovered.forEach { s -> OutlinedButton(onClick = { c.connect(s.address) }) { Text(s.name) } }
+        state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }, modifier = Modifier.controlFocus()) { Text(s.name) } }
+        state.discovered.forEach { s -> OutlinedButton(onClick = { c.connect(s.address) }, modifier = Modifier.controlFocus()) { Text(s.name) } }
         Text(if (state.discovering) "Looking for Jellyfin servers…" else if(state.discovered.isEmpty()) "No server found yet. You can always enter its address above." else "Select a server to connect.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         InlineTextAction("Search again", "discover", c::discover, enabled = !state.discovering)
         if (state.accounts.isNotEmpty()) InlineTextAction("Remembered accounts", "remembered-accounts", c::accounts)
@@ -329,12 +352,12 @@ private fun SignInPage(state: DesktopState, c: DesktopController) {
         }
     }
     FormPage("Sign in", state.server?.name ?: "Your Jellyfin server") {
-        if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(onClick = { username = u.name; c.clearError() }, label = { Text(u.name) }) } }
+        if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(modifier = Modifier.controlFocus(), onClick = { username = u.name; c.clearError() }, label = { Text(u.name) }) } }
         OutlinedTextField(username, { username = it; c.clearError() }, label = { Text("Username") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("username"))
-        OutlinedTextField(password, { password = it; c.clearError() }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
-        Button(onClick = { c.signIn(username, password.text) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
+        OutlinedTextField(password, { password = it; c.clearError() }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }, modifier = Modifier.controlFocus()) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.controlFocus().fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
+        Button(onClick = { c.signIn(username, password.text) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
         HorizontalDivider()
-        OutlinedButton(onClick = c::quickConnect, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("quick-connect")) { Text("Use Quick Connect") }
+        OutlinedButton(onClick = c::quickConnect, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("quick-connect")) { Text("Use Quick Connect") }
     }
 }
 @Composable
@@ -369,7 +392,7 @@ private fun LibraryPage(state: DesktopState, c: DesktopController) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
             Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
-            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
+            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.controlFocus().probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
         }
         Text("${state.total} items", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.items.isEmpty() && !state.busy) Text("This library is empty.")
@@ -401,16 +424,16 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
                     Text(item.name, style = if (expansive) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                     Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Button(onClick={c.play(item)},enabled=!state.busy,modifier=Modifier.heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
-                        if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
+                        Button(onClick={c.play(item)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
+                        if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
                         Row(Modifier.offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
                         DesktopTooltip(if (item.isWatched) "Mark unwatched" else "Mark watched") {
-                            IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {
+                            IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.controlFocus().probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {
                                 Icon(if (item.isWatched) DesktopGlyph.Watched else DesktopGlyph.WatchedOutline, contentDescription = null, tint = if (item.isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         DesktopTooltip(if (item.userData.isFavorite) "Remove favorite" else "Add to favorites") {
-                            IconToggleButton(checked = item.userData.isFavorite, onCheckedChange = { c.toggleFavorite() }, modifier = Modifier.probe("favorite").semantics { contentDescription = "Favorite"; stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite" }) {
+                            IconToggleButton(checked = item.userData.isFavorite, onCheckedChange = { c.toggleFavorite() }, modifier = Modifier.controlFocus().probe("favorite").semantics { contentDescription = "Favorite"; stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite" }) {
                                 Icon(if (item.userData.isFavorite) DesktopGlyph.Favorite else DesktopGlyph.FavoriteOutline, contentDescription = null, tint = if (item.userData.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -473,22 +496,22 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                 Text(p.item.name,style=MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text(clock(p.positionSeconds),Modifier.width(72.dp),textAlign=TextAlign.End,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
-                    Slider(value=p.positionSeconds.toFloat().coerceIn(0f,p.durationSeconds.coerceAtLeast(1.0).toFloat()),onValueChange={c.seek(it.toDouble())},valueRange=0f..p.durationSeconds.coerceAtLeast(1.0).toFloat(),modifier=Modifier.weight(1f).probe("seek").semantics { contentDescription="Playback position" })
+                    Slider(value=p.positionSeconds.toFloat().coerceIn(0f,p.durationSeconds.coerceAtLeast(1.0).toFloat()),onValueChange={c.seek(it.toDouble())},valueRange=0f..p.durationSeconds.coerceAtLeast(1.0).toFloat(),modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).weight(1f).probe("seek").semantics { contentDescription="Playback position" })
                     Text(clock(p.durationSeconds),Modifier.width(72.dp),textAlign=TextAlign.Start,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
                 }
 
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        DesktopTooltip("Back 10 seconds", above = true) { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
-                        DesktopTooltip(if (p.paused) "Play" else "Pause", above = true) { FilledIconButton(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
-                        DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
+                        DesktopTooltip("Back 10 seconds", above = true) { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier = Modifier.controlFocus().probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
+                        DesktopTooltip(if (p.paused) "Play" else "Pause", above = true) { FilledIconButton(onClick=c::playerToggle,modifier = Modifier.controlFocus().probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
+                        DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier = Modifier.controlFocus().probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
                         Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
-                        DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier=Modifier.probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
-                        if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
-                        DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
+                        DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
+                        if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
+                        DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier = Modifier.controlFocus().probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
                     }
 
                 }
@@ -504,7 +527,7 @@ private fun SettingsPage(state:DesktopState,c:DesktopController) {
     FormPage("Settings","Playback and viewing preferences for this desktop.") {
         CatalogHeading("Account",section=true)
         SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
-            OutlinedButton(onClick = c::signOut, modifier = Modifier.heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
+            OutlinedButton(onClick = c::signOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
         }
         CatalogHeading("Playback",section=true)
         SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
@@ -518,7 +541,7 @@ private fun SettingsPage(state:DesktopState,c:DesktopController) {
                 Spacer(Modifier.weight(1f))
                 Text("${s.volume}%", style = MaterialTheme.typography.labelLarge)
             }
-            Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.probe("volume").semantics { contentDescription="Volume" })
+            Slider(s.volume.toFloat(),{c.saveSettings(s.copy(volume=it.toInt()))},valueRange=0f..100f,modifier=Modifier.controlFocus(RoundedCornerShape(12.dp)).probe("volume").semantics { contentDescription="Volume" })
         }
         HorizontalDivider()
         CatalogHeading("Interface",section=true)
@@ -540,31 +563,31 @@ private fun SettingRow(title: String, caption: String, trailing: @Composable () 
 }
 @Composable
 private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,onChange:(Boolean)->Unit) {
-    SettingRow(title, caption) { Switch(value,onChange,Modifier.probe(tag).semantics { contentDescription=title }) }
+    SettingRow(title, caption) { Switch(value,onChange,Modifier.controlFocus().probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
 private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
+        OutlinedButton(onClick={expanded=true},modifier = Modifier.controlFocus().widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
             if(icon!=null) Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp))
             Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis)
             if (trailingIcon != null) { Spacer(Modifier.width(4.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
         }
-        DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.probe("$tag:$key")) } }
+        DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key")) } }
     }
 }
 
 @Composable
 private fun DesktopUtility(label: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, tag: String, action: () -> Unit) {
     DesktopTooltip(label) {
-        IconButton(onClick=action, modifier=Modifier.probe(tag)) { Icon(glyph, label, tint=MaterialTheme.colorScheme.onSurfaceVariant) }
+        IconButton(onClick=action, modifier = Modifier.controlFocus().probe(tag)) { Icon(glyph, label, tint=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
 @Composable
 private fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, enabled: Boolean = true) {
-    TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp).probe(tag)) { Text(label) }
+    TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe(tag)) { Text(label) }
 }
 
 private fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream): String =
