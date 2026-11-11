@@ -48,8 +48,13 @@ python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
 
 `build-native.sh` creates development smoke dependencies using LGPL-disabled-GPL
 FFmpeg and mpv plus the qualified native adapter. FFmpeg includes its built-in
-decoders/demuxers/parsers and libdav1d for software AV1, covering the advertised
-desktop profile; HTTPS uses Secure Transport on Mac and GnuTLS on Linux. Linux retains stock Weston 16
+decoders/demuxers/parsers and libdav1d for software AV1. The isolated Mac/Linux
+smoke dependency build then explicitly omits the FFV1 decoder, with a separate
+receipt, so Archive Signal tests a genuinely unavailable decoder. This omission
+is a test-closure choice and must not restrict the shipping device profile.
+The pinned Windows upstream archive retains its own decoder set; a real requested
+bitrate cap can require conversion there even when FFV1 decoding is available.
+HTTPS uses Secure Transport on Mac and GnuTLS on Linux. Linux retains stock Weston 16
 and uses `softpipe`; the AWT shell has its own Xvfb display. Windows uses the
 pinned upstream LGPL mpv archive and WARP on hosted CI. These software runs do not
 qualify physical HDR, speaker output, real-GPU performance or release packaging.

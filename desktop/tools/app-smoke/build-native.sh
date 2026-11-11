@@ -44,13 +44,16 @@ fi
  ./configure --prefix="$prefix" --disable-gpl --disable-nonfree --enable-shared --disable-static \
   --disable-programs --disable-doc --disable-debug --disable-autodetect --disable-everything \
   --enable-protocol=file,http,https,tcp,tls,crypto,data,httpproxy --enable-network \
-  --enable-decoders --enable-demuxers --enable-parsers --enable-libdav1d \
+  --enable-decoders --enable-demuxers --enable-parsers --enable-libdav1d --disable-decoder=ffv1 \
   --enable-filter=buffer,buffersink,format,null,scale \
   --enable-swscale --enable-swresample "${extra[@]}"
  make -j2
  make install
 ) > desktop-evidence/native-build/ffmpeg-build.log 2>&1
 cp "$build/source/ffmpeg-8.0/config.h" desktop-evidence/native-build/ffmpeg-config.h
+cat > desktop-evidence/native-build/smoke-only-decoder-omissions.json <<'JSON'
+{"omittedDecoders":["ffv1"],"scope":"isolated smoke dependency build only","reason":"Exercise genuine unavailable-decoder conversion without restricting the production device profile"}
+JSON
 if [[ "$os" == mac ]]; then
  sh desktop/tools/macos/build-mpv.sh "$prefix" "$build/mpv-source"
  python3 - "$build/mpv-source/mpv.tar.gz" <<'PY'

@@ -456,6 +456,12 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                     line = sanitized(line, password, viewer.token)
                     lines.append(line)
             (evidence / "app-output.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            # Keep the independent observations even when the app fails before
+            # its receipt. A failure must not discard the only server evidence.
+            write_json(evidence / "server-session-observations.json", {"samples": samples,
+                                                                      "encoderSamples": encoder_samples,
+                                                                      "cleanup": None,
+                                                                      "quickConnectApproved": bool(qc_codes)})
     cleanup_deadline = time.monotonic() + 20
     cleanup = {"activePlayingItems": None, "encoderCount": None}
     while time.monotonic() < cleanup_deadline:
