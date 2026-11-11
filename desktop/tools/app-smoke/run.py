@@ -853,6 +853,25 @@ def copy_decoder_envelope(playback: Path, evidence: Path):
                {"source": "actual loaded libmpv decoder-list", "codecs": sorted(set(codecs))})
 
 
+def validate_decoder_envelope(evidence: Path) -> dict:
+    """Require the native decoder receipt for a successful fixture smoke only."""
+    receipt_path = evidence / "playback" / "decoder-envelope.json"
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise RuntimeError("Successful native playback is missing its decoder envelope") from None
+    codecs = receipt.get("codecs") if isinstance(receipt, dict) else None
+    if (not isinstance(receipt, dict)
+            or receipt.get("source") != "actual loaded libmpv decoder-list"
+            or not isinstance(codecs, list)
+            or not all(isinstance(codec, str) for codec in codecs)):
+        raise RuntimeError("Successful native playback has an invalid decoder envelope")
+    subtitle_decoder = next((codec for codec in codecs if codec.lower() in {"subrip", "srt"}), None)
+    if subtitle_decoder is None:
+        raise RuntimeError("Successful native playback is missing the fixture subtitle decoder")
+    return {"nativeSubtitleDecoderVerified": True, "nativeSubtitleDecoder": subtitle_decoder}
+
+
 def copy_subtitle_failure_categories(playback: Path, evidence: Path):
     source = playback / "mpv.log"
     limit = 2 * 1024 * 1024
@@ -982,6 +1001,7 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
     result.update(validate_discovery(evidence))
     result.update(screen_reader)
     result.update(validate_native_close(evidence, environment.get("PICTURESHOW_SMOKE_NATIVE_CLOSE") == "1"))
+    result.update(validate_decoder_envelope(evidence))
     return result
 
 

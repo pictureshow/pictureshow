@@ -46,6 +46,33 @@ class NativeMetadataEvidenceTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "exceeds"):
                 smoke.copy_decoder_envelope(root, root / "evidence")
 
+    def test_successful_smoke_requires_decoder_envelope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "missing its decoder envelope"):
+                smoke.validate_decoder_envelope(Path(directory))
+
+    def test_successful_smoke_requires_fixture_subtitle_decoder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            playback = evidence / "playback"
+            playback.mkdir()
+            (playback / "decoder-envelope.json").write_text(json.dumps({
+                "source": "actual loaded libmpv decoder-list", "codecs": ["aac", "h264"]
+            }))
+            with self.assertRaisesRegex(RuntimeError, "fixture subtitle decoder"):
+                smoke.validate_decoder_envelope(evidence)
+
+    def test_successful_smoke_accepts_subrip_fixture_decoder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            playback = evidence / "playback"
+            playback.mkdir()
+            (playback / "decoder-envelope.json").write_text(json.dumps({
+                "source": "actual loaded libmpv decoder-list", "codecs": ["aac", "subrip"]
+            }))
+            self.assertEqual({"nativeSubtitleDecoderVerified": True, "nativeSubtitleDecoder": "subrip"},
+                             smoke.validate_decoder_envelope(evidence))
+
     def test_subtitle_failure_receipt_withholds_raw_log_and_bounds_scan(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
