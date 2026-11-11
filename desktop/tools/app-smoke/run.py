@@ -300,6 +300,23 @@ def native_server(root: Path) -> Path:
     return exe
 
 
+def write_native_network_configuration(path: Path, port: int):
+    path.write_text(f"""<?xml version="1.0"?>
+<NetworkConfiguration>
+  <BaseUrl/>
+  <EnableHttps>false</EnableHttps>
+  <InternalHttpPort>{port}</InternalHttpPort>
+  <PublicHttpPort>{port}</PublicHttpPort>
+  <EnableUPnP>false</EnableUPnP>
+  <EnableRemoteAccess>false</EnableRemoteAccess>
+  <AutoDiscovery>false</AutoDiscovery>
+  <EnableIPv4>true</EnableIPv4>
+  <EnableIPv6>false</EnableIPv6>
+  <LocalNetworkAddresses><string>127.0.0.1</string></LocalNetworkAddresses>
+</NetworkConfiguration>
+""", encoding="utf-8")
+
+
 @contextlib.contextmanager
 def owned_server(root: Path, media: Path, ffmpeg: str):
     # Jellyfin can change its working directory internally. Native data and
@@ -323,8 +340,9 @@ def owned_server(root: Path, media: Path, ffmpeg: str):
             exe = native_server(root)
             for folder in ["data", "cache", "config", "logs"]:
                 (root / folder).mkdir()
-            # Explicit port, no automatic port mapping or LAN discovery traffic.
-            (root / "config" / "network.xml").write_text(f"<?xml version=\"1.0\"?><NetworkConfiguration><BaseUrl/><EnableHttps>false</EnableHttps><InternalHttpPort>{port}</InternalHttpPort><PublicHttpPort>{port}</PublicHttpPort><EnableUPnP>false</EnableUPnP><EnableRemoteAccess>false</EnableRemoteAccess><EnableIPv4>true</EnableIPv4><EnableIPv6>false</EnableIPv6><LocalNetworkAddresses><string>127.0.0.1</string></LocalNetworkAddresses></NetworkConfiguration>", encoding="utf-8")
+            # Discovery otherwise binds UDP 7359 on IPAddress.Any independently
+            # of HTTP's LocalNetworkAddresses, including on loopback-only runs.
+            write_native_network_configuration(root / "config" / "network.xml", port)
             # Fatal avoids request/query tokens in retained logs.
             write_json(root / "config" / "logging.json", {"Serilog": {"MinimumLevel": {"Default": "Warning", "Override": {"Microsoft": "Warning", "System": "Warning"}}}})
             server_log = (root / "server.log").open("w", encoding="utf-8")

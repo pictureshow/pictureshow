@@ -213,6 +213,18 @@ class SmokeVerdictTest(unittest.TestCase):
         self.assertEqual("/fixture/movies", api.registered)
         self.assertTrue(api.fixture_library_receipts[0]["registeredLocation"])
 
+    def test_native_server_configuration_has_only_loopback_ingress(self):
+        import xml.etree.ElementTree as ET
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "network.xml"
+            smoke.write_native_network_configuration(path, 19382)
+            configuration = ET.parse(path).getroot()
+        self.assertEqual(["127.0.0.1"], [node.text for node in configuration.findall("LocalNetworkAddresses/string")])
+        self.assertEqual("false", configuration.findtext("AutoDiscovery"))
+        self.assertEqual("false", configuration.findtext("EnableIPv6"))
+        self.assertEqual("false", configuration.findtext("EnableRemoteAccess"))
+        self.assertEqual("19382", configuration.findtext("InternalHttpPort"))
+
     def test_fixture_empty_virtual_folder_fails_before_scan_timeout(self):
         class FixtureAPI:
             def request(self, method, endpoint, body=None, query=None):
