@@ -348,6 +348,8 @@ class CatalogCustomizationTest {
         val cancel = compose.onNodeWithTag("home:reset-cancel").getUnclippedBoundsInRoot()
         val restore = compose.onNodeWithTag("home:reset-confirm").getUnclippedBoundsInRoot()
         assertTrue(restore.right < cancel.left, "Primary Restore precedes content-sized Cancel")
+        assertTrue(restore.right - restore.left < 160.dp, "Restore sizes to its content")
+        assertTrue(cancel.right - cancel.left < 160.dp, "Cancel sizes to its content")
         assertEquals(cancel.top, restore.top)
         compose.onNodeWithTag("home:reset-cancel").assert(
             SemanticsMatcher("Cancel is a command, not a selection") {

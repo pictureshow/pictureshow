@@ -947,14 +947,7 @@ private fun CatalogPersonAvatar(item: MediaItem, account: Account) {
                 it.firstOrNull()
             }.take(2).joinToString(""),
             style = MaterialTheme.typography.titleSmall,
-            color = if (usesTvInterface(
-                    LocalContext.current
-                )
-            ) {
-                androidx.tv.material3.LocalContentColor.current
-            } else {
-                androidx.compose.material3.LocalContentColor.current
-            }
+            color = MaterialTheme.colorScheme.onSecondaryContainer
         )
         imageUrl(account.server, item, 80)?.let {
             AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
