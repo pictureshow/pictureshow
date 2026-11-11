@@ -269,7 +269,7 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
                 CatalogArtwork(item,account,false,Modifier.width(180.dp).height(270.dp))
                 Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                     CatalogHeading(item.name)
-                    Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier=Modifier.heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
                         if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.probe("play-start")) { Text("Play from start") }

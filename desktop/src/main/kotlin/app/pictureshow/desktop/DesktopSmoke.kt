@@ -175,7 +175,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key
-        click("remove:$removeKey");screenshot("12b-remove-confirmation");click("remove-cancel")
+        click("remove:$removeKey");screenshot("12b-remove-confirmation");key(KeyEvent.VK_ESCAPE)
+        waitFor("Escape dismisses removal without changing accounts") { !DesktopUiProbe.bounds.containsKey("remove-cancel") && c.state.value.route==DesktopRoute.Accounts && c.state.value.accounts.any{it.key==removeKey} }
         // Voluntary sign-out is tested before the second authentication method.
         click("account:${c.state.value.accounts.first().key}");ready(DesktopRoute.Home);click("nav:settings");ready(DesktopRoute.Settings);click("sign-out")
         waitFor("signed out"){c.state.value.account==null&&!c.state.value.busy}
@@ -185,7 +186,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val code=c.state.value.quickCode!!
         val temp=File(out,"quick-connect-request.tmp");temp.writeText("{\"code\":\"$code\"}\n");java.nio.file.Files.move(temp.toPath(),File(out,"quick-connect-request.json").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         screenshot("13-quick-connect");ready(DesktopRoute.Home);checks["quickConnect"]=true
-        click("shortcuts");screenshot("14-keyboard-shortcuts");click("help-close")
+        click("shortcuts");screenshot("14-keyboard-shortcuts");key(KeyEvent.VK_ESCAPE)
+        waitFor("Escape dismisses keyboard help without navigating") { !DesktopUiProbe.bounds.containsKey("help-close") && c.state.value.route==DesktopRoute.Home }
         // Native Tab and Escape must act on the same viewer window after authentication.
         key(KeyEvent.VK_TAB);key(KeyEvent.VK_ESCAPE)
         successful=checks.size==18&&checks.values.all{it}
