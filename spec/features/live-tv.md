@@ -202,3 +202,8 @@ releases gesture ownership, so a later toolbar refresh cannot inherit a stale fl
 A missing/invalid measured live default or an out-of-window current position cannot establish that playback is at the
 live edge. Both visible and freshly queried reader state say Live position unavailable. Forward seek also requires the
 current position to lie in the measured seekable window; it must not turn an unknown position into a clamped backward seek.
+
+A failed/offline guide read does not establish that XMLTV is missing. Empty guide lanes, focused preview gaps and
+channel rows say Guide unavailable while the explicit server error/reference warning remains visible and actions
+are unavailable. The successful-empty-guide explanation (including administrator setup and channel tuning) appears
+only after a successful empty read. Cached programmes remain readable with their existing stale/reference qualification.

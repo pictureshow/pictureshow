@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(111, cases.size)
+        assertEquals(115, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -139,9 +139,18 @@ class LivePresentationVectorsTest {
                     id
                 )
 
+                "guide-empty-message" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveGuideEmptyMessage(c.getValue("unavailable").jsonPrimitive.boolean),
+                    id
+                )
+
                 "channel-idle-label" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
-                    liveChannelIdleLabel(c.getValue("hasPrograms").jsonPrimitive.boolean),
+                    liveChannelIdleLabel(
+                        c.getValue("hasPrograms").jsonPrimitive.boolean,
+                        c["unavailable"]?.jsonPrimitive?.boolean ?: false
+                    ),
                     id
                 )
 

@@ -91,6 +91,7 @@ internal fun LiveChannelRow(
     canFavorite: Boolean,
     favoriteEnabled: Boolean = true,
     tuneEnabled: Boolean,
+    guideUnavailable: Boolean = false,
     onFavorite: () -> Unit,
     onTune: () -> Unit
 ) {
@@ -100,7 +101,7 @@ internal fun LiveChannelRow(
     val next = programs.firstOrNull { liveInstant(it.startDate) > now }
     val support: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            LiveText(current?.name ?: liveChannelIdleLabel(programs.isNotEmpty()), tv, maxLines = 1)
+            LiveText(current?.name ?: liveChannelIdleLabel(programs.isNotEmpty(), guideUnavailable), tv, maxLines = 1)
             Box(Modifier.fillMaxWidth().height(2.dp)) {
                 current?.let {
                     val duration = liveInstant(it.endDate) - liveInstant(it.startDate)
@@ -372,4 +373,11 @@ internal fun LiveMenu(
 }
 
 /** Missing current coverage is not the same as an absent guide. */
-internal fun liveChannelIdleLabel(hasPrograms: Boolean): String = if (hasPrograms) "Nothing on now" else "No guide data"
+internal fun liveChannelIdleLabel(hasPrograms: Boolean, unavailable: Boolean = false): String = when {
+    unavailable -> "Guide unavailable"
+    hasPrograms -> "Nothing on now"
+    else -> "No guide data"
+}
+
+/** Only a successful empty guide establishes missing guide data; a failed read cannot diagnose server configuration. */
+internal fun liveGuideEmptyMessage(unavailable: Boolean): String = if (unavailable) "Guide unavailable" else NO_LIVE_GUIDE

@@ -1983,7 +1983,7 @@ class TouchPlayerControlsTest {
         val gestures = compose.onNodeWithTag("touch:gestures")
         assertTrue(gestures.fetchSemanticsNode().config[SemanticsActions.CustomActions].none { it.label == "Forward 10 seconds" })
         val before = compose.runOnIdle { decoder.seeks.size }
-        gestures.performTouchInput { doubleClick(Offset(size.width * .8f, size.height * .5f)) }
+        gestures.performTouchInput { doubleClick(Offset(width * .8f, height * .5f)) }
         compose.runOnIdle { assertEquals(before, decoder.seeks.size, "An edge double tap must not request an ineffective seek") }
         compose.runOnIdle { host.position = 10_000 }
         settled()

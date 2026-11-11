@@ -152,6 +152,7 @@ internal fun LiveTvScreen(
             ?: state.programs.firstOrNull { app.pictureshow.core.livetv.canTune(it, now) }
             ?: state.programs.firstOrNull()
     }
+    val guideUnavailable = state.offline || state.error != null
     val canAct = state.actionsAvailable(now)
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
@@ -180,7 +181,14 @@ internal fun LiveTvScreen(
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         if (preview == null && focusedChannel != null) {
-                            LiveText(liveChannelIdleLabel(state.programs.any { it.channelId == focusedChannel.id }), true, small = true)
+                            LiveText(
+                                liveChannelIdleLabel(
+                                    state.programs.any { it.channelId == focusedChannel.id },
+                                    state.offline || state.error != null
+                                ),
+                                true,
+                                small = true
+                            )
                         }
                         preview?.let { show ->
                             LiveText(
@@ -373,10 +381,11 @@ internal fun LiveTvScreen(
             if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
                     if (!tv) LiveGuideDateBar(state.windowStart, now, false, !state.loading, vm::refresh)
-                    if (state.programs.isEmpty() && !state.loading) LiveText(NO_LIVE_GUIDE, tv, small = true)
+                    if (state.programs.isEmpty() && !state.loading) LiveText(liveGuideEmptyMessage(guideUnavailable), tv, small = true)
                     LiveGuide(
                         channels, state.programs, account, tv, state.windowStart, now, guideScroll, guideList,
                         returnFocus, restoreFocus, ::focused,
+                        guideUnavailable = guideUnavailable,
                         channelHeader = { LiveGuideDateBar(state.windowStart, now, true, !state.loading, vm::refresh) }
                     ) {
                         selectedProgram =
@@ -530,7 +539,7 @@ internal fun LiveTvScreen(
                                     state.channels.isNotEmpty() &&
                                     state.programs.isEmpty()
                                 ) {
-                                    item { LiveListText(NO_LIVE_GUIDE, tv) }
+                                    item { LiveListText(liveGuideEmptyMessage(guideUnavailable), tv) }
                                 }
                                 itemsIndexed(channels, key = { _, channel -> "channel:${channel.id}" }) { index, channel ->
                                     val key = "c:${channel.id}"
@@ -551,6 +560,7 @@ internal fun LiveTvScreen(
                                             canFavorite = state.policy?.userData == true,
                                             favoriteEnabled = canAct && !state.writing,
                                             tuneEnabled = canAct,
+                                            guideUnavailable = guideUnavailable,
                                             onFavorite = { vm.favorite(channel) }, onTune = { if (canAct) onPlay(channel.mediaItem()) }
                                         )
                                     } else {

@@ -1480,6 +1480,40 @@
         "status": "Live position unavailable",
         "clock": ""
       }
+    },
+    {
+      "id": "live-presentation.channel-failed-guide",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": false,
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.channel-cached-gap-failed-refresh",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": true,
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.failed-guide-message",
+      "operation": "guide-empty-message",
+      "input": {
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.successful-empty-guide-message",
+      "operation": "guide-empty-message",
+      "input": {
+        "unavailable": false
+      },
+      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
     }
   ]
 }

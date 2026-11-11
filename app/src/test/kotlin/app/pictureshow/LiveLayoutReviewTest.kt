@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -57,6 +58,26 @@ class LiveLayoutReviewTest {
 
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
+
+    @Test fun failedColdGuideReadNeverClaimsThatAnAdministratorMustAddXmltvOrThatTuningWorks() {
+        val fake = LiveFake().apply { failPrograms = true }
+        compose.setContent {
+            PictureshowTheme {
+                LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:c:c").assertIsNotEnabled()
+        compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
+        assertTrue(compose.onAllNodesWithText("Guide unavailable", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
+        assertTrue(compose.onAllNodesWithText("Guide unavailable", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText("List").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
+        compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
+        compose.onNodeWithText("Guide unavailable").assertIsDisplayed()
+    }
 
     @Test fun tvLinearGuideKeepsTimeControlsAboveTheListAfterAnotherTabScrolled() {
         val now = Instant.now()

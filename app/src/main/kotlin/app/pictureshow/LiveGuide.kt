@@ -62,6 +62,7 @@ internal fun LiveGuide(
     returnFocus: String?,
     restore: Boolean,
     onFocus: (String) -> Unit,
+    guideUnavailable: Boolean = false,
     channelHeader: @Composable () -> Unit = { LiveText("Channel", tv, small = true) },
     onOpen: (LiveProgram) -> Unit
 ) {
@@ -244,7 +245,14 @@ internal fun LiveGuide(
                                 ).width(2.dp).height(rowHeight * lanes).background(LiveAccent).testTag("live:now-line")
                             )
                         }
-                        if (cells.isEmpty()) LiveText("No guide data", tv, Modifier.padding(8.dp), small = true)
+                        if (cells.isEmpty()) {
+                            LiveText(
+                                liveChannelIdleLabel(false, guideUnavailable),
+                                tv,
+                                Modifier.padding(8.dp),
+                                small = true
+                            )
+                        }
                     }
                 }
             }
