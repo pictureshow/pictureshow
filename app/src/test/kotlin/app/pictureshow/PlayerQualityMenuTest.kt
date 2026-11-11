@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import android.app.Application
+import android.view.WindowManager
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import java.io.File
@@ -45,6 +47,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -95,7 +98,7 @@ class PlayerQualityMenuTest {
     }
 
     @Test
-    @Config(qualifiers = "w800dp-h360dp-land-mdpi")
+    @Config(qualifiers = "w720dp-h360dp-land-mdpi")
     fun shortLandscapeQualityMenuRevealsOverflowAndSelectsLowerCapOnce() {
         val file = listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
             .single { it.isFile }
@@ -135,6 +138,19 @@ class PlayerQualityMenuTest {
             }
         }
         compose.runOnIdle {
+            // Controlled allocation fault matching the observed phone default: Robolectric
+            // otherwise gives WRAP_CONTENT dialogs more width than that native phone.
+            // Explicit full-window dialogs retain their real measured allocation.
+            val window = requireNotNull(ShadowDialog.getLatestDialog().window)
+            if (window.attributes.width == WindowManager.LayoutParams.WRAP_CONTENT) {
+                window.setLayout(
+                    input.getValue("platformDefaultDialogWidthDp").jsonPrimitive.int,
+                    WindowManager.LayoutParams.WRAP_CONTENT
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
             assertEquals(expected.getValue("selectionCountOnOpen").jsonPrimitive.int, selections)
             assertEquals(null, value)
             assertEquals(0, closes)
@@ -145,9 +161,27 @@ class PlayerQualityMenuTest {
         assertEquals(1, compose.onAllNodesWithText(hint).fetchSemanticsNodes().size, "A short Quality menu must reveal its lower choices")
         compose.onNodeWithText(hint).assertIsDisplayed()
         val viewport = compose.onNodeWithTag("player:quality-menu").getBoundsInRoot()
+        assertEquals(
+            true,
+            (viewport.right.value - viewport.left.value) >= expected.getValue("minimumContentWidthDp").jsonPrimitive.float,
+            "A short phone Quality menu must use enough available width for its explanation: $viewport"
+        )
         val supporting = input.getValue("automaticContext").jsonPrimitive.content + "\n" +
             input.getValue("reductionNotice").jsonPrimitive.content
-        val supportBounds = compose.onNodeWithText(supporting, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val support = compose.onNodeWithText(supporting, useUnmergedTree = true)
+        val supportBounds = support.getUnclippedBoundsInRoot()
+        val layouts = mutableListOf<TextLayoutResult>()
+        support.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.size, "Auto explanation must expose its actual text layout")
+        val layout = layouts.single()
+        assertEquals(
+            true,
+            !layout.hasVisualOverflow &&
+                layout.lineCount >= 2 &&
+                (0 until layout.lineCount).none(layout::isLineEllipsized) &&
+                layout.getLineEnd(layout.lineCount - 1, visibleEnd = true) == supporting.length,
+            "The full Auto limit and reduction explanation must be rendered before scrolling"
+        )
         val supportFullyVisible = supportBounds.top >= viewport.top &&
             supportBounds.bottom <= viewport.bottom &&
             supportBounds.left >= viewport.left &&

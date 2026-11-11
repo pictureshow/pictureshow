@@ -114,18 +114,20 @@
       "id": "playback-settings-layout.player-quality-landscape-overflow-font1.3",
       "operation": "player-quality-short-window-overflow",
       "input": {
-        "widthDp": 800,
+        "widthDp": 720,
         "heightDp": 360,
         "fontScale": 1.3,
         "automaticContext": "Automatic: Home limit 200 Mbps",
         "selectMbps": 4,
-        "reductionNotice": "Quality limit reduced to 20 Mbps to avoid buffering."
+        "reductionNotice": "Quality limit reduced to 20 Mbps to avoid buffering.",
+        "platformDefaultDialogWidthDp": 320
       },
       "expected": {
         "overflowHint": "Scroll for more options",
         "selectionCountOnOpen": 0,
         "selectionCountAfterChoice": 1,
-        "closeCountAfterChoice": 1
+        "closeCountAfterChoice": 1,
+        "minimumContentWidthDp": 480
       }
     }
   ]
