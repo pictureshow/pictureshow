@@ -158,8 +158,8 @@ internal fun LiveChip(
     label: String,
     selected: Boolean,
     tv: Boolean,
-    enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     controlHeight: Dp? = null,
     onClick: () -> Unit
 ) {

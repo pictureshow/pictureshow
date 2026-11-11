@@ -5,8 +5,8 @@ package app.pictureshow
 
 import android.text.format.DateFormat
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -67,10 +67,9 @@ internal class LiveTime(
 @Composable
 internal fun liveTime(): LiveTime {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
     return LiveTime(
         DateFormat.is24HourFormat(context),
-        androidx.core.os.ConfigurationCompat.getLocales(configuration)[0] ?: Locale.getDefault()
+        LocalLocale.current.platformLocale
     )
 }
 

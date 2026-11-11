@@ -178,8 +178,8 @@ private fun RowScope.TouchRowText(title: String, supporting: String?, enabled: B
 internal fun TouchValueRow(
     title: String,
     value: String,
-    enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {

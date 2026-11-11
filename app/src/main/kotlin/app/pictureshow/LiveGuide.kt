@@ -150,16 +150,16 @@ internal fun LiveGuide(
                                 if (show.hasRecordingTimer()) " · Recording scheduled" else ""
                             val x = inset + cell.startFraction * LIVE_GUIDE_WIDTH
                             var isFocused by remember(show.id) { mutableStateOf(false) }
-                            val shift = if (tv &&
-                                isFocused
-                            ) {
-                                liveGuideFocusShift(x, width - 2, scroll.value / density.density, viewportWidth)
-                            } else {
-                                0f
-                            }
                             val target = Modifier.offset(x = x.dp, y = rowHeight * cell.lane + if (tv) 4.dp else 0.dp)
                                 .width(width.dp).height(rowHeight - if (tv) 8.dp else 2.dp)
-                                .graphicsLayer { translationX = with(density) { shift.dp.toPx() } }
+                                .graphicsLayer {
+                                    val shift = if (tv && isFocused) {
+                                        liveGuideFocusShift(x, width - 2, scroll.value / density.density, viewportWidth)
+                                    } else {
+                                        0f
+                                    }
+                                    translationX = with(density) { shift.dp.toPx() }
+                                }
                                 .onFocusChanged { isFocused = it.isFocused }
                                 .liveFocus(
                                     key,

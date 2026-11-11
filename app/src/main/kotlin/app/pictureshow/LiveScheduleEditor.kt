@@ -205,7 +205,7 @@ internal fun LiveScheduleEditor(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         liveRecordingWeekdays.forEach { day ->
-                            LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled) {
+                            LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled = enabled) {
                                 val next = if (day in days) days - day else days + day
                                 edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
                             }
@@ -260,7 +260,7 @@ private fun LiveOption(
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
-        BoxOption(modifier) { TouchValueRow(title, value, enabled) { open = true } }
+        BoxOption(modifier) { TouchValueRow(title, value, enabled = enabled) { open = true } }
     }
     if (open) {
         LiveMenu(
@@ -339,6 +339,6 @@ private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boole
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
-        TouchValueRow("More options", if (expanded) "Expanded" else "Collapsed", enabled, modifier, icon, onClick)
+        TouchValueRow("More options", if (expanded) "Expanded" else "Collapsed", modifier, enabled, icon, onClick)
     }
 }

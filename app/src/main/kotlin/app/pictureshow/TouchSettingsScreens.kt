@@ -252,7 +252,7 @@ private fun <T> TouchChoice(
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    TouchValueRow(title, label(value), enabled) { open = true }
+    TouchValueRow(title, label(value), enabled = enabled) { open = true }
     if (open) {
         val shortWindow = isShortTouchWindow()
         AlertDialog(

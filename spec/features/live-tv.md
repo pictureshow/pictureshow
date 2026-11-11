@@ -221,3 +221,5 @@ detail and restores actions only after a successful fresh read; it never tunes o
 Main Live TV destinations retain the last successful fetch time in every view mode, including phone Grid and List.
 The phone app bar carries the secondary freshness line without adding a content row. A missing fetch time creates no
 timestamp; offline cached data uses “Offline · last loaded”. Times follow the same device-clock and DST-fold rules.
+
+Locale-sensitive Live TV text reads the current observable composition/app locale. A locale change recomputes guide, details, schedules and player labels; a cached process-global locale is not an authoritative substitute. Japanese twelve-hour period placement is retained by the localized clock pattern (live-presentation.device-japanese-twelve-hour). Guide focus paint may follow horizontal scrolling in layout/draw without recomposing every program for every scroll pixel; time geometry and focus restoration remain unchanged.
