@@ -136,8 +136,18 @@ final class CatalogPresentationUITests: XCTestCase {
             // speech below still comes solely from the OS service, and all
             // subsequent backward/forward and selected-state checks remain.
             XCTAssertTrue(anchor.exists && anchor.isHittable)
-            anchor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // A multiline native Toggle exposes a row-sized Switch containing
+            // its actual switch thumb. The row centre can land on descriptive
+            // text and explore the following footer instead of the control.
+            let nativeSwitches = anchor.descendants(matching: .switch)
+            let explorationTarget = anchor.elementType == .switch && nativeSwitches.count == 1
+                ? nativeSwitches.firstMatch : anchor
+            let valueBeforeExploration = anchor.value as? String
+            XCTAssertTrue(explorationTarget.exists && explorationTarget.isHittable)
+            XCTAssertTrue(anchor.frame.contains(explorationTarget.frame), "Explore only this control's contained native switch")
+            explorationTarget.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             XCTAssertTrue(anchor.exists, "Reader exploration must not activate or leave the current screen")
+            XCTAssertEqual(anchor.value as? String, valueBeforeExploration, "One reader exploration touch must not change the control's value")
             #endif
             var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
             if output == nil {
@@ -210,7 +220,11 @@ final class CatalogPresentationUITests: XCTestCase {
         if app.keyboards.firstMatch.exists { XCUIRemote.shared.press(.menu) }
         #else
         let done = app.buttons["dismissSignInKeyboard"]
-        if done.exists && done.isHittable { done.tap() }
+        // Keyboard toolbars can leave an existing AX node without an activation
+        // frame after the synthetic credentials dismiss the software keyboard.
+        // Query hittability only for a real visible keyboard control.
+        if app.keyboards.firstMatch.exists && done.exists && !done.frame.isEmpty
+            && app.windows.firstMatch.frame.intersects(done.frame) && done.isHittable { done.tap() }
         #endif
         activate(signIn, app: app)
         let library = app.buttons["item-catalog-library"]
@@ -336,7 +350,11 @@ final class CatalogPresentationUITests: XCTestCase {
         if app.keyboards.firstMatch.exists { XCUIRemote.shared.press(.menu) }
         #else
         let done = app.buttons["dismissSignInKeyboard"]
-        if done.exists && done.isHittable { done.tap() }
+        // Keyboard toolbars can leave an existing AX node without an activation
+        // frame after the synthetic credentials dismiss the software keyboard.
+        // Query hittability only for a real visible keyboard control.
+        if app.keyboards.firstMatch.exists && done.exists && !done.frame.isEmpty
+            && app.windows.firstMatch.frame.intersects(done.frame) && done.isHittable { done.tap() }
         #endif
         activate(signIn, app: app)
         let library = app.buttons["item-catalog-library"]

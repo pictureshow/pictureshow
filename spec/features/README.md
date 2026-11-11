@@ -52,3 +52,5 @@ the fixture, and verifies the player stays READY before releasing that response.
 assertions: readiness alone does not establish that only the selected subtitle loaded or that its cue arrived.
 
 Native focus evidence follows the actual platform focus owner. In a tvOS Form, the native row can own focus around a contained switch; tests must require that the focused row contains that exact control, then verify real navigation away and back and the reader's spoken control/state. A child's `hasFocus` value alone does not establish or disprove that interaction. The Apple suite bounds this comparison to the target's center inside a focused row shorter than three target heights, so a surrounding screen cannot stand in for the control's row.
+
+For iOS multiline native Toggles, a row-sized accessibility Switch can contain the actual native switch thumb. Reader exploration targets that contained thumb when unique and verifies the control value stays unchanged; actual OS utterances and navigation away/return remain separate required observations.
