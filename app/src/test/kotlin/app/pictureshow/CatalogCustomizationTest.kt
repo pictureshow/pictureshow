@@ -199,6 +199,8 @@ class CatalogCustomizationTest {
             }
         }
         compose.onNodeWithTag("home:overflow:${pin.key}").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("home:overflow:${pin.key}").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Row options").assertDoesNotExist()
         compose.onNodeWithTag("home:unpin").assertIsFocused().assert(
             SemanticsMatcher("Unpin is a command rather than a radio choice") {
@@ -226,7 +228,9 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertEquals(before, preferences) }
         compose.onNodeWithTag("home:reset-cancel").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
-        compose.onNodeWithText("Restore default layout").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("home:reset-opener").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("home:reset-opener").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("home:reset-confirm").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(HomePreferences(libraries = before.libraries), preferences) }
     }

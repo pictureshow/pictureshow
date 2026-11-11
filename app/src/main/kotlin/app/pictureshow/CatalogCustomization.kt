@@ -306,6 +306,15 @@ internal fun HomeCustomization(
     val scope = rememberCoroutineScope()
     var picker by remember { mutableStateOf<HomePinKind?>(null) }
     var confirmingReset by remember { mutableStateOf(false) }
+    val resetOpener = remember { FocusRequester() }
+    var restoreResetFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(confirmingReset, restoreResetFocus) {
+        if (tv && !confirmingReset && restoreResetFocus) {
+            withFrameNanos { }
+            resetOpener.requestFocus()
+            restoreResetFocus = false
+        }
+    }
     var moving by remember { mutableStateOf<String?>(null) }
     var draftOrder by remember { mutableStateOf<List<String>?>(null) }
     val preferences = state.preferences
@@ -460,15 +469,26 @@ internal fun HomeCustomization(
             }
         }
         item("reset-heading") { CatalogSection("Layout") }
-        item { CatalogActionRow("Restore default layout", { confirmingReset = true }, enabled = !state.saving && moving == null) }
+        item {
+            CatalogActionRow(
+                "Restore default layout",
+                { confirmingReset = true },
+                Modifier.focusRequester(resetOpener).testTag("home:reset-opener"),
+                enabled = !state.saving && moving == null
+            )
+        }
     }
     if (confirmingReset) {
         HomeLayoutResetConfirmation(
             confirm = {
                 confirmingReset = false
+                restoreResetFocus = true
                 change { resetHomeLayout(it, confirmed = true) }
             },
-            close = { confirmingReset = false }
+            close = {
+                confirmingReset = false
+                restoreResetFocus = true
+            }
         )
     }
     picker?.let { kind ->

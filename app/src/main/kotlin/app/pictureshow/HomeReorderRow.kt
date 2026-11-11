@@ -18,6 +18,7 @@ import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -68,6 +70,15 @@ internal fun HomeReorderRow(
     var height by remember { mutableIntStateOf(1) }
     var drag by remember { mutableFloatStateOf(0f) }
     var overflow by remember { mutableStateOf(false) }
+    val overflowOpener = remember { FocusRequester() }
+    var restoreOverflowFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(overflow, restoreOverflowFocus) {
+        if (tv && !overflow && restoreOverflowFocus) {
+            withFrameNanos { }
+            overflowOpener.requestFocus()
+            restoreOverflowFocus = false
+        }
+    }
     val hint = homeRowEditHint(shown, moving, tv)
     val secondaryEnabled = enabled && !moving
     val semantics = Modifier.semantics {
@@ -153,7 +164,7 @@ internal fun HomeReorderRow(
                 androidx.tv.material3.IconButton(
                     onClick = { overflow = !overflow },
                     enabled = secondaryEnabled,
-                    modifier = Modifier.size(48.dp).testTag("home:overflow:$key")
+                    modifier = Modifier.size(48.dp).focusRequester(overflowOpener).testTag("home:overflow:$key")
                 ) {
                     androidx.tv.material3.Icon(touchActionIcon("more"), "Options for $title")
                 }
@@ -211,7 +222,10 @@ internal fun HomeReorderRow(
         // Only pinned rows have this overflow. It never expands the normal row into a stack of bars.
         if (tv && overflow) {
             val first = remember { FocusRequester() }
-            TvSettingsPanel(title, { overflow = false }, first) {
+            TvSettingsPanel(title, {
+                overflow = false
+                restoreOverflowFocus = true
+            }, first) {
                 TvSettingsRow(
                     "Unpin",
                     null,
