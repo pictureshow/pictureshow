@@ -1082,6 +1082,7 @@ internal class MusicHost(
 
     /** Incoming group corrections bypass the viewer/OS command functions, so they never echo. */
     internal val syncBridge = object : SyncRenderer {
+        override val sourceIdentity: Any get() = player ?: this
         override fun snapshot(): SyncRendererState {
             val running = player
             val q = queue.committed

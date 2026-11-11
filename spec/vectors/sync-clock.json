@@ -361,6 +361,246 @@
         "phase": "Waiting"
       },
       "expected": false
+    },
+    {
+      "id": "unpause-echo-new-emission-same-timeline",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "unpause-echo-not-yet-applied",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": null,
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-changed-group",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "other",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-changed-entry",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "b",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-changed-when",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1001,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-changed-position",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000001,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-changed-command",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Pause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-previous-pause",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Pause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": 50000000,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "unpause-echo-missing-position",
+      "op": "same-unpause-timeline",
+      "input": {
+        "applied": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": null,
+          "emitted": 9000000
+        },
+        "received": {
+          "group": "g",
+          "entry": "a",
+          "command": "Unpause",
+          "when": 1000,
+          "position": null,
+          "emitted": 15000000
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "seek-feedback-automatic-no-preview",
+      "op": "seek-feedback",
+      "input": {
+        "previous": null,
+        "target": 7000,
+        "showFeedback": false
+      },
+      "expected": null
+    },
+    {
+      "id": "seek-feedback-automatic-preserves-deliberate-preview",
+      "op": "seek-feedback",
+      "input": {
+        "previous": 1234,
+        "target": 7000,
+        "showFeedback": false
+      },
+      "expected": 1234
+    },
+    {
+      "id": "seek-feedback-viewer-starts-preview",
+      "op": "seek-feedback",
+      "input": {
+        "previous": null,
+        "target": 7000,
+        "showFeedback": true
+      },
+      "expected": 7000
+    },
+    {
+      "id": "seek-feedback-viewer-replaces-preview",
+      "op": "seek-feedback",
+      "input": {
+        "previous": 1234,
+        "target": 7000,
+        "showFeedback": true
+      },
+      "expected": 7000
     }
   ]
 }

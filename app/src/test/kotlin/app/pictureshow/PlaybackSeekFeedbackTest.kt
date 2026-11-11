@@ -1,0 +1,112 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
+package app.pictureshow
+
+import android.app.Application
+import android.os.Looper
+import androidx.compose.runtime.mutableStateOf
+import androidx.media3.common.C
+import androidx.media3.common.Player
+import androidx.media3.common.SimpleBasePlayer
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.Server
+import com.google.common.util.concurrent.Futures
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import org.junit.Rule
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+
+/** Exercise the real host's immediate and deferred native-seek paths. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [30], application = Application::class)
+class PlaybackSeekFeedbackTest {
+    @get:Rule val timeLimit = PerTestTimeLimit(180)
+
+    private class LocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
+        val seeks = mutableListOf<Long>()
+        private var seekable = true
+        private var position = 1_000L
+        override fun getState(): State = State.Builder()
+            .setAvailableCommands(
+                Player.Commands.Builder().apply {
+                    add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+                    add(Player.COMMAND_GET_TIMELINE)
+                    add(Player.COMMAND_RELEASE)
+                    if (seekable) add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                }.build()
+            )
+            .setPlaylist(
+                listOf(
+                    MediaItemData.Builder("entry")
+                        .setMediaItem(androidx.media3.common.MediaItem.fromUri("https://media.example.test/video"))
+                        .setDurationUs(600_000_000).setIsSeekable(true).build()
+                )
+            )
+            .setPlaybackState(Player.STATE_READY)
+            .setContentPositionMs(position)
+            .build()
+        override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int) = Futures.immediateVoidFuture().also {
+            seeks += positionMs
+            position = positionMs.takeUnless { it == C.TIME_UNSET } ?: 0
+        }
+        override fun handleRelease() = Futures.immediateVoidFuture()
+        fun allowSeek(value: Boolean) {
+            seekable = value
+            invalidateState()
+        }
+    }
+
+    @Test fun automaticAlignmentDoesNotOpenOrReplaceTheViewersSeekPreview() {
+        for (prior in listOf(null, 1_234L)) {
+            val output =
+                Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+            val player = LocalPlayer()
+            try {
+                val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+                host.playerSource = mutableStateOf(player)
+                host.seekPreview = prior
+                var revealed = 0
+                host.onSeekShown = { revealed++ }
+                host.seekToLocal(7_000, revealControls = false)
+                assertEquals(listOf(7_000L), player.seeks)
+                assertEquals(7_000L, host.position)
+                assertEquals(prior, host.seekPreview, "automatic alignment must not create or overwrite user seek feedback")
+                assertEquals(0, revealed)
+                assertNull(host.pendingSeek)
+            } finally {
+                player.release()
+                output.release()
+            }
+        }
+    }
+
+    @Test fun deferredAutomaticAlignmentRetainsItsFeedbackIntentUntilSeekingIsAvailable() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+        val player = LocalPlayer()
+        try {
+            val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+            host.playerSource = mutableStateOf(player)
+            host.seekPreview = 1_234
+            player.allowSeek(false)
+            host.seekToLocal(7_000, revealControls = false)
+            assertEquals(7_000L, host.pendingSeek)
+            assertEquals(1_234L, host.seekPreview)
+            player.allowSeek(true)
+            host.applyPendingSeek()
+            assertEquals(listOf(7_000L), player.seeks)
+            assertEquals(1_234L, host.seekPreview, "deferred completion must preserve the automatic intent")
+            host.seekToLocal(8_000)
+            assertEquals(8_000L, host.seekPreview, "a subsequent deliberate seek still gets feedback")
+        } finally {
+            player.release()
+            output.release()
+        }
+    }
+}

@@ -93,6 +93,16 @@ fun syncScheduledPosition(command: String, currentTicks: Long, targetTicks: Long
         targetTicks
     }
 
+/** A Ready response may freshly emit an Unpause whose positional timeline already took effect. */
+fun syncSameUnpauseTimeline(applied: SyncCommand?, received: SyncCommand): Boolean = applied != null &&
+    applied.command == "Unpause" &&
+    received.command == "Unpause" &&
+    applied.groupId == received.groupId &&
+    applied.playlistItemId == received.playlistItemId &&
+    applied.whenMs == received.whenMs &&
+    applied.positionTicks != null &&
+    applied.positionTicks == received.positionTicks
+
 /** A phase notification cannot turn an already-applied paused Seek into a playing timeline. */
 fun syncTimelinePlaying(command: String, appliedPlaying: Boolean): Boolean = command == "Unpause" || (command == "Seek" && appliedPlaying)
 

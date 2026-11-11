@@ -167,6 +167,8 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     host.sync = sync
     val bridge = remember(host, sync) {
         object : SyncRenderer {
+            override val sourceIdentity: Any get() = host.player ?: host.output
+            override val positionApplicationPending: Boolean get() = host.pendingSeek != null || host.state.seekTargetMs != null
             override fun snapshot(): SyncRendererState = host.syncRendererSnapshot()
             override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
                 var positionChanged = false

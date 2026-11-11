@@ -104,6 +104,12 @@ internal class PlaybackHostState(
     /** Both are scoped to one decoder; [rememberPlaybackHostState] replaces them when the player changes. */
     internal var seekPreviewSource by mutableStateOf<MutableState<Long?>>(mutableStateOf(null))
     internal var pendingSeekSource by mutableStateOf<MutableState<Long?>>(mutableStateOf(null))
+    internal var pendingSeekFeedbackSource by mutableStateOf<MutableState<Boolean>>(mutableStateOf(true))
+    private var pendingSeekFeedback: Boolean
+        get() = pendingSeekFeedbackSource.value
+        set(value) {
+            pendingSeekFeedbackSource.value = value
+        }
     var seekPreview: Long?
         get() = seekPreviewSource.value
         set(value) {
@@ -199,10 +205,12 @@ internal class PlaybackHostState(
         val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
         val target = requested.coerceIn(0, limit)
         // Clear before seekTo: its synchronous callbacks can update available commands.
+        val feedback = pendingSeekFeedback
         pendingSeek = null
+        pendingSeekFeedback = true
         active.seekTo(target)
         position = target
-        seekPreview = target
+        seekPreview = app.pictureshow.core.playback.SeekSteps.preview(seekPreview, target, feedback)
     }
 
     /** A relative step, accumulating against the last intended target (PLAY-07). */
@@ -217,6 +225,7 @@ internal class PlaybackHostState(
             val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
             val target = ((pendingSeek ?: seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
             pendingSeek = target
+            pendingSeekFeedback = true
             position = target
             seekPreview = target
             applyPendingSeek()
@@ -237,11 +246,12 @@ internal class PlaybackHostState(
             controller?.seek(targetMs, current) == true
         ) {
             position = targetMs
-            seekPreview = targetMs
+            seekPreview = app.pictureshow.core.playback.SeekSteps.preview(seekPreview, targetMs, revealControls)
         } else {
             pendingSeek = targetMs
+            pendingSeekFeedback = revealControls
             position = targetMs
-            seekPreview = targetMs
+            seekPreview = app.pictureshow.core.playback.SeekSteps.preview(seekPreview, targetMs, revealControls)
             applyPendingSeek()
         }
         if (revealControls) onSeekShown()
@@ -276,6 +286,7 @@ internal fun rememberPlaybackHostState(
     val player = host.player
     host.seekPreviewSource = remember(player) { mutableStateOf(null) }
     host.pendingSeekSource = remember(player) { mutableStateOf(null) }
+    host.pendingSeekFeedbackSource = remember(player) { mutableStateOf(true) }
     return host
 }
 

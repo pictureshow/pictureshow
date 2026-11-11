@@ -89,6 +89,9 @@ internal data class SyncRendererState(
 )
 
 internal interface SyncRenderer {
+    /** A stable bridge can outlive the native decoder it currently controls. */
+    val sourceIdentity: Any get() = this
+    val positionApplicationPending: Boolean get() = false
     fun snapshot(): SyncRendererState
 
     /** Bypasses outgoing transport interception; returns whether a position seek was actually issued. */
@@ -146,6 +149,14 @@ internal class SyncPlayHost(
     private var timeline: SyncCommand? = null
     private var timelinePlaying = false
     private var timelineApplied = false
+    private data class AppliedUnpause(
+        val token: Any?,
+        val renderer: SyncRenderer,
+        val sourceIdentity: Any,
+        val generation: Long,
+        val command: app.pictureshow.core.sync.SyncCommand
+    )
+    private var appliedUnpause: AppliedUnpause? = null
     private var drift = SyncDriftState()
     private var readiness = SyncReadinessState()
     private var stoppedEntry: String? = null
@@ -290,6 +301,7 @@ internal class SyncPlayHost(
             scheduled?.cancel()
             pause("membership-reconnecting")
             timeline = null
+            appliedUnpause = null
             publish()
             // A fresh deliberate rejoin is visible; avoid loops on unknown future event types.
             note(after.notice ?: "Synchronization needs a fresh group snapshot. Leave and join again.")
@@ -306,6 +318,7 @@ internal class SyncPlayHost(
             scheduled?.cancel()
             pause("queue-entry")
             timeline = null
+            appliedUnpause = null
             drift = stopSyncDrift()
             readiness = SyncReadinessState()
             requestedOpen = null
@@ -510,6 +523,7 @@ internal class SyncPlayHost(
             "accepted=true candidateToken=${traceToken(token)} replacedToken=${traceToken(rendererToken)} " +
                 "openGeneration=${opening?.generation ?: -1} openEntry=${traceId(opening?.entryId)} " + stateFields(next.snapshot())
         )
+        if (rendererToken !== token || renderer !== next) appliedUnpause = null
         rendererToken = token
         renderer = next
         if (opening != null && opening.entryId == openingEntry) openingEntry = null
@@ -527,6 +541,7 @@ internal class SyncPlayHost(
         trace("clear", "clearToken=${traceToken(token)} accepted=${rendererToken === token} " + stateFields())
         if (rendererToken !== token) return
         renderer = null
+        appliedUnpause = null
         rendererToken = null
         pendingSource = null
         awaitingSource = null
@@ -692,6 +707,7 @@ internal class SyncPlayHost(
             completed = true
             next.best?.let { send(syncPing(it.networkRttMillis)) }
             if (anchor == null) {
+                appliedUnpause = null
                 pause("clock-calibration")
                 note("Synchronization unavailable: no valid server clock samples. Leave or try joining again.")
             }
@@ -725,6 +741,7 @@ internal class SyncPlayHost(
         }
         val r = output.snapshot()
         if (participating && r.ready && !r.seekable) {
+            appliedUnpause = null
             pause("source-ineligible", output)
             note("Watch together is unavailable for this source. Leave the group to play it separately.")
         }
@@ -771,6 +788,7 @@ internal class SyncPlayHost(
         }
         val now = anchor?.serverNowTicks(wall(), monotonic())
         if (now == null) {
+            appliedUnpause = null
             pause("clock-unavailable", output)
             note("Synchronization unavailable: refresh the server clock by joining again.")
             tickTrace("clock-unavailable", r)
@@ -865,7 +883,15 @@ internal class SyncPlayHost(
         return true
     }
 
+    private fun alreadyAppliedUnpause(command: SyncCommand): Boolean = appliedUnpause?.let {
+        it.token === rendererToken &&
+            it.renderer === renderer &&
+            it.sourceIdentity === renderer?.sourceIdentity &&
+            it.generation == membership.generation &&
+            app.pictureshow.core.sync.syncSameUnpauseTimeline(it.command, command)
+    } == true
     private fun schedule(command: SyncCommand, retainedPlaying: Boolean? = null) {
+        if (!alreadyAppliedUnpause(command)) appliedUnpause = null
         scheduled?.cancel()
         // Acceptance can publish Playing before When. The ticker must wait on this command,
         // rather than extrapolating a previous paused Seek through the wait interval.
@@ -878,6 +904,7 @@ internal class SyncPlayHost(
         scheduled = scope.launch {
             var outcome = "unfinished"
             fun abort(reason: String) {
+                if (reason == "clock-before-wait" || reason == "clock-after-wait") appliedUnpause = null
                 outcome = reason
                 trace("schedule-abort", "attempt=$attempt reason=$reason " + stateFields())
             }
@@ -942,16 +969,43 @@ internal class SyncPlayHost(
                         return@launch
                     }
                 diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
-                val position = syncScheduledPosition(command.command, r.positionTicks, execution.positionTicks)
+                // A Ready response can repeat an already-applied timeline with a new
+                // message/emission identity. Resume its mode without bypassing the
+                // autonomous correction cooldown with another positional seek.
+                val alreadyPositioned = alreadyAppliedUnpause(command)
+                val position = if (alreadyPositioned) {
+                    null
+                } else {
+                    syncScheduledPosition(
+                        command.command,
+                        r.positionTicks,
+                        execution.positionTicks
+                    )
+                }
                 trace(
                     "apply-before",
                     "source=scheduled attempt=$attempt playing=$playing seekTicks=${position ?: -1} nowTicks=$at " + stateFields(r)
                 )
-                val positionChanged = renderer?.apply(position, playing) == true
+                val applyingRenderer = renderer
+                val applyingToken = rendererToken
+                val applyingSource = applyingRenderer?.sourceIdentity
+                val positionChanged = applyingRenderer?.apply(position, playing) == true
                 // A BUFFERING -> READY cycle can finish between 250 ms samples. The old
                 // acknowledgement belongs to the pre-seek position, even if both samples are READY.
                 readiness = readiness.afterPositionApplied(positionChanged)
                 timelineApplied = !intendedPlaying || playing
+                if (!alreadyPositioned &&
+                    command.command == "Unpause" &&
+                    playing &&
+                    timelineApplied &&
+                    applyingRenderer != null &&
+                    !applyingRenderer.positionApplicationPending &&
+                    renderer === applyingRenderer &&
+                    rendererToken === applyingToken &&
+                    applyingSource === applyingRenderer.sourceIdentity
+                ) {
+                    appliedUnpause = AppliedUnpause(applyingToken, applyingRenderer, requireNotNull(applyingSource), generation, command)
+                }
                 // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
                 drift = syncTransportApplied(drift, monotonic(), positionChanged)
                 outcome = "applied"
@@ -964,6 +1018,7 @@ internal class SyncPlayHost(
     }
 
     private fun resetClock(reason: String) {
+        appliedUnpause = null
         trace("clock-reset", "reason=$reason nextAnchorGeneration=${anchorGeneration + 1} " + stateFields())
         pendingSource = null
         awaitingSource = null

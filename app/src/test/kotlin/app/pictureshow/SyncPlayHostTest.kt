@@ -49,12 +49,17 @@ class SyncPlayHostTest {
     private data class Applied(val position: Long?, val playing: Boolean?, val rate: Double)
 
     private class Renderer : SyncRenderer {
+        override var sourceIdentity: Any = Any()
+        override var positionApplicationPending = false
         var value = SyncRendererState("local-item", 123_456_789L, 9_000_000_000L, true, false, true, true)
         val applied = mutableListOf<Applied>()
         var bufferOnSeek = false
         override fun snapshot() = value
         override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
-            val positionChanged = positionTicks != null && kotlin.math.abs(value.positionTicks / 10_000 - positionTicks / 10_000) > 1
+            val positionChanged =
+                !positionApplicationPending &&
+                    positionTicks != null &&
+                    kotlin.math.abs(value.positionTicks / 10_000 - positionTicks / 10_000) > 1
             applied += Applied(positionTicks.takeIf { positionChanged }, playing, rate)
             value =
                 value.copy(
@@ -591,6 +596,145 @@ class SyncPlayHostTest {
         rig.host.tick()
         runCurrent()
         assertFalse(rig.operations().any { it in setOf("Buffering", "Unpause", "Seek") })
+    }
+
+    @Test fun aFreshEmissionOfAnAppliedUnpauseResumesWithoutRepeatingItsPositionalSeek() = runTest {
+        for (waiting in listOf(false, true)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.joined("Playing")
+            rig.queue()
+            runCurrent()
+            rig.preparedEntry()
+            rig.host.receive(rig.command("Unpause", ticks = 50_000_000L, id = "initial"))
+            runCurrent()
+            assertTrue(rig.renderer.value.playing)
+            rig.renderer.applied.clear()
+            rig.renderer.bufferOnSeek = true
+            advanceTimeBy(100)
+            if (waiting) {
+                rig.host.receive(
+                    rig.update(
+                        "StateUpdate",
+                        buildJsonObject {
+                            put("State", "Waiting")
+                            put("Reason", "Buffering")
+                        }
+                    )
+                )
+                rig.renderer.value = rig.renderer.value.copy(playing = false)
+            }
+            // Ready can elicit a fresh emission of the exact same timeline. Its new
+            // MessageId/EmittedAt do not turn it into another explicit position change.
+            rig.host.receive(rig.command("Unpause", delayMs = -100, ticks = 50_000_000L, id = "ready-response"))
+            runCurrent()
+            if (waiting) {
+                assertFalse(rig.renderer.value.playing)
+                rig.host.receive(
+                    rig.update(
+                        "StateUpdate",
+                        buildJsonObject {
+                            put("State", "Playing")
+                            put("Reason", "Ready")
+                        }
+                    )
+                )
+                rig.host.tick()
+                runCurrent()
+            }
+            assertFalse(rig.renderer.applied.any { it.position != null }, "an applied Unpause echo must not bypass the seek cooldown")
+            assertTrue(rig.renderer.value.ready, "an equivalent timeline must not manufacture BUFFERING")
+            assertTrue(rig.renderer.value.playing, "a repeated timeline still restores its permitted playback mode")
+            assertFalse(rig.operations().any { it in setOf("Seek", "Unpause") })
+        }
+    }
+
+    @Test fun anUnpauseEchoMustStillPositionAnUnappliedOrReplacedRenderer() = runTest {
+        for (replacement in listOf("aborted", "bridge", "decoder", "pending-position")) {
+            val aborted = replacement == "aborted"
+            val rig = Rig(this)
+            rig.join()
+            rig.joined("Playing")
+            rig.queue()
+            runCurrent()
+            rig.preparedEntry()
+            rig.renderer.value = rig.renderer.value.copy(ready = !aborted)
+            rig.renderer.positionApplicationPending = replacement == "pending-position"
+            rig.host.receive(rig.command("Unpause", ticks = 50_000_000L, id = "initial"))
+            runCurrent()
+            advanceTimeBy(100)
+            val receiving = if (replacement != "bridge") {
+                rig.renderer
+            } else {
+                Renderer().also {
+                    it.value = rig.renderer.value.copy(positionTicks = 49_000_000L, playing = false)
+                    rig.host.bindRenderer(it, it)
+                }
+            }
+            if (replacement == "decoder") receiving.sourceIdentity = Any()
+            receiving.value = receiving.value.copy(ready = true, buffering = false)
+            receiving.positionApplicationPending = false
+            receiving.applied.clear()
+            rig.host.receive(rig.command("Unpause", delayMs = -100, ticks = 50_000_000L, id = "new-emission"))
+            runCurrent()
+            assertTrue(
+                receiving.applied.any {
+                    it.position != null
+                },
+                "no completed application may be borrowed from an aborted or replaced renderer"
+            )
+            assertTrue(receiving.value.playing)
+        }
+    }
+
+    @Test fun equivalentEmissionsWhileAPositionIsDeferredCannotEstablishAnAppliedMarker() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.renderer.positionApplicationPending = true
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L, id = "initial"))
+        runCurrent()
+        advanceTimeBy(100)
+        rig.host.receive(rig.command("Unpause", delayMs = -100, ticks = 50_000_000L, id = "still-deferred"))
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null }, "the native seek command remains unavailable")
+        rig.renderer.positionApplicationPending = false
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 50_000_000L)
+        advanceTimeBy(100)
+        rig.host.receive(rig.command("Unpause", delayMs = -200, ticks = 50_000_000L, id = "available"))
+        runCurrent()
+        assertTrue(
+            rig.renderer.applied.any {
+                it.position == 52_000_000L
+            },
+            "deferred echoes cannot suppress the first actual timed alignment"
+        )
+    }
+
+    @Test fun aChangedUnpauseTimelineAndExplicitPauseInvalidateTheAppliedMarker() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L))
+        runCurrent()
+        advanceTimeBy(100)
+        rig.host.receive(rig.command("Unpause", ticks = 70_000_000L, id = "changed-timeline"))
+        runCurrent()
+        assertEquals(70_000_000L, rig.renderer.value.positionTicks)
+        rig.host.receive(rig.command("Pause", ticks = 70_020_000L))
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        assertEquals(70_020_000L, rig.renderer.value.positionTicks)
+        rig.renderer.applied.clear()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L, id = "new-after-pause"))
+        runCurrent()
+        assertTrue(rig.renderer.applied.any { it.position == 50_000_000L }, "an explicit paused timeline supersedes the earlier Unpause")
     }
 
     @Test fun smallExplicitPauseAndSeekStillApplyTheirAuthoritativePositions() = runTest {

@@ -3,12 +3,15 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.playback.SeekSteps
 import app.pictureshow.core.sync.SyncClockCalibration
 import app.pictureshow.core.sync.SyncClockSample
+import app.pictureshow.core.sync.SyncCommand
 import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncDrift
+import app.pictureshow.core.sync.syncSameUnpauseTimeline
 import app.pictureshow.core.sync.syncScheduledPlaying
 import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncTarget
@@ -68,6 +71,37 @@ class SyncTimingVectorsTest {
                     val i = row.getValue("input").jsonObject
                     val value = syncScheduledPosition(i.getValue("command").jsonPrimitive.content, i.long("current"), i.long("target"))
                     assertEquals(if (expected is JsonNull) null else expected.jsonPrimitive.long, value, row.toString())
+                }
+
+                "same-unpause-timeline" -> {
+                    val i = row.getValue("input").jsonObject
+                    fun command(value: kotlinx.serialization.json.JsonElement): SyncCommand? {
+                        if (value is JsonNull) return null
+                        val c = value.jsonObject
+                        return SyncCommand(
+                            c.getValue("group").jsonPrimitive.content,
+                            c.getValue("entry").jsonPrimitive.content,
+                            c.getValue("command").jsonPrimitive.content,
+                            c.long("when"),
+                            c.getValue("position").takeUnless { it is JsonNull }?.jsonPrimitive?.long,
+                            c.long("emitted")
+                        )
+                    }
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        syncSameUnpauseTimeline(command(i.getValue("applied")), requireNotNull(command(i.getValue("received")))),
+                        row.toString()
+                    )
+                }
+
+                "seek-feedback" -> {
+                    val i = row.getValue("input").jsonObject
+                    val prior = i.getValue("previous").takeUnless { it is JsonNull }?.jsonPrimitive?.long
+                    assertEquals(
+                        if (expected is JsonNull) null else expected.jsonPrimitive.long,
+                        SeekSteps.preview(prior, i.long("target"), i.bool("showFeedback")),
+                        row.toString()
+                    )
                 }
 
                 "timeline-playing" -> {
