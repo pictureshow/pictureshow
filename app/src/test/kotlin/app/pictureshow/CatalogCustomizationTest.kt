@@ -336,6 +336,7 @@ class CatalogCustomizationTest {
             }
         }
         compose.onNodeWithTag("catalog:choice:saved").assertIsDisplayed().assertIsFocused()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
         compose.onNodeWithText("Selected performer").assertIsDisplayed()
         compose.onNodeWithTag("catalog:choice:first").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
@@ -392,7 +393,8 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("filters:person"))
         compose.onNodeWithTag("filters:person").performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithTag("catalog:choice:any").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("catalog:choice:any").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+            .performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("filters:person").assertIsFocused()
         compose.onNodeWithTag("filters:apply").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before.copy(personId = null), applied) }

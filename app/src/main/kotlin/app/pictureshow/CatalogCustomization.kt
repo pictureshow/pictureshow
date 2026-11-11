@@ -719,6 +719,7 @@ internal fun NamedCatalogPicker(
                 val modifier = (if (focusAny) Modifier.focusRequester(choiceFocus) else Modifier).testTag("catalog:choice:any")
                     .semantics {
                         selected = checked
+                        role = Role.RadioButton
                         stateDescription = if (checked) "Selected" else ""
                     }
                 if (tv) {
@@ -747,6 +748,7 @@ internal fun NamedCatalogPicker(
                 )
                 .testTag("catalog:choice:${item.id}").semantics {
                     this.selected = checked
+                    role = if (pickingHomeRows) Role.Button else Role.RadioButton
                     stateDescription =
                         if (checked) {
                             if (pickingHomeRows) "On your home" else "Selected"
@@ -765,7 +767,7 @@ internal fun NamedCatalogPicker(
                     leading = avatar,
                     trailing = {
                         if (pickingHomeRows) {
-                            if (checked) androidx.tv.material3.Icon(touchActionIcon("check"), "On your home")
+                            if (checked) androidx.tv.material3.Icon(touchActionIcon("check"), null)
                         } else {
                             TvSettingsRadioIndicator(checked)
                         }
@@ -778,7 +780,7 @@ internal fun NamedCatalogPicker(
                     leadingContent = avatar,
                     trailingContent = {
                         if (pickingHomeRows) {
-                            if (checked) Icon(touchActionIcon("check"), "On your home")
+                            if (checked) Icon(touchActionIcon("check"), null)
                         } else {
                             RadioButton(checked, onClick = null)
                         }
