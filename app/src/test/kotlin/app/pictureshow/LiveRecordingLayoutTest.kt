@@ -18,9 +18,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -189,7 +190,7 @@ class LiveRecordingLayoutTest {
 
     @Test fun tvRecordingCaptionsKeepRelatedLinesTogetherAndPutStatusOnArtwork() {
         val growing = recording.copy(
-            episodeTitle = "One",
+            episodeTitle = "Actual episode",
             name = "Generated series",
             recordingStatus = "InProgress",
             recordingEndDate = "2026-11-10T23:30:00Z",
@@ -217,15 +218,22 @@ class LiveRecordingLayoutTest {
         assertEquals(first.bottom - first.top, second.bottom - second.top, "Mixed caption lengths retain equal card heights")
         val caption = compose.onNodeWithTag("live:recording:caption:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(caption.bottom - caption.top <= 100.dp, "TV has no touch overflow row to reserve")
-        val title = compose.onAllNodesWithTag("live:recording:title", useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
-        val meta = compose.onAllNodesWithTag("live:recording:metadata", useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
+        val titleNode = compose.onNode(
+            androidx.compose.ui.test.hasTestTag("live:recording:title") and hasAnyAncestor(hasTestTag("live:r:r")),
+            useUnmergedTree = true
+        )
+        val metaNode = compose.onNode(
+            hasTestTag("live:recording:metadata") and hasAnyAncestor(hasTestTag("live:r:r")),
+            useUnmergedTree = true
+        )
+        val title = titleNode.getUnclippedBoundsInRoot()
+        val meta = metaNode.getUnclippedBoundsInRoot()
         assertTrue(
             meta.top - title.bottom in 0.dp..5.dp,
             "Title and metadata retain the4dp gap, including native focus scaling; title=$title metadata=$meta"
         )
         val titleLayouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        compose.onAllNodesWithTag("live:recording:title", useUnmergedTree = true)[0]
-            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
+        titleNode.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
         val titleLayout = titleLayouts.single()
         assertEquals(
             1,
@@ -242,7 +250,7 @@ class LiveRecordingLayoutTest {
         )
         val status = compose.onNodeWithTag("live:recording:status:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(status.bottom <= caption.top, "Recording state belongs on the artwork")
-        compose.onNodeWithTag("live:r:r").assert(hasContentDescription("One", substring = true))
+        compose.onNodeWithTag("live:r:r").assert(hasContentDescription("Actual episode", substring = true))
     }
 
     @Test fun recordingDetailKeepsPlayAndDownloadInOneVisibleNativeActionRow() {
