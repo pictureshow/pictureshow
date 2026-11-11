@@ -45,6 +45,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
@@ -110,6 +111,7 @@ class PlayerQualityMenuTest {
         var open by mutableStateOf(true)
         var selections = 0
         var closes = 0
+        RuntimeEnvironment.setFontScale(input.getValue("fontScale").jsonPrimitive.float)
         compose.setContent {
             assertEquals(
                 IntSize(input.getValue("widthDp").jsonPrimitive.int, input.getValue("heightDp").jsonPrimitive.int),
@@ -175,12 +177,38 @@ class PlayerQualityMenuTest {
         assertEquals(1, layouts.size, "Auto explanation must expose its actual text layout")
         val layout = layouts.single()
         assertEquals(
+            input.getValue("fontScale").jsonPrimitive.float,
+            layout.layoutInput.density.fontScale,
+            "The actual dialog text must use the portable font scale"
+        )
+        val lines = 0 until layout.lineCount
+        val glyphs = supporting.indices.filter { supporting[it] != '\n' }.map(layout::getBoundingBox)
+        // A wrap-content Text can be narrower than MultiParagraph's layout allocation,
+        // so didOverflowWidth is not a reliable painted-text clipping test here.
+        val paintedLinesFit = lines.all { layout.getLineLeft(it) >= 0f && layout.getLineRight(it) <= layout.size.width }
+        val paintedGlyphsFit = glyphs.all {
+            it.left >= 0f && it.right <= layout.size.width && it.top >= 0f && it.bottom <= layout.size.height
+        }
+        val paintDescription = "The full Auto limit and reduction explanation must be rendered before scrolling: " +
+            "overflow=${layout.hasVisualOverflow}, widthOverflow=${layout.didOverflowWidth}, " +
+            "heightOverflow=${layout.didOverflowHeight}, " +
+            "size=${layout.size}, lines=${layout.lineCount}, paragraphHeight=${layout.multiParagraph.height}, " +
+            "paragraphWidth=${layout.multiParagraph.width}, maxLineRight=${lines.maxOf(layout::getLineRight)}, " +
+            "fontScale=${layout.layoutInput.density.fontScale}, linePaintFits=$paintedLinesFit, glyphPaintFits=$paintedGlyphsFit, " +
+            "lineEnds=${(0 until layout.lineCount).map { layout.getLineEnd(it, visibleEnd = true) }}, " +
+            "ellipsized=${(0 until layout.lineCount).map(layout::isLineEllipsized)}, " +
+            "lastVisibleEnd=${layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)}, length=${supporting.length}, " +
+            "textLength=${layout.layoutInput.text.length}, bounds=$supportBounds / $viewport"
+        println(paintDescription)
+        assertEquals(
             true,
-            !layout.hasVisualOverflow &&
+            !layout.didOverflowHeight &&
+                paintedLinesFit &&
+                paintedGlyphsFit &&
                 layout.lineCount >= 2 &&
                 (0 until layout.lineCount).none(layout::isLineEllipsized) &&
                 layout.getLineEnd(layout.lineCount - 1, visibleEnd = true) == supporting.length,
-            "The full Auto limit and reduction explanation must be rendered before scrolling"
+            paintDescription
         )
         val supportFullyVisible = supportBounds.top >= viewport.top &&
             supportBounds.bottom <= viewport.bottom &&
