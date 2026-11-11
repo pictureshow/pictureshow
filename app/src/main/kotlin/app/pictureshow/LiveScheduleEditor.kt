@@ -42,6 +42,7 @@ internal fun LiveScheduleEditor(
     var validationError by remember(original) { mutableStateOf<String?>(null) }
     val merged = JsonObject(original.fields + edits)
     val enabled = !confirmed && !busy
+    val firstPadding = listOf("PrePaddingSeconds", "PostPaddingSeconds").firstOrNull { it in original.fields }
     val textInset = if (tv) Modifier.padding(start = 16.dp) else Modifier
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         LiveText(original.name, tv, textInset, heading = true)
@@ -85,7 +86,7 @@ internal fun LiveScheduleEditor(
                 "$minutes min"
             }
         }
-        listOf("PrePaddingSeconds" to "Start early", "PostPaddingSeconds" to "End late").forEachIndexed { index, (key, label) ->
+        listOf("PrePaddingSeconds" to "Start early", "PostPaddingSeconds" to "End late").forEach { (key, label) ->
             if (key in original.fields) {
                 val seconds = merged[key]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
                 LiveOption(
@@ -102,7 +103,7 @@ internal fun LiveScheduleEditor(
                     padding,
                     tv,
                     enabled,
-                    Modifier.liveFocus("editor:$key", tv && index == 0 && !confirmed)
+                    Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed)
                 ) { edits = edits + (key to it) }
             }
         }

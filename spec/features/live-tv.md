@@ -137,3 +137,6 @@ stable geometry remain unchanged. Growing/failed recordings retain their authori
 Inactive TV navigation labels use an opaque readable foreground while content owns focus. The reference muted token
 #C3C9D8 against window#10131C has calculated11.19:1contrast; the native library's default inactive0.4alpha is overridden
 for this destination. Native focused/selected colours remain distinct. A rendered text-layout assertion guards this role.
+
+TV recording editor focuses its first supplied padding option; if neither padding field is supplied, Review recording is
+its initial focus target. A provider omitting optional fields must not leave the screen without an attached focus target.

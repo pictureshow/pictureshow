@@ -53,6 +53,18 @@ class LiveLayoutReviewTest {
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
 
     @Test
+    fun tvEditorWithNoPaddingFieldsHasARealInitialReviewFocus() {
+        val schedule = app.pictureshow.core.livetv.LiveSchedule(
+            kotlinx.serialization.json.buildJsonObject {
+                put("Name", kotlinx.serialization.json.JsonPrimitive("Generated series"))
+                put("RecordNewOnly", kotlinx.serialization.json.JsonPrimitive(true))
+            }
+        )
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveScheduleEditor(schedule, true, true, false, false) {} } }
+        compose.onNodeWithTag("live:editor:review").assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test
     fun errorStatusOwnsItsTextColorInsideAnActuallyFocusedTvRow() {
         var expected = androidx.compose.ui.graphics.Color.Unspecified
         val schedule = app.pictureshow.core.livetv.LiveSchedule(
