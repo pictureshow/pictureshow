@@ -1,6 +1,6 @@
 # Viewer home and library browsing
 
-Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 110 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
+Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 118 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
 
 | ID | Viewer behavior | Acceptance |
 |---|---|---|
@@ -48,3 +48,4 @@ TV row reordering keeps the keyed moving row in view with the least necessary sc
 
 Command and value-opening rows expose a button role without selected/checkable state; radio choices alone carry selection, and switches carry their on/off state. Reset offers equally sized Cancel and Restore buttons together, initially focusing Cancel. TV search retains a visible focus indicator after leaving text entry, including zero results.
 Supporting text follows the foreground of the surface actually drawn in both focused and resting command rows; focus alone cannot assume an inverse background.
+Touch library app bars share the window edge and native insets with editor app bars, independently of the catalog grid's content gutter. Sort and Filters use the same native chip shape.

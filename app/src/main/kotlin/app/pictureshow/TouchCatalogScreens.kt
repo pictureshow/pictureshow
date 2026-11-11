@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -283,106 +284,110 @@ private fun TouchMediaGrid(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // One artwork height per grid: columns round to different pixels, and an aspect ratio would inherit that wobble.
         val artHeight = touchGridArtHeight(maxWidth, cellMinimum, if (shortWindow) 9f / 16f else 3f / 2f)
-        LazyVerticalGrid(
-            columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(cellMinimum),
-            state = grid,
-            modifier = Modifier.fillMaxSize().testTag("touch:grid"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
-            verticalArrangement = Arrangement.spacedBy(if (shortWindow) 12.dp else 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
-                    TopAppBar(title = { TouchCatalogHeading(state.parent.name, section = true) }, navigationIcon = {
-                        IconButton(onClick = onBack, modifier = Modifier.testTag("touch:back")) { Icon(touchActionIcon("back"), "Back") }
-                    })
-                    if (person != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TouchCatalogArtwork(
-                                person,
-                                state.account,
-                                false,
-                                Modifier.width(if (shortWindow) 48.dp else 112.dp).aspectRatio(if (shortWindow) 1f else 2f / 3f)
-                            )
-                            Text(
-                                person.overview?.takeIf(String::isNotBlank) ?: "Titles featuring ${person.name}",
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        itemVerticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (onSort != null) TouchCatalogSort(state, onSort)
-                        if (onFilters != null) {
-                            FilterChip(
-                                selected = state.filters.active,
-                                onClick = onFilters,
-                                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:filters"),
-                                label = { Text(filterChipLabel(state.filters)) }
-                            )
-                        }
-                        if (onDisplayList != null) {
-                            IconToggleButton(
-                                checked = state.list,
-                                onCheckedChange = onDisplayList,
-                                modifier = Modifier.testTag("touch:display")
-                            ) {
-                                Icon(
-                                    touchActionIcon(if (state.list) "list" else "grid"),
-                                    contentDescription = if (state.list) "List view. Switch to grid" else "Grid view. Switch to list"
+        Column(Modifier.fillMaxSize()) {
+            TopAppBar(modifier = Modifier.testTag("touch:library-appbar"), title = {
+                TouchCatalogHeading(state.parent.name, section = true)
+            }, navigationIcon = {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("touch:back")) { Icon(touchActionIcon("back"), "Back") }
+            })
+            LazyVerticalGrid(
+                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(cellMinimum),
+                state = grid,
+                modifier = Modifier.weight(1f).testTag("touch:grid"),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
+                verticalArrangement = Arrangement.spacedBy(if (shortWindow) 12.dp else 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
+                        if (person != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                TouchCatalogArtwork(
+                                    person,
+                                    state.account,
+                                    false,
+                                    Modifier.width(if (shortWindow) 48.dp else 112.dp).aspectRatio(if (shortWindow) 1f else 2f / 3f)
+                                )
+                                Text(
+                                    person.overview?.takeIf(String::isNotBlank) ?: "Titles featuring ${person.name}",
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
-                    }
-                    if (onRemoveFilter != null && state.filters.active) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically
                         ) {
-                            state.filters.constraintKeys().forEach { key ->
-                                InputChip(
-                                    selected = true,
-                                    onClick = { onRemoveFilter(key) },
-                                    label = { Text(filterConstraintLabel(state.filters, key)) },
-                                    trailingIcon = {
-                                        Icon(
-                                            touchActionIcon("close"),
-                                            "Remove ${filterConstraintLabel(state.filters, key)}",
-                                            Modifier.size(16.dp)
-                                        )
-                                    }
+                            if (onSort != null) TouchCatalogSort(state, onSort)
+                            if (onFilters != null) {
+                                FilterChip(
+                                    selected = state.filters.active,
+                                    onClick = onFilters,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:filters"),
+                                    label = { Text(filterChipLabel(state.filters)) }
                                 )
+                            }
+                            if (onDisplayList != null) {
+                                IconToggleButton(
+                                    checked = state.list,
+                                    onCheckedChange = onDisplayList,
+                                    modifier = Modifier.testTag("touch:display")
+                                ) {
+                                    Icon(
+                                        touchActionIcon(if (state.list) "list" else "grid"),
+                                        contentDescription = if (state.list) "List view. Switch to grid" else "Grid view. Switch to list"
+                                    )
+                                }
+                            }
+                        }
+                        if (onRemoveFilter != null && state.filters.active) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                state.filters.constraintKeys().forEach { key ->
+                                    InputChip(
+                                        selected = true,
+                                        onClick = { onRemoveFilter(key) },
+                                        label = { Text(filterConstraintLabel(state.filters, key)) },
+                                        trailingIcon = {
+                                            Icon(
+                                                touchActionIcon("close"),
+                                                "Remove ${filterConstraintLabel(state.filters, key)}",
+                                                Modifier.size(16.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        state.preferenceStatus?.let { Text(it) }
+                        TouchCatalogError(state.error ?: state.refreshError, onRetry)
+                        if (state.loading && state.items.isEmpty()) TouchCatalogLoading("Loading titles…")
+                        if (!state.loading && state.items.isEmpty() && state.error == null) {
+                            Text(emptyGridLabel(state.parent, state.filters))
+                            if (state.filters.active && onClearFilters != null) {
+                                Button(
+                                    onClick = onClearFilters,
+                                    modifier = Modifier.testTag("touch:clear-filters")
+                                ) { Text("Clear filters") }
                             }
                         }
                     }
-                    state.preferenceStatus?.let { Text(it) }
-                    TouchCatalogError(state.error ?: state.refreshError, onRetry)
-                    if (state.loading && state.items.isEmpty()) TouchCatalogLoading("Loading titles…")
-                    if (!state.loading && state.items.isEmpty() && state.error == null) {
-                        Text(emptyGridLabel(state.parent, state.filters))
-                        if (state.filters.active && onClearFilters != null) {
-                            Button(
-                                onClick = onClearFilters,
-                                modifier = Modifier.testTag("touch:clear-filters")
-                            ) { Text("Clear filters") }
-                        }
+                }
+                itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
+                    if (state.list) {
+                        TouchCatalogListRow(item, state.account, { onOpen(item) })
+                    } else {
+                        TouchCatalogCard(item, state.account, shortWindow, {
+                            onOpen(item)
+                        }, Modifier.fillMaxWidth(), artHeight = artHeight)
                     }
                 }
-            }
-            itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
-                if (state.list) {
-                    TouchCatalogListRow(item, state.account, { onOpen(item) })
-                } else {
-                    TouchCatalogCard(item, state.account, shortWindow, {
-                        onOpen(item)
-                    }, Modifier.fillMaxWidth(), artHeight = artHeight)
+                if (state.loading && state.items.isNotEmpty()) {
+                    item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }
                 }
-            }
-            if (state.loading && state.items.isNotEmpty()) {
-                item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }
             }
         }
     }
@@ -409,19 +414,18 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
     // Sort and its direction are equal in rank, so they match; the menu shows its current choice to everyone.
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
-            OutlinedButton(
+            AssistChip(
                 onClick = { expanded = true },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("touch:sort")
                     .touchMenuButton(expanded, "Show sort options", sortDirectionLabel(state.descending)) { expanded = true },
-                border = touchOutlineBorder(),
-                contentPadding = PaddingValues(start = 16.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp)
-            ) {
-                Text(label)
-                Spacer(Modifier.width(6.dp))
-                Icon(touchActionIcon(if (state.descending) "arrow-down" else "arrow-up"), null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(label)
+                        Icon(touchActionIcon(if (state.descending) "arrow-down" else "arrow-up"), null, Modifier.size(18.dp))
+                    }
+                },
+                trailingIcon = { Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp)) }
+            )
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 options.forEach { (key, title) ->
                     val current = state.sortBy == key

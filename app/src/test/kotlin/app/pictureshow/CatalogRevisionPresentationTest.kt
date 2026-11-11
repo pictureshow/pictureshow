@@ -146,6 +146,33 @@ class CatalogRevisionPresentationTest {
 
     @Test
     @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchLibraryAppBarUsesWindowInsetsIndependentlyOfGridContentPadding() {
+        compose.setContent {
+            MaterialTheme {
+                TouchCatalogGrid(
+                    state = CatalogGridState(account, library, loading = false, items = listOf(MediaItem("one", "First movie", "Movie"))),
+                    onOpen = {},
+                    onNearEnd = {},
+                    onSort = { _, _ -> },
+                    onRetry = {},
+                    onFilters = {},
+                    onDisplayList = {},
+                    onBack = {}
+                )
+            }
+        }
+        val bar = compose.onNodeWithTag("touch:library-appbar").getUnclippedBoundsInRoot()
+        assertEquals(0.dp, bar.left, "Native app bars share the window edge, outside the grid gutter")
+        assertEquals(0.dp, bar.top, "The grid top padding must not inset the app bar")
+        assertEquals(411.dp, bar.right - bar.left)
+        assertTrue(compose.onNodeWithTag("touch:back").getUnclippedBoundsInRoot().left < 12.dp)
+        compose.onNodeWithTag("touch:sort").assertIsDisplayed()
+        compose.onNodeWithTag("touch:filters").assertIsDisplayed()
+        compose.onNodeWithTag("touch:card:one").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
     fun touchHomeEditorWaitsForInitialViewerPreferences() = homeEditorWaitsForPreferences(tv = false)
 
     private fun homeEditorWaitsForPreferences(tv: Boolean) {
