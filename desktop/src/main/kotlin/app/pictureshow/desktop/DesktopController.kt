@@ -67,7 +67,7 @@ class DesktopController(
         val g = generation.incrementAndGet()
         pageJob?.cancel()
         if (route !in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect)) { pendingQuick = null; quickOwner = null }
-        mutable.update { it.copy(route = route, busy = true, error = null) }
+        mutable.update { it.copy(route = route, busy = true, error = null, errorKind = null) }
         pageJob = scope.launch {
             try {
                 if (before.route == DesktopRoute.Player && route != DesktopRoute.Player) {
@@ -77,7 +77,7 @@ class DesktopController(
                 block(g)
             }
             catch (e: CancellationException) { throw e }
-            catch (_: Exception) { publish(g) { it.copy(error = "Could not complete this action. Check the connection or local storage and try again.") } }
+            catch (_: Exception) { publish(g) { it.copy(error = "Could not complete this action. Check the connection or local storage and try again.", errorKind = null) } }
             finally { publish(g) { it.copy(busy = false) } }
         }
     }
@@ -93,13 +93,15 @@ class DesktopController(
                     if (mutable.value.account?.accessToken == account.accessToken) mutable.update { it.copy(account = null, server = account.server, route = DesktopRoute.SignIn) }
                     snapshotAccounts()
                 }
-                throw DesktopFailure(response.error.message)
+                throw DesktopFailure(response.error.message, response.error.kind)
             }
         }
     }
-    private class DesktopFailure(override val message: String) : Exception(message)
+    private class DesktopFailure(override val message: String, val kind: ErrorKind) : Exception(message)
     private suspend fun <T> attempt(g: Long, account: Account? = null, call: suspend () -> ClientResult<T>): T? = try { result(account, call) }
-    catch (e: DesktopFailure) { publish(g) { it.copy(error = e.message) }; null }
+    catch (e: DesktopFailure) { publish(g) { it.copy(error = e.message, errorKind = e.kind) }; null }
+
+    fun clearError() { mutable.update { it.copy(error = null, errorKind = null) } }
 
     fun start() = page(DesktopRoute.Loading) { g ->
         val s = store.load()
@@ -112,8 +114,8 @@ class DesktopController(
                 is ClientResult.Success -> { mutable.update { it.copy(account = account) }; loadHome(g) }
                 is ClientResult.Failure -> if (checked.error.kind == ErrorKind.INVALID_CREDENTIALS) {
                     store.expire(account.key, account.accessToken); snapshotAccounts()
-                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, error = "Your session ended. Sign in again.") }
-                } else publish(g) { it.copy(route = DesktopRoute.Home, account = account, error = checked.error.message) }
+                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
+                } else publish(g) { it.copy(route = DesktopRoute.Home, account = account, error = checked.error.message, errorKind = checked.error.kind) }
             }
         } else publish(g) { it.copy(route = if (s.accounts.isNotEmpty()) DesktopRoute.Accounts else DesktopRoute.Servers) }
     }
@@ -126,11 +128,14 @@ class DesktopController(
             finally { mutable.update { it.copy(discovering = false) } }
         }
     }
-    fun connect(address: String) = page(DesktopRoute.Servers) { g ->
-        val server = attempt(g) { client.probe(address) } ?: return@page
-        publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null) }
-        val users = attempt(g) { client.publicUsers(server) }.orEmpty()
-        publish(g) { it.copy(publicUsers = users) }
+    fun connect(address: String) {
+        mutable.update { it.copy(serverAddress = address) }
+        page(DesktopRoute.Servers) { g ->
+            val server = attempt(g) { client.probe(address) } ?: return@page
+            publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null) }
+            val users = attempt(g) { client.publicUsers(server) }.orEmpty()
+            publish(g) { it.copy(publicUsers = users) }
+        }
     }
     fun signIn(username: String, password: String) {
         if (mutable.value.busy || username.isBlank()) return
@@ -156,10 +161,10 @@ class DesktopController(
         page(DesktopRoute.QuickConnect) { g ->
             identityClient().quickConnect(server, pendingQuick) { pendingQuick = it }.collect { q ->
                 when (q) {
-                    is QuickConnectState.Code -> publish(g) { it.copy(quickCode = q.code, busy = false, error = null) }
+                    is QuickConnectState.Code -> publish(g) { it.copy(quickCode = q.code, busy = false, error = null, errorKind = null) }
                     is QuickConnectState.Authorized -> acceptAccount(g, q.account)
-                    is QuickConnectState.Failed -> publish(g) { it.copy(error = q.error.message, busy = false) }
-                    QuickConnectState.Disabled -> publish(g) { it.copy(error = "Quick Connect is disabled on this server. Sign in with your username and password.", busy = false) }
+                    is QuickConnectState.Failed -> publish(g) { it.copy(error = q.error.message, errorKind = q.error.kind, busy = false) }
+                    QuickConnectState.Disabled -> publish(g) { it.copy(error = "Quick Connect is disabled on this server. Sign in with your username and password.", errorKind = null, busy = false) }
                 }
             }
         }
@@ -273,7 +278,7 @@ class DesktopController(
         if (s.route == DesktopRoute.QuickConnect) { page(DesktopRoute.SignIn) { _ -> }; return }
         val previous = synchronized(history) { if (history.isEmpty()) null else history.removeAt(history.lastIndex) }
         generation.incrementAndGet(); pageJob?.cancel()
-        if (previous != null) mutable.value = previous.copy(busy = false, error = null, settings = s.settings)
+        if (previous != null) mutable.value = previous.copy(busy = false, error = null, errorKind = null, settings = s.settings)
         else when (s.route) {
             DesktopRoute.SignIn -> addServer()
             DesktopRoute.Accounts, DesktopRoute.Servers -> if (s.account != null) home() else addServer()
@@ -288,7 +293,8 @@ class DesktopController(
             DesktopRoute.Library -> s.library?.let { browse(it, s.sortBy, s.descending) }
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()
-            else -> mutable.update { it.copy(error = null) }
+            DesktopRoute.Servers -> s.serverAddress?.let(::connect)
+            else -> mutable.update { it.copy(error = null, errorKind = null) }
         }
     }
     fun attachWindow(window: Window) { this.window = window; engine?.attach(window) }

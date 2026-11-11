@@ -25,6 +25,8 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.TooltipArea
+import androidx.compose.ui.window.TooltipPlacement
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 import app.pictureshow.ui.*
@@ -127,7 +129,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route !in listOf(DesktopRoute.Servers, DesktopRoute.Loading)) TextButton(onClick = controller::back, modifier = Modifier.probe("back")) { Text("‹ Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { help = true }, modifier = Modifier.probe("shortcuts")) { Text("Keyboard shortcuts") }
                     TextButton(onClick = onFullscreen, modifier = Modifier.probe("fullscreen")) { Text(if (fullscreen) "Exit fullscreen" else "Fullscreen") }
@@ -137,22 +139,26 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.weight(1f)) {
                     if (state.account != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         Column(Modifier.width(184.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(state.account!!.user.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(12.dp))
-                            Text(state.account!!.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
+                            Text(state.account!!.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(state.account!!.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint) {
+                                Text(state.account!!.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = state.account!!.server.name })
+                            }
                             NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.probe("nav:home"))
                             state.homeRows.filter { it.library }.flatMap { it.items }.forEach { library ->
                                 NavigationDrawerItem(label = { Text(library.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.library?.id == library.id && state.route == DesktopRoute.Library, onClick = { controller.browse(library) }, modifier = Modifier.probe("nav:library:${library.id}"))
                             }
                             Spacer(Modifier.weight(1f))
                             NavigationDrawerItem(label = { Text("Settings") }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.probe("nav:settings"))
-                            TextButton(onClick = controller::accounts, modifier = Modifier.probe("nav:accounts")) { Text("Switch user") }
+                            NavigationDrawerItem(label = { Text("Switch user") }, selected = false, onClick = controller::accounts, modifier = Modifier.probe("nav:accounts"))
                         }
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
-                        state.error?.let { error ->
-                            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
-                                Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                                TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.probe("retry")) { Text("Retry") }
+                        state.error?.takeIf { state.errorKind != ErrorKind.INVALID_CREDENTIALS }?.let { error ->
+                            Card(Modifier.fillMaxWidth().widthIn(max = 560.dp).align(Alignment.CenterHorizontally).padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                                    if (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Loading, DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect)) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.probe("retry")) { Text("Retry") }
+                                }
                             }
                         }
                         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
@@ -213,7 +219,7 @@ private fun ServerPage(state: DesktopState, c: DesktopController) {
     LaunchedEffect(Unit) { c.discover() }
     var address by remember { mutableStateOf("") }
     FormPage("Your library, on your desktop", "Connect to your Jellyfin server to start watching.") {
-        OutlinedTextField(address, { address = it }, label = { Text("Server address") }, placeholder = { Text("https://jellyfin.example.org") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("server-address"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if(address.isNotBlank()) c.connect(address) }))
+        OutlinedTextField(address, { address = it }, label = { Text("Server address") }, supportingText = { Text("For example, https://jellyfin.example.org") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("server-address"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if(address.isNotBlank()) c.connect(address) }))
         Button(onClick = { c.connect(address) }, enabled = address.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("connect")) { Text(if (state.busy) "Connecting…" else "Connect") }
         Text("On your network", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }) { Text(s.name) } }
@@ -226,13 +232,21 @@ private fun ServerPage(state: DesktopState, c: DesktopController) {
 @Composable
 private fun SignInPage(state: DesktopState, c: DesktopController) {
     var username by remember(state.server?.id) { mutableStateOf("") }
-    var password by remember(state.server?.id) { mutableStateOf("") }
+    var password by remember(state.server?.id) { mutableStateOf(TextFieldValue("")) }
     var show by remember { mutableStateOf(false) }
+    val passwordFocus = remember { FocusRequester() }
+    val credentialsRejected = state.errorKind == ErrorKind.INVALID_CREDENTIALS
+    LaunchedEffect(credentialsRejected, state.busy) {
+        if (credentialsRejected && !state.busy) {
+            passwordFocus.requestFocus()
+            password = password.copy(selection = TextRange(0, password.text.length))
+        }
+    }
     FormPage("Sign in", state.server?.name ?: "Your Jellyfin server") {
-        if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(onClick = { username = u.name }, label = { Text(u.name) }) } }
-        OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("username"))
-        OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password) }))
-        Button(onClick = { c.signIn(username, password) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
+        if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(onClick = { username = u.name; c.clearError() }, label = { Text(u.name) }) } }
+        OutlinedTextField(username, { username = it; c.clearError() }, label = { Text("Username") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("username"))
+        OutlinedTextField(password, { password = it; c.clearError() }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
+        Button(onClick = { c.signIn(username, password.text) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
         HorizontalDivider()
         OutlinedButton(onClick = c::quickConnect, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("quick-connect")) { Text("Use Quick Connect") }
     }
@@ -242,8 +256,8 @@ private fun HomePage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
     LazyColumn(Modifier.fillMaxSize().probe("home"), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item { CatalogHeading("Home") }
-        if (!state.busy && state.homeRows.isEmpty()) item { Text("Your library is ready. Add media in Jellyfin and choose Retry to refresh."); TextButton(onClick=c::home) { Text("Refresh") } }
-        items(state.homeRows, key = { it.key }) { row ->
+        if (!state.busy && state.homeRows.isEmpty()) item { Text("Nothing to show yet. Add media in Jellyfin, then refresh."); TextButton(onClick=c::home) { Text("Refresh") } }
+        items(state.homeRows.sortedBy { if (it.library) 1 else 0 }, key = { it.key }) { row ->
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CatalogHeading(row.title, section = true)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -278,22 +292,32 @@ private fun LibraryPage(state: DesktopState, c: DesktopController) {
 private fun DetailPage(state: DesktopState, c: DesktopController) {
     val item = state.detail ?: return
     val account = state.account ?: return
-    LazyColumn(Modifier.fillMaxSize().probe("detail"), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Detail content width excludes the persistent sidebar and top chrome; this
+    // breakpoint corresponds to a full window around 1440 dp wide.
+    val expansive = maxWidth >= 1120.dp
+    LazyColumn(Modifier.fillMaxSize().probe("detail"), contentPadding = PaddingValues(if (expansive) 40.dp else 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                CatalogArtwork(item,account,false,Modifier.width(180.dp).height(270.dp))
-                Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                    CatalogHeading(item.name)
+                CatalogArtwork(item,account,false,Modifier.width(if (expansive) 240.dp else 180.dp).aspectRatio(2f / 3f))
+                Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(if (expansive) 18.dp else 14.dp)) {
+                    Text(item.name, style = if (expansive) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                     Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier=Modifier.heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
                         if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.probe("play-start")) { Text("Play from start") }
+                        TooltipArea(tooltip = { Text(if (item.isWatched) "Mark unwatched" else "Mark watched") }) {
+                            IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.probe("watched").semantics { contentDescription = "Watched" }) {
+                                Icon(DesktopGlyph.Watched, contentDescription = null, tint = if (item.isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        TooltipArea(tooltip = { Text(if (item.userData.isFavorite) "Remove favorite" else "Add to favorites") }) {
+                            IconToggleButton(checked = item.userData.isFavorite, onCheckedChange = { c.toggleFavorite() }, modifier = Modifier.probe("favorite").semantics { contentDescription = "Favorite" }) {
+                                Icon(DesktopGlyph.Favorite, contentDescription = null, tint = if (item.userData.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
-                    FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected=item.isWatched,onClick=c::toggleWatched,label={Text(if(item.isWatched) "Mark unwatched" else "Mark watched")},modifier=Modifier.probe("watched"))
-                        FilterChip(selected=item.userData.isFavorite,onClick=c::toggleFavorite,label={Text(if(item.userData.isFavorite) "Remove favorite" else "Favorite")},modifier=Modifier.probe("favorite"))
-                    }
-                    item.overview?.let { Text(it,style=MaterialTheme.typography.bodyLarge) }
+                    item.overview?.let { Text(it, Modifier.widthIn(max = 640.dp), style=MaterialTheme.typography.bodyLarge) }
                     if(item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -314,6 +338,7 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
                 }
             }
         }
+    }
     }
 }
 @Composable

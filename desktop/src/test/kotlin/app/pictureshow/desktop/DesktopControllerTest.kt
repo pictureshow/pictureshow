@@ -112,6 +112,11 @@ class DesktopControllerTest {
             c.start(); c.await { !it.busy }; c.connect(f.url); c.await { it.route == DesktopRoute.SignIn && !it.busy }
             c.signIn("Viewer", "wrong"); c.await { it.error != null && !it.busy }
             assertEquals(DesktopRoute.SignIn, c.state.value.route)
+            assertEquals(ErrorKind.INVALID_CREDENTIALS, c.state.value.errorKind)
+            assertEquals("Sign-in was refused. Check your username and password or sign in again.", c.state.value.error)
+            c.retry()
+            assertNull(c.state.value.error, "Credential refusal should be corrected in the fields, not resubmitted by Retry")
+            assertEquals(DesktopRoute.SignIn, c.state.value.route)
             c.signIn("Viewer", "correct"); c.await { it.route == DesktopRoute.Home && !it.busy }
         } }
     }
