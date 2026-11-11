@@ -198,7 +198,7 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
                         LiveText(
                             schedule.channelName ?: "Channel ${schedule.channelId}",
                             false,
-                            Modifier.weight(1f),
+                            Modifier.weight(1f, fill = false),
                             small = true,
                             maxLines = 1
                         )
@@ -232,7 +232,7 @@ internal fun LiveStatus(label: String, tv: Boolean, status: String? = null) {
         container = when (tone) {
             RecordingTone.Error -> colors.errorContainer
             RecordingTone.Live -> colors.primaryContainer
-            RecordingTone.Muted -> colors.surface
+            RecordingTone.Muted -> colors.surfaceVariant
             else -> colors.surfaceVariant
         }
         content = when (tone) {
@@ -245,7 +245,7 @@ internal fun LiveStatus(label: String, tv: Boolean, status: String? = null) {
         container = when (tone) {
             RecordingTone.Error -> colors.errorContainer
             RecordingTone.Live -> colors.primaryContainer
-            RecordingTone.Muted -> colors.surface
+            RecordingTone.Muted -> colors.surfaceContainerHigh
             else -> colors.surfaceVariant
         }
         content = when (tone) {

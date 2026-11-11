@@ -49,6 +49,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -78,6 +79,15 @@ internal fun LiveTvScreen(
     var cancelling by remember { mutableStateOf(false) }
     var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocus by remember { mutableStateOf(false) }
+    var pulledRefresh by remember { mutableStateOf(false) }
+    LaunchedEffect(pulledRefresh) {
+        if (pulledRefresh) {
+            // A fast request can finish between UI frames; observe the owner's current state directly.
+            vm.state.first { !it.loading }
+            pulledRefresh = false
+        }
+    }
+    val refreshPresentation = liveRefreshPresentation(state.loading, state.writing, tv, pulledRefresh)
     val scrollOwner = liveScrollOwner(tab, linear)
     val list = androidx.compose.runtime.key(scrollOwner) { rememberLazyListState() }
     val platformBringIntoView = LocalBringIntoViewSpec.current
@@ -341,8 +351,8 @@ internal fun LiveTvScreen(
                 filters()
             }
         }
-        if (tv && state.loading || state.writing) {
-            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        if (refreshPresentation.headerLoading) {
+            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp).testTag("live:header-loading"))
         }
         state.error?.let {
             LiveText(it, tv, Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp), warning = true, small = true)
@@ -601,14 +611,22 @@ internal fun LiveTvScreen(
                                     ) {
                                         item { LiveListText("No scheduled recordings.", tv) }
                                     }
-                                    listOf("Series rules" to state.series, "Upcoming" to state.timers).forEach { (group, schedules) ->
+                                    val groups = liveScheduleGroups(state.series, state.timers, now)
+                                    val firstSchedule = groups.firstOrNull { it.schedules.isNotEmpty() }?.let { group ->
+                                        liveScheduleFocusKey(group.schedules.first(), group.seriesRule)
+                                    }
+                                    groups.forEach { section ->
+                                        val group = section.title
+                                        val schedules = section.schedules
                                         if (schedules.isNotEmpty()) {
                                             item("schedule-heading:$group") {
                                                 LiveListText(group, tv, heading = true)
                                             }
                                         }
-                                        itemsIndexed(schedules, key = { _, timer -> "$group:${timer.id}" }) { index, timer ->
-                                            val key = "s:$group:${timer.id}"
+                                        itemsIndexed(schedules, key = { _, timer ->
+                                            liveScheduleFocusKey(timer, section.seriesRule)
+                                        }) { _, timer ->
+                                            val key = liveScheduleFocusKey(timer, section.seriesRule)
                                             LiveScheduleRow(
                                                 timer,
                                                 tv,
@@ -620,17 +638,16 @@ internal fun LiveTvScreen(
                                                             restoreFocus &&
                                                                 returnFocus == key ||
                                                                 returnFocus == null &&
-                                                                index == 0 &&
-                                                                (group == "Series rules" || state.series.isEmpty())
+                                                                key == firstSchedule
                                                             )
                                                 ) { focused(key) },
-                                                seriesRule = group == "Series rules"
+                                                seriesRule = section.seriesRule
                                             ) {
                                                 if (canAct &&
                                                     !state.writing
                                                 ) {
                                                     selectedSchedule = timer
-                                                    selectedSeries = group == "Series rules"
+                                                    selectedSeries = section.seriesRule
                                                 }
                                             }
                                         }
@@ -644,7 +661,14 @@ internal fun LiveTvScreen(
         }
         Box(Modifier.weight(1f)) {
             if (!tv && !detail) {
-                androidx.compose.material3.pulltorefresh.PullToRefreshBox(state.loading, { vm.refresh() }) { body() }
+                androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    refreshPresentation.pullRefreshing,
+                    {
+                        pulledRefresh = true
+                        vm.refresh()
+                    },
+                    Modifier.testTag("live:pull-refresh")
+                ) { body() }
             } else if (tv && !detail && tab == "Recordings") {
                 CompositionLocalProvider(LocalBringIntoViewSpec provides recordingFocus.verticalSpec) { body() }
             } else {
