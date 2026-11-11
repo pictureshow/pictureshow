@@ -162,7 +162,7 @@ internal fun LiveTvScreen(
         Modifier.fillMaxSize().background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
             .testTag(if (tv) "live:tv" else "live:touch")
     ) {
-        if (tv && program == null) {
+        if (tv) {
             Row(
                 Modifier.fillMaxWidth().height(if (!detail) (60 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
