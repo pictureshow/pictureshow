@@ -50,3 +50,5 @@ Video READY and the arrival of an optional subtitle HTTP request are independent
 regression first establishes READY while the response is held, waits separately for the selected request to reach
 the fixture, and verifies the player stays READY before releasing that response. Keep the request-count and cue
 assertions: readiness alone does not establish that only the selected subtitle loaded or that its cue arrived.
+
+Native focus evidence follows the actual platform focus owner. In a tvOS Form, the native row can own focus around a contained switch; tests must require that the focused row contains that exact control, then verify real navigation away and back and the reader's spoken control/state. A child's `hasFocus` value alone does not establish or disprove that interaction.
