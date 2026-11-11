@@ -4,24 +4,18 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.playback.PlaybackQualityPresentation
 
@@ -56,19 +50,31 @@ internal fun PlayerQualityMenu(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()).selectableGroup().testTag("player:quality-menu")) {
                 PlaybackQualityPresentation.choices.forEach { choice ->
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                            .selectable(selected = value == choice, role = Role.RadioButton, onClick = {
-                                onSelect(choice)
-                                onClose()
-                            }).testTag("player:quality-choice:${choice ?: "auto"}").padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    val note = supporting(choice)
+                    TouchRadioRow(
+                        selected = value == choice,
+                        modifier = Modifier.heightIn(min = 56.dp)
+                            .testTag("player:quality-choice:${choice ?: "auto"}").padding(vertical = 4.dp),
+                        onClick = {
+                            onSelect(choice)
+                            onClose()
+                        },
+                        alignToFirstLine = note != null
                     ) {
-                        RadioButton(selected = value == choice, onClick = null)
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(PlaybackQualityPresentation.choiceLabel(choice), style = MaterialTheme.typography.bodyLarge)
-                            supporting(choice)?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                PlaybackQualityPresentation.choiceLabel(choice),
+                                modifier = Modifier.testTag("player:quality-label:${choice ?: "auto"}"),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            note?.let {
+                                Text(
+                                    it,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }

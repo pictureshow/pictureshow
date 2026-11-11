@@ -6,20 +6,33 @@ package app.pictureshow
 import android.app.Application
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.Density
+import java.io.File
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -89,6 +102,33 @@ class PlayerQualityMenuTest {
             assertEquals(null, selected)
             assertEquals(1, closed)
         }
+    }
+
+    @Test fun automaticRadioAlignsWithItsLabelAtLargeFontScale() {
+        val file = listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
+            .single { it.isFile }
+        val case = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.single { it.getValue("operation").jsonPrimitive.content == "settings-radio-first-line" }
+        val input = case.getValue("input").jsonObject
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, input.getValue("fontScale").jsonPrimitive.float)) {
+                TouchTheme {
+                    PlayerQualityMenu(null, "Automatic: Home limit 200 Mbps", "Quality limit reduced to 4 Mbps to avoid buffering.", true, {
+                    }, {})
+                }
+            }
+        }
+        val label = compose.onNodeWithTag("player:quality-label:auto", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val radio = compose.onNode(
+            hasTestTag("touch:radio-indicator") and hasAnyAncestor(hasTestTag("player:quality-choice:auto")),
+            useUnmergedTree = true
+        ).getUnclippedBoundsInRoot()
+        val offset = abs((label.top.value + label.bottom.value - radio.top.value - radio.bottom.value) / 2)
+        assertEquals(
+            true,
+            offset <= case.getValue("expected").jsonObject.getValue("maximumCenterOffsetDp").jsonPrimitive.float,
+            "$label / $radio"
+        )
     }
 
     @Test fun automaticRowExplainsConfiguredNetworkLimitAndCurrentReduction() {
