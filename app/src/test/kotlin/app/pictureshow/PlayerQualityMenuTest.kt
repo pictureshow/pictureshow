@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -143,6 +144,19 @@ class PlayerQualityMenuTest {
         // Count first: omitting the cue must fail a content assertion, not a node lookup.
         assertEquals(1, compose.onAllNodesWithText(hint).fetchSemanticsNodes().size, "A short Quality menu must reveal its lower choices")
         compose.onNodeWithText(hint).assertIsDisplayed()
+        val viewport = compose.onNodeWithTag("player:quality-menu").getBoundsInRoot()
+        val supporting = input.getValue("automaticContext").jsonPrimitive.content + "\n" +
+            input.getValue("reductionNotice").jsonPrimitive.content
+        val supportBounds = compose.onNodeWithText(supporting, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val supportFullyVisible = supportBounds.top >= viewport.top &&
+            supportBounds.bottom <= viewport.bottom &&
+            supportBounds.left >= viewport.left &&
+            supportBounds.right <= viewport.right
+        assertEquals(
+            true,
+            supportFullyVisible,
+            "The full Auto limit and reduction explanation must be visible before scrolling: $supportBounds / $viewport"
+        )
         val requested = input.getValue("selectMbps").jsonPrimitive.int
         compose.onNodeWithTag("player:quality-choice:$requested").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
