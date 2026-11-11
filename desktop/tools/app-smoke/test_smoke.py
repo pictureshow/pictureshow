@@ -201,6 +201,14 @@ class SmokeVerdictTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "did not retain"):
             smoke.add_fixture_library(FixtureAPI(), "Movies", "movies", "/fixture/movies")
 
+    def test_container_encoder_observation_keeps_required_pid_column(self):
+        def docker_top(command, **_kwargs):
+            self.assertEqual(["docker", "top", "owned-fixture", "-eo", "pid,comm"], command)
+            return "PID COMMAND\n12 jellyfin\n13 ffmpeg\n14 ffprobe\n"
+        api = type("OwnedServer", (), {"fixture_container": "owned-fixture"})()
+        with patch.object(smoke.subprocess, "check_output", docker_top):
+            self.assertEqual(1, smoke.encoding_process_count(api))
+
 
 if __name__ == "__main__":
     unittest.main()

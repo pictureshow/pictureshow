@@ -442,9 +442,11 @@ def provision(api: API, media_base: str):
 def encoding_process_count(api: API) -> int:
     """Inspect only the owned server tree/container, never command arguments."""
     if api.fixture_container is not None:
-        names = subprocess.check_output(["docker", "top", api.fixture_container, "-eo", "comm"], text=True, timeout=5)
-        return sum(Path(line.strip()).name.lower() in ("ffmpeg", "ffmpeg.exe")
-                   for line in names.splitlines())
+        # Docker needs PID in ps output to map/filter the container's processes;
+        # comm alone fails in the daemon before returning any rows.
+        rows = subprocess.check_output(["docker", "top", api.fixture_container, "-eo", "pid,comm"], text=True, timeout=5)
+        return sum(Path(fields[1]).name.lower() in ("ffmpeg", "ffmpeg.exe")
+                   for line in rows.splitlines() if len(fields := line.split(None, 1)) == 2)
     server_pid = api.fixture_process.pid
     if platform.system() == "Windows":
         command = "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress"
