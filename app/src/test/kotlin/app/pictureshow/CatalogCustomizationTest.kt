@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -171,6 +172,8 @@ class CatalogCustomizationTest {
         row.performKeyInput { pressKey(Key.DirectionDown) }
         row.assertIsDisplayed().assertIsFocused()
         compose.onNodeWithTag("home:row:nextup").assertIsDisplayed()
+        val scroll = compose.onNodeWithTag("catalog:editor").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        compose.runOnIdle { assertEquals(0f, scroll.value(), "Moving a visible row must preserve its surrounding viewport") }
         repeat(7) {
             row.performKeyInput { pressKey(Key.DirectionDown) }
             row.assertIsDisplayed().assertIsFocused()
@@ -277,7 +280,15 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("home:reset-opener"))
         compose.onNodeWithTag("home:reset-opener").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
-        compose.onNodeWithTag("home:reset-cancel").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
+        val cancel = compose.onNodeWithTag("home:reset-cancel").getUnclippedBoundsInRoot()
+        val restore = compose.onNodeWithTag("home:reset-confirm").getUnclippedBoundsInRoot()
+        assertEquals(cancel.width, restore.width)
+        assertEquals(cancel.top, restore.top)
+        compose.onNodeWithTag("home:reset-cancel").assert(
+            SemanticsMatcher("Cancel is a command, not a selection") {
+                !it.config.contains(SemanticsProperties.Selected)
+            }
+        ).assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
         compose.onNodeWithTag("home:reset-opener").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         backFromTopDialog()

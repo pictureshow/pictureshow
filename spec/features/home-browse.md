@@ -45,3 +45,5 @@ Home editor entry remains disabled while the initial per-viewer preference read 
 Disabled home-editor entries also ignore an already-delivered accessibility or menu action while preferences are pending; both the control and its launcher guard the resolved-layout condition.
 
 TV row reordering keeps the keyed moving row in view with the least necessary scroll; moving an already visible row does not scroll its preceding neighbor away. The picked row remains focused across repeated moves, and only dropping commits the draft order.
+
+Command and value-opening rows expose a button role without selected/checkable state; radio choices alone carry selection, and switches carry their on/off state. Reset offers equally sized Cancel and Restore buttons together, initially focusing Cancel. TV search retains a visible focus indicator after leaving text entry, including zero results.

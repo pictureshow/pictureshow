@@ -565,8 +565,12 @@ internal fun HomeLayoutResetConfirmation(confirm: () -> Unit, close: () -> Unit)
     val first = remember { FocusRequester() }
     CatalogEditor("Restore default layout?", close, first) {
         item { Text("Restore your home rows and landing view. Library display choices stay as they are.") }
-        item { CatalogActionRow("Cancel", close, Modifier.focusRequester(first).testTag("home:reset-cancel")) }
-        item { CatalogCommand("Restore", confirm, Modifier.testTag("home:reset-confirm"), primary = true) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CatalogCommand("Cancel", close, Modifier.weight(1f).focusRequester(first).testTag("home:reset-cancel"))
+                CatalogCommand("Restore", confirm, Modifier.weight(1f).testTag("home:reset-confirm"), primary = true)
+            }
+        }
     }
 }
 
