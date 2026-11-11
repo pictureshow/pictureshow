@@ -87,6 +87,7 @@ import app.pictureshow.core.homePinPickerSupport
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.moveHomeRow
 import app.pictureshow.core.namedPickerChoices
+import app.pictureshow.core.namedPickerFocusTarget
 import app.pictureshow.core.nextUpSeriesHint
 import app.pictureshow.core.offerRestoreAllSeries
 import app.pictureshow.core.resetHomeLayout
@@ -639,7 +640,8 @@ internal fun NamedCatalogPicker(
     }
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
-    val focusAny = selectAny != null && (selectedKeys.isEmpty() || choices.isEmpty())
+    val focusTarget = namedPickerFocusTarget(choices.isNotEmpty(), selectAny != null, selectedKeys.isNotEmpty())
+    val focusAny = focusTarget == "any"
     var searchEditing by remember(account.key, kind, parentId) { mutableStateOf(false) }
     val searchField = remember { FocusRequester() }
     val title = when (kind) {
@@ -790,7 +792,7 @@ internal fun NamedCatalogPicker(
     }
     LaunchedEffect(loading, requested, page, currentChoices, searchEditing) {
         if (tv && !loading && !searchEditing) {
-            val hasChoice = choices.isNotEmpty() || selectAny != null
+            val hasChoice = focusTarget != "search"
             list.scrollToItem(
                 if (!hasChoice) {
                     0

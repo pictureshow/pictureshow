@@ -1850,6 +1850,86 @@
         "resolution": "UHD"
       },
       "expected": "4K and above"
+    },
+    {
+      "id": "named-focus-False-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": false
+      },
+      "expected": "search"
+    },
+    {
+      "id": "named-focus-False-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": true
+      },
+      "expected": "search"
+    },
+    {
+      "id": "named-focus-False-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": false
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-False-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": true
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-True-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": false
+      },
+      "expected": "choice"
+    },
+    {
+      "id": "named-focus-True-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": true
+      },
+      "expected": "choice"
+    },
+    {
+      "id": "named-focus-True-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": false
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-True-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": true
+      },
+      "expected": "choice"
     }
   ]
 }

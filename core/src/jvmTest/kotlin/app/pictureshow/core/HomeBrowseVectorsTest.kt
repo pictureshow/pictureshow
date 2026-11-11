@@ -35,6 +35,13 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "named-picker-focus-target" -> Json.encodeToJsonElement(
+                    namedPickerFocusTarget(
+                        input.getValue("hasChoices").jsonPrimitive.content == "true",
+                        input.getValue("hasAny").jsonPrimitive.content == "true",
+                        input.getValue("hasSelection").jsonPrimitive.content == "true"
+                    )
+                )
                 "title-count-label" -> Json.encodeToJsonElement(titleCountLabel(input.getValue("count").jsonPrimitive.content.toInt()))
                 "resolution-summary" -> Json.encodeToJsonElement(
                     VideoResolution.valueOf(input.getValue("resolution").jsonPrimitive.content).summary()

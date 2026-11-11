@@ -85,3 +85,10 @@ fun VideoResolution.summary(): String = when (this) {
     VideoResolution.FULL_HD -> "Full HD"
     VideoResolution.UHD -> "4K and above"
 }
+
+/** A missing selected person never removes the remaining focus escape routes. */
+fun namedPickerFocusTarget(hasChoices: Boolean, hasAny: Boolean, hasSelection: Boolean): String = when {
+    !hasChoices && !hasAny -> "search"
+    hasAny && (!hasSelection || !hasChoices) -> "any"
+    else -> "choice"
+}
