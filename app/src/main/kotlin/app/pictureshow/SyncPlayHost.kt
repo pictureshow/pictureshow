@@ -35,6 +35,7 @@ import app.pictureshow.core.sync.syncPing
 import app.pictureshow.core.sync.syncReadiness
 import app.pictureshow.core.sync.syncRemove
 import app.pictureshow.core.sync.syncRepeat
+import app.pictureshow.core.sync.syncScheduledPlaying
 import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
@@ -130,6 +131,7 @@ internal class SyncPlayHost(
     private var scheduled: Job? = null
     private var timeline: SyncCommand? = null
     private var timelinePlaying = false
+    private var timelineApplied = false
     private var drift = SyncDriftState()
     private var readyEntry: String? = null
     private var stoppedEntry: String? = null
@@ -653,6 +655,13 @@ internal class SyncPlayHost(
         }
         val command = timeline ?: return
         if (!ready || command.playlistItemId != current.playlistItemId || membership.phase !in setOf("Playing", "Paused")) return
+        if (!timelineApplied) {
+            if (timelinePlaying && membership.phase != "Playing") return
+            // A scheduled command may have reached When before this decoder was ready.
+            // Re-run its scheduled application, including play/pause even when position is aligned.
+            if (scheduled?.isActive != true) schedule(command, timelinePlaying)
+            return
+        }
         val playing = syncTimelinePlaying(command.command, timelinePlaying)
         val target = syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, now, playing, r.durationTicks) ?: return
         if (target.delayMillis > 0) return
@@ -688,12 +697,14 @@ internal class SyncPlayHost(
         return true
     }
 
-    private fun schedule(command: SyncCommand) {
+    private fun schedule(command: SyncCommand, retainedPlaying: Boolean? = null) {
         scheduled?.cancel()
         // Acceptance can publish Playing before When. The ticker must wait on this command,
         // rather than extrapolating a previous paused Seek through the wait interval.
         timeline = command
-        timelinePlaying = false
+        timelinePlaying = retainedPlaying ?: syncTimelinePlaying(command.command, membership.phase == "Playing")
+        val intendedPlaying = timelinePlaying
+        timelineApplied = false
         scheduled = scope.launch {
             val generation = membership.generation
             val now = anchor?.serverNowTicks(wall(), monotonic()) ?: run {
@@ -720,13 +731,14 @@ internal class SyncPlayHost(
                 return@launch
             }
             val at = anchor?.serverNowTicks(wall(), monotonic()) ?: return@launch
-            val playing = command.command == "Unpause" || (command.command == "Seek" && membership.phase == "Playing")
+            // Waiting may temporarily hold a playing command; it does not erase that command's intent.
+            val playing = syncScheduledPlaying(intendedPlaying, membership.phase)
             val execution =
                 syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, at, playing, r.durationTicks) ?: return@launch
             diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
             val position = syncScheduledPosition(command.command, r.positionTicks, execution.positionTicks)
             val positionChanged = renderer?.apply(position, playing) == true
-            timelinePlaying = playing
+            timelineApplied = !intendedPlaying || playing
             // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
             drift = syncTransportApplied(drift, monotonic(), positionChanged)
         }
@@ -746,6 +758,7 @@ internal class SyncPlayHost(
         calibration = SyncClockCalibration()
         timeline = null
         timelinePlaying = false
+        timelineApplied = false
         drift = stopSyncDrift()
         readyEntry = null
         stoppedEntry = null

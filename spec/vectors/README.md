@@ -437,3 +437,5 @@ The `sync-state` suite also executes `access-presentation`: unknown/loading/fail
 The future-Unpause state trace retains its new command immediately even when Playing is published before When; renderer adapters must honor the existing future-target delay cases rather than advancing an older paused Seek through the wait.
 
 `sync-clock` operation `timeline-playing` takes command and appliedPlaying; Unpause is playing, Pause is paused, and Seek retains its applied mode across independent StateUpdate notifications. Expected is boolean. These cases complement the separate-event host deadline regression.
+
+Operation `scheduled-playing` in `sync-clock` takes intended (retained command authority) and current phase. Output is playing only for intended=true and phase=Playing. Waiting/Paused holds output without erasing pending authority. Command acceptance uses `timeline-playing` with current playing context; after application it uses the retained applied mode, never a fresh phase reinterpretation.

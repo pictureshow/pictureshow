@@ -316,6 +316,51 @@
         "appliedPlaying": true
       },
       "expected": false
+    },
+    {
+      "id": "scheduled-mode-playing",
+      "op": "scheduled-playing",
+      "input": {
+        "intended": true,
+        "phase": "Playing"
+      },
+      "expected": true
+    },
+    {
+      "id": "scheduled-mode-waiting",
+      "op": "scheduled-playing",
+      "input": {
+        "intended": true,
+        "phase": "Waiting"
+      },
+      "expected": false
+    },
+    {
+      "id": "scheduled-mode-paused",
+      "op": "scheduled-playing",
+      "input": {
+        "intended": true,
+        "phase": "Paused"
+      },
+      "expected": false
+    },
+    {
+      "id": "scheduled-mode-no-authority-playing",
+      "op": "scheduled-playing",
+      "input": {
+        "intended": false,
+        "phase": "Playing"
+      },
+      "expected": false
+    },
+    {
+      "id": "scheduled-mode-no-authority-waiting",
+      "op": "scheduled-playing",
+      "input": {
+        "intended": false,
+        "phase": "Waiting"
+      },
+      "expected": false
     }
   ]
 }

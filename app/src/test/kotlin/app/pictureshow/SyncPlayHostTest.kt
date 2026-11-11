@@ -279,6 +279,103 @@ class SyncPlayHostTest {
         assertFalse(rig.operations().any { it in setOf("Seek", "Unpause") })
     }
 
+    @Test fun aPendingPlayingSeekRetainsItsIntentAcrossLateReadinessAndWaitingEvenWhenAligned() = runTest {
+        for ((readyAtWhen, barrier) in listOf(false to "Waiting", true to "Waiting", false to "Paused", true to "Paused")) {
+            val rig = Rig(this)
+            rig.join()
+            rig.snapshot()
+            rig.joined("Playing")
+            rig.renderer.value = rig.renderer.value.copy(positionTicks = 50_000_000L, playing = false)
+            rig.host.receive(rig.command("Seek", delayMs = 1_000, ticks = 50_000_000L))
+            runCurrent()
+            rig.renderer.value = rig.renderer.value.copy(ready = readyAtWhen, buffering = !readyAtWhen)
+            rig.host.receive(
+                rig.update(
+                    "StateUpdate",
+                    buildJsonObject {
+                        put("State", "Waiting")
+                        put("Reason", "Buffering")
+                    }
+                )
+            )
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertFalse(rig.renderer.value.playing)
+            val heldApplyCount = rig.renderer.applied.size
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertEquals(heldApplyCount, rig.renderer.applied.size, "A closed $barrier barrier must not reapply pending output every tick")
+            rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false)
+            rig.renderer.applied.clear()
+            rig.host.tick()
+            runCurrent()
+            assertFalse(rig.renderer.applied.any { it.playing == true }, "Waiting holds both unready and prepared pending output")
+            rig.host.receive(
+                rig.update(
+                    "StateUpdate",
+                    buildJsonObject {
+                        put("State", "Playing")
+                        put("Reason", "Ready")
+                    }
+                )
+            )
+            // Late target is already aligned: a drift-only retry would never apply Play.
+            rig.renderer.value = rig.renderer.value.copy(positionTicks = 60_000_000L, ready = true, buffering = false)
+            rig.renderer.applied.clear()
+            rig.sent.clear()
+            rig.host.tick()
+            runCurrent()
+            assertTrue(rig.renderer.value.playing, "Pending play intent survives readyAtWhen=$readyAtWhen")
+            assertEquals(60_000_000L, rig.renderer.value.positionTicks)
+            assertFalse(rig.renderer.applied.any { it.position != null })
+            assertTrue(rig.renderer.applied.any { it.playing == true })
+            assertFalse(rig.operations().any { it in setOf("Seek", "Unpause") })
+            rig.host.leave()
+            runCurrent()
+        }
+    }
+
+    @Test fun aSeekAcceptedDuringWaitingDoesNotInventPlayAuthorityFromALaterPhaseNotification() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Waiting")
+                    put("Reason", "Buffering")
+                }
+            )
+        )
+        rig.host.receive(rig.command("Seek", ticks = 50_000_000L))
+        runCurrent()
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.renderer.value.playing)
+        rig.renderer.applied.clear()
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Playing")
+                    put("Reason", "Ready")
+                }
+            )
+        )
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.playing == true || it.position != null })
+        rig.host.receive(rig.command("Unpause", delayMs = 1_000, ticks = 50_000_000L))
+        runCurrent()
+        advanceTimeBy(999)
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(rig.renderer.value.playing)
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
+    }
+
     @Test fun futureUnpauseWaitsForTheCalibratedWhenAndDoesNotEcho() = runTest {
         val rig = Rig(this)
         rig.join()

@@ -9,6 +9,7 @@ import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncDrift
+import app.pictureshow.core.sync.syncScheduledPlaying
 import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncTarget
 import app.pictureshow.core.sync.syncTimelinePlaying
@@ -74,6 +75,15 @@ class SyncTimingVectorsTest {
                     assertEquals(
                         expected.jsonPrimitive.boolean,
                         syncTimelinePlaying(i.getValue("command").jsonPrimitive.content, i.bool("appliedPlaying")),
+                        row.toString()
+                    )
+                }
+
+                "scheduled-playing" -> {
+                    val i = row.getValue("input").jsonObject
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        syncScheduledPlaying(i.bool("intended"), i.getValue("phase").jsonPrimitive.content),
                         row.toString()
                     )
                 }
