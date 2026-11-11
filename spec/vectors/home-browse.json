@@ -2050,6 +2050,34 @@
         "preferencesReady": true
       },
       "expected": true
+    },
+    {
+      "id": "editor-repeated-down-up-drop-retains-exact-order",
+      "operation": "editor-move-sequence",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries",
+          "latest:one",
+          "latest:two"
+        ],
+        "key": "resume",
+        "deltas": [
+          1,
+          1,
+          1,
+          -1
+        ]
+      },
+      "expected": [
+        "nextup",
+        "libraries",
+        "resume",
+        "latest:one",
+        "latest:two"
+      ]
     }
   ]
 }

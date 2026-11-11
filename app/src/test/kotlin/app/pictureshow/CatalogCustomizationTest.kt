@@ -151,6 +151,45 @@ class CatalogCustomizationTest {
             )
     }
 
+    @Test fun repeatedNativeMovesKeepThePickedRowAndItsNeighborVisibleUntilDrop() {
+        var preferences by mutableStateOf(HomePreferences())
+        val libraries = (1..12).map { library.copy(id = "library-$it", name = "Library $it") }
+        compose.setContent {
+            MaterialTheme {
+                HomeCustomization(
+                    CatalogHomeState(loading = false, libraries = libraries, preferences = preferences),
+                    account,
+                    service,
+                    { preferences = it(preferences) },
+                    {}
+                )
+            }
+        }
+        val row = compose.onNodeWithTag("home:reorder:resume")
+        row.performSemanticsAction(SemanticsActions.RequestFocus)
+        row.performSemanticsAction(SemanticsActions.OnClick)
+        row.performKeyInput { pressKey(Key.DirectionDown) }
+        row.assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag("home:row:nextup").assertIsDisplayed()
+        repeat(7) {
+            row.performKeyInput { pressKey(Key.DirectionDown) }
+            row.assertIsDisplayed().assertIsFocused()
+        }
+        repeat(2) {
+            row.performKeyInput { pressKey(Key.DirectionUp) }
+            row.assertIsDisplayed().assertIsFocused()
+        }
+        compose.runOnIdle { assertTrue(preferences.order.isEmpty()) }
+        row.performSemanticsAction(SemanticsActions.OnClick)
+        row.assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(
+                listOf("nextup", "libraries", "latest:library-1", "latest:library-2", "latest:library-3", "latest:library-4", "resume"),
+                preferences.order.take(7)
+            )
+        }
+    }
+
     @Test fun pickedPinKeepsVisibilityAndUnpinDisabledUntilDrop() {
         val pin = app.pictureshow.core.HomePin(app.pictureshow.core.HomePinKind.FAVORITES)
         var preferences by mutableStateOf(HomePreferences(pins = listOf(pin)))

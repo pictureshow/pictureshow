@@ -242,6 +242,21 @@ class HomeBrowseVectorsTest {
                         input.getValue("delta").jsonPrimitive.content.toInt()
                     )
                 )
+                "editor-move-sequence" -> {
+                    val initial = Json.decodeFromJsonElement<List<String>>(input.getValue("visible"))
+                    val preferences = HomePreferences(order = Json.decodeFromJsonElement(input.getValue("order")))
+                    val result = Json.decodeFromJsonElement<List<Int>>(input.getValue("deltas")).fold(preferences) { draft, delta ->
+                        draft.copy(
+                            order = moveHomeRow(
+                                draft.order,
+                                editableHomeKeys(initial, draft),
+                                input.getValue("key").jsonPrimitive.content,
+                                delta
+                            )
+                        )
+                    }
+                    Json.encodeToJsonElement(result.order)
+                }
                 "filter-presentation" -> {
                     val filters = Json.decodeFromJsonElement<LibraryFilters>(input.getValue("filters"))
                     buildJsonObject {

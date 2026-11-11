@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -62,8 +64,18 @@ internal fun HomeReorderRow(
     move: (Int) -> Unit,
     endDrag: () -> Unit,
     unpin: (() -> Unit)?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    position: Int = 0
 ) {
+    val visibility = remember { BringIntoViewRequester() }
+    // A keyed row follows its own placement. Numeric scroll targets race reordered/saving items
+    // and pin every move to the top, hiding the neighbor the viewer just crossed.
+    LaunchedEffect(tv, moving, position) {
+        if (tv && moving) {
+            withFrameNanos { }
+            visibility.bringIntoView()
+        }
+    }
     val currentMove by rememberUpdatedState(move)
     val currentEnd by rememberUpdatedState(endDrag)
     val currentPick by rememberUpdatedState(pickOrDrop)
@@ -131,7 +143,7 @@ internal fun HomeReorderRow(
         }
     }
     Row(
-        modifier.fillMaxWidth().heightIn(min = 56.dp).onSizeChanged { height = it.height }
+        modifier.bringIntoViewRequester(visibility).fillMaxWidth().heightIn(min = 56.dp).onSizeChanged { height = it.height }
             .testTag("home:row:$key").onPreviewKeyEvent { event ->
                 if (tv && moving && event.key in listOf(Key.DirectionUp, Key.DirectionDown)) {
                     if (event.type == KeyEventType.KeyDown) move(if (event.key == Key.DirectionUp) -1 else 1)

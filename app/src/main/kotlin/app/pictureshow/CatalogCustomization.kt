@@ -421,11 +421,14 @@ internal fun HomeCustomization(
                 },
                 move = { delta ->
                     draftOrder = moveHomeRow(draftOrder ?: preferences.order, rows, key, delta)
-                    scope.launch {
-                        list.animateScrollToItem(
-                            (if (state.saving) 1 else 0) + (if (state.preferenceStatus != null) 1 else 0) + 1 +
-                                (index + delta).coerceIn(rows.indices)
-                        )
+                    // Touch keeps its existing drag-follow behavior; TV follows the keyed row.
+                    if (!tv) {
+                        scope.launch {
+                            list.animateScrollToItem(
+                                (if (state.saving) 1 else 0) + (if (state.preferenceStatus != null) 1 else 0) + 1 +
+                                    (index + delta).coerceIn(rows.indices)
+                            )
+                        }
                     }
                 }, endDrag = ::finish,
                 unpin = if (key.startsWith("pin:")) {
@@ -444,6 +447,7 @@ internal fun HomeCustomization(
                 } else {
                     null
                 },
+                position = index,
                 modifier = Modifier.animateItem().then(if (index == 0) Modifier.focusRequester(first) else Modifier)
             )
         }

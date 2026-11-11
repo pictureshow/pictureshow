@@ -43,3 +43,5 @@ The combined sort/direction control announces its sort name once and Ascending/D
 
 Home editor entry remains disabled while the initial per-viewer preference read is pending. Enable it only after either the server layout or the local fallback has resolved (`preferencesReady`); catalog refreshes may retain an already resolved layout. This prevents a cold start from presenting editable default rows before the viewer’s layout arrives. TV and touch use the same rule; the launcher callback also guards a stale click. Cases `home-editor-pending-read-blocks-default-layout` and `home-editor-ready-server-or-local-layout-opens` cover the portable decision.
 Disabled home-editor entries also ignore an already-delivered accessibility or menu action while preferences are pending; both the control and its launcher guard the resolved-layout condition.
+
+TV row reordering keeps the keyed moving row in view with the least necessary scroll; moving an already visible row does not scroll its preceding neighbor away. The picked row remains focused across repeated moves, and only dropping commits the draft order.
