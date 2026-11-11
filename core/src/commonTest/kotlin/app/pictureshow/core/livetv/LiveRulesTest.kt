@@ -117,4 +117,21 @@ class LiveRulesTest {
         assertEquals("Won’t record", recordingStatus("ConflictedNotOk"))
         assertEquals("Failed", recordingStatus("Error"))
     }
+
+    @Test fun actualRecorderMetadataDecodesThroughBothLiveListAndNormalItemResponses() {
+        val body = """{"Id":"r","Name":"Series","Status":"InProgress","EpisodeTitle":"Generated episode",
+            "StartDate":"2026-11-10T23:00:00Z","EndDate":"2026-11-10T23:30:00Z","CompletionPercentage":0}"""
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val normal = json.decodeFromString<app.pictureshow.core.MediaItem>(body)
+        val listed = json.decodeFromString<app.pictureshow.core.ItemPage>("""{"Items":[$body]}""").items.single()
+        assertEquals(normal, listed)
+        assertEquals("Generated episode", normal.episodeTitle)
+        assertEquals("2026-11-10T23:00:00Z", normal.recordingStartDate)
+        assertEquals("2026-11-10T23:30:00Z", normal.recordingEndDate)
+        assertEquals(0.0, normal.recordingCompletionPercentage)
+        assertEquals("InProgress", normal.recordingStatus)
+        val missing = json.decodeFromString<app.pictureshow.core.MediaItem>("""{"Id":"c","Name":"Completed"}""")
+        assertEquals(null, missing.recordingStartDate)
+        assertEquals(null, missing.recordingCompletionPercentage)
+    }
 }

@@ -5,7 +5,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveGuide.kt",
     "app/src/main/kotlin/app/pictureshow/LiveTime.kt",
     "app/src/main/kotlin/app/pictureshow/LiveGuideCell.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt"
   ],
   "cases": [
     {
@@ -495,6 +496,218 @@
         "viewportWidth": 696
       },
       "expected": 45
+    },
+    {
+      "id": "recording-real-fields-zero",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "EpisodeTitle": "Painted windows",
+          "IndexNumber": 7,
+          "ParentIndexNumber": 1,
+          "CompletionPercentage": 0,
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Painted windows",
+        "metadata": "S1 E7 \u00b7 Ends 6:30 PM \u00b7 2 min",
+        "progress": 0.0
+      }
+    },
+    {
+      "id": "recording-episode-fallback",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "IndexNumber": 5,
+          "ParentIndexNumber": 1,
+          "Status": "Completed",
+          "PremiereDate": "2026-11-10T23:00:00Z",
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "S1 E5",
+        "metadata": "Today \u00b7 6:00 PM \u00b7 2 min",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-missing-percent",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-explicit-half",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 50
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": 0.5
+      }
+    },
+    {
+      "id": "recording-out-of-range",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 150
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-completed-not-growing",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "Completed",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 50
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Today \u00b7 6:00 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-missing-fields",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-ordinary-episode-name",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Actual episode",
+          "SeriesName": "Series",
+          "RunTimeTicks": 599999999
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Actual episode",
+        "metadata": "<1 min",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-reversed-end",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T22:30:00Z"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Today \u00b7 6:00 PM",
+        "progress": null
+      }
     }
   ]
 }

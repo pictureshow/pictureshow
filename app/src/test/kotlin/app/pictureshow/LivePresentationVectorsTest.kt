@@ -10,13 +10,16 @@ import java.util.Locale
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -28,13 +31,28 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(44, cases.size)
+        assertEquals(53, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "recording-metadata" -> {
+                    val item = Json { ignoreUnknownKeys = true }.decodeFromJsonElement<app.pictureshow.core.MediaItem>(c.getValue("item"))
+                    val time = LiveTime(
+                        c.getValue("twentyFour").jsonPrimitive.boolean,
+                        Locale.forLanguageTag(value("locale")),
+                        ZoneId.of(value("zone")),
+                        Instant.parse(value("now")).toEpochMilli()
+                    )
+                    val actual = buildJsonObject {
+                        put("title", liveRecordingTitle(item))
+                        put("metadata", liveRecordingMetadata(item, time).replace('\u202f', ' ').replace('\u00a0', ' '))
+                        put("progress", liveRecordingProgress(item))
+                    }
+                    assertEquals(envelope.getValue("expected"), actual, id)
+                }
                 "focus-shift" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideFocusShift(

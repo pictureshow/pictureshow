@@ -119,3 +119,17 @@ a fixed dark badge. Short labels are Recording, Failed, Overlaps and Won’t rec
 server statuses remain explicitly distinguishable with the supplied value, as required by LIVE-08, rather than being
 silently mapped to a known state. Phone schedule badges occupy their own line, leaving headline and localized time readable.
 Completed recordings need no exceptional-state badge. Phone refresh uses one pull indicator; writes have their own progress.
+
+Recording shelves decode EpisodeTitle, StartDate, EndDate and CompletionPercentage when actually supplied on either the
+Live TV list or normal item response. Prefer the supplied episode title, then a non-redundant item name, then season/episode
+identity. A valid server start/end pair may label the scheduled end; missing or reversed dates never invent it. A growing
+recording's thumbnail progress uses only a finite server CompletionPercentage within0…100, including authoritative zero.
+Scheduled elapsed time, premiere date and runtime are not recorded-byte progress or a seekable window. A finished item
+without those optional fields remains an ordinary playable/downloadable recording. Nine native metadata vectors fix the
+missing/invalid/zero/completed cases. Card captions reserve consistent space; TV options use native long-press/Menu while
+phone keeps its bare overflow. Delete remains an explicitly destructive contextual choice followed by scoped confirmation.
+
+TV recording entry uses the normal item-detail and download owners with a recording navigation context. A dimmed artwork
+backdrop sits behind title/metadata/overview; the action group keeps Play and Download visible together at standard960×540.
+Compact stable action geometry survives playback/readback handoffs. The default catalog detail route,220dp hero and existing
+stable geometry remain unchanged. Growing/failed recordings retain their authoritative download restrictions in either layout.

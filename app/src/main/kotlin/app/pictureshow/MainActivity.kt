@@ -233,6 +233,7 @@ class MainActivity : ComponentActivity() {
 }
 
 internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
+internal fun liveRecordingItemRoute(item: MediaItem) = itemRoute(item) + if (item.isMusic()) "" else "&liveRecording=true"
 
 internal fun playerRoute(item: MediaItem, resume: Boolean) =
     playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
@@ -877,7 +878,7 @@ internal fun Pictureshow(
                 val vm: LiveTvViewModel = koinViewModel(key = "live:${account.key}", parameters = { parametersOf(account) })
                 LiveTvScreen(vm, account, tv = true, onPlay = {
                     nav.navigate(playerRoute(it, true))
-                }, onRecording = { nav.navigate(itemRoute(it)) }, onBack = { nav.popBackStack() })
+                }, onRecording = { nav.navigate(liveRecordingItemRoute(it)) }, onBack = { nav.popBackStack() })
             }
         }
         offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
@@ -996,7 +997,16 @@ internal fun Pictureshow(
             }
         }
         composable(MUSIC_NOW_ROUTE) { TvMusicNow(music) { nav.popBackStack() } }
-        composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
+        composable(
+            "item?item={item}&liveRecording={liveRecording}",
+            arguments = listOf(
+                navArgument("item") { type = NavType.StringType },
+                navArgument("liveRecording") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
                 if (item.type == "Person") {
@@ -1037,6 +1047,7 @@ internal fun Pictureshow(
                         onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
                         onPlayedRequest = vm::playedRequested,
                         origin = item,
+                        recordingContext = entry.arguments?.getBoolean("liveRecording") == true,
                         onDownload = { shown, season, seasonName ->
                             offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
                         }

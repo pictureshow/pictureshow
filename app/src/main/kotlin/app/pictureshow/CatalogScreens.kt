@@ -1250,6 +1250,7 @@ fun CatalogDetail(
     onPendingQueueNeeded: () -> Unit = {},
     onPendingQueueExpired: (() -> Boolean)? = null,
     onPlayedRequest: () -> Unit = {},
+    recordingContext: Boolean = false,
     onDownload: ((MediaItem, String?, String?) -> Unit)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -2139,6 +2140,9 @@ fun CatalogDetail(
             ) {
                 item(key = "body") {
                     Box(Modifier.fillMaxWidth()) {
+                        if (recordingContext && headerItem != null) {
+                            RecordingDetailBackdrop(headerItem, state.account, Modifier.matchParentSize())
+                        }
                         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
                             if (item != null && headerItem != null) {
@@ -2149,13 +2153,15 @@ fun CatalogDetail(
                                 } else {
                                     headerItem
                                 }
-                                CatalogArtwork(
-                                    backdrop,
-                                    state.account,
-                                    wide = true,
-                                    modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
-                                    alignment = BiasAlignment(0f, -.5f)
-                                )
+                                if (!recordingContext) {
+                                    CatalogArtwork(
+                                        backdrop,
+                                        state.account,
+                                        wide = true,
+                                        modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
+                                        alignment = BiasAlignment(0f, -.5f)
+                                    )
+                                }
                                 CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics.testTag("detail:title"))
                                 if (headerItem.type == "Episode") {
                                     Text(
@@ -2197,6 +2203,7 @@ fun CatalogDetail(
                                         },
                                         onPlay,
                                         playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        compact = recordingContext,
                                         stableLayout =
                                         playbackLayout || playbackWaiting,
                                         readyQueuedTargets = readyQueuedTargets,
@@ -2226,8 +2233,17 @@ fun CatalogDetail(
                                         if (trackSelection) selectedSection = "header"
                                     }
                                 }
-                                headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it, modifier = arrivalMetadataSemantics) }
-                                if (headerItem.genres.isNotEmpty()) {
+                                headerItem.overview?.takeIf(String::isNotBlank)?.let {
+                                    Text(
+                                        it,
+                                        modifier = arrivalMetadataSemantics.then(
+                                            if (recordingContext) Modifier.fillMaxWidth(.6f) else Modifier
+                                        ),
+                                        maxLines = if (recordingContext) 4 else Int.MAX_VALUE,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (!recordingContext && headerItem.genres.isNotEmpty()) {
                                     Text(
                                         headerItem.genres.joinToString(" · "),
                                         color = CatalogMuted,
@@ -2249,6 +2265,7 @@ fun CatalogDetail(
                                         },
                                         onPlay,
                                         playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        compact = recordingContext,
                                         stableLayout =
                                         playbackLayout || playbackWaiting,
                                         readyQueuedTargets = readyQueuedTargets,
@@ -2826,6 +2843,7 @@ private fun DetailActions(
     pending: PendingDetailActions? = null,
     onHeaderFocus: (String, Boolean) -> Unit = { _, _ -> },
     stableLayout: Boolean = false,
+    compact: Boolean = false,
     readyQueuedTargets: Set<String> = emptySet(),
     requestCueTarget: String? = null,
     readiness: app.pictureshow.core.DetailReadyFeedback,
@@ -2954,10 +2972,10 @@ private fun DetailActions(
             val childBringIntoView = childBringIntoViews.getValue(target)
             return Modifier
                 .then(
-                    if (stableLayout) {
+                    if (stableLayout || compact) {
                         Modifier.bringIntoViewRequester(childBringIntoView).onGloballyPositioned { coordinates ->
                             if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
-                        }.width(detailStableWidth(target)).heightIn(min = DETAIL_STABLE_HEIGHT)
+                        }.width(detailActionWidth(target, compact)).heightIn(min = if (compact) 48.dp else DETAIL_STABLE_HEIGHT)
                     } else {
                         Modifier
                     }
@@ -3047,8 +3065,9 @@ private fun DetailActions(
                 ) {
                     DetailActionLabel(
                         labels.getValue("primary"),
-                        if (stableLayout) "primary" else null,
-                        Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary"))
+                        if (stableLayout || compact) "primary" else null,
+                        Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
+                        compact = compact
                     )
                 }
             }
@@ -3060,6 +3079,7 @@ private fun DetailActions(
                         onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
                         enabled = !blocked,
                         modifier = Modifier.detailFocusDiagnostic("from-start")
+                            .then(if (compact) Modifier.width(detailActionWidth("from-start", true)).heightIn(min = 48.dp) else Modifier)
                     ) { Text("Play from start") }
                 }
             }
@@ -3089,8 +3109,9 @@ private fun DetailActions(
                 ) {
                     DetailActionLabel(
                         labels.getValue("played"),
-                        if (stableLayout) "played" else null,
-                        Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played"))
+                        if (stableLayout || compact) "played" else null,
+                        Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
+                        compact = compact
                     )
                 }
             }
@@ -3120,17 +3141,25 @@ private fun DetailActions(
                 ) {
                     DetailActionLabel(
                         labels.getValue("favorite"),
-                        if (stableLayout) "favorite" else null,
-                        Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
+                        if (stableLayout || compact) "favorite" else null,
+                        Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite")),
+                        compact = compact
                     )
                 }
             }
         }
         if (onDownload != null && pending == null) {
             key("download") {
-                Button(onClick = {
-                    if (!blocked) onDownload()
-                }, enabled = !blocked, modifier = Modifier.testTag("detail:download")) { Text("Download") }
+                Button(
+                    onClick = {
+                        if (!blocked) onDownload()
+                    },
+                    enabled = !blocked,
+                    modifier = Modifier.testTag("detail:download")
+                        .then(if (compact) Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp) else Modifier)
+                ) {
+                    if (compact) DetailActionLabel("Download", "download", Modifier, compact = true) else Text("Download")
+                }
             }
         }
         if (stableLayout) {
@@ -3148,8 +3177,9 @@ private fun DetailActions(
                     ) {
                         DetailActionLabel(
                             labels.getValue("from-start"),
-                            if (stableLayout) "from-start" else null,
-                            Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start"))
+                            if (stableLayout || compact) "from-start" else null,
+                            Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                            compact = compact
                         )
                     }
                 }
@@ -3162,17 +3192,28 @@ private val DETAIL_STABLE_HEIGHT = 72.dp
 
 private fun detailStableWidth(target: String) = if (target == "primary" || target == "from-start") 200.dp else 260.dp
 
+private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) {
+    detailStableWidth(target)
+} else {
+    when (target) {
+        "played" -> 160.dp
+        "from-start" -> 140.dp
+        else -> 120.dp
+    }
+}
+
 /**
  * After playback the pills keep a fixed size so nothing moves as labels change. TV Material's Button leaves its content at
  * the surface's top start, so the wording has to fill the room inside the button's padding to sit in the middle.
  */
 @Composable
-private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier) {
+private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false) {
     if (stableTarget == null) {
         Text(label, modifier = modifier)
     } else {
         Box(
-            Modifier.width(detailStableWidth(stableTarget) - 32.dp).heightIn(min = DETAIL_STABLE_HEIGHT - 20.dp),
+            Modifier.width(detailActionWidth(stableTarget, compact) - 32.dp)
+                .heightIn(min = (if (compact) 48.dp else DETAIL_STABLE_HEIGHT) - 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(label, modifier = modifier, textAlign = TextAlign.Center)

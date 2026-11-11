@@ -211,7 +211,8 @@ internal fun LiveTvScreen(
                                 },
                                 modifier = Modifier.height(
                                     (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
-                                ).testTag("live:tab:$next")
+                                ).testTag("live:tab:$next"),
+                                colors = androidx.tv.material3.TabDefaults.pillIndicatorTabColors(inactiveContentColor = LiveMuted)
                             ) {
                                 androidx.tv.material3.Text(
                                     next,

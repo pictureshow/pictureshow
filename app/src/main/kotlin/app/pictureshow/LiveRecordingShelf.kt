@@ -84,7 +84,7 @@ private fun LiveRecordingCard(
     val status = if (item.isInProgress) "InProgress" else item.recordingStatus
     val label = status?.takeUnless { it == "Completed" }?.let(::recordingStatus)
     val metadata = liveRecordingMetadata(item, time)
-    val fraction = liveRecordingProgress(item, now)
+    val fraction = liveRecordingProgress(item)
     val growing = item.isInProgress || item.recordingStatus == "InProgress"
     val target = modifier.width(if (tv) 240.dp else 244.dp).semantics {
         stateDescription = listOfNotNull(
@@ -201,14 +201,9 @@ internal fun liveRecordingMetadata(item: MediaItem, time: LiveTime): String {
 }
 
 /** A reported zero is authoritative, even when the elapsed guide window would suggest growth. */
-internal fun liveRecordingProgress(item: MediaItem, now: Long): Float? {
+internal fun liveRecordingProgress(item: MediaItem): Float? {
     if (!item.isInProgress && item.recordingStatus != "InProgress") return null
-    item.recordingCompletionPercentage?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { return (it / 100).toFloat() }
-    val start = recordingInstant(item.recordingStartDate) ?: return null
-    val end = recordingInstant(item.recordingEndDate) ?: return null
-    if (end <= start || now < start || now > end) return null
-    val duration = end.toDouble() - start.toDouble()
-    return if (duration > 0) ((now.toDouble() - start.toDouble()) / duration).toFloat() else null
+    return item.recordingCompletionPercentage?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { (it / 100).toFloat() }
 }
 
 private fun recordingInstant(value: String?): Long? = runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
