@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -272,7 +274,10 @@ internal fun PlayerItemScreen(
     }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") = host.finish(next, reason)
-    fun seek(delta: Long) = host.seek(delta)
+    fun forwardSeekAllowed() = liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)
+    fun seek(delta: Long) {
+        if (delta <= 0 || forwardSeekAllowed()) host.seek(delta)
+    }
     SideEffect {
         host.onFinishing = {
             extraPanel = null
@@ -298,6 +303,7 @@ internal fun PlayerItemScreen(
 
     // A reader's seek reveals the controls with the position control focused, so the new clock is spoken.
     fun readerSeek(delta: Long, arrow: Boolean = false) {
+        if (delta > 0 && !forwardSeekAllowed()) return
         if (arrow && !onePressSeek.admit(OnePressSeek.Path.Reader, delta)) {
             PlaybackDiagnostics.write("player-seek source=reader deltaMs=$delta dropped=paired")
             return
@@ -535,23 +541,32 @@ internal fun PlayerItemScreen(
                             // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
                             val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
                             when {
-                                x != 0f && canSeekHere -> readerSeek(if (forward) 10_000L else -10_000L, arrow = true)
+                                x != 0f && canSeekHere && (!forward || forwardSeekAllowed()) -> readerSeek(
+                                    if (forward) 10_000L else -10_000L,
+                                    arrow = true
+                                )
                                 y != 0f -> readerShowControls()
                                 else -> return@scrollBy false
                             }
                             true
                         }
                         customActions = if (canSeekHere) {
-                            listOf(
-                                CustomAccessibilityAction("Back 10 seconds") {
-                                    readerSeek(-10_000L)
-                                    true
-                                },
-                                CustomAccessibilityAction("Forward 10 seconds") {
-                                    readerSeek(10_000L)
-                                    true
+                            buildList {
+                                add(
+                                    CustomAccessibilityAction("Back 10 seconds") {
+                                        readerSeek(-10_000L)
+                                        true
+                                    }
+                                )
+                                if (forwardSeekAllowed()) {
+                                    add(
+                                        CustomAccessibilityAction("Forward 10 seconds") {
+                                            readerSeek(10_000L)
+                                            true
+                                        }
+                                    )
                                 }
-                            )
+                            }
                         } else {
                             emptyList()
                         }
@@ -721,7 +736,14 @@ internal fun PlayerItemScreen(
                         PlaybackToggle(
                             paused,
                             showPlayButton,
-                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play")),
+                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))
+                                .then(
+                                    if (host.isLive) {
+                                        Modifier.width(liveControlWidth()).heightIn(min = 48.dp).align(Alignment.CenterVertically)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                             ended,
                             enabled = !host.isLive || host.liveCanTimeShift
                         ) {
@@ -730,7 +752,12 @@ internal fun PlayerItemScreen(
                             interaction++
                         }
                         if (host.isLive) {
-                            PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused, host::goLive)
+                            Box(Modifier.align(Alignment.CenterVertically)) {
+                                PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused) {
+                                    host.goLive()
+                                    if (!accessibleControls) playFocus.requestFocus()
+                                }
+                            }
                         }
                         Button(scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
@@ -963,7 +990,7 @@ internal fun PlayerItemScreen(
                 restoringSeekFocus = true
                 returnFocus = timelineFocus
             }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
-                SeekPanel(position, if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration, ::seek) {
+                SeekPanel(position, if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration, ::seek, forwardSeekAllowed()) {
                     close {
                         seekOpen = false
                         restoringSeekFocus = true

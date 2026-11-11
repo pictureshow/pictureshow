@@ -4,14 +4,17 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AssistChip
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -46,13 +50,13 @@ internal fun PlayerIconButton(
     ) { Icon(playerActionIcon(icon), null, Modifier.size(24.dp)) }
 }
 
-/** The live chip is part of the position row, rather than a second filled transport action. */
+/** The live action/status has one reserved slot beside the measured position range. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsState, paused: Boolean) {
     val window = host.liveWindow
     val position = ui.scrubMs ?: host.position
-    val behind = window?.behindLiveMs(position)
+    val readout = liveTimelineReadout(window, position, paused, host.liveBufferExpired, host.liveCanTimeShift)
     val atEdge = window?.atLiveEdge(position, host.liveBufferExpired) == true
     val announced = key(window?.canTimeShift, window?.goLivePosition() != null) {
         rememberAnnouncedPosition(
@@ -67,8 +71,16 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
     val spoken = remember(paused, announced, host.liveBufferExpired, host.liveCanTimeShift, window?.goLivePosition() != null) {
         liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired, window?.behindLiveMs(announced))
     }
+    CurrentPositionAccessibility(setOf("touch:scrubber", "touch:live-status")) {
+        liveTimelineLabel(
+            paused,
+            host.liveCanTimeShift,
+            host.liveBufferExpired,
+            host.liveWindow?.behindLiveMs(ui.scrubMs ?: host.position)
+        )
+    }
     val accent = MaterialTheme.colorScheme.primary
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
             Modifier.fillMaxWidth().testTag("touch:live-position"),
             verticalAlignment = Alignment.CenterVertically,
@@ -96,27 +108,33 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
             } else {
                 LivePlayerTrack(null, 0, accent, Modifier.weight(1f))
             }
-            AssistChip(
-                onClick = {
-                    host.goLive()
-                    ui.interact()
-                },
-                enabled = window?.goLivePosition() != null && (!atEdge || paused),
-                label = { Text(if (atEdge) "LIVE" else "Go live") },
-                modifier = Modifier.testTag("touch:go-live").semantics {
-                    contentDescription = if (atEdge) "Live" else "Go live"
+            Box(Modifier.width(liveControlWidth()).heightIn(min = 48.dp).testTag("touch:live-slot"), contentAlignment = Alignment.Center) {
+                if (atEdge && !paused) {
+                    LiveEdgeBadge(tv = false, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live"))
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            host.goLive()
+                            ui.interact()
+                        },
+                        enabled = window?.goLivePosition() != null,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
+                    ) { Text("Go live") }
                 }
-            )
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired, behind),
+                readout.status,
                 color = Color.White.copy(alpha = .8f),
                 style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics { contentDescription = spoken }
+                modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics {
+                    contentDescription = "Live playback status"
+                    stateDescription = spoken
+                }
             )
             Text(
-                behindLiveClock(behind),
+                readout.clock,
                 color = Color.White,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.testTag("touch:behind-live").clearAndSetSemantics {}

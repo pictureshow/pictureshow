@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
@@ -56,28 +58,29 @@ internal fun PlayerTimeline(
     onOpenSeek: () -> Unit = {}
 ) {
     if (live) {
-        val behind = liveWindow?.behindLiveMs(positionMs)
+        val readout = liveTimelineReadout(liveWindow, positionMs, paused, liveExpired, liveCanTimeShift)
         val spoken = remember(paused, announcedPositionMs, liveExpired, liveCanTimeShift, liveWindow?.goLivePosition() != null) {
             liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(announcedPositionMs))
         }
         CurrentPositionAccessibility(setOf("player:position")) {
             liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(positionMs))
         }
-        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    liveTimelineLabel(paused, liveCanTimeShift, liveExpired, behind),
+                    readout.status,
                     modifier = Modifier.clearAndSetSemantics {}
                 )
                 Box(
-                    modifier = Modifier.testTag("player:position")
+                    modifier = Modifier.widthIn(min = 48.dp).testTag("player:position")
                         .clickable(enabled = liveCanTimeShift && !liveExpired, onClickLabel = "Seek in live buffer", onClick = onOpenSeek)
                         .semantics {
                             contentDescription = "Live playback position"
                             stateDescription = spoken
-                        }
-                ) { Text(behindLiveClock(behind), modifier = Modifier.clearAndSetSemantics {}) }
+                        },
+                    contentAlignment = Alignment.CenterEnd
+                ) { Text(readout.clock, modifier = Modifier.clearAndSetSemantics {}) }
             }
         }
         return

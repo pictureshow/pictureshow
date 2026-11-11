@@ -307,7 +307,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         ui.visible = !ui.visible
                         ui.interact()
                     },
-                    onDoubleTap = { offset -> host.seek(if (offset.x >= size.width / 2) TOUCH_SEEK_STEP_MS else -TOUCH_SEEK_STEP_MS) }
+                    onDoubleTap = { offset ->
+                        val forward = offset.x >= size.width / 2
+                        if (!forward || liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)) {
+                            host.seek(if (forward) TOUCH_SEEK_STEP_MS else -TOUCH_SEEK_STEP_MS)
+                        }
+                    }
                 )
             }.semantics {
                 contentDescription = "Video player"
@@ -318,16 +323,22 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 }
                 // PLAY-03's reader actions: a screen reader reaches a seek without first showing the controls.
                 customActions = if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
-                    listOf(
-                        CustomAccessibilityAction("Back 10 seconds") {
-                            host.seek(-TOUCH_SEEK_STEP_MS)
-                            true
-                        },
-                        CustomAccessibilityAction("Forward 10 seconds") {
-                            host.seek(TOUCH_SEEK_STEP_MS)
-                            true
+                    buildList {
+                        add(
+                            CustomAccessibilityAction("Back 10 seconds") {
+                                host.seek(-TOUCH_SEEK_STEP_MS)
+                                true
+                            }
+                        )
+                        if (liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)) {
+                            add(
+                                CustomAccessibilityAction("Forward 10 seconds") {
+                                    host.seek(TOUCH_SEEK_STEP_MS)
+                                    true
+                                }
+                            )
                         }
-                    )
+                    }
                 } else {
                     emptyList()
                 }
@@ -460,7 +471,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 ) {
                     Icon(playerActionIcon(if (playback.showPlayButton) "play" else "pause"), null, Modifier.size(32.dp))
                 }
-                PlayerIconButton("forward10", "Forward 10 seconds", Modifier.testTag("touch:forward10"), enabled = canSeek) {
+                PlayerIconButton(
+                    "forward10",
+                    "Forward 10 seconds",
+                    Modifier.testTag("touch:forward10"),
+                    enabled = canSeek && liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)
+                ) {
                     host.seek(TOUCH_SEEK_STEP_MS)
                 }
             }
