@@ -130,7 +130,7 @@ internal fun AdvancedPlaybackSettings(
                                 horizontalArrangement = Arrangement.spacedBy(24.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch) }
+                                Box(Modifier.width(240.dp)) { SubtitlePreview(local.appearance, touch, compact) }
                                 Column(Modifier.weight(1f)) {
                                     TouchSettingsHeading(group)
                                     TouchSettingsList(onClose, groupScroll, rows)
@@ -139,7 +139,7 @@ internal fun AdvancedPlaybackSettings(
                         } else {
                             Column(panelModifier) {
                                 TouchSettingsHeading(group)
-                                if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch)
+                                if (group == "Subtitle appearance") SubtitlePreview(local.appearance, touch, compact)
                                 TouchSettingsList(onClose, groupScroll, rows)
                             }
                         }
@@ -571,10 +571,10 @@ private fun SettingSupportingText(text: String, touch: Boolean) {
 }
 
 @Composable
-internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = false) {
+internal fun SubtitlePreview(appearance: SubtitleAppearance, touch: Boolean = false, compact: Boolean = touch && isShortTouchWindow()) {
     val context = LocalContext.current
     val image = remember { imageSubtitleSample() }
-    val previewHeight = if (touch && isShortTouchWindow()) 64.dp else 108.dp
+    val previewHeight = if (touch && compact) 64.dp else 108.dp
     val cues = remember(appearance) {
         appearance.cues(
             listOf(

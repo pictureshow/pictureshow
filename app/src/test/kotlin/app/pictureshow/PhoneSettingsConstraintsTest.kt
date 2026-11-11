@@ -80,6 +80,12 @@ class PhoneSettingsConstraintsTest {
         val row = first.getUnclippedBoundsInRoot()
         val viewport = compose.onNodeWithTag("settings:touch-list").getUnclippedBoundsInRoot()
         val preview = compose.onNodeWithTag("settings:subtitle-preview").getUnclippedBoundsInRoot()
+        assertEquals(
+            true,
+            abs(preview.bottom.value - preview.top.value - expected.getValue("previewHeightDp").jsonPrimitive.float) <=
+                expected.getValue("maximumPreviewHeightOffsetDp").jsonPrimitive.float,
+            "Allocated landscape preview height: $preview"
+        )
         val besideChoices = preview.right <= viewport.left &&
             minOf(preview.bottom, viewport.bottom) > maxOf(preview.top, viewport.top)
         assertEquals(expected.getValue("previewBesideChoices").jsonPrimitive.boolean, besideChoices, "$preview / $viewport")
@@ -148,6 +154,12 @@ class PhoneSettingsConstraintsTest {
             compose.runOnIdle { hint.value = next }
             val preview = compose.onNodeWithTag("settings:subtitle-preview").getUnclippedBoundsInRoot()
             val list = compose.onNodeWithTag("settings:touch-list").getUnclippedBoundsInRoot()
+            assertEquals(
+                true,
+                abs(preview.bottom.value - preview.top.value - expected.getValue("previewHeightDp").jsonPrimitive.float) <=
+                    expected.getValue("maximumPreviewHeightOffsetDp").jsonPrimitive.float,
+                "$next: allocated portrait preview height: $preview"
+            )
             assertEquals(
                 expected.getValue("previewAboveChoices").jsonPrimitive.boolean,
                 preview.bottom <= list.top,
