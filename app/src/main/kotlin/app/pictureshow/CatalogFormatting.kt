@@ -6,6 +6,7 @@ package app.pictureshow
 import app.pictureshow.core.LibraryFilters
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.constraintKeys
+import app.pictureshow.core.constraintLabel
 import app.pictureshow.core.filteredEmptyLabel
 import java.text.NumberFormat
 import java.util.Locale
@@ -43,14 +44,4 @@ internal fun filterChipLabel(filters: LibraryFilters): String = filters.constrai
     }
 }
 
-internal fun filterConstraintLabel(filters: LibraryFilters, key: String): String = when (key) {
-    "genre" -> filters.genre ?: "Genre"
-    "year" -> filters.year.toString()
-    "rating" -> filters.officialRating ?: "Rating"
-    "unwatched" -> "Unwatched"
-    "favorite" -> "Favorites"
-    "resolution" -> filters.resolution.label
-    "person" -> "Person"
-    "studio" -> filters.studio ?: "Studio"
-    else -> "Filter"
-}
+internal fun filterConstraintLabel(filters: LibraryFilters, key: String): String = filters.constraintLabel(key)

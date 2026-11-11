@@ -12,8 +12,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -43,6 +45,72 @@ class CatalogRevisionPresentationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Cinema", "https://media.example.test", "12"), User("v", "Viewer"), "fake")
     private val library = MediaItem("movies", "Movies", "CollectionFolder", collectionType = "movies")
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun personChipNamesItsPersonAndRemovalTarget() {
+        compose.setContent {
+            MaterialTheme {
+                TouchCatalogGrid(
+                    CatalogGridState(
+                        account,
+                        library,
+                        loading = false,
+                        filters = LibraryFilters(personId = "person", personName = "Alice Marcolino")
+                    ),
+                    {}, {}, { _, _ -> }, {}, onFilters = {}, onDisplayList = {}, onRemoveFilter = {}, onBack = {}
+                )
+            }
+        }
+        compose.onNodeWithText("Alice Marcolino").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Remove Alice Marcolino").assertExists()
+    }
+
+    @Test fun tvHeaderUsesEqualChipGeometryAndNamesItsViewState() {
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme {
+                CatalogGrid(
+                    CatalogGridState(account, library, loading = false, list = true),
+                    {},
+                    {},
+                    { _, _ -> },
+                    {},
+                    onFilters = {},
+                    onDisplayList = {}
+                )
+            }
+        }
+        val sort = compose.onNodeWithTag("grid:sort:SortName").getUnclippedBoundsInRoot()
+        for (tag in listOf("grid:filters", "grid:display")) {
+            val bounds = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+            assertEquals(sort.bottom - sort.top, bounds.bottom - bounds.top, tag)
+        }
+        compose.onNodeWithText("View: List").assertExists()
+    }
+
+    @Test fun tvSectionAndNativeRowLabelShareAnInset() = sectionInset(tv = true)
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchSectionAndNativeRowLabelShareAnInset() = sectionInset(tv = false)
+
+    private fun sectionInset(tv: Boolean) {
+        compose.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Column {
+                    CatalogSection("Section", first = true)
+                    if (tv) {
+                        androidx.tv.material3.MaterialTheme { TvSettingsRow("Label", null, selected = false, onClick = {}) }
+                    } else {
+                        androidx.compose.material3.ListItem(headlineContent = { androidx.compose.material3.Text("Label") })
+                    }
+                }
+            }
+        }
+        val heading = compose.onNodeWithText("Section", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val label = compose.onNodeWithText("Label", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(heading.left, label.left)
+    }
 
     @Test fun tvListRowsKeepPosterBoundedAndMoreThanOneTitleVisible() {
         compose.setContent {
@@ -92,6 +160,7 @@ class CatalogRevisionPresentationTest {
         compose.onNodeWithText("No movies match these filters").assertExists()
         compose.onNodeWithText("This library is empty.").assertDoesNotExist()
         compose.onNodeWithText("Filters (3)").assertExists()
+        compose.onNodeWithTag("grid:filters").assertIsSelected()
         compose.onNodeWithTag("grid:clear-filters").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(cleared) }
     }

@@ -2102,6 +2102,73 @@
         "selected": true
       },
       "expected": true
+    },
+    {
+      "id": "person-chip-name",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personId": "alice",
+          "personName": "Alice Marcolino"
+        },
+        "key": "person"
+      },
+      "expected": "Alice Marcolino"
+    },
+    {
+      "id": "person-chip-missing-name",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personId": "alice"
+        },
+        "key": "person"
+      },
+      "expected": "Selected person"
+    },
+    {
+      "id": "person-name-alone-is-not-a-filter",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personName": "Alice Marcolino"
+        },
+        "key": "person"
+      },
+      "expected": "Selected person"
+    },
+    {
+      "id": "resolution-chip-compact",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "resolution": "FULL_HD"
+        },
+        "key": "resolution"
+      },
+      "expected": "Full HD"
+    },
+    {
+      "id": "rating-chip-value",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "officialRating": "G"
+        },
+        "key": "rating"
+      },
+      "expected": "Rated G"
+    },
+    {
+      "id": "person-display-name-never-enters-query",
+      "operation": "library-filter-parameters",
+      "input": {
+        "personId": "alice",
+        "personName": "Alice Marcolino"
+      },
+      "expected": {
+        "personIds": "alice"
+      }
     }
   ]
 }

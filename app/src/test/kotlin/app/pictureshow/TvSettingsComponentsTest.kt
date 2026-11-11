@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -31,6 +32,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -181,7 +183,9 @@ class TvSettingsComponentsTest {
         compose.onNodeWithTag("value").assertIsFocused()
     }
 
-    @Test fun commandSupportingTextUsesTheDrawnForegroundWhileFocusedAndResting() {
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun commandSupportingTextUsesTheDrawnForegroundWhileFocusedAndResting() {
         compose.setContent {
             PictureshowTheme {
                 val first = remember { FocusRequester() }
@@ -197,17 +201,29 @@ class TvSettingsComponentsTest {
                 LaunchedEffect(Unit) { first.requestFocus() }
             }
         }
-        fun color(text: String): androidx.compose.ui.graphics.Color {
-            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-            compose.onNodeWithText(text, useUnmergedTree = true)
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            return layouts.single().layoutInput.style.color
+        fun supportContrast(focused: Boolean) {
+            val pixels = compose.onNodeWithTag("search").captureToImage().asAndroidBitmap()
+            val supportColors = mutableMapOf<Int, Int>()
+            for (y in pixels.height / 2 until pixels.height - 12) {
+                for (x in 24 until pixels.width / 2) {
+                    val color = pixels.getPixel(x, y)
+                    supportColors[color] = (supportColors[color] ?: 0) + 1
+                }
+            }
+            val background = pixels.getPixel(pixels.width / 2, pixels.height / 2)
+            assertTrue(
+                supportColors.any { (color, count) ->
+                    count > 8 &&
+                        androidx.core.graphics.ColorUtils.calculateContrast(color, background) >= 4.5
+                },
+                "Supporting text must be painted with readable contrast on the actual native surface; focused=$focused"
+            )
         }
         compose.onNodeWithTag("search").assertIsFocused()
-        assertEquals(color("Find by name"), color("An exact query"), "Focus must not assume a light surface that was not drawn")
+        supportContrast(true)
         key("search", Key.DirectionDown)
         compose.onNodeWithTag("next").assertIsFocused()
-        assertEquals(color("Find by name"), color("An exact query"), "Resting support follows the actual surface foreground too")
+        supportContrast(false)
     }
 
     @Test fun longPickerArrivesAtCurrentOffscreenValueWithReadableSupportingText() {

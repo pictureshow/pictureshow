@@ -6,6 +6,7 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +36,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -92,7 +96,6 @@ import app.pictureshow.core.nextUpSeriesHint
 import app.pictureshow.core.offerRestoreAllSeries
 import app.pictureshow.core.resetHomeLayout
 import app.pictureshow.core.summary
-import app.pictureshow.core.titleCountLabel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -107,6 +110,7 @@ private fun CatalogEditor(
     first: FocusRequester,
     list: LazyListState = rememberLazyListState(),
     footer: (@Composable () -> Unit)? = null,
+    status: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit
 ) {
     val tv = usesTvInterface(LocalContext.current)
@@ -115,7 +119,7 @@ private fun CatalogEditor(
     ) {
         CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
             if (tv) {
-                TvSettingsPanel(title, close, first, scrollContent = false, footer = footer, lazyState = list) {
+                TvSettingsPanel(title, close, first, scrollContent = false, footer = footer, lazyState = list, preview = status) {
                     LazyColumn(
                         state = list,
                         modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
@@ -127,21 +131,28 @@ private fun CatalogEditor(
             } else {
                 Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            TopAppBar(title = { Text(title) }, navigationIcon = {
-                                IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
-                                    Icon(touchActionIcon("back"), "Back")
+                        Box(Modifier.fillMaxSize()) {
+                            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                TopAppBar(title = { Text(title) }, navigationIcon = {
+                                    IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
+                                        Icon(touchActionIcon("back"), "Back")
+                                    }
+                                })
+                                LazyColumn(
+                                    state = list,
+                                    modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
+                                    contentPadding = PaddingValues(vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    content = content
+                                )
+                                footer?.let {
+                                    Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
+                                        it()
+                                    }
                                 }
-                            })
-                            LazyColumn(
-                                state = list,
-                                modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
-                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                content = content
-                            )
-                            footer?.let {
-                                Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() }
+                            }
+                            status?.let {
+                                Box(Modifier.align(Alignment.BottomCenter).widthIn(max = 640.dp).fillMaxWidth().padding(16.dp)) { it() }
                             }
                         }
                     }
@@ -151,9 +162,70 @@ private fun CatalogEditor(
     }
 }
 
+/** Non-row content meets the native row's inner text edge. */
 @Composable
-private fun CatalogSection(title: String) {
-    Text(title, Modifier.padding(top = 24.dp, bottom = 8.dp).semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+private fun CatalogBody(text: String, modifier: Modifier = Modifier) {
+    Text(text, modifier.padding(horizontal = 16.dp))
+}
+
+@Composable
+internal fun CatalogSection(title: String, first: Boolean = false) {
+    Text(
+        title,
+        Modifier.padding(horizontal = 16.dp).padding(top = if (first) 0.dp else 24.dp, bottom = 8.dp)
+            .testTag("catalog:section:$title").semantics { heading() },
+        style = MaterialTheme.typography.titleMedium
+    )
+}
+
+/** A permanent slot keeps saving/error transitions outside the lazy list's geometry. */
+@Composable
+private fun HomeSaveStatus(state: CatalogHomeState, retry: () -> Unit) {
+    if (!usesTvInterface(LocalContext.current)) {
+        val message = if (state.saving) "Saving layout…" else state.preferenceStatus
+        if (message != null) {
+            Snackbar(action = {
+                if (state.preferenceRetryable && !state.saving) TextButton(retry, Modifier.testTag("home:retry-save")) { Text("Retry") }
+            }) {
+                Text(
+                    message,
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    color = if (state.preferenceRetryable &&
+                        !state.saving
+                    ) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.inverseOnSurface
+                    }
+                )
+            }
+        }
+        return
+    }
+    Row(
+        Modifier.fillMaxWidth().height(64.dp).testTag("home:status-slot"),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val message = if (state.saving) "Saving layout…" else state.preferenceStatus
+        message?.let {
+            Text(
+                it,
+                Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                color = if (state.preferenceRetryable &&
+                    !state.saving
+                ) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        if (state.preferenceRetryable && !state.saving) {
+            CatalogCommand("Retry", retry, Modifier.testTag("home:retry-save"))
+        }
+    }
 }
 
 /** These adapt touch roles to the same TV components used by the main settings page. */
@@ -169,7 +241,22 @@ private fun <T> CatalogChoiceRow(
 ) {
     val tv = usesTvInterface(LocalContext.current)
     if (tv) {
-        TvSettingsChoiceRow(title, value, values, label, modifier, enabled = enabled, onSelect = change)
+        TvSettingsChoiceRow(
+            title,
+            value,
+            values,
+            label,
+            modifier,
+            enabled = enabled,
+            pickerTitle = if (title ==
+                "Genre"
+            ) {
+                "Choose a genre"
+            } else {
+                title
+            },
+            onSelect = change
+        )
     } else {
         var choosing by remember { mutableStateOf(false) }
         ListItem(
@@ -178,7 +265,22 @@ private fun <T> CatalogChoiceRow(
             trailingContent = { Icon(touchActionIcon("chevron-right"), null) },
             modifier = modifier.clickable(enabled = enabled) { choosing = true }.semantics { stateDescription = label(value) }
         )
-        if (choosing) CatalogChoicePicker(title, value, values, label, change, close = { choosing = false })
+        if (choosing) {
+            CatalogChoicePicker(
+                if (title ==
+                    "Genre"
+                ) {
+                    "Choose a genre"
+                } else {
+                    title
+                },
+                value,
+                values,
+                label,
+                change,
+                close = { choosing = false }
+            )
+        }
     }
 }
 
@@ -389,21 +491,8 @@ internal fun HomeCustomization(
         } else {
             close()
         }
-    }, first, list) {
-        if (state.saving) item("saving") { Text("Saving layout…", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-        state.preferenceStatus?.let { status ->
-            item("save-status") {
-                Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(status, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    if (state.preferenceRetryable) {
-                        CatalogCommand("Retry", {
-                            change { it }
-                        }, Modifier.testTag("home:retry-save"), enabled = !state.saving)
-                    }
-                }
-            }
-        }
-        item("rows-heading") { CatalogSection("Rows") }
+    }, first, list, status = { HomeSaveStatus(state) { change { it } } }) {
+        item("rows-heading") { CatalogSection("Rows", first = true) }
         items(rows, key = { it }) { key ->
             val index = rows.indexOf(key)
             HomeReorderRow(
@@ -425,7 +514,7 @@ internal fun HomeCustomization(
                     if (!tv) {
                         scope.launch {
                             list.animateScrollToItem(
-                                (if (state.saving) 1 else 0) + (if (state.preferenceStatus != null) 1 else 0) + 1 +
+                                1 +
                                     (index + delta).coerceIn(rows.indices)
                             )
                         }
@@ -448,9 +537,11 @@ internal fun HomeCustomization(
                     null
                 },
                 position = index,
-                modifier = Modifier.animateItem().then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+                modifier = Modifier.animateItem(),
+                bodyModifier = if (index == 0) Modifier.focusRequester(first) else Modifier
             )
         }
+        item("display-heading") { CatalogSection("Display") }
         item("combine") {
             CatalogToggleRow(
                 "Combine Continue watching and Next up",
@@ -496,7 +587,7 @@ internal fun HomeCustomization(
         val episodes = state.availableRows.firstOrNull {
             it.key == "nextup"
         }?.items.orEmpty().filter { it.seriesId != null }.distinctBy { it.seriesId }
-        if (episodes.isEmpty() && preferences.hiddenSeries.isEmpty()) item { Text("No series in Next up.") }
+        if (episodes.isEmpty() && preferences.hiddenSeries.isEmpty()) item { CatalogBody("No series in Next up.") }
         items(episodes, key = { "hide:${it.seriesId}" }) { episode ->
             val id = requireNotNull(episode.seriesId)
             CatalogToggleRow(
@@ -562,13 +653,27 @@ internal fun HomeCustomization(
 
 @Composable
 internal fun HomeLayoutResetConfirmation(confirm: () -> Unit, close: () -> Unit) {
+    val body = "Restore your home rows and landing view. Library display choices stay as they are."
+    if (!usesTvInterface(LocalContext.current)) {
+        AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Restore default layout?") },
+            text = { Text(body) },
+            dismissButton = { TextButton(close, Modifier.testTag("home:reset-cancel")) { Text("Cancel") } },
+            confirmButton = { TextButton(confirm, Modifier.testTag("home:reset-confirm")) { Text("Restore") } }
+        )
+        return
+    }
     val first = remember { FocusRequester() }
     CatalogEditor("Restore default layout?", close, first) {
-        item { Text("Restore your home rows and landing view. Library display choices stay as they are.") }
+        item { CatalogBody(body) }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CatalogCommand("Cancel", close, Modifier.weight(1f).focusRequester(first).testTag("home:reset-cancel"))
-                CatalogCommand("Restore", confirm, Modifier.weight(1f).testTag("home:reset-confirm"), primary = true)
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CatalogCommand("Restore", confirm, Modifier.testTag("home:reset-confirm"), primary = true)
+                CatalogCommand("Cancel", close, Modifier.focusRequester(first).testTag("home:reset-cancel"))
             }
         }
     }
@@ -706,11 +811,11 @@ internal fun NamedCatalogPicker(
                 )
             }
         }
-        if (loading) item("loading") { Text("Loading…") }
+        if (loading) item("loading") { CatalogBody("Loading choices…") }
         error?.let {
             item("error") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(it)
+                    CatalogBody(it)
                     CatalogCommand("Retry", { retry++ })
                 }
             }
@@ -719,7 +824,7 @@ internal fun NamedCatalogPicker(
             error == null &&
             choices.isEmpty()
         ) {
-            item("empty") { Text(if (requested.isBlank()) "No choices available" else "No matches for “$requested”") }
+            item("empty") { CatalogBody(if (requested.isBlank()) "No choices available" else "No matches for “$requested”") }
         }
         if (selectAny != null) {
             item("any-choice") {
@@ -744,7 +849,7 @@ internal fun NamedCatalogPicker(
         items(choices, key = MediaItem::id) { item ->
             val checked = selected(item)
             val count = item.recursiveItemCount ?: item.childCount
-            val support = if (pickingHomeRows) homePinPickerSupport(checked, count) else count?.let(::titleCountLabel)
+            val support = if (pickingHomeRows) homePinPickerSupport(checked, count) else null
             val modifier = (
                 if (choices.indexOf(item) == initial &&
                     (selectAny == null || selectedKeys.isNotEmpty())
@@ -833,7 +938,10 @@ internal fun NamedCatalogPicker(
 
 @Composable
 private fun CatalogPersonAvatar(item: MediaItem, account: Account) {
-    Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
             item.name.split(' ').mapNotNull {
                 it.firstOrNull()
@@ -898,14 +1006,17 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
-    var personLabel by remember { mutableStateOf("Selected person") }
+    var personLabel by remember { mutableStateOf(draft.personName ?: "Selected person") }
     LaunchedEffect(state.account.key, state.parent.id, draft.personId) {
-        personLabel = "Selected person"
+        personLabel = draft.personName ?: "Selected person"
         draft.personId?.let { id ->
             val parent = service.item(state.account, state.parent.id)
             val result = if (parent is ClientResult.Success) service.item(state.account, id) else parent
             currentCoroutineContext().ensureActive()
-            if (result is ClientResult.Success && result.value.name.isNotBlank()) personLabel = result.value.name
+            if (result is ClientResult.Success && result.value.name.isNotBlank()) {
+                personLabel = result.value.name
+                draft = draft.copy(personName = result.value.name)
+            }
         }
     }
     LaunchedEffect(state.parent.id, retry) {
@@ -923,7 +1034,7 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     CatalogEditor("Filters", close, first, footer = {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             CatalogCommand("Apply", {
-                apply(draft)
+                apply(draft.copy(personName = personLabel.takeIf { draft.personId != null }))
                 close()
             }, Modifier.testTag("filters:apply"), primary = true)
             CatalogCommand("Clear all", { draft = LibraryFilters() }, Modifier.testTag("filters:clear"))
@@ -985,20 +1096,20 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
         item {
             CatalogPickerRow("Person", if (draft.personId == null) "Any" else personLabel, Modifier.testTag("filters:person")) { done ->
                 NamedCatalogPicker(state.account, service, "Persons", state.parent.id, {
-                    draft = draft.copy(personId = it.id)
+                    draft = draft.copy(personId = it.id, personName = it.name)
                     personLabel = it.name
                     done()
                 }, done, selectedKeys = setOfNotNull(draft.personId), selectAny = {
-                    draft = draft.copy(personId = null)
+                    draft = draft.copy(personId = null, personName = null)
                     done()
                 })
             }
         }
-        if (loading) item { Text("Loading choices…") }
+        if (loading) item { CatalogBody("Loading choices…") }
         error?.let {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(it)
+                    CatalogBody(it)
                     CatalogCommand("Retry", { retry++ })
                 }
             }

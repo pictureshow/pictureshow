@@ -145,6 +145,7 @@ internal fun <T> TvSettingsChoiceRow(
     supportingText: String? = null,
     enabled: Boolean = true,
     optionSupportingText: ((T) -> String?)? = null,
+    pickerTitle: String = title,
     onSelect: (T) -> Unit
 ) {
     require(values.isNotEmpty())
@@ -187,7 +188,7 @@ internal fun <T> TvSettingsChoiceRow(
         }
     )
     if (picker) {
-        TvSettingsChoicePicker(title, value, values, label, onSelect, onClose = {
+        TvSettingsChoicePicker(pickerTitle, value, values, label, onSelect, onClose = {
             picker = false
             restoreOpener = true
         }, supportingText = optionSupportingText)

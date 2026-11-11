@@ -7,9 +7,11 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.DropdownMenu
@@ -65,7 +67,8 @@ internal fun HomeReorderRow(
     endDrag: () -> Unit,
     unpin: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    position: Int = 0
+    position: Int = 0,
+    bodyModifier: Modifier = Modifier
 ) {
     val visibility = remember { BringIntoViewRequester() }
     // A keyed row follows its own placement. Numeric scroll targets race reordered/saving items
@@ -166,11 +169,17 @@ internal fun HomeReorderRow(
             TvSettingsRow(
                 title,
                 hint,
-                modifier = Modifier.weight(1f).then(semantics).testTag("home:reorder:$key"),
+                modifier = bodyModifier.weight(1f).then(semantics).testTag("home:reorder:$key"),
                 selected = moving,
                 enabled = enabled,
                 onClick = pickOrDrop,
-                trailing = { androidx.tv.material3.Icon(touchActionIcon("drag"), if (moving) "Drop row" else "Reorder row") }
+                trailing = {
+                    androidx.tv.material3.Icon(
+                        touchActionIcon("drag"),
+                        if (moving) "Drop row" else "Reorder row",
+                        Modifier.testTag("home:handle:$key")
+                    )
+                }
             )
             if (unpin != null) {
                 androidx.tv.material3.IconButton(
@@ -180,6 +189,8 @@ internal fun HomeReorderRow(
                 ) {
                     androidx.tv.material3.Icon(touchActionIcon("more"), "Options for $title")
                 }
+            } else {
+                Spacer(Modifier.width(48.dp))
             }
         } else {
             IconToggleButton(
@@ -222,13 +233,15 @@ internal fun HomeReorderRow(
                         )
                     }
                 }
-            ) { Icon(touchActionIcon("drag"), "Reorder $title") }
+            ) { Icon(touchActionIcon("drag"), "Reorder $title", Modifier.testTag("home:handle:$key")) }
             if (unpin != null) {
                 IconButton(
                     onClick = { overflow = true },
                     enabled = secondaryEnabled,
-                    modifier = Modifier.testTag("home:overflow:$key")
+                    modifier = Modifier.size(48.dp).testTag("home:overflow:$key")
                 ) { Icon(touchActionIcon("more"), "Options for $title") }
+            } else {
+                Spacer(Modifier.width(48.dp))
             }
         }
         // Only pinned rows have this overflow. It never expands the normal row into a stack of bars.

@@ -48,7 +48,7 @@ fun LibraryFilters.withoutConstraint(key: String): LibraryFilters = when (key) {
     "unwatched" -> copy(unwatched = false)
     "favorite" -> copy(favorite = false)
     "resolution" -> copy(resolution = VideoResolution.ANY)
-    "person" -> copy(personId = null)
+    "person" -> copy(personId = null, personName = null)
     "studio" -> copy(studio = null)
     else -> this
 }
@@ -102,3 +102,16 @@ fun canOpenHomeEditor(preferencesReady: Boolean): Boolean = preferencesReady
 
 /** Commands have no selection state; unselected radio choices still have one. */
 fun hasControlSelection(selected: Boolean?): Boolean = selected != null
+
+/** Viewer-facing chips carry values; display-only names never affect server constraints. */
+fun LibraryFilters.constraintLabel(key: String): String = when (key) {
+    "genre" -> genre ?: "Genre"
+    "year" -> year?.toString() ?: "Year"
+    "rating" -> officialRating?.let { "Rated $it" } ?: "Rating"
+    "unwatched" -> "Unwatched"
+    "favorite" -> "Favorites"
+    "resolution" -> resolution.summary()
+    "person" -> personName?.takeIf { !personId.isNullOrBlank() && it.isNotBlank() } ?: "Selected person"
+    "studio" -> studio ?: "Studio"
+    else -> "Filter"
+}

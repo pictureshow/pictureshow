@@ -90,6 +90,69 @@ class CatalogCustomizationTest {
         }
     }
 
+    @Test fun savingAndFailureNeverMoveTheHomeRows() = stableHomeRows()
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchSnackbarNeverMovesTheHomeRows() = stableHomeRows()
+
+    private fun stableHomeRows() {
+        var state by mutableStateOf(CatalogHomeState(loading = false))
+        compose.setContent { MaterialTheme { HomeCustomization(state, account, service, {}, {}) } }
+        val before = compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot()
+        compose.runOnIdle { state = state.copy(saving = true) }
+        compose.onNodeWithText("Saving layout…").assertIsDisplayed()
+        assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())
+        compose.runOnIdle {
+            state =
+                state.copy(
+                    saving = false,
+                    preferenceStatus = "Couldn't save to your server. Saved on this device.",
+                    preferenceRetryable = true
+                )
+        }
+        compose.onNodeWithTag("home:retry-save").assertIsDisplayed()
+        assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())
+        compose.runOnIdle { state = state.copy(preferenceStatus = null, preferenceRetryable = false) }
+        assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())
+    }
+
+    @Test fun tvReorderHandlesShareAColumnWithAndWithoutOverflow() = handleColumns(tv = true)
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchReorderHandlesShareAColumnWithAndWithoutOverflow() = handleColumns(tv = false)
+
+    private fun handleColumns(tv: Boolean) {
+        compose.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Column {
+                    listOf("builtin", "pin").forEach { key ->
+                        HomeReorderRow(
+                            key, key, true, tv, false, true, false, true, {}, {}, {}, {},
+                            unpin = if (key == "pin") ({}) else null
+                        )
+                    }
+                }
+            }
+        }
+        val a = compose.onNodeWithTag("home:handle:builtin", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val b = compose.onNodeWithTag("home:handle:pin", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(a.left, b.left)
+        assertEquals(a.right, b.right)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchResetIsACompactNativeAlertWithTrailingActions() {
+        compose.setContent { androidx.compose.material3.MaterialTheme { HomeLayoutResetConfirmation({}, {}) } }
+        compose.onNodeWithText("Restore default layout?").assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").assertDoesNotExist()
+        val cancel = compose.onNodeWithTag("home:reset-cancel").getUnclippedBoundsInRoot()
+        val confirm = compose.onNodeWithTag("home:reset-confirm").getUnclippedBoundsInRoot()
+        assertTrue(cancel.right <= confirm.left)
+    }
+
     @Test fun homeBuilderShowsCurrentChoiceAndPersistsReversibleRowEdits() {
         var preferences by mutableStateOf(HomePreferences())
         var closed = false
@@ -104,7 +167,7 @@ class CatalogCustomizationTest {
                 )
             }
         }
-        compose.onNodeWithTag("home:visibility:resume").assertIsFocused().assertIsDisplayed()
+        compose.onNodeWithTag("home:reorder:resume").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithText("Back").assertDoesNotExist()
         compose.onNodeWithTag("home:combine").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(preferences.mergeWatching) }
@@ -284,7 +347,7 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertEquals(before, preferences) }
         val cancel = compose.onNodeWithTag("home:reset-cancel").getUnclippedBoundsInRoot()
         val restore = compose.onNodeWithTag("home:reset-confirm").getUnclippedBoundsInRoot()
-        assertEquals(cancel.right - cancel.left, restore.right - restore.left)
+        assertTrue(restore.right < cancel.left, "Primary Restore precedes content-sized Cancel")
         assertEquals(cancel.top, restore.top)
         compose.onNodeWithTag("home:reset-cancel").assert(
             SemanticsMatcher("Cancel is a command, not a selection") {

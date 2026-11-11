@@ -35,6 +35,11 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "filter-constraint-label" -> Json.encodeToJsonElement(
+                    Json.decodeFromJsonElement<LibraryFilters>(
+                        input.getValue("filters")
+                    ).constraintLabel(input.getValue("key").jsonPrimitive.content)
+                )
                 "named-picker-focus-target" -> Json.encodeToJsonElement(
                     namedPickerFocusTarget(
                         input.getValue("hasChoices").jsonPrimitive.content == "true",
