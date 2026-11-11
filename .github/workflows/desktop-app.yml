@@ -119,7 +119,7 @@ jobs:
           $screen = $screenJson | ConvertFrom-Json
           $env:PICTURESHOW_SMOKE_WINDOW_X = [string]$screen.x
           $env:PICTURESHOW_SMOKE_WINDOW_Y = [string]$screen.y
-          python desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+          python desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke --timeout 420
           if ($LASTEXITCODE -ne 0) { throw 'Desktop E2E smoke failed' }
       - uses: actions/upload-artifact@v7
         if: always()

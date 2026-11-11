@@ -48,4 +48,4 @@ done
 [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]
 # AWT shell uses its owned Xvfb; video uses the separate qualified Wayland surface.
 xvfb-run -a -s '-screen 0 1920x1080x24' python3 desktop/tools/app-smoke/run.py \
- --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+ --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke --timeout 420
