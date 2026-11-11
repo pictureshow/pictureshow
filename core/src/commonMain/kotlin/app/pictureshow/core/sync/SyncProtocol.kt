@@ -201,6 +201,18 @@ data class SyncMembership(
 fun syncReportsReadiness(phase: String, currentEntryId: String, stoppedEntryId: String?): Boolean =
     phase != "Idle" || currentEntryId != stoppedEntryId
 
+/** Deduplicate observations, but a real seek invalidates the old position's readiness acknowledgement. */
+data class SyncReadinessState(val entryId: String? = null, val ready: Boolean? = null) {
+    fun afterPositionApplied(positionChanged: Boolean): SyncReadinessState = if (positionChanged) copy(ready = null) else this
+
+    fun observe(currentEntryId: String, currentReady: Boolean): SyncReadinessObservation = SyncReadinessObservation(
+        SyncReadinessState(currentEntryId, currentReady),
+        entryId != currentEntryId || ready != currentReady
+    )
+}
+
+data class SyncReadinessObservation(val state: SyncReadinessState, val report: Boolean)
+
 /** While an entry is opening, matching media alone is insufficient: the renderer must own the current playlist entry. */
 fun syncRendererOwnsEntry(pendingEntryId: String?, renderedEntryId: String?, currentEntryId: String): Boolean =
     pendingEntryId == null || renderedEntryId == currentEntryId

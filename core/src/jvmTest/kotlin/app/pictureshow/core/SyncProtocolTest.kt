@@ -5,6 +5,7 @@ package app.pictureshow.core
 
 import app.pictureshow.core.sync.SyncEvent
 import app.pictureshow.core.sync.SyncMembership
+import app.pictureshow.core.sync.SyncReadinessState
 import app.pictureshow.core.sync.beginSyncJoin
 import app.pictureshow.core.sync.leaveSync
 import app.pictureshow.core.sync.parseSyncMessage
@@ -104,6 +105,10 @@ class SyncProtocolTest {
                 runReadinessCase(case, id)
                 return@forEach
             }
+            if (case.getValue("operation").jsonPrimitive.content == "readiness-cache") {
+                runReadinessCacheCase(case, id)
+                return@forEach
+            }
             if (case.getValue("operation").jsonPrimitive.content == "renderer-readiness") {
                 runRendererReadinessCase(case, id)
                 return@forEach
@@ -166,6 +171,34 @@ class SyncProtocolTest {
             case.getValue("stoppedEntryId").takeUnless { it == JsonNull }?.jsonPrimitive?.content
         )
         assertEquals(case.getValue("expected"), JsonPrimitive(actual), id)
+    }
+
+    private fun runReadinessCacheCase(case: JsonObject, id: String) {
+        checkKeys(case, setOf("id", "operation", "steps"))
+        var state = SyncReadinessState()
+        case.getValue("steps").jsonArray.forEachIndexed { index, value ->
+            val step = value.jsonObject
+            when (step.getValue("op").jsonPrimitive.content) {
+                "observe" -> {
+                    checkKeys(step, setOf("op", "entryId", "ready", "report"))
+                    val observation = state.observe(
+                        step.getValue("entryId").jsonPrimitive.content,
+                        step.getValue("ready").jsonPrimitive.boolean
+                    )
+                    assertEquals(step.getValue("report").jsonPrimitive.boolean, observation.report, "$id step $index")
+                    state = observation.state
+                }
+                "position-applied" -> {
+                    checkKeys(step, setOf("op", "changed"))
+                    state = state.afterPositionApplied(step.getValue("changed").jsonPrimitive.boolean)
+                }
+                "reset" -> {
+                    checkKeys(step, setOf("op"))
+                    state = SyncReadinessState()
+                }
+                else -> error("Unknown readiness step in $id")
+            }
+        }
     }
 
     private fun runRendererReadinessCase(case: JsonObject, id: String) {

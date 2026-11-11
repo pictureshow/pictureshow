@@ -2355,6 +2355,209 @@
           }
         }
       ]
+    },
+    {
+      "id": "sync-state.readiness-cache-short-buffer-between-samples-needs-new-ready",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-long-buffer-reports-unready-then-ready-once",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": false,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": false,
+          "report": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-aligned-no-seek-retains-ready-acknowledgement",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-unchanged-waiting-observations-do-not-rearm-ready",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-new-entry-needs-independent-acknowledgement",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "b",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "b",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-new-membership-or-binding-resets-old-acknowledgement",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "reset"
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": false
+        }
+      ]
+    },
+    {
+      "id": "sync-state.readiness-cache-unready-after-seek-is-not-a-ready-acknowledgement",
+      "operation": "readiness-cache",
+      "steps": [
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": true
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": false,
+          "report": true
+        },
+        {
+          "op": "position-applied",
+          "changed": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": false,
+          "report": false
+        },
+        {
+          "op": "observe",
+          "entryId": "a",
+          "ready": true,
+          "report": true
+        }
+      ]
     }
   ]
 }

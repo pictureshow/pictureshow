@@ -17,6 +17,7 @@ import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.SyncEvent
 import app.pictureshow.core.sync.SyncGroup
 import app.pictureshow.core.sync.SyncMembership
+import app.pictureshow.core.sync.SyncReadinessState
 import app.pictureshow.core.sync.SyncRequest
 import app.pictureshow.core.sync.SyncUtcTime
 import app.pictureshow.core.sync.beginSyncJoin
@@ -146,9 +147,8 @@ internal class SyncPlayHost(
     private var timelinePlaying = false
     private var timelineApplied = false
     private var drift = SyncDriftState()
-    private var readyEntry: String? = null
+    private var readiness = SyncReadinessState()
     private var stoppedEntry: String? = null
-    private var wasReady: Boolean? = null
     private var requestedOpen: String? = null
     private var openingEntry: String? = null
     private var createQueue = false
@@ -307,8 +307,7 @@ internal class SyncPlayHost(
             pause("queue-entry")
             timeline = null
             drift = stopSyncDrift()
-            readyEntry = null
-            wasReady = null
+            readiness = SyncReadinessState()
             requestedOpen = null
         }
         val entryChanged = entry?.playlistItemId != before.queue?.current?.playlistItemId
@@ -331,7 +330,8 @@ internal class SyncPlayHost(
             }
             // This decoder already owns the paused selection. Keep its single viewing/report session.
             trace("apply-before", "source=prepared-queue playing=false seekTicks=${start ?: -1} " + stateFields(prepared))
-            renderer?.apply(start, playing = false)
+            val positionChanged = renderer?.apply(start, playing = false) == true
+            readiness = readiness.afterPositionApplied(positionChanged)
             trace("apply-after", "source=prepared-queue " + stateFields())
         }
         val needsOpen = entry != null && !reusePrepared && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
@@ -519,8 +519,7 @@ internal class SyncPlayHost(
         }?.let { PendingSource(token, membership.generation, it) }
         if (participating) {
             pause("bind", next)
-            readyEntry = null
-            wasReady = null
+            readiness = SyncReadinessState()
         }
         return true
     }
@@ -531,8 +530,7 @@ internal class SyncPlayHost(
         rendererToken = null
         pendingSource = null
         awaitingSource = null
-        readyEntry = null
-        wasReady = null
+        readiness = SyncReadinessState()
     }
 
     /** True consumes every timeline intent while grouped, even during reconnect or preparation. */
@@ -779,9 +777,9 @@ internal class SyncPlayHost(
             return
         }
         val ready = r.ready && !r.buffering && r.seekable && r.durationTicks > 0
-        if (readyEntry != current.playlistItemId || wasReady != ready) {
-            readyEntry = current.playlistItemId
-            wasReady = ready
+        val readinessObservation = readiness.observe(current.playlistItemId, ready)
+        if (readinessObservation.report) {
+            readiness = readinessObservation.state
             if (!ready) pause("not-ready", output)
             diagnostic("readiness", "ready=$ready buffering=${r.buffering} playing=${r.playing}")
             trace(
@@ -846,6 +844,7 @@ internal class SyncPlayHost(
                 "source=correction action=${decision.action} targetTicks=${decision.targetTicks} playing=$playing " + stateFields(r)
             )
             val changed = output.apply(decision.targetTicks, playing, decision.rate)
+            readiness = readiness.afterPositionApplied(changed)
             trace("apply-after", "source=correction positionChanged=$changed " + stateFields())
         } else {
             output.apply(playing = playing, rate = decision.rate)
@@ -949,6 +948,9 @@ internal class SyncPlayHost(
                     "source=scheduled attempt=$attempt playing=$playing seekTicks=${position ?: -1} nowTicks=$at " + stateFields(r)
                 )
                 val positionChanged = renderer?.apply(position, playing) == true
+                // A BUFFERING -> READY cycle can finish between 250 ms samples. The old
+                // acknowledgement belongs to the pre-seek position, even if both samples are READY.
+                readiness = readiness.afterPositionApplied(positionChanged)
                 timelineApplied = !intendedPlaying || playing
                 // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
                 drift = syncTransportApplied(drift, monotonic(), positionChanged)
@@ -979,9 +981,8 @@ internal class SyncPlayHost(
         timelinePlaying = false
         timelineApplied = false
         drift = stopSyncDrift()
-        readyEntry = null
+        readiness = SyncReadinessState()
         stoppedEntry = null
-        wasReady = null
         requestedOpen = null
         openingEntry = null
     }

@@ -697,6 +697,85 @@ class SyncPlayHostTest {
         assertEquals(JsonPrimitive("entry-a"), next["PlaylistItemId"])
     }
 
+    @Test fun anAppliedSeekRefreshesReadinessEvenWhenItsBufferCycleFallsBetweenTicks() = runTest {
+        for (command in listOf("Pause", "Seek")) {
+            val rig = Rig(this)
+            rig.join()
+            rig.snapshot()
+            rig.host.tick()
+            runCurrent()
+            assertEquals(1, rig.operations().count { it == "Ready" })
+            rig.host.receive(
+                rig.update(
+                    "StateUpdate",
+                    buildJsonObject {
+                        put("State", "Waiting")
+                        put("Reason", "Buffering")
+                    }
+                )
+            )
+            rig.host.receive(rig.command(command, delayMs = 100, ticks = 2_490_590_000L))
+            runCurrent()
+            rig.host.tick()
+            runCurrent()
+            assertEquals(1, rig.operations().count { it == "Ready" }, "a future seek cannot acknowledge the old position")
+            advanceTimeBy(100)
+            runCurrent()
+            assertEquals(2_490_590_000L, rig.renderer.value.positionTicks)
+            // Native BUFFERING -> READY can complete in 86 ms, before the next 250 ms tick.
+            // The fake remains READY throughout, making the missing sampled transition explicit.
+            assertTrue(rig.renderer.value.ready)
+            rig.host.tick()
+            runCurrent()
+            val ready = rig.sent.filter { it.second.operation == "Ready" }
+            assertEquals(2, ready.size, "$command must refresh readiness after an actual positional application")
+            val body = requireNotNull(ready.last().second.body)
+            assertEquals(2_490_590_000L, body.getValue("PositionTicks").jsonPrimitive.long)
+            assertFalse(body.getValue("IsPlaying").jsonPrimitive.boolean)
+            assertEquals(JsonPrimitive("entry-a"), body["PlaylistItemId"])
+            rig.host.tick()
+            runCurrent()
+            assertEquals(2, rig.operations().count { it == "Ready" }, "one acknowledgement, not a Ready loop")
+        }
+    }
+
+    @Test fun aPositionApplicationStillBufferingReportsBufferingThenOneFreshReady() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        runCurrent()
+        rig.renderer.bufferOnSeek = true
+        rig.host.receive(rig.command("Seek", ticks = 2_490_590_000L))
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "Buffering" })
+        assertEquals(1, rig.operations().count { it == "Ready" })
+        rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false)
+        rig.host.tick()
+        runCurrent()
+        assertEquals(2, rig.operations().count { it == "Ready" })
+        rig.host.tick()
+        runCurrent()
+        assertEquals(2, rig.operations().count { it == "Ready" })
+    }
+
+    @Test fun anAlignedTransportWhichDoesNotSeekDoesNotRepeatPreparedReadiness() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        runCurrent()
+        val position = rig.renderer.value.positionTicks
+        rig.host.receive(rig.command("Seek", ticks = position))
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1, rig.operations().count { it == "Ready" })
+        assertTrue(rig.renderer.applied.none { it.position != null })
+    }
+
     @Test fun bufferingAndReadyCarryActualEntryPositionAndRendererState() = runTest {
         val rig = Rig(this)
         rig.join()
