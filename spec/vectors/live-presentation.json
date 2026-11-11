@@ -1514,6 +1514,42 @@
         "unavailable": false
       },
       "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
+    },
+    {
+      "id": "live-presentation.guide-successful-empty",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": false,
+        "error": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.guide-write-error",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": false,
+        "error": "Favorites are disabled for this viewer."
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.guide-failed-read",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": true,
+        "error": "Server unavailable"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.guide-failed-read-error-cleared",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": true,
+        "error": null
+      },
+      "expected": true
     }
   ]
 }

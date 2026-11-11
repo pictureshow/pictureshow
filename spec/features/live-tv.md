@@ -207,3 +207,7 @@ A failed/offline guide read does not establish that XMLTV is missing. Empty guid
 channel rows say Guide unavailable while the explicit server error/reference warning remains visible and actions
 are unavailable. The successful-empty-guide explanation (including administrator setup and channel tuning) appears
 only after a successful empty read. Cached programmes remain readable with their existing stale/reference qualification.
+
+Guide-read availability is independent of errors from favorite, schedule, or delete writes. A failed mutation preserves
+the last successful guide (including its successful-empty explanation) and does not disable tuning. Only a failed
+guide refresh establishes the stale/unavailable read state; clearing a write error does not clear that read state.

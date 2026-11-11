@@ -98,8 +98,14 @@ class TouchLivePositionReadTest {
         compose.mainClock.advanceTimeBy(32)
         compose.runOnIdle {
             val provider = requireNotNull(view.accessibilityNodeProvider)
-            assertEquals("Live position unavailable", provider.createAccessibilityNodeInfo(sliderId).stateDescription?.toString())
-            assertEquals("Live position unavailable", provider.createAccessibilityNodeInfo(statusId).stateDescription?.toString())
+            assertEquals(
+                "Live position unavailable",
+                requireNotNull(provider.createAccessibilityNodeInfo(sliderId)).stateDescription?.toString()
+            )
+            assertEquals(
+                "Live position unavailable",
+                requireNotNull(provider.createAccessibilityNodeInfo(statusId)).stateDescription?.toString()
+            )
         }
     }
 

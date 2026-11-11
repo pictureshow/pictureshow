@@ -44,7 +44,10 @@ internal data class LiveTvState(
     val draftSeries: Boolean = false,
     val writeVersion: Long = 0,
     val lastWriteOutcome: String? = null
-)
+) {
+    // Refresh owns this flag; mutation errors do not invalidate a successfully loaded guide.
+    val guideUnavailable: Boolean get() = offline
+}
 
 /** Navigation-entry scoped, with no global cache: account changes cannot reuse another viewer's guide. */
 internal class LiveTvViewModel(

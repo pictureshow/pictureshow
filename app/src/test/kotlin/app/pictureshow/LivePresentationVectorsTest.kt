@@ -139,6 +139,15 @@ class LivePresentationVectorsTest {
                     id
                 )
 
+                "guide-read-status" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    LiveTvState(
+                        offline = c.getValue("readFailed").jsonPrimitive.boolean,
+                        error = c["error"]?.jsonPrimitive?.contentOrNull
+                    ).guideUnavailable,
+                    id
+                )
+
                 "guide-empty-message" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveGuideEmptyMessage(c.getValue("unavailable").jsonPrimitive.boolean),

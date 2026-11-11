@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -77,6 +78,26 @@ class LiveLayoutReviewTest {
         compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
         compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
         compose.onNodeWithText("Guide unavailable").assertIsDisplayed()
+    }
+
+    @Test fun failedFavoriteWriteRetainsSuccessfullyLoadedEmptyGuideAndTuneAction() {
+        val fake = LiveFake()
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent {
+            PictureshowTheme { LiveTvScreen(vm, account, true, {}, {}, {}) }
+        }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:c:c").assertIsEnabled()
+        compose.runOnIdle {
+            fake.rights = fake.rights.copy(userData = false)
+            vm.favorite(fake.channelRows.first())
+        }
+        compose.onNodeWithText("Favorites are disabled for this viewer.").assertIsDisplayed()
+        compose.onNodeWithText("Guide unavailable").assertDoesNotExist()
+        compose.onNodeWithTag("live:c:c").assertIsEnabled()
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText(NO_LIVE_GUIDE).assertIsDisplayed()
+        compose.onNodeWithText("Guide unavailable").assertDoesNotExist()
     }
 
     @Test fun tvLinearGuideKeepsTimeControlsAboveTheListAfterAnotherTabScrolled() {

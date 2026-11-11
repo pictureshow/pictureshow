@@ -152,7 +152,7 @@ internal fun LiveTvScreen(
             ?: state.programs.firstOrNull { app.pictureshow.core.livetv.canTune(it, now) }
             ?: state.programs.firstOrNull()
     }
-    val guideUnavailable = state.offline || state.error != null
+    val guideUnavailable = state.guideUnavailable
     val canAct = state.actionsAvailable(now)
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
@@ -184,7 +184,7 @@ internal fun LiveTvScreen(
                             LiveText(
                                 liveChannelIdleLabel(
                                     state.programs.any { it.channelId == focusedChannel.id },
-                                    state.offline || state.error != null
+                                    state.guideUnavailable
                                 ),
                                 true,
                                 small = true
