@@ -170,7 +170,7 @@ final class CatalogPresentationUITests: XCTestCase {
                        matches: (String) -> Bool) throws {
             defer { attachSpeech(name) }
             focus(anchor, app: app)
-            XCTAssertTrue(anchor.hasFocus, "The real remote must reach the expected control")
+            XCTAssertTrue(ownsNativeFocus(anchor, app: app), "The real remote must reach the expected control or its native Form row")
             let spoken = try settledSpeech(name + " focused", accepts: matches)
             XCTAssertTrue(matches(spoken))
             func button(_ direction: ReaderDirection) -> XCUIRemote.Button {
@@ -178,10 +178,10 @@ final class CatalogPresentationUITests: XCTestCase {
             }
             XCUIRemote.shared.press(button(away))
             let previous = try settledSpeech(name + " remote away", after: spoken)
-            XCTAssertFalse(anchor.hasFocus, "The native remote must actually leave the target")
+            XCTAssertFalse(ownsNativeFocus(anchor, app: app), "The native remote must actually leave the target and its native Form row")
             XCUIRemote.shared.press(button(back))
             let returned = try settledSpeech(name + " remote return", after: previous, accepts: matches)
-            XCTAssertTrue(anchor.hasFocus, "One inverse native remote move must return to the same control")
+            XCTAssertTrue(ownsNativeFocus(anchor, app: app), "One inverse native remote move must return to the same control or its native Form row")
             XCTAssertTrue(matches(returned), "Actual VoiceOver must speak the same meaningful control/state on return")
         }
         #else
@@ -635,6 +635,20 @@ final class CatalogPresentationUITests: XCTestCase {
         }
     }
 
+    private func ownsNativeFocus(_ element: XCUIElement, app: XCUIApplication) -> Bool {
+        guard element.exists else { return false }
+        if element.hasFocus { return true }
+        func focused(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? {
+            node.children.compactMap(focused).first ?? (node.hasFocus ? node : nil)
+        }
+        guard let owner = (try? app.snapshot()).flatMap(focused) else { return false }
+        let target = element.frame
+        // Form's native row owns focus around its contained switch/button.
+        // Match the same exact-target geometry as focus(), including its bound.
+        return !target.isEmpty && owner.frame.contains(CGPoint(x: target.midX, y: target.midY))
+            && owner.frame.height < max(1, target.height) * 3
+    }
+
     private func focus(_ element: XCUIElement, app: XCUIApplication) {
         // A native large-text grid may have fewer than one precomposed row
         // below the viewport. Actual Down inputs compose those lazy cards.
@@ -680,8 +694,12 @@ final class CatalogPresentationUITests: XCTestCase {
     private func activateSettingsChrome(_ app: XCUIApplication) {
         // Sidebar/tab navigation is fixed chrome, outside the content scroll
         // viewport that reveal() intentionally requires for catalog controls.
-        let settings = UIDevice.current.userInterfaceIdiom == .pad ? app.buttons["Settings"] : app.tabBars.buttons["Settings"]
+        let query = UIDevice.current.userInterfaceIdiom == .pad
+            ? app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Settings", "openSettings"))
+            : app.tabBars.buttons.matching(identifier: "Settings")
+        let settings = query.firstMatch
         let exists = settings.waitForExistence(timeout: 15)
+        XCTAssertEqual(query.count, 1, "Choose one sidebar/tab Settings control, excluding Home's toolbar action")
         if !exists { capture("132 Settings navigation chrome missing", app: app) }
         XCTAssertTrue(exists, "The native Settings navigation button must exist")
         let window = app.windows.firstMatch.frame
@@ -704,12 +722,18 @@ final class CatalogPresentationUITests: XCTestCase {
     /// rendered action below navigation chrome, not just an existing AX node.
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         XCTAssertTrue(element.waitForExistence(timeout: 15))
+        // Anonymous headings have a label but no identifier. Matching the empty
+        // identifier would select unrelated nested horizontal season scrollers.
+        let identifier = element.identifier
+        let identity = identifier.isEmpty ? element.label : identifier
+        XCTAssertFalse(identity.isEmpty, "A reveal target needs an accessibility identifier or label")
+        let targetMatch = NSPredicate(format: identifier.isEmpty ? "label == %@" : "identifier == %@", identity)
         for _ in 0..<16 {
             let window = app.windows.firstMatch.frame
             let target = element.frame
             let containers = (app.scrollViews.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex)
                 .filter { $0.isHittable && $0.frame.intersects(window) }
-            let containing = containers.filter { $0.descendants(matching: .any).matching(identifier: element.identifier).firstMatch.exists }
+            let containing = containers.filter { $0.descendants(matching: .any).matching(targetMatch).firstMatch.exists }
             let scroll = containing.last ?? containers.last ?? app
             var viewport = scroll.frame.intersection(window)
             let navigation = app.navigationBars.firstMatch

@@ -969,7 +969,12 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         }
         let (session, _) = try await readySession(loader: loader, player: player)
         defer { player.mediaTime = { .invalid } }
-        let (retried, didReachLimit) = receipt("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(30))
+        // Every malformed retry still traverses real URLSession bytes and the
+        // production utility-priority parser. CI measured 38.4 real seconds for
+        // 29 attempts under load; this is a fixture-throughput bound, separate
+        // from the unchanged 2-second cold-caption delivery/startup requirement.
+        let retryTimeout: TimeInterval = 60
+        let (retried, didReachLimit) = receipt("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(60))
         let retryProbeStart = ContinuousClock.now
         clock.reachedLimit = {
             print("OPTIONAL_SUBTITLE_RETRY_LIMIT elapsed=\(retryProbeStart.duration(to: .now)) retryMs=\(clock.elapsedMs)")
@@ -979,7 +984,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let retryJoin = Task(priority: .userInitiated) { await selectedTask?.value }
         defer { retryJoin.cancel(); clock.reachedLimit = nil }
         if clock.elapsedMs >= 242_000 { clock.reachedLimit?(); clock.reachedLimit = nil }
-        let retryResult = await XCTWaiter.fulfillment(of: [retried], timeout: 30)
+        let retryResult = await XCTWaiter.fulfillment(of: [retried], timeout: retryTimeout)
         XCTAssertEqual(retryResult, .completed, "Optional retry clock did not cross the 242-second held-failure interval")
         XCTAssertGreaterThanOrEqual(clock.elapsedMs, 242_000)
         // Cross the real 12-second A/V watchdog even on a fast runner. An invalid
