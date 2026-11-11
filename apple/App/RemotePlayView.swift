@@ -177,75 +177,143 @@ struct RemotePlayView: View {
     private var panelTitle: String {
         operation == "play-next" ? "Play next" : operation == "add-to-queue" ? "Add to queue" : fromStart ? "Play from start" : "Play on TV"
     }
+    #if os(tvOS)
+    @State private var contentHeight: CGFloat = 600
+    #endif
     var body: some View {
         NavigationStack {
-            List {
-                #if os(tvOS)
-                Section {
-                } header: {
-                    Text(panelTitle).font(.title3.weight(.semibold)).foregroundStyle(Color.white)
-                        .fixedSize(horizontal: false, vertical: true).textCase(nil)
-                        .accessibilityAddTraits(.isHeader).accessibilityIdentifier("remote-play-heading")
-                }
-                #endif
-                Section {
-                    Text(item.name).font(.headline).fixedSize(horizontal: false, vertical: true)
-                    Text(model.message).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("remote-play-status")
-                    if let name = model.selectedName { Text(name).font(.subheadline) }
-                    if let error = model.error { Text(error).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("remote-play-error") }
-                    if model.waiting { ProgressView().accessibilityLabel("Waiting for the TV") }
-                }
-                if model.selectedName == nil {
-                    Section("Devices") {
-                        if operation == "play-now", let onThisDevice {
-                            Button("This device") { dismiss(); onThisDevice() }
-                                .accessibilityIdentifier("remote-play-this-device")
-                                .accessibilityHint(fromStart ? "Play this title from the start on this device" : "Play this title on this device")
-                        }
-                        ForEach(model.targets) { target in
-                            Button {
-                                onAttached?(target)
-                                model.play(on: target, itemID: item.id, operation: operation, fromStart: fromStart)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(target.name).font(.headline)
-                                    Text(target.client).font(.subheadline)
-                                    if target.duplicateName, let viewer = target.viewerName { Text(viewer).font(.caption) }
-                                    if !target.sameViewer { Text("Different viewer").font(.caption) }
-                                    if let title = target.playingTitle { Text("Now playing: \(title)").font(.subheadline) }
-                                }.fixedSize(horizontal: false, vertical: true)
-                            }
-                            .accessibilityIdentifier("remote-play-target-\(target.id)")
-                            .disabled(model.loading)
-                            .accessibilityHint(operation == "play-next" ? "Play this title next on this device" : operation == "add-to-queue" ? "Add this title to this device’s queue" : "Play this title on this device")
-                        }
-                        if model.targets.isEmpty, !model.loading { Text("No available TVs. Open Jellyfin on the TV, then refresh.").fixedSize(horizontal: false, vertical: true) }
-                    }
-                }
-                Section {
-                    Button(model.selectedName == nil ? "Refresh devices" : "Refresh status") { Task { await model.refresh() } }
-                        .disabled(model.loading)
-                        .accessibilityIdentifier("remote-play-refresh")
-                }
-                #if os(tvOS)
-                Section { Button("Done") { dismiss() }.accessibilityIdentifier("remote-play-done") }
-                #endif
-            }
             #if os(tvOS)
-            .toolbar(.hidden, for: .navigationBar)
-            .onExitCommand { dismiss() }
+            televisionContent
+                .toolbar(.hidden, for: .navigationBar)
+                .onExitCommand { dismiss() }
             #else
+            List {
+                Section { statusRows }
+                if model.selectedName == nil { Section("Devices") { deviceRows } }
+                Section { refreshButton }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
             .navigationTitle(panelTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("remote-play-done") } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { doneButton } }
             #endif
-            .task {
-                if ["play-next", "add-to-queue"].contains(operation), let attachedTarget {
-                    await model.beginAttached(attachedTarget, itemID: item.id, operation: operation)
-                } else { await model.refresh() }
+        }
+        .background(Theme.background)
+        #if os(tvOS)
+        // Fit short choosers to their measured contents; many targets and large
+        // text keep the same scrollable surface within the TV safe area.
+        .frame(width: 920, height: min(contentHeight, UIScreen.main.bounds.height - 160))
+        .modifier(RemoteChooserPresentationSizing())
+        #endif
+        .task {
+            if ["play-next", "add-to-queue"].contains(operation), let attachedTarget {
+                await model.beginAttached(attachedTarget, itemID: item.id, operation: operation)
+            } else { await model.refresh() }
+        }
+        .onDisappear { model.close() }
+    }
+    #if os(tvOS)
+    private var televisionContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(panelTitle).font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("remote-play-heading")
+                VStack(alignment: .leading, spacing: 12) { statusRows }
+                if model.selectedName == nil {
+                    Text("Devices").font(.subheadline).foregroundStyle(Theme.muted)
+                        .accessibilityAddTraits(.isHeader).padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 24) { deviceRows }
+                }
+                refreshButton.frame(maxWidth: .infinity, alignment: .leading)
+                doneButton.frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onDisappear { model.close() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(32)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: RemoteChooserHeight.self, value: geometry.size.height)
+                }
+            }
+        }
+        .buttonStyle(.bordered)
+        .background(Theme.background)
+        .onPreferenceChange(RemoteChooserHeight.self) { contentHeight = $0 }
+    }
+    #endif
+    @ViewBuilder private var statusRows: some View {
+        Text(item.name).font(.headline).fixedSize(horizontal: false, vertical: true)
+        Text(model.message).fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("remote-play-status")
+        if let name = model.selectedName { Text(name).font(.subheadline) }
+        if let error = model.error { Text(error).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("remote-play-error") }
+        if model.waiting { ProgressView().accessibilityLabel("Waiting for the TV") }
+    }
+    @ViewBuilder private var deviceRows: some View {
+        if operation == "play-now", let onThisDevice {
+            Button { dismiss(); onThisDevice() } label: {
+                RemotePlaybackTargetRow(name: "This device", detail: "Play here")
+            }
+            .accessibilityIdentifier("remote-play-this-device")
+            .accessibilityHint(fromStart ? "Play this title from the start on this device" : "Play this title on this device")
+        }
+        ForEach(model.targets) { target in
+            Button {
+                onAttached?(target)
+                model.play(on: target, itemID: item.id, operation: operation, fromStart: fromStart)
+            } label: {
+                RemotePlaybackTargetRow(name: target.name, detail: target.client,
+                    viewer: target.duplicateName ? target.viewerName : nil,
+                    differentViewer: !target.sameViewer, playingTitle: target.playingTitle)
+            }
+            .accessibilityIdentifier("remote-play-target-\(target.id)")
+            .disabled(model.loading)
+            .accessibilityHint(operation == "play-next" ? "Play this title next on this device" : operation == "add-to-queue" ? "Add this title to this device’s queue" : "Play this title on this device")
+        }
+        if model.targets.isEmpty, !model.loading {
+            Text("No available TVs. Open Jellyfin on the TV, then refresh.").fixedSize(horizontal: false, vertical: true)
         }
     }
+    private var refreshButton: some View {
+        Button(model.selectedName == nil ? "Refresh devices" : "Refresh status") { Task { await model.refresh() } }
+            .disabled(model.loading)
+            .accessibilityIdentifier("remote-play-refresh")
+    }
+    private var doneButton: some View {
+        Button("Done") { dismiss() }.accessibilityIdentifier("remote-play-done")
+    }
 }
+
+/// Local and remote destinations use the same type hierarchy and target geometry.
+private struct RemotePlaybackTargetRow: View {
+    let name: String
+    let detail: String
+    var viewer: String? = nil
+    var differentViewer = false
+    var playingTitle: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(name).font(.headline)
+            Text(detail).font(.subheadline)
+            if let viewer { Text(viewer).font(.subheadline) }
+            if differentViewer { Text("Different viewer").font(.subheadline) }
+            if let playingTitle { Text("Now playing: \(playingTitle)").font(.subheadline) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+    }
+}
+#if os(tvOS)
+private struct RemoteChooserHeight: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+private struct RemoteChooserPresentationSizing: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(tvOS 18.0, *) { content.presentationSizing(.fitted) }
+        else { content }
+    }
+}
+#endif

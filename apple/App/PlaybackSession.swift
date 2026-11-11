@@ -358,7 +358,7 @@ final class ViewingAVPlayer: AVPlayer {
     }
     private var playbackMethodStatus: String {
         guard let decision else { return "Preparing playback…" }
-        return decision.method == .directPlay ? "Direct play" : decision.method == .directStream ? "Direct stream" : "Server HLS"
+        return decision.method == .transcode ? "Converting" : ""
     }
     /// Explicit readiness/deadline events allow hosted tests to exercise delayed
     /// startup without requiring a real decoder or waiting for wall-clock deadlines.

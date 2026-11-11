@@ -13,6 +13,8 @@ import {
     progressReport,
     stopReport,
     assembleHome,
+    trackLabel,
+    trackLabels,
 } from "./index";
 import {
     decodeSettings,
@@ -86,6 +88,7 @@ for (const file of files) {
             "application",
             "recovery",
             "playback-information",
+            "track-labels",
             ...controlSuites,
             ...pendingPortSuites,
         ].includes(suite.suite) ||
@@ -157,6 +160,16 @@ for (const file of files) {
                     return;
                 }
                 switch (c.operation) {
+                    case "track-label":
+                        value = trackLabel(
+                            i.stream,
+                            i.trackNumber,
+                            i.showDefault ?? true,
+                        );
+                        break;
+                    case "track-labels":
+                        value = trackLabels(i.streams);
+                        break;
                     case "visibility-play":
                         value = rc28.visibilityPlay(
                             i.requested,

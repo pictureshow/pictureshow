@@ -8,7 +8,7 @@ import CryptoKit
 
 @main struct PictureshowApp: App {
     @StateObject private var model = AppModel()
-    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large).minimumTouchListRows().pictureshowTestDynamicType() } }
+    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.focusTint).controlSize(.large).minimumTouchListRows().pictureshowTestDynamicType() } }
 }
 
 enum Theme {
@@ -17,11 +17,13 @@ enum Theme {
     static let muted = DesignTokens.muted
     static let accent = DesignTokens.accent
     #if os(tvOS)
-    static let secondaryButtonText = background.opacity(0.8)
+    static let focusTint = Color.white
+    static let secondaryButtonText = Color.white
     static let gutter: CGFloat = 48
     static let cardWidth: CGFloat = 288
     static let wideCardWidth: CGFloat = 480
     #else
+    static let focusTint = accent
     static let secondaryButtonText = muted
     static let gutter: CGFloat = 20
     static let cardWidth: CGFloat = 136
@@ -622,33 +624,26 @@ struct RootView: View {
 #if os(iOS)
 struct TouchShell: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.horizontalSizeClass) private var width
-    @ScaledMetric(relativeTo: .body) private var railWidth: CGFloat = 220
     @State private var tab = 0
     @State private var paths: [[AppRoute]] = [[], [], [], []]
     private let names = ["Home", "Libraries", "Search", "Settings"]
     private let icons = ["house", "square.grid.2x2", "magnifyingglass", "gearshape"]
     var body: some View {
         Group {
-            if width == .regular {
-                HStack(spacing: 0) {
-                    VStack(spacing: 24) {
-                        ForEach(0..<4) { index in
-                            Button { tab = index } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: icons[index]).frame(minWidth: 24).accessibilityHidden(true)
-                                    Text(names[index]).lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 8).padding(.horizontal, 4).minimumTouchTarget()
-                            }.secondaryActionStyle().tint(tab == index ? Theme.accent : Theme.muted)
-                                .accessibilityLabel(names[index]).accessibilityValue(tab == index ? "Selected" : "")
-                        }
-                        Spacer()
-                    }.padding(16).frame(width: railWidth).background(Theme.surface)
-                    stack(tab)
-                }
+            if #available(iOS 18.0, *) {
+                TabView(selection: $tab) {
+                    Tab("Home", systemImage: "house", value: 0) { stack(0) }
+                    Tab("Libraries", systemImage: "square.grid.2x2", value: 1) { stack(1) }
+                    Tab("Search", systemImage: "magnifyingglass", value: 2) { stack(2) }
+                    Tab("Settings", systemImage: "gearshape", value: 3) { stack(3) }
+                }.tabViewStyle(.sidebarAdaptable)
             } else {
-                TabView(selection: $tab) { ForEach(0..<4) { index in stack(index).tabItem { Label(names[index], systemImage: icons[index]) }.tag(index) } }
+                // iOS17 uses its native bottom tabs, including at narrow iPad widths.
+                TabView(selection: $tab) {
+                    ForEach(0..<4) { index in
+                        stack(index).tabItem { Label(names[index], systemImage: icons[index]) }.tag(index)
+                    }
+                }
             }
         }
         .task {

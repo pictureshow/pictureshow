@@ -7,6 +7,64 @@ import Foundation
 enum SpecCaseManifest {
     static let contracts: [String: String] = {
         let rows = """
+        track-labels.audio-language-format|track-labels/track-label
+        track-labels.all-audio-metadata|track-labels/track-label
+        track-labels.subtitle-metadata|track-labels/track-label
+        track-labels.language-fr|track-labels/track-label
+        track-labels.language-fra|track-labels/track-label
+        track-labels.language-fre|track-labels/track-label
+        track-labels.language-deu|track-labels/track-label
+        track-labels.language-ger|track-labels/track-label
+        track-labels.language-es_MX|track-labels/track-label
+        track-labels.language-pt-BR|track-labels/track-label
+        track-labels.language-jpn|track-labels/track-label
+        track-labels.language-zzz|track-labels/track-label
+        track-labels.server-description|track-labels/track-label
+        track-labels.title-names-language|track-labels/track-label
+        track-labels.title-names-language-and-format|track-labels/track-label
+        track-labels.title-carries-format|track-labels/track-label
+        track-labels.title-is-exact-format|track-labels/track-label
+        track-labels.display-title-not-viewer-title|track-labels/track-label
+        track-labels.blank-title|track-labels/track-label
+        track-labels.codec-truehd|track-labels/track-label
+        track-labels.codec-dts|track-labels/track-label
+        track-labels.codec-opus|track-labels/track-label
+        track-labels.codec-mov_text|track-labels/track-label
+        track-labels.codec-hdmv_pgs_subtitle|track-labels/track-label
+        track-labels.codec-dvd_subtitle|track-labels/track-label
+        track-labels.codec-subrip|track-labels/track-label
+        track-labels.channels-1|track-labels/track-label
+        track-labels.channels-2|track-labels/track-label
+        track-labels.channels-6|track-labels/track-label
+        track-labels.channels-8|track-labels/track-label
+        track-labels.channels-4|track-labels/track-label
+        track-labels.channels-0|track-labels/track-label
+        track-labels.missing-format|track-labels/track-label
+        track-labels.format-is-title|track-labels/track-label
+        track-labels.boundary-34|track-labels/track-label
+        track-labels.boundary-35|track-labels/track-label
+        track-labels.boundary-36|track-labels/track-label
+        track-labels.boundary-37|track-labels/track-label
+        track-labels.boundary-38|track-labels/track-label
+        track-labels.boundary-39|track-labels/track-label
+        track-labels.boundary-40|track-labels/track-label
+        track-labels.boundary-41|track-labels/track-label
+        track-labels.boundary-42|track-labels/track-label
+        track-labels.dedup-43|track-labels/track-label
+        track-labels.dedup-44|track-labels/track-label
+        track-labels.dedup-45|track-labels/track-label
+        track-labels.dedup-46|track-labels/track-label
+        track-labels.dedup-47|track-labels/track-label
+        track-labels.dedup-48|track-labels/track-label
+        track-labels.all-flags-already-in-title|track-labels/track-label
+        track-labels.single-default-hidden|track-labels/track-labels
+        track-labels.one-informative-default|track-labels/track-labels
+        track-labels.multiple-defaults-hidden|track-labels/track-labels
+        track-labels.same-looking-known-language|track-labels/track-labels
+        track-labels.unknown-language-list|track-labels/track-labels
+        track-labels.unknown-language-blank|track-labels/track-labels
+        track-labels.empty-list|track-labels/track-labels
+        track-labels.repeat-collision-with-title|track-labels/track-labels
         settings.empty.defaults|application/settings
         settings.bitrate.120|application/settings
         settings.bitrate.80|application/settings

@@ -570,8 +570,19 @@ struct DetailView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16, alignment: .top)], alignment: .leading, spacing: 24) {
                     ForEach(state.episodes) { raw in
                         let episode = model.presented(raw)
-                        Button { open(episode) } label: { CatalogCard(item: episode, wide: true, fillsAvailableWidth: true) }
+                        VStack(alignment: .leading, spacing: 9) {
+                            Button { open(episode) } label: {
+                                #if os(tvOS)
+                                CatalogCard(item: episode, wide: true, fillsAvailableWidth: true, artworkOnly: true)
+                                #else
+                                CatalogCard(item: episode, wide: true, fillsAvailableWidth: true)
+                                #endif
+                            }
                             .buttonStyle(PosterButtonStyle()).accessibilityLabel(episode.accessibleTitle).accessibilityIdentifier("item-\(episode.id)")
+                            #if os(tvOS)
+                            CatalogCard(item: episode, wide: true, fillsAvailableWidth: true, metadataOnly: true).accessibilityHidden(true)
+                            #endif
+                        }
                     }
                 }
             }
@@ -762,16 +773,17 @@ struct DetailView: View {
                 Button("Add to TV queue") { showRemote(target, operation: "add-to-queue") }.accessibilityIdentifier("remote-mode-add-to-queue")
                 Button("Play on TV from start") { showRemote(target, fromStart: true) }.accessibilityIdentifier("remote-mode-from-start")
             } label: {
-                Label("Play on TV", systemImage: "tv")
-                    #if os(tvOS)
-                    .foregroundStyle(Theme.background)
-                    #endif
+                #if os(tvOS)
+                TelevisionActionInk { Label("Play on TV", systemImage: "tv") }
                     .modifier(DetailActionWidth())
+                #else
+                Label("Play on TV", systemImage: "tv").modifier(DetailActionWidth())
+                #endif
             }
                 #if os(tvOS)
                 // Menu owns its native activation; a primitive Button style
                 // would replace its label/ink and leave an empty filled target.
-                .buttonStyle(.bordered)
+                .buttonStyle(.bordered).tint(.white)
                 #else
                 .catalogActionStyle()
                 #endif

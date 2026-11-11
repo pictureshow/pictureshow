@@ -26,7 +26,7 @@ extension View {
 /// light lavender accent. Setting this inside the style affects button labels only.
 struct ProminentActionStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Button(configuration).buttonStyle(.borderedProminent).foregroundStyle(Theme.background)
+        Button(configuration).buttonStyle(.borderedProminent).tint(Theme.accent).foregroundStyle(Theme.background)
     }
 }
 
@@ -74,13 +74,19 @@ extension View {
 
 
 #if os(tvOS)
+/// Native bordered focus supplies the white platter and lift. Only its focused
+/// label needs dark ink; selection/role never make resting labels look disabled.
+struct TelevisionActionInk<Content: View>: View {
+    @Environment(\.isFocused) private var focused
+    @ViewBuilder var content: () -> Content
+    var body: some View { content().foregroundStyle(focused ? Theme.background : Color.white) }
+}
+
 private struct TelevisionSecondaryActionStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button(role: configuration.role) { configuration.trigger() } label: {
-            // Set ink on the label itself so the native bordered style cannot
-            // inherit light text onto the shared light lavender fill.
-            configuration.label.foregroundStyle(Theme.background)
-        }.buttonStyle(.bordered)
+            TelevisionActionInk { configuration.label }
+        }.buttonStyle(.bordered).tint(.white)
     }
 }
 #endif

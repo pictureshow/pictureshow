@@ -54,6 +54,7 @@ private struct RemovalConfirmation: View {
             Button(action: cancel) { Text("Cancel").minimumTouchTarget() }.focused($cancelFocused).disabled(committing).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
             Button(role: .destructive) { committing = true; do { try commit() } catch { self.error = error.localizedDescription; committing = false } } label: { Text("Remove").minimumTouchTarget() }.touchSecondaryInk(destructive: true).disabled(committing).accessibilityIdentifier("confirmRemoval")
         }.secondaryActionStyle().padding(Theme.gutter).frame(maxWidth: 720, alignment: .leading).frame(maxWidth: .infinity) }
+            .background(Theme.background.ignoresSafeArea())
             .interactiveDismissDisabled(committing).onAppear { cancelFocused = true }
             #if os(tvOS)
             .onExitCommand { if !committing { cancel() } }

@@ -70,11 +70,11 @@ private struct SettingsForm: View {
                     .accessibilityLabel("Conversion notice").accessibilityIdentifier("conversionNoticeToggle")
             } header: { Text("Playback") }
               footer: { Text(audioOutputFooter).accessibilityIdentifier("audioOutputExplanation") }
-            Section("Subtitles") {
+            Section {
                 Picker("Subtitle size", selection: preference(\.subtitleSize)) { ForEach(SubtitleSize.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }
                 Picker("Subtitle background", selection: preference(\.subtitleBackground)) { ForEach(SubtitleBackground.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }
-                Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted)
-            }
+            } header: { Text("Subtitles") }
+              footer: { Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted) }
             Section("Skip segments") {
                 ForEach(SegmentType.allCases.filter { $0 != .unknown }, id: \.rawValue) { type in
                     Picker(type.rawValue, selection: Binding(get: { preferences.value.segmentModes[type] ?? .ask }, set: { choice in preferences.update { $0.segmentModes[type] = choice } })) { ForEach(SegmentMode.allCases, id: \.rawValue) { mode in Text(mode == .automatic ? "Skip automatically" : mode.rawValue).tag(mode) } }
@@ -98,6 +98,8 @@ private struct SettingsForm: View {
                 NavigationLink("Troubleshooting · This \(deviceNoun)", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics").focused($focused, equals: "diagnostics")
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.background.ignoresSafeArea())
         .minimumTouchListRows()
         .background { GeometryReader { geometry in Color.clear.onAppear { windowSize = geometry.size }.onChange(of: geometry.size) { _, size in windowSize = size } } }
         .onAppear { focused = opener }

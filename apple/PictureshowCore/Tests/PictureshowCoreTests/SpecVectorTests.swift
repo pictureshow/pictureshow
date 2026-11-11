@@ -41,6 +41,7 @@ final class SpecVectorTests:XCTestCase {
     func errorName(_ error:Error)->String{switch error as? ClientError{case .serverRefused:return "SERVER_REFUSED";case .sourceNotFound:return "SOURCE_NOT_FOUND";case .noCompatibleSource:return "NO_COMPATIBLE_SOURCE";case .unsafeStreamURL:return "UNSAFE_STREAM_URL";default:return "UNEXPECTED_\(error)"}}
     func decisionJSON(_ d:PlayDecision,urlParts:Bool=false)->[String:Any]{["method":d.method.rawValue,"mediaSourceId":d.source.id as Any? ?? NSNull(),"url":urlParts ? parts(d.url):d.url.absoluteString as Any,"headers":d.headers,"playSessionId":d.playSessionId as Any? ?? NSNull(),"transcodeReasons":d.transcodeReasons]}
     func parts(_ url:URL)->[String:Any]{let c=URLComponents(url:url,resolvingAgainstBaseURL:false)!;var q:[String:[String]]=[:];for x in c.queryItems ?? []{q[x.name,default:[]].append(x.value ?? "")};return ["scheme":c.scheme!,"host":c.host!,"port":c.port ?? (c.scheme == "https" ? 443:80),"path":c.percentEncodedPath,"query":q]}
+    func testTrackLabelsVectors() async throws { try await runVectors(operations: ["track-label", "track-labels"]) }
     func testAllSharedVectors() async throws { try await runVectors() }
     func testRC28PolicyVectors() async throws {
         try await runVectors(operations: ["caption-index", "detail-ready-feedback", "detail-request-cue-active", "detail-pending-presentation-visible", "detail-pending-presentation-label", "detail-held-label-presentation", "detail-feedback-source", "detail-quiet-departing-change", "detail-quiet-request-rediscovery", "detail-reader-focus-clear", "detail-retry-description", "detail-retry-failure-cue", "detail-retry-attempt-succeeded", "detail-retry-cue-can-wait", "detail-completion-presented-played", "detail-completion-intent-retained", "detail-raw-read-acknowledgement", "detail-played-request-notice", "detail-request-once-feedback", "visibility-play"])
@@ -84,7 +85,7 @@ final class SpecVectorTests:XCTestCase {
         let castSuites:Set<String>=["cast-capability","cast-session","cast-handoff"]
         let remoteSuites:Set<String>=["remote-wire","remote-targets","remote-receive","remote-reconnect","remote-queue"]
         let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites)
-        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","grid-navigation"]).union(traceSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation"]).union(traceSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -246,6 +247,8 @@ final class SpecVectorTests:XCTestCase {
         case "detail-retain-season-focus":return DetailAvailability.retainsSeasonFocus(selectedSection:try required(String.self,i,"selectedSection"),restored:try required(Bool.self,i,"restored"),semanticsRevealed:try required(Bool.self,i,"semanticsRevealed"),selectedId:try required(String.self,i,"selectedId"),seasonIds:try required([String].self,i,"seasonIds"))
         case "detail-ready-cue":return DetailFeedback.readyCue(actionLabel:try required(String.self,i,"label"))
         case "next-countdown":return NextEpisodeCard.seconds(wallSeconds:try required(Int64.self,i,"wallSeconds"),creditsCountdown:try required(Bool.self,i,"creditsCountdown"),mediaLeftMs:try required(Int64.self,i,"mediaLeftMs"),speed:try required(Double.self,i,"speed"),autoPlay:try required(Bool.self,i,"autoPlay"),ended:try required(Bool.self,i,"ended"),suspended:try required(Bool.self,i,"suspended")) as Any? ?? NSNull()
+        case "track-label": return PlaybackTrackLabels.label(try required(MediaStream.self,i,"stream"), trackNumber: optionalInt(i,"trackNumber"), showDefault: bool(i,"showDefault",true))
+        case "track-labels": return PlaybackTrackLabels.labels(try required([MediaStream].self,i,"streams"))
         case "server-label": return ServerLabels.label(try required(Server.self,i,"server"),all:try required([Server].self,i,"all"))
         case "grid-vertical-move", "grid-vertical-outcome", "grid-hold-release":
             let move = GridNavigation.verticalMove(index:try required(Int.self,i,"index"),columns:try required(Int.self,i,"columns"),count:try required(Int.self,i,"count"),down:operation == "grid-hold-release" ? true : try required(Bool.self,i,"down"),loadingMore:operation == "grid-hold-release" ? false : try defaulted(Bool.self,i,"loadingMore",false),pageFailed:try defaulted(Bool.self,i,"pageFailed",false))

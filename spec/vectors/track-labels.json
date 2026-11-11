@@ -1,0 +1,896 @@
+{
+  "schemaVersion": 1,
+  "suite": "track-labels",
+  "cases": [
+    {
+      "id": "track-labels.audio-language-format",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "English · AAC stereo"
+    },
+    {
+      "id": "track-labels.all-audio-metadata",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "eac3",
+          "Channels": 6,
+          "IsDefault": true,
+          "IsForced": true,
+          "IsHearingImpaired": true,
+          "IsExternalUrl": true
+        }
+      },
+      "expected": "English · E-AC-3 5.1 · Default · Forced · SDH · External"
+    },
+    {
+      "id": "track-labels.subtitle-metadata",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 94,
+          "Language": "eng",
+          "Codec": "ass",
+          "Channels": 6,
+          "IsForced": true,
+          "IsHearingImpaired": true,
+          "IsExternal": true
+        }
+      },
+      "expected": "English · ASS · Forced · SDH · External"
+    },
+    {
+      "id": "track-labels.language-fr",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "fr",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "French · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-fra",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "fra",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "French · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-fre",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "fre",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "French · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-deu",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "deu",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "German · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-ger",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "ger",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "German · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-es_MX",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "es_MX",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "Spanish · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-pt-BR",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "pt-BR",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "Portuguese · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-jpn",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "jpn",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "Japanese · AAC stereo"
+    },
+    {
+      "id": "track-labels.language-zzz",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "zzz",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "zzz · AAC stereo"
+    },
+    {
+      "id": "track-labels.server-description",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "Director's commentary"
+        }
+      },
+      "expected": "English · AAC stereo · Director's commentary"
+    },
+    {
+      "id": "track-labels.title-names-language",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "English commentary"
+        }
+      },
+      "expected": "English commentary · AAC stereo"
+    },
+    {
+      "id": "track-labels.title-names-language-and-format",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "English · AAC stereo commentary"
+        }
+      },
+      "expected": "English · AAC stereo commentary"
+    },
+    {
+      "id": "track-labels.title-carries-format",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "Commentary AAC stereo"
+        }
+      },
+      "expected": "English · Commentary AAC stereo"
+    },
+    {
+      "id": "track-labels.title-is-exact-format",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "AAC stereo"
+        }
+      },
+      "expected": "English · AAC stereo"
+    },
+    {
+      "id": "track-labels.display-title-not-viewer-title",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "DisplayTitle": "Stream 12 (AAC)"
+        }
+      },
+      "expected": "English · AAC stereo"
+    },
+    {
+      "id": "track-labels.blank-title",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2,
+          "Title": "  \n"
+        }
+      },
+      "expected": "English · AAC stereo"
+    },
+    {
+      "id": "track-labels.codec-truehd",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "truehd"
+        }
+      },
+      "expected": "TrueHD"
+    },
+    {
+      "id": "track-labels.codec-dts",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "dts"
+        }
+      },
+      "expected": "DTS"
+    },
+    {
+      "id": "track-labels.codec-opus",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "opus"
+        }
+      },
+      "expected": "Opus"
+    },
+    {
+      "id": "track-labels.codec-mov_text",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "mov_text"
+        }
+      },
+      "expected": "mov_text"
+    },
+    {
+      "id": "track-labels.codec-hdmv_pgs_subtitle",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "hdmv_pgs_subtitle"
+        }
+      },
+      "expected": "PGS"
+    },
+    {
+      "id": "track-labels.codec-dvd_subtitle",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "dvd_subtitle"
+        }
+      },
+      "expected": "VobSub"
+    },
+    {
+      "id": "track-labels.codec-subrip",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 3,
+          "Codec": "subrip"
+        }
+      },
+      "expected": "SRT"
+    },
+    {
+      "id": "track-labels.channels-1",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 1
+        }
+      },
+      "expected": "English · AAC mono"
+    },
+    {
+      "id": "track-labels.channels-2",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 2
+        }
+      },
+      "expected": "English · AAC stereo"
+    },
+    {
+      "id": "track-labels.channels-6",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 6
+        }
+      },
+      "expected": "English · AAC 5.1"
+    },
+    {
+      "id": "track-labels.channels-8",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 8
+        }
+      },
+      "expected": "English · AAC 7.1"
+    },
+    {
+      "id": "track-labels.channels-4",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 4
+        }
+      },
+      "expected": "English · AAC 4 channels"
+    },
+    {
+      "id": "track-labels.channels-0",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 12,
+          "Language": "eng",
+          "Codec": "aac",
+          "Channels": 0
+        }
+      },
+      "expected": "English · AAC 0 channels"
+    },
+    {
+      "id": "track-labels.missing-format",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 0
+        }
+      },
+      "expected": "Unknown format"
+    },
+    {
+      "id": "track-labels.format-is-title",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Audio",
+          "Index": 8,
+          "Codec": "eac3",
+          "Channels": 6,
+          "Title": "E-AC-3 5.1"
+        }
+      },
+      "expected": "E-AC-3 5.1"
+    },
+    {
+      "id": "track-labels.boundary-34",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Non-Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "Non-Forced · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-35",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "non-forced",
+          "IsForced": true
+        }
+      },
+      "expected": "non-forced · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-36",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Non‑Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "Non‑Forced · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-37",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Non–Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "Non–Forced · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-38",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Unforced",
+          "IsForced": true
+        }
+      },
+      "expected": "Unforced · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-39",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Forcedness",
+          "IsForced": true
+        }
+      },
+      "expected": "Forcedness · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-40",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Forced²",
+          "IsForced": true
+        }
+      },
+      "expected": "Forced² · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-41",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "ForcedⅧ",
+          "IsForced": true
+        }
+      },
+      "expected": "ForcedⅧ · SRT · Forced"
+    },
+    {
+      "id": "track-labels.boundary-42",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Forced𐐀",
+          "IsForced": true
+        }
+      },
+      "expected": "Forced𐐀 · SRT · Forced"
+    },
+    {
+      "id": "track-labels.dedup-43",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "(Forced)",
+          "IsForced": true
+        }
+      },
+      "expected": "(Forced) · SRT"
+    },
+    {
+      "id": "track-labels.dedup-44",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Forced / SRT",
+          "IsForced": true
+        }
+      },
+      "expected": "Forced / SRT"
+    },
+    {
+      "id": "track-labels.dedup-45",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "Forced\nSRT",
+          "IsForced": true
+        }
+      },
+      "expected": "Forced\nSRT"
+    },
+    {
+      "id": "track-labels.dedup-46",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "anon-Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "anon-Forced · SRT"
+    },
+    {
+      "id": "track-labels.dedup-47",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "é́non-Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "é́non-Forced · SRT"
+    },
+    {
+      "id": "track-labels.dedup-48",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Codec": "srt",
+          "Title": "non-Forced / Forced",
+          "IsForced": true
+        }
+      },
+      "expected": "non-Forced / Forced · SRT"
+    },
+    {
+      "id": "track-labels.all-flags-already-in-title",
+      "operation": "track-label",
+      "input": {
+        "stream": {
+          "Type": "Subtitle",
+          "Index": 2,
+          "Language": "eng",
+          "Codec": "srt",
+          "Title": "English Default Forced SDH External",
+          "IsDefault": true,
+          "IsForced": true,
+          "IsHearingImpaired": true,
+          "IsExternal": true
+        }
+      },
+      "expected": "English Default Forced SDH External · SRT"
+    },
+    {
+      "id": "track-labels.single-default-hidden",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2,
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": [
+        "English · AAC stereo"
+      ]
+    },
+    {
+      "id": "track-labels.one-informative-default",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2,
+            "IsDefault": true
+          },
+          {
+            "Type": "Audio",
+            "Index": 98,
+            "Language": "spa",
+            "Codec": "aac",
+            "Channels": 2
+          }
+        ]
+      },
+      "expected": [
+        "English · AAC stereo · Default",
+        "Spanish · AAC stereo"
+      ]
+    },
+    {
+      "id": "track-labels.multiple-defaults-hidden",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2,
+            "IsDefault": true
+          },
+          {
+            "Type": "Audio",
+            "Index": 98,
+            "Language": "spa",
+            "Codec": "aac",
+            "Channels": 2,
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": [
+        "English · AAC stereo",
+        "Spanish · AAC stereo"
+      ]
+    },
+    {
+      "id": "track-labels.same-looking-known-language",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2
+          },
+          {
+            "Type": "Audio",
+            "Index": 98,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2
+          }
+        ]
+      },
+      "expected": [
+        "English · AAC stereo · Track 1",
+        "English · AAC stereo · Track 2"
+      ]
+    },
+    {
+      "id": "track-labels.unknown-language-list",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "und",
+            "Codec": "aac",
+            "Channels": 2,
+            "Title": "Commentary"
+          },
+          {
+            "Type": "Audio",
+            "Index": 99,
+            "Language": null,
+            "Codec": "aac",
+            "Channels": 2,
+            "Title": null
+          }
+        ]
+      },
+      "expected": [
+        "Commentary · AAC stereo · Track 1",
+        "AAC stereo · Track 2"
+      ]
+    },
+    {
+      "id": "track-labels.unknown-language-blank",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": " ",
+            "Codec": "aac",
+            "Channels": 2
+          }
+        ]
+      },
+      "expected": [
+        "AAC stereo · Track 1"
+      ]
+    },
+    {
+      "id": "track-labels.empty-list",
+      "operation": "track-labels",
+      "input": {
+        "streams": []
+      },
+      "expected": []
+    },
+    {
+      "id": "track-labels.repeat-collision-with-title",
+      "operation": "track-labels",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 12,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2
+          },
+          {
+            "Type": "Audio",
+            "Index": 98,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2
+          },
+          {
+            "Type": "Audio",
+            "Index": 200,
+            "Language": "eng",
+            "Codec": "aac",
+            "Channels": 2,
+            "Title": "English · AAC stereo · Track 1"
+          }
+        ]
+      },
+      "expected": [
+        "English · AAC stereo · Track 1 · Track 1",
+        "English · AAC stereo · Track 2",
+        "English · AAC stereo · Track 1 · Track 3"
+      ]
+    }
+  ]
+}

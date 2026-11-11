@@ -217,7 +217,7 @@ struct ConversionNoticeBanner: View {
     }
     private func noticeContent(_ notice: ConversionNotice) -> some View {
         #if os(tvOS)
-        let path = "Open the player controls, then choose Playback info."
+        let path = "Open the player controls, then choose the Playback tab."
         #else
         let path = ""
         #endif

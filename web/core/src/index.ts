@@ -12,6 +12,11 @@ export type Stream = {
     Index: number;
     Codec?: string;
     DisplayTitle?: string;
+    Title?: string;
+    IsDefault?: boolean;
+    IsForced?: boolean;
+    IsHearingImpaired?: boolean;
+    IsExternalUrl?: boolean;
     Language?: string;
     IsExternal?: boolean;
     IsTextSubtitleStream?: boolean;
@@ -1003,3 +1008,5 @@ export function authenticatedMediaRequest(
     );
     return new Request(url, { ...init, ...networkOptions(url), headers });
 }
+
+export { trackLanguage, trackLabel, trackLabels } from "./track-labels";
