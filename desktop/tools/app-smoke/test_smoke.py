@@ -275,6 +275,8 @@ class FixtureProbeCompletionTest(unittest.TestCase):
                     ready = index != 1 or self.wrong_codec or (self.recovers and self.refreshes)
                     codec = 'ffv1' if index == 1 and not self.wrong_codec else 'h264'
                     items.append({'Id': str(index), 'Name': name, 'Type': kind,
+                                  'IndexNumber': index - 1 if kind == 'Episode' else None,
+                                  'ParentIndexNumber': 1 if kind == 'Episode' else None,
                                   'MediaSources': [{'MediaStreams': [{'Type': 'Video', 'Codec': codec}] if ready else []}]})
                 return {'Items': items}
             if endpoint == '/ScheduledTasks':
@@ -316,6 +318,32 @@ class FixtureProbeCompletionTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'video stream probing'):
             self.wait(api)
         self.assertEqual([], api.refreshes)
+
+    def test_episode_metadata_must_finish_before_fixture_order_is_recorded(self):
+        class PendingEpisodeAPI(self.API):
+            calls = 0
+            def request(self, method, endpoint, body=None, query=None):
+                result = super().request(method, endpoint, body, query)
+                if endpoint == '/Items':
+                    self.calls += 1
+                    if self.calls == 1:
+                        result['Items'][3].pop('IndexNumber')
+                        result['Items'][3]['Name'] = 'Signal Stories - S01E02 - Second Light'
+                return result
+        api = PendingEpisodeAPI(scanning=True)
+        api.refreshes.append({'alreadyProbed': True})
+        self.wait(api)
+        self.assertGreater(api.calls, 1)
+        self.assertEqual([1, 2], [item['episode'] for item in api.fixture_probe_completion['episodes']])
+        self.assertEqual(['2', '3'], [item['itemId'] for item in api.fixture_probe_completion['episodes']])
+
+    def test_episode_order_rejects_missing_duplicate_or_wrong_metadata(self):
+        episodes = [{'Id': 'first', 'Name': 'First Light', 'IndexNumber': 1, 'ParentIndexNumber': 1},
+                    {'Id': 'second', 'Name': 'Second Light', 'IndexNumber': 2, 'ParentIndexNumber': 1}]
+        self.assertEqual(['first', 'second'], [item['Id'] for item in smoke.fixture_episode_order(list(reversed(episodes)))])
+        for changes in [{'IndexNumber': None}, {'IndexNumber': 1}, {'ParentIndexNumber': 2}, {'Name': 'raw-filename'}]:
+            with self.subTest(changes=changes):
+                self.assertIsNone(smoke.fixture_episode_order([episodes[0], dict(episodes[1], **changes)]))
 
 
 class SmokeVerdictTest(unittest.TestCase):

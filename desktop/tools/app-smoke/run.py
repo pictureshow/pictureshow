@@ -457,6 +457,15 @@ def fixture_video_codecs(item: dict) -> list:
             if stream.get("Type") == "Video" and stream.get("Codec")]
 
 
+def fixture_episode_order(episodes: list):
+    expected = {1: "First Light", 2: "Second Light"}
+    if (len(episodes) != 2 or {item.get("IndexNumber") for item in episodes} != {1, 2}
+            or not all(item.get("ParentIndexNumber") == 1
+                       and item.get("Name") == expected.get(item.get("IndexNumber")) for item in episodes)):
+        return None
+    return sorted(episodes, key=lambda item: item["IndexNumber"])
+
+
 def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_after: float = 5):
     """Wait for actual stream probes, with one incomplete-item refresh after an idle scan."""
     deadline = time.monotonic() + timeout
@@ -468,15 +477,21 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
         movies = [item for item in items if item["Type"] == "Movie"]
         episodes = [item for item in items if item["Type"] == "Episode"]
         leaves = movies + episodes
+        ordered_episodes = fixture_episode_order(episodes)
         if len(movies) == 2 and len(episodes) == 2 and all(fixture_video_codecs(item) for item in leaves):
             archive = next(item for item in movies if item["Name"] == "Archive Signal")
             if "ffv1" not in fixture_video_codecs(archive):
                 raise RuntimeError("Archive Signal was not probed as the intended FFV1 conversion fixture")
-            api.fixture_probe_completion.update({"complete": True, "videoCodecs": {
-                item["Name"]: fixture_video_codecs(item) for item in leaves}})
-            return movies, episodes
+            if ordered_episodes is not None:
+                api.fixture_probe_completion.update({"complete": True, "videoCodecs": {
+                    item["Name"]: fixture_video_codecs(item) for item in leaves},
+                    "episodes": [{"itemId": item["Id"], "name": item["Name"],
+                                  "season": item["ParentIndexNumber"], "episode": item["IndexNumber"]}
+                                 for item in ordered_episodes]})
+                return movies, ordered_episodes
         now = time.monotonic()
-        incomplete = [item for item in leaves if not fixture_video_codecs(item)]
+        incomplete = [item for item in leaves if not fixture_video_codecs(item)
+                      or (item["Type"] == "Episode" and ordered_episodes is None)]
         for item in incomplete:
             incomplete_since.setdefault(item["Id"], now)
         candidates = [item for item in incomplete if item["Id"] not in retried and now - incomplete_since[item["Id"]] >= retry_after]
@@ -485,7 +500,8 @@ def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_a
             if scans and all(task.get("State") == "Idle" and (task.get("LastExecutionResult") or {}).get("Status") == "Completed" for task in scans):
                 for item in candidates:
                     retried.add(item["Id"])
-                    attempt = {"itemId": item["Id"], "name": item["Name"], "reason": "missing-video-stream-after-completed-scan", "queued": False}
+                    reason = "missing-video-stream-after-completed-scan" if not fixture_video_codecs(item) else "incomplete-episode-metadata-after-completed-scan"
+                    attempt = {"itemId": item["Id"], "name": item["Name"], "reason": reason, "queued": False}
                     api.fixture_probe_completion["refreshAttempts"].append(attempt)
                     api.request("POST", f"/Items/{item['Id']}/Refresh", query={
                         "metadataRefreshMode": "FullRefresh", "imageRefreshMode": "None",
@@ -525,7 +541,7 @@ def provision(api: API, media_base: str):
     viewer_api.login("desktop-viewer", password)
     viewer_api.fixture_process = api.fixture_process
     viewer_api.fixture_container = api.fixture_container
-    return viewer_api, password, {"movieId": movie["Id"], "archiveMovieId": archive["Id"], "episodeIds": [item["Id"] for item in sorted(episodes, key=lambda item: item.get("IndexNumber", 0))], "userId": user_id}
+    return viewer_api, password, {"movieId": movie["Id"], "archiveMovieId": archive["Id"], "episodeIds": [item["Id"] for item in episodes], "userId": user_id}
 
 
 class MacProcessInfo(ctypes.Structure):
