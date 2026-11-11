@@ -4,7 +4,6 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 
-
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.*
@@ -34,7 +33,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-
 
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
@@ -80,7 +78,6 @@ private fun Modifier.focusOutline(): Modifier {
 }
 
 @Composable
-
 internal fun DesktopTooltip(label: String, content: @Composable () -> Unit) {
     TooltipArea(
         tooltip = {
@@ -105,7 +102,6 @@ private fun ShortcutRow(keys: String, action: String) {
 }
 
 @Composable
-
 fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit,
     macChrome: Boolean = false,
     chrome: @Composable (@Composable () -> Unit) -> Unit = { it() },
@@ -415,13 +411,16 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
 @Composable
 fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit) {
     val p = state.playback ?: return
-    var playerBottom by remember(p.item.id) { mutableStateOf(0.0) }
+    var playerBottom by remember(p.decision) { mutableStateOf(0.0) }
+    var videoTop by remember(p.decision) { mutableStateOf(0.0) }
+    var videoBottom by remember(p.decision) { mutableStateOf(0.0) }
+    LaunchedEffect(p.decision, playerBottom, videoTop, videoBottom) {
+        if (playerBottom > 0.0 && videoBottom > videoTop) c.videoViewport(videoTop / playerBottom, (playerBottom - videoBottom) / playerBottom)
+    }
     Column(Modifier.fillMaxSize().onGloballyPositioned { playerBottom = (it.positionInWindow().y + it.size.height).toDouble() }) {
         Spacer(Modifier.weight(1f).onGloballyPositioned {
-            val top = it.positionInWindow().y.toDouble()
-            val bottom = top + it.size.height
-            val total = playerBottom
-            if (total > 0.0) c.videoViewport((top / total).coerceIn(0.0, 1.0), ((total - bottom) / total).coerceIn(0.0, 1.0))
+            videoTop = it.positionInWindow().y.toDouble()
+            videoBottom = videoTop + it.size.height
         })
         p.notice?.let { notice ->
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.widthIn(max = 560.dp).padding(horizontal = 20.dp, vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
@@ -444,7 +443,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     Text(clock(p.durationSeconds),Modifier.width(72.dp),textAlign=TextAlign.Start,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         DesktopTooltip("Back 10 seconds") { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
                         DesktopTooltip(if (p.paused) "Play" else "Pause") { FilledIconButton(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
@@ -499,13 +498,13 @@ private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:St
 }
 
 @Composable
-
 private fun DesktopUtility(label: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, tag: String, action: () -> Unit) {
     DesktopTooltip(label) {
         IconButton(onClick=action, modifier=Modifier.probe(tag)) { Icon(glyph, label, tint=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
+@Composable
 private fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, enabled: Boolean = true) {
     TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp).probe(tag)) { Text(label) }
 }

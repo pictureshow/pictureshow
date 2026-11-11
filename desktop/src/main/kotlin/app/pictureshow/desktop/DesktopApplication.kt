@@ -27,7 +27,7 @@ fun desktopMain(args: Array<String>) {
     // Disposable smoke confines the real UDP discovery implementation to its
     // owned loopback responder. Installed viewers retain normal LAN broadcast.
     val discoveryPort=if(smoke) System.getenv("PICTURESHOW_SMOKE_DISCOVERY_PORT")?.toInt() else null
-    val discovery=if(discoveryPort!=null) app.pictureshow.core.JvmServerDiscovery(port=discoveryPort,targets={setOf(java.net.InetAddress.getLoopbackAddress())}) else app.pictureshow.core.JvmServerDiscovery()
+    val discovery=if(discoveryPort!=null) app.pictureshow.core.JvmServerDiscovery(port=discoveryPort,targets={setOf(java.net.InetAddress.getByName("127.0.0.1"))}) else app.pictureshow.core.JvmServerDiscovery()
     val controller = DesktopController(discovery=discovery)
     application {
         val state = rememberWindowState(width=1280.dp,height=800.dp,position=if(smoke && System.getenv("PICTURESHOW_SMOKE_WINDOW_X")!=null) WindowPosition.Absolute(System.getenv("PICTURESHOW_SMOKE_WINDOW_X").toInt().dp,(System.getenv("PICTURESHOW_SMOKE_WINDOW_Y") ?: "0").toInt().dp) else WindowPosition.PlatformDefault)
