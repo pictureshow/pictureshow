@@ -177,7 +177,7 @@ private fun <T> CatalogChoiceRow(
             trailingContent = { Icon(touchActionIcon("chevron-right"), null) },
             modifier = modifier.clickable(enabled = enabled) { choosing = true }.semantics { stateDescription = label(value) }
         )
-        if (choosing) CatalogChoicePicker(title, value, values, label, change) { choosing = false }
+        if (choosing) CatalogChoicePicker(title, value, values, label, change, close = { choosing = false })
     }
 }
 
@@ -639,6 +639,7 @@ internal fun NamedCatalogPicker(
     }
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
+    val focusAny = selectAny != null && (selectedKeys.isEmpty() || choices.isEmpty())
     var searchEditing by remember(account.key, kind, parentId) { mutableStateOf(false) }
     val searchField = remember { FocusRequester() }
     val title = when (kind) {
@@ -697,7 +698,7 @@ internal fun NamedCatalogPicker(
         if (selectAny != null) {
             item("any-choice") {
                 val checked = selectedKeys.isEmpty()
-                val modifier = (if (checked) Modifier.focusRequester(choiceFocus) else Modifier).testTag("catalog:choice:any")
+                val modifier = (if (focusAny) Modifier.focusRequester(choiceFocus) else Modifier).testTag("catalog:choice:any")
                     .semantics {
                         selected = checked
                         stateDescription = if (checked) "Selected" else ""
@@ -788,10 +789,19 @@ internal fun NamedCatalogPicker(
         searchEditing = false
     }
     LaunchedEffect(loading, requested, page, currentChoices, searchEditing) {
-        if (tv && !loading && !searchEditing && (choices.isNotEmpty() || selectAny != null)) {
-            list.scrollToItem(if (selectAny != null && selectedKeys.isEmpty()) 1 else initial + (if (selectAny != null) 2 else 1))
+        if (tv && !loading && !searchEditing) {
+            val hasChoice = choices.isNotEmpty() || selectAny != null
+            list.scrollToItem(
+                if (!hasChoice) {
+                    0
+                } else if (focusAny) {
+                    1
+                } else {
+                    initial + (if (selectAny != null) 2 else 1)
+                }
+            )
             withFrameNanos { }
-            choiceFocus.requestFocus()
+            if (hasChoice) choiceFocus.requestFocus() else first.requestFocus()
             keyboard?.hide()
         }
     }

@@ -342,6 +342,32 @@ class CatalogCustomizationTest {
         compose.onNode(hasSetTextAction()).assertIsDisplayed().assertIsFocused()
     }
 
+    @Test fun tvEmptySearchReturnsFocusToSearchActionOnBack() {
+        compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Persons", select = {}, close = {}) } }
+        compose.onNodeWithTag("catalog:search").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(hasSetTextAction()).performTextInput("nobody")
+        compose.mainClock.advanceTimeBy(350)
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("catalog:search").assertIsFocused()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.onNodeWithText("No matches for “nobody”").assertIsDisplayed()
+    }
+
+    @Test fun unresolvedCurrentPersonStillOffersAnyAsAFocusTargetWithoutClearing() {
+        var cleared = false
+        compose.setContent {
+            MaterialTheme {
+                NamedCatalogPicker(account, service, "Persons", select = {}, close = {}, selectedKeys = setOf("missing"), selectAny = {
+                    cleared =
+                        true
+                })
+            }
+        }
+        compose.onNodeWithTag("catalog:choice:any").assertIsFocused()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        compose.runOnIdle { assertFalse(cleared) }
+    }
+
     @Test fun personAnyClearsOnlyThePersonConstraint() {
         var applied: LibraryFilters? = null
         val before = LibraryFilters(genre = "Animation", personId = "p", unwatched = true)
