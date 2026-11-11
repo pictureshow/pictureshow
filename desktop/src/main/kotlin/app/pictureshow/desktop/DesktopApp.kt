@@ -3,9 +3,13 @@
  */
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 
+
+
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import kotlinx.coroutines.launch
@@ -20,14 +24,18 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.text.TextRange
+
+
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 import app.pictureshow.ui.*
@@ -72,12 +80,39 @@ private fun Modifier.focusOutline(): Modifier {
 }
 
 @Composable
+
+internal fun DesktopTooltip(label: String, content: @Composable () -> Unit) {
+    TooltipArea(
+        tooltip = {
+            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) {
+                Text(label, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface)
+            }
+        },
+        delayMillis = 500,
+        tooltipPlacement = TooltipPlacement.CursorPoint(),
+        content = content
+    )
+}
+
+@Composable
+private fun ShortcutRow(keys: String, action: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(4.dp)) {
+            Text(keys, Modifier.widthIn(min = 112.dp).padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, textAlign = TextAlign.Center)
+        }
+        Text(action, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+
 fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit,
     macChrome: Boolean = false,
     chrome: @Composable (@Composable () -> Unit) -> Unit = { it() },
     windowControls: @Composable RowScope.() -> Unit = {}) {
     val state by controller.state.collectAsState()
     // Semantics and tooltip callbacks may outlive this composition during sign-out.
+
     val sidebarAccount = state.account
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
@@ -113,7 +148,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
             SideEffect { windowKeys { e ->
                     if (e.type != KeyEventType.KeyDown) false
                     else when {
-                        e.key == Key.F11 || (e.key == Key.Enter && e.isAltPressed) -> { onFullscreen(); true }
+                        e.key == Key.F11 || (e.key == Key.Enter && e.isAltPressed) || (macChrome && e.key == Key.F && e.isCtrlPressed && e.isMetaPressed) -> { onFullscreen(); true }
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
                         e.key == Key.Escape && fullscreen -> { onFullscreen(); true }
@@ -143,7 +178,9 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
                         Column(Modifier.width(184.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(sidebarAccount.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                            TooltipArea(tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) { Text(sidebarAccount.server.name, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface) } }, delayMillis = 500, tooltipPlacement = TooltipPlacement.CursorPoint()) {
+
+                            DesktopTooltip(sidebarAccount.server.name) {
+
                                 Text(sidebarAccount.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = sidebarAccount.server.name })
                             }
                             NavigationDrawerItem(label = { Text("Home") }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.probe("nav:home"))
@@ -175,7 +212,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.QuickConnect -> FormPage("Quick Connect", "Approve this desktop from a signed-in Jellyfin app.") {
                                     Text(state.quickCode?.toCharArray()?.joinToString(" ") ?: "Getting your code…", style = MaterialTheme.typography.displayLarge, modifier = Modifier.probe("quick-code").semantics { liveRegion = LiveRegionMode.Polite })
                                     Text("In Jellyfin, open Settings → Quick Connect and enter this code. Keep this window open while you approve.")
-                                    TextButton(onClick = controller::back, modifier = Modifier.probe("quick-back")) { Text("Use username and password") }
+                                    InlineTextAction("Use username and password", "quick-back", controller::back)
                                 }
                                 DesktopRoute.Accounts -> FormPage("Who's watching?", "Choose a saved viewer or connect another server.") {
                                     state.accounts.forEach { a ->
@@ -198,23 +235,39 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     }
                 }
             }
-            if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = { Text("Tab / Shift+Tab · Move between controls\nArrow keys · Browse cards and menus\nEnter / Space · Activate focused control\nEscape · Close menu, exit fullscreen, then go back\nF11 / Alt+Enter · Fullscreen\nDuring playback: Space · Pause / play\nLeft / Right · Seek 10 seconds\nAll playback actions are also available in the control bar.") }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.probe("help-close")) { Text("Close") } })
+            if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Anywhere", style = MaterialTheme.typography.titleSmall)
+                ShortcutRow(if (macChrome) "Tab / ⇧Tab" else "Tab / Shift+Tab", "Move between controls")
+                ShortcutRow("↑ ↓ ← →", "Browse cards and menus")
+                ShortcutRow("Enter / Space", "Activate focused control")
+                ShortcutRow("Esc", "Close a dialog, exit fullscreen, or go back")
+                ShortcutRow(if (macChrome) "⌃⌘F" else "F11 / Alt+Enter", "Fullscreen")
+                HorizontalDivider()
+                Text("During playback", style = MaterialTheme.typography.titleSmall)
+                ShortcutRow("Space", "Pause or play")
+                ShortcutRow("← / →", "Seek 10 seconds")
+                Text("Playback actions are also available in the control bar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.probe("help-close")) { Text("Close") } })
             remove?.let { a ->
                 val cancelFocus = remember(a.key) { FocusRequester() }
                 LaunchedEffect(a.key) { delay(100); cancelFocus.requestFocus() }
-                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("Forget this viewer on ${a.server.name} on this desktop. Your Jellyfin account and other saved viewers stay available.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, modifier = Modifier.probe("remove-confirm")) { Text("Remove viewer") } }) }
+                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.probe("remove-confirm")) { Text("Remove viewer") } }) }
         }
     }
 }
 
 @Composable
 private fun FormPage(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
-    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    val scroll = rememberScrollState()
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.align(Alignment.TopCenter).fillMaxHeight().verticalScroll(scroll).padding(horizontal = 32.dp, vertical = 32.dp)) {
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(top = 32.dp, end = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             CatalogHeading(title)
             Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             content()
         }
+        }
+        VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
 @Composable
@@ -226,10 +279,10 @@ private fun ServerPage(state: DesktopState, c: DesktopController) {
         Button(onClick = { c.connect(address) }, enabled = address.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 48.dp).probe("connect")) { Text(if (state.busy) "Connecting…" else "Connect") }
         Text("On your network", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }) { Text(s.name) } }
-        state.discovered.forEach { s -> OutlinedButton(onClick = { c.connect(s.address) }) { Text(s.name ?: s.address) } }
+        state.discovered.forEach { s -> OutlinedButton(onClick = { c.connect(s.address) }) { Text(s.name) } }
         Text(if (state.discovering) "Looking for Jellyfin servers…" else if(state.discovered.isEmpty()) "No server found yet. You can always enter its address above." else "Select a server to connect.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = c::discover, enabled = !state.discovering, modifier = Modifier.probe("discover")) { Text("Search again") }
-        if (state.accounts.isNotEmpty()) TextButton(onClick = c::accounts) { Text("Remembered accounts") }
+        InlineTextAction("Search again", "discover", c::discover, enabled = !state.discovering)
+        if (state.accounts.isNotEmpty()) InlineTextAction("Remembered accounts", "remembered-accounts", c::accounts)
     }
 }
 @Composable
@@ -257,9 +310,11 @@ private fun SignInPage(state: DesktopState, c: DesktopController) {
 @Composable
 private fun HomePage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
-    LazyColumn(Modifier.fillMaxSize().probe("home"), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    val listState = rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().padding(end = 20.dp).probe("home"), state = listState, contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item { CatalogHeading("Home") }
-        if (!state.busy && state.homeRows.isEmpty()) item { Text("Nothing to show yet. Add media in Jellyfin, then refresh."); TextButton(onClick=c::home) { Text("Refresh") } }
+        if (!state.busy && state.homeRows.isEmpty()) item { Text("Nothing to show yet. Add media in Jellyfin, then refresh."); InlineTextAction("Refresh", "home-refresh", c::home) }
         items(state.homeRows.sortedBy { if (it.library) 1 else 0 }, key = { it.key }) { row ->
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CatalogHeading(row.title, section = true)
@@ -271,6 +326,8 @@ private fun HomePage(state: DesktopState, c: DesktopController) {
             }
         }
     }
+    VerticalScrollbar(rememberScrollbarAdapter(listState), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+    }
 }
 @Composable
 private fun LibraryPage(state: DesktopState, c: DesktopController) {
@@ -279,15 +336,18 @@ private fun LibraryPage(state: DesktopState, c: DesktopController) {
     LaunchedEffect(state.library?.id, state.sortBy, state.descending) { grid.scrollToItem(0) }
     LaunchedEffect(grid, state.items.size) { snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
             Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
-            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
+            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.padding(top = 4.dp).probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
         }
         Text("${state.total} items", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.items.isEmpty() && !state.busy) Text("This library is empty.")
-        LazyVerticalGrid(GridCells.Adaptive(156.dp), state = grid, horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(state.items, key = { it.id }) { item -> CatalogCard(item,account,false,{c.open(item)},Modifier.focusOutline().probe("grid:${item.id}"), artHeight = 228.dp, announcement = catalogAnnouncement(item), tag = "grid:${item.id}") }
+        Box(Modifier.weight(1f)) {
+        LazyVerticalGrid(GridCells.FixedSize(156.dp), state = grid, modifier = Modifier.fillMaxSize().padding(end = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(state.items, key = { it.id }) { item -> CatalogCard(item,account,false,{c.open(item)},Modifier.focusOutline().probe("grid:${item.id}"), announcement = catalogAnnouncement(item), tag = "grid:${item.id}") }
+        }
+        VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
 }
@@ -299,25 +359,31 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
     // Detail content width excludes the persistent sidebar and top chrome; this
     // breakpoint corresponds to a full window around 1440 dp wide.
     val expansive = maxWidth >= 1120.dp
-    LazyColumn(Modifier.fillMaxSize().probe("detail"), contentPadding = PaddingValues(if (expansive) 40.dp else 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    val detailState = rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().padding(end = 20.dp).probe("detail"), state = detailState, contentPadding = PaddingValues(start = if (expansive) 40.dp else 24.dp, top = if (expansive) 40.dp else 24.dp, end = if (expansive) 40.dp else 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                CatalogArtwork(item,account,false,Modifier.width(if (expansive) 240.dp else 180.dp).aspectRatio(2f / 3f))
+                val isEpisode = item.type == "Episode"
+                val posterWidth = when { isEpisode && expansive -> 480.dp; isEpisode -> 360.dp; expansive -> 240.dp; else -> 180.dp }
+                CatalogArtwork(item,account,isEpisode,Modifier.width(posterWidth).aspectRatio(if (isEpisode) 16f / 9f else 2f / 3f))
                 Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(if (expansive) 18.dp else 14.dp)) {
                     Text(item.name, style = if (expansive) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                     Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier=Modifier.heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
-                        if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.probe("play-start")) { Text("Play from start") }
-                        TooltipArea(tooltip = { Text(if (item.isWatched) "Mark unwatched" else "Mark watched") }) {
-                            IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.probe("watched").semantics { contentDescription = "Watched" }) {
-                                Icon(DesktopGlyph.Watched, contentDescription = null, tint = if (item.isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if(item.userData.playbackPositionTicks>0) OutlinedButton(onClick={c.play(item,true)},modifier=Modifier.heightIn(min=48.dp).probe("play-start")) { Text("Play from start") }
+                        Row(Modifier.offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
+                        DesktopTooltip(if (item.isWatched) "Mark unwatched" else "Mark watched") {
+                            IconToggleButton(checked = item.isWatched, onCheckedChange = { c.toggleWatched() }, modifier = Modifier.probe("watched").semantics { contentDescription = "Watched"; stateDescription = if (item.isWatched) "Watched" else "Not watched" }) {
+                                Icon(if (item.isWatched) DesktopGlyph.Watched else DesktopGlyph.WatchedOutline, contentDescription = null, tint = if (item.isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        TooltipArea(tooltip = { Text(if (item.userData.isFavorite) "Remove favorite" else "Add to favorites") }) {
-                            IconToggleButton(checked = item.userData.isFavorite, onCheckedChange = { c.toggleFavorite() }, modifier = Modifier.probe("favorite").semantics { contentDescription = "Favorite" }) {
-                                Icon(DesktopGlyph.Favorite, contentDescription = null, tint = if (item.userData.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        DesktopTooltip(if (item.userData.isFavorite) "Remove favorite" else "Add to favorites") {
+                            IconToggleButton(checked = item.userData.isFavorite, onCheckedChange = { c.toggleFavorite() }, modifier = Modifier.probe("favorite").semantics { contentDescription = "Favorite"; stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite" }) {
+                                Icon(if (item.userData.isFavorite) DesktopGlyph.Favorite else DesktopGlyph.FavoriteOutline, contentDescription = null, tint = if (item.userData.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                        }
                         }
                     }
                     item.overview?.let { Text(it, Modifier.widthIn(max = 640.dp), style=MaterialTheme.typography.bodyLarge) }
@@ -342,31 +408,56 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
             }
         }
     }
+    VerticalScrollbar(rememberScrollbarAdapter(detailState), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+    }
     }
 }
 @Composable
 fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit) {
     val p = state.playback ?: return
-    Column(Modifier.fillMaxSize()) {
-        Spacer(Modifier.weight(1f))
-        p.notice?.let { notice -> Surface(color=MaterialTheme.colorScheme.surfaceContainer) { Column(Modifier.padding(16.dp)) { Text(notice.title,style=MaterialTheme.typography.titleMedium); Text(notice.reason); Text(notice.fix) } } }
+    var playerBottom by remember(p.item.id) { mutableStateOf(0.0) }
+    Column(Modifier.fillMaxSize().onGloballyPositioned { playerBottom = (it.positionInWindow().y + it.size.height).toDouble() }) {
+        Spacer(Modifier.weight(1f).onGloballyPositioned {
+            val top = it.positionInWindow().y.toDouble()
+            val bottom = top + it.size.height
+            val total = playerBottom
+            if (total > 0.0) c.videoViewport((top / total).coerceIn(0.0, 1.0), ((total - bottom) / total).coerceIn(0.0, 1.0))
+        })
+        p.notice?.let { notice ->
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.widthIn(max = 560.dp).padding(horizontal = 20.dp, vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("ⓘ", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.titleMedium)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(notice.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text(notice.reason, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text(notice.fix, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                }
+            }
+        }
         Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=.96f)) {
             Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Text(p.item.name,style=MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Text(clock(p.positionSeconds),Modifier.width(60.dp))
+                    Text(clock(p.positionSeconds),Modifier.width(72.dp),textAlign=TextAlign.End,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
                     Slider(value=p.positionSeconds.toFloat().coerceIn(0f,p.durationSeconds.coerceAtLeast(1.0).toFloat()),onValueChange={c.seek(it.toDouble())},valueRange=0f..p.durationSeconds.coerceAtLeast(1.0).toFloat(),modifier=Modifier.weight(1f).probe("seek").semantics { contentDescription="Playback position" })
-                    Text(clock(p.durationSeconds),Modifier.width(60.dp))
+                    Text(clock(p.durationSeconds),Modifier.width(72.dp),textAlign=TextAlign.Start,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
                 }
-                FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Button(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Text(if(p.paused) "Play" else "Pause") }
-                    TextButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Text("−10 s") }
-                    TextButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Text("+10 s") }
-                    Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",c::selectAudio)
-                    Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",c::selectSubtitle)
-                    if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.probe("next-episode")) { Text("Next episode") }
-                    TextButton(onClick=fullscreen) { Text("Fullscreen") }
-                    OutlinedButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Text("Stop") }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DesktopTooltip("Back 10 seconds") { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
+                        DesktopTooltip(if (p.paused) "Play" else "Pause") { FilledIconButton(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
+                        DesktopTooltip("Forward 10 seconds") { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
+                        Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
+                        DesktopTooltip("Fullscreen") { IconButton(onClick=fullscreen,modifier=Modifier.probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
+                        if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
+                        DesktopTooltip("Stop playback") { IconButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
+                    }
+
                 }
                 if(!p.ready) Text("Opening video…",modifier=Modifier.semantics{liveRegion=LiveRegionMode.Polite})
             }
@@ -388,7 +479,7 @@ private fun SettingsPage(state:DesktopState,c:DesktopController) {
         CatalogHeading("Interface",section=true)
         SettingSwitch("Living-room size","Larger text and controls for watching from a distance.",s.largeInterface,"large-interface") { c.saveSettings(s.copy(largeInterface=it)) }
         Text("Pictureshow · Free, open source Jellyfin client\nMPL-2.0 · Legitimate LLC\nVideo: dynamically loaded LGPL libmpv",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick=c::signOut,modifier=Modifier.probe("sign-out")) { Text("Sign out") }
+        InlineTextAction("Sign out", "sign-out", c::signOut)
     }
 }
 @Composable
@@ -396,17 +487,28 @@ private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,o
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Text(caption,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(value,onChange,Modifier.probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
-private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,onChoose:(T)->Unit) {
+private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=260.dp).probe(tag)) { Text("$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis) }
+        OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
+            if(icon!=null) Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp))
+            Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",maxLines=1,overflow=TextOverflow.Ellipsis)
+        }
         DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.probe("$tag:$key")) } }
     }
 }
 
 @Composable
+
 private fun DesktopUtility(label: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, tag: String, action: () -> Unit) {
-    TooltipArea(tooltip = { Surface(color=MaterialTheme.colorScheme.inverseSurface, shape=RoundedCornerShape(4.dp)) { Text(label, Modifier.padding(8.dp), color=MaterialTheme.colorScheme.inverseOnSurface) } }) {
+    DesktopTooltip(label) {
         IconButton(onClick=action, modifier=Modifier.probe(tag)) { Icon(glyph, label, tint=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
+
+private fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, enabled: Boolean = true) {
+    TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp).probe(tag)) { Text(label) }
+}
+
+private fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream): String =
+    trackLabel(stream).substringBefore(" · ").ifBlank { "Track ${stream.index + 1}" }
