@@ -257,7 +257,9 @@ class CatalogCustomizationTest {
         compose.onNodeWithText("Row options").assertDoesNotExist()
         compose.onNodeWithTag("home:unpin").assertIsFocused().assert(
             SemanticsMatcher("Unpin is a command rather than a radio choice") {
-                it.config.getOrNull(SemanticsProperties.Role) != Role.RadioButton
+                it.config.getOrNull(SemanticsProperties.Role) == Role.Button &&
+                    !it.config.contains(SemanticsProperties.Selected) &&
+                    !it.config.contains(SemanticsProperties.ToggleableState)
             }
         ).performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(preferences.pins.isEmpty()) }
@@ -282,7 +284,7 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertEquals(before, preferences) }
         val cancel = compose.onNodeWithTag("home:reset-cancel").getUnclippedBoundsInRoot()
         val restore = compose.onNodeWithTag("home:reset-confirm").getUnclippedBoundsInRoot()
-        assertEquals(cancel.width, restore.width)
+        assertEquals(cancel.right - cancel.left, restore.right - restore.left)
         assertEquals(cancel.top, restore.top)
         compose.onNodeWithTag("home:reset-cancel").assert(
             SemanticsMatcher("Cancel is a command, not a selection") {
@@ -334,7 +336,9 @@ class CatalogCustomizationTest {
         compose.onNodeWithText("On your home · 2 titles").assertIsDisplayed()
         compose.onNodeWithTag("catalog:choice:c").assert(
             SemanticsMatcher("Pinned item has a check/status rather than a radio role") {
-                it.config.getOrNull(SemanticsProperties.Role) != Role.RadioButton
+                it.config.getOrNull(SemanticsProperties.Role) == Role.Button &&
+                    !it.config.contains(SemanticsProperties.Selected) &&
+                    !it.config.contains(SemanticsProperties.ToggleableState)
             }
         )
     }

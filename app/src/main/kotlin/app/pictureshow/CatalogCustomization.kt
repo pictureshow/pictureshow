@@ -755,7 +755,7 @@ internal fun NamedCatalogPicker(
                 }
                 )
                 .testTag("catalog:choice:${item.id}").semantics {
-                    this.selected = checked
+                    if (!pickingHomeRows) this.selected = checked
                     role = if (pickingHomeRows) Role.Button else Role.RadioButton
                     stateDescription =
                         if (checked) {
@@ -770,7 +770,7 @@ internal fun NamedCatalogPicker(
                     item.name,
                     support,
                     modifier,
-                    selected = checked,
+                    selected = if (pickingHomeRows) null else checked,
                     onClick = { select(item) },
                     leading = avatar,
                     trailing = {
