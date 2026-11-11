@@ -7,6 +7,7 @@ import android.app.Application
 import android.app.UiModeManager
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import androidx.activity.ComponentDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -62,6 +63,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-television-xhdpi")
@@ -78,6 +80,13 @@ class CatalogCustomizationTest {
     @Before fun matchUiModeServiceToDeviceConfiguration() {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java))
             .setCurrentModeType(compose.activity.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK)
+    }
+
+    private fun backFromTopDialog() {
+        compose.runOnIdle {
+            val dialog = requireNotNull(ShadowDialog.getLatestDialog()) as ComponentDialog
+            dialog.onBackPressedDispatcher.onBackPressed()
+        }
     }
 
     @Test fun homeBuilderShowsCurrentChoiceAndPersistsReversibleRowEdits() {
@@ -201,7 +210,7 @@ class CatalogCustomizationTest {
             }
         }
         compose.onNodeWithTag("home:overflow:${pin.key}").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        backFromTopDialog()
         compose.onNodeWithTag("home:overflow:${pin.key}").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Row options").assertDoesNotExist()
         compose.onNodeWithTag("home:unpin").assertIsFocused().assert(
@@ -232,7 +241,7 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("home:reset-cancel").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
         compose.onNodeWithTag("home:reset-opener").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        backFromTopDialog()
         compose.onNodeWithTag("home:reset-opener").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("home:reset-confirm").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(HomePreferences(libraries = before.libraries), preferences) }
@@ -309,7 +318,7 @@ class CatalogCustomizationTest {
             compose.onNodeWithTag("catalog:option:1").performScrollTo().performClick()
             compose.onNodeWithTag("filters:year").performScrollTo().performClick()
             compose.onNodeWithText("2020–2029").performScrollTo().performClick()
-            compose.onNodeWithText("2026").performScrollTo().performClick()
+            compose.onNodeWithTag("catalog:option:0").performScrollTo().performClick()
             compose.onNodeWithTag("filters:genre").performScrollTo().performClick()
             compose.onNodeWithTag("catalog:option:1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
             compose.onNodeWithTag("catalog:option:1").performClick()
@@ -347,13 +356,14 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:search").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNode(hasSetTextAction()).performTextInput("nobody")
         compose.mainClock.advanceTimeBy(350)
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        backFromTopDialog()
         compose.onNodeWithTag("catalog:search").assertIsFocused()
         compose.onNode(hasSetTextAction()).assertDoesNotExist()
         compose.onNodeWithText("No matches for “nobody”").assertIsDisplayed()
     }
 
     @Test fun unresolvedCurrentPersonStillOffersAnyAsAFocusTargetWithoutClearing() {
+        service.detail = { ClientResult.Failure(ClientError(ErrorKind.SERVER, "Not found")) }
         var cleared = false
         compose.setContent {
             MaterialTheme {
@@ -365,6 +375,7 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("catalog:choice:any").assertIsFocused()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        compose.onNodeWithText("Untitled").assertDoesNotExist()
         compose.runOnIdle { assertFalse(cleared) }
     }
 

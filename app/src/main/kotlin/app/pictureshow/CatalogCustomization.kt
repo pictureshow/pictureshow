@@ -652,7 +652,15 @@ internal fun NamedCatalogPicker(
         "Persons" -> "Choose a person"
         else -> "Choose a row"
     }
-    CatalogEditor(title, close, first, list) {
+    val initialFocus = if (tv && !searchEditing && focusTarget != "search") choiceFocus else first
+    CatalogEditor(title, {
+        if (tv && searchEditing) {
+            keyboard?.hide()
+            searchEditing = false
+        } else {
+            close()
+        }
+    }, initialFocus, list) {
         item("search") {
             if (tv && !searchEditing) {
                 TvSettingsActionRow(
@@ -785,10 +793,6 @@ internal fun NamedCatalogPicker(
             searchField.requestFocus()
             keyboard?.show()
         }
-    }
-    BackHandler(enabled = tv && searchEditing) {
-        keyboard?.hide()
-        searchEditing = false
     }
     LaunchedEffect(loading, requested, page, currentChoices, searchEditing) {
         if (tv && !loading && !searchEditing) {
