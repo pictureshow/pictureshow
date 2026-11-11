@@ -10,6 +10,7 @@ import os
 import tempfile
 import time
 import json
+import itertools
 
 spec = importlib.util.spec_from_file_location("app_smoke", Path(__file__).with_name("run.py"))
 smoke = importlib.util.module_from_spec(spec)
@@ -219,6 +220,62 @@ class VoiceOverCheckpointTest(unittest.TestCase):
                 smoke.record_voiceover_checkpoint(evidence, 'before')
             with self.assertRaisesRegex(RuntimeError, 'screenshot qualification'):
                 smoke.validate_voiceover_checkpoints(evidence, ('before',))
+
+
+class FixtureProbeCompletionTest(unittest.TestCase):
+    class API:
+        def __init__(self, recovers=True, wrong_codec=False, scanning=False):
+            self.recovers, self.wrong_codec, self.scanning = recovers, wrong_codec, scanning
+            self.refreshes = []
+
+        def request(self, method, endpoint, body=None, query=None):
+            if endpoint == '/Items':
+                items = []
+                for index, (name, kind) in enumerate([('Signal One', 'Movie'), ('Archive Signal', 'Movie'), ('First Light', 'Episode'), ('Second Light', 'Episode')]):
+                    ready = index != 1 or self.wrong_codec or (self.recovers and self.refreshes)
+                    codec = 'ffv1' if index == 1 and not self.wrong_codec else 'h264'
+                    items.append({'Id': str(index), 'Name': name, 'Type': kind,
+                                  'MediaSources': [{'MediaStreams': [{'Type': 'Video', 'Codec': codec}] if ready else []}]})
+                return {'Items': items}
+            if endpoint == '/ScheduledTasks':
+                return [{'Key': 'RefreshLibrary', 'State': 'Running' if self.scanning else 'Idle', 'LastExecutionResult': {'Status': 'Completed'}}]
+            if method == 'POST' and endpoint == '/Items/1/Refresh':
+                self.refreshes.append(query)
+                return None
+            raise AssertionError((method, endpoint))
+
+    def wait(self, api):
+        ticks = itertools.count(0, .1)
+        with patch.object(smoke.time, 'monotonic', side_effect=lambda: next(ticks)), patch.object(smoke.time, 'sleep'):
+            return smoke.wait_for_fixture_media(api, 'fixture-user', timeout=2, retry_after=0)
+
+    def test_media_source_stub_requires_actual_video_probe_and_one_refresh(self):
+        api = self.API()
+        movies, episodes = self.wait(api)
+        self.assertEqual((2, 2), (len(movies), len(episodes)))
+        self.assertEqual(1, len(api.refreshes))
+        self.assertEqual('FullRefresh', api.refreshes[0]['metadataRefreshMode'])
+        self.assertTrue(api.fixture_probe_completion['complete'])
+        self.assertEqual(['ffv1'], api.fixture_probe_completion['videoCodecs']['Archive Signal'])
+
+    def test_persistently_unprobed_item_fails_without_repeated_refresh(self):
+        api = self.API(recovers=False)
+        with self.assertRaisesRegex(RuntimeError, 'video stream probing'):
+            self.wait(api)
+        self.assertEqual(1, len(api.refreshes))
+        self.assertFalse(api.fixture_probe_completion['complete'])
+
+    def test_wrong_archive_codec_is_never_accepted_or_rewritten(self):
+        api = self.API(wrong_codec=True)
+        with self.assertRaisesRegex(RuntimeError, 'FFV1 conversion fixture'):
+            self.wait(api)
+        self.assertEqual([], api.refreshes)
+
+    def test_active_scan_is_not_interrupted_with_an_item_refresh(self):
+        api = self.API(scanning=True)
+        with self.assertRaisesRegex(RuntimeError, 'video stream probing'):
+            self.wait(api)
+        self.assertEqual([], api.refreshes)
 
 
 class SmokeVerdictTest(unittest.TestCase):

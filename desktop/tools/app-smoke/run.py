@@ -137,6 +137,7 @@ def fixture_diagnostics(api: "API", evidence: Path, error: Exception) -> None:
                                  "hasItemId": bool(folder.get("ItemId"))}
                                 for folder in folders]
         result["libraryProvisionReceipts"] = getattr(api, "fixture_library_receipts", [])
+        result["probeCompletion"] = getattr(api, "fixture_probe_completion", None)
         catalog = api.request("GET", "/Items", query={"Recursive": "true", "Fields": "MediaSources,MediaStreams"})
         items = catalog.get("Items", [])
         result["itemCount"] = len(items)
@@ -450,6 +451,50 @@ def add_fixture_library(api: API, name: str, kind: str, path: str):
     api.fixture_library_receipts.append(receipt)
 
 
+def fixture_video_codecs(item: dict) -> list:
+    return [stream["Codec"] for source in item.get("MediaSources") or []
+            for stream in source.get("MediaStreams") or []
+            if stream.get("Type") == "Video" and stream.get("Codec")]
+
+
+def wait_for_fixture_media(api: API, user_id: str, timeout: float = 120, retry_after: float = 5):
+    """Wait for actual stream probes, with one incomplete-item refresh after an idle scan."""
+    deadline = time.monotonic() + timeout
+    incomplete_since, retried = {}, set()
+    api.fixture_probe_completion = {"complete": False, "refreshAttempts": []}
+    while time.monotonic() < deadline:
+        catalog = api.request("GET", "/Items", query={"Recursive": "true", "IncludeItemTypes": "Movie,Episode", "Fields": "MediaSources,MediaStreams", "UserId": user_id})
+        items = catalog["Items"]
+        movies = [item for item in items if item["Type"] == "Movie"]
+        episodes = [item for item in items if item["Type"] == "Episode"]
+        leaves = movies + episodes
+        if len(movies) == 2 and len(episodes) == 2 and all(fixture_video_codecs(item) for item in leaves):
+            archive = next(item for item in movies if item["Name"] == "Archive Signal")
+            if "ffv1" not in fixture_video_codecs(archive):
+                raise RuntimeError("Archive Signal was not probed as the intended FFV1 conversion fixture")
+            api.fixture_probe_completion.update({"complete": True, "videoCodecs": {
+                item["Name"]: fixture_video_codecs(item) for item in leaves}})
+            return movies, episodes
+        now = time.monotonic()
+        incomplete = [item for item in leaves if not fixture_video_codecs(item)]
+        for item in incomplete:
+            incomplete_since.setdefault(item["Id"], now)
+        candidates = [item for item in incomplete if item["Id"] not in retried and now - incomplete_since[item["Id"]] >= retry_after]
+        if candidates:
+            scans = [task for task in api.request("GET", "/ScheduledTasks") if "library" in task.get("Key", "").lower()]
+            if scans and all(task.get("State") == "Idle" and (task.get("LastExecutionResult") or {}).get("Status") == "Completed" for task in scans):
+                for item in candidates:
+                    retried.add(item["Id"])
+                    attempt = {"itemId": item["Id"], "name": item["Name"], "reason": "missing-video-stream-after-completed-scan", "queued": False}
+                    api.fixture_probe_completion["refreshAttempts"].append(attempt)
+                    api.request("POST", f"/Items/{item['Id']}/Refresh", query={
+                        "metadataRefreshMode": "FullRefresh", "imageRefreshMode": "None",
+                        "replaceAllMetadata": "false", "replaceAllImages": "false"})
+                    attempt["queued"] = True
+        time.sleep(1)
+    raise RuntimeError("Generated two movies and two episodes did not complete video stream probing")
+
+
 def provision(api: API, media_base: str):
     admin_password, password = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
     api.request("GET", "/Startup/Configuration")
@@ -471,22 +516,9 @@ def provision(api: API, media_base: str):
     for name, kind, path in [("Movies", "movies", "movies"), ("Shows", "tvshows", "shows")]:
         add_fixture_library(api, name, kind, os.path.join(media_base, path))
     api.request("POST", "/Library/Refresh")
-    deadline = time.monotonic() + 120
-    while time.monotonic() < deadline:
-        catalog = api.request("GET", "/Items", query={"Recursive": "true", "IncludeItemTypes": "Movie,Episode", "Fields": "MediaSources,MediaStreams", "UserId": viewer["Id"]})
-        items = catalog["Items"]
-        movies = [item for item in items if item["Type"] == "Movie" and item.get("MediaSources")]
-        episodes = [item for item in items if item["Type"] == "Episode" and item.get("MediaSources")]
-        if len(movies) == 2 and len(episodes) == 2:
-            break
-        time.sleep(1)
-    else:
-        raise RuntimeError("Generated two movies and two episodes did not complete media probing")
+    movies, episodes = wait_for_fixture_media(api, viewer["Id"])
     movie = next(item for item in movies if item["Name"] == "Signal One")
     archive = next(item for item in movies if item["Name"] == "Archive Signal")
-    if not any(stream.get("Codec") == "ffv1" and stream.get("Type") == "Video"
-               for source in archive["MediaSources"] for stream in source.get("MediaStreams", [])):
-        raise RuntimeError("Archive Signal was not probed as the intended FFV1 conversion fixture")
     user_id = viewer["Id"]
     api.request("POST", f"/UserItems/{movie['Id']}/UserData", {"PlaybackPositionTicks": 120_000_000, "Played": False}, {"userId": user_id})
     viewer_api = API(api.url, "pictureshow-desktop-fixture-viewer")
@@ -927,7 +959,7 @@ def main():
                 witness = {"reason": "viewer-bitrate-cap" if quality_witness else "unavailable-decoder",
                            "bitrateCapMbps": 4 if quality_witness else None,
                            "conversionNoticeExpected": not quality_witness}
-                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "libraries": admin.fixture_library_receipts, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
+                write_json(args.evidence / "fixture.json", {"version": VERSION, "provenance": provenance, "libraries": admin.fixture_library_receipts, "probeCompletion": admin.fixture_probe_completion, "movieCount": 2, "episodeCount": 2, "conversionMovie": "Archive Signal", "conversionCodec": "ffv1", "conversionWitness": witness, "resumeSeconds": 12, "disposable": True})
                 result["conversionWitness"] = witness
                 with gui_lease(args.gui_lock, args.wait_gui_seconds):
                     result.update(run_app(args, viewer, password, ids, args.evidence))
