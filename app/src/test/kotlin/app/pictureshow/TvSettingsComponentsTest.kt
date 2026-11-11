@@ -33,6 +33,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -216,8 +217,8 @@ class TvSettingsComponentsTest {
         assertEquals(2.dp, indicator.right - indicator.left)
         repeat(11) { key("tv-settings:panel", Key.DirectionDown) }
         compose.onNodeWithTag("row:11").assertIsFocused().assertIsDisplayed()
-        val support = compose.onNodeWithText(
-            "Explanation for setting 11 that stays inside its focused row.",
+        val support = compose.onNode(
+            hasText("Explanation for setting 11 that stays inside its focused row.") and !hasClickAction(),
             useUnmergedTree = true
         ).getUnclippedBoundsInRoot()
         val row = compose.onNodeWithTag("row:11").getUnclippedBoundsInRoot()
