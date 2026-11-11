@@ -4,12 +4,17 @@
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import kotlinx.coroutines.delay
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.Color
@@ -26,14 +31,27 @@ import app.pictureshow.ui.*
 import java.util.concurrent.ConcurrentHashMap
 
 /** Geometry of real controls, used by the finite Robot smoke driver, never by normal input handling. */
+private val LocalDesktopPage = staticCompositionLocalOf { "" }
 object DesktopUiProbe {
     val bounds = ConcurrentHashMap<String, androidx.compose.ui.geometry.Rect>()
     val focus = ConcurrentHashMap<String, Boolean>()
+    val pageOfTag = ConcurrentHashMap<String, String>()
+    val requestFocus = ConcurrentHashMap<String, FocusRequester>()
+    val lastFocus = ConcurrentHashMap<String, String>()
+    val reveal = ConcurrentHashMap<String, () -> Unit>()
 }
 fun Modifier.probe(tag: String): Modifier = composed {
-    DisposableEffect(tag) { onDispose { DesktopUiProbe.bounds.remove(tag); DesktopUiProbe.focus.remove(tag) } }
-    testTag(tag).onGloballyPositioned { DesktopUiProbe.bounds[tag] = it.boundsInWindow() }
-        .onFocusChanged { DesktopUiProbe.focus[tag] = it.isFocused }
+    val requester = remember { BringIntoViewRequester() }
+    val focusRequester = remember { FocusRequester() }
+    val page = LocalDesktopPage.current
+    val scope = rememberCoroutineScope()
+    DisposableEffect(tag) {
+        DesktopUiProbe.requestFocus[tag] = focusRequester
+        DesktopUiProbe.reveal[tag] = { scope.launch { requester.bringIntoView() } }
+        onDispose { DesktopUiProbe.bounds.remove(tag); DesktopUiProbe.focus.remove(tag); DesktopUiProbe.reveal.remove(tag); DesktopUiProbe.requestFocus.remove(tag); DesktopUiProbe.pageOfTag.remove(tag) }
+    }
+    focusRequester(focusRequester).bringIntoViewRequester(requester).testTag(tag).onGloballyPositioned { DesktopUiProbe.bounds[tag] = it.boundsInWindow(); DesktopUiProbe.pageOfTag[tag] = page }
+        .onFocusChanged { DesktopUiProbe.focus[tag] = it.isFocused; if(it.isFocused && page.isNotBlank()) DesktopUiProbe.lastFocus[page] = tag }
 }
 @Composable
 private fun Modifier.focusOutline(): Modifier {
@@ -44,6 +62,29 @@ private fun Modifier.focusOutline(): Modifier {
 @Composable
 fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean) {
     val state by controller.state.collectAsState()
+    val pageKey = state.route.name + when(state.route) {
+        DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
+        DesktopRoute.Detail -> ":${state.detail?.id}"
+        else -> ""
+    }
+    val savedPages = rememberSaveableStateHolder()
+    LaunchedEffect(pageKey, state.busy) {
+        if(!state.busy) {
+            delay(150)
+            if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
+                val target = DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
+                    DesktopRoute.Servers -> "server-address"
+                    DesktopRoute.SignIn -> "username"
+                    DesktopRoute.Detail -> "play"
+                    DesktopRoute.Player -> "pause"
+                    DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
+                    DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" }
+                    else -> null
+                }
+                target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
+            }
+        }
+    }
     val focus = LocalFocusManager.current
     var help by remember { mutableStateOf(false) }
     var remove by remember { mutableStateOf<Account?>(null) }
@@ -98,6 +139,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         }
                         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
                         Box(Modifier.fillMaxSize()) {
+                            savedPages.SaveableStateProvider(pageKey) {
+                            CompositionLocalProvider(LocalDesktopPage provides pageKey) {
                             when (state.route) {
                                 DesktopRoute.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                                 DesktopRoute.Servers -> ServerPage(state, controller)
@@ -122,12 +165,17 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
                                 DesktopRoute.Settings -> SettingsPage(state, controller)
                             }
+                            }
+                            }
                         }
                     }
                 }
             }
             if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = { Text("Tab / Shift+Tab · Move between controls\nArrow keys · Browse cards and menus\nEnter / Space · Activate focused control\nEscape · Close menu, exit fullscreen, then go back\nF11 / Alt+Enter · Fullscreen\nDuring playback: Space · Pause / play\nLeft / Right · Seek 10 seconds\nAll playback actions are also available in the control bar.") }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.probe("help-close")) { Text("Close") } })
-            remove?.let { a -> AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("Forget this viewer on ${a.server.name} on this desktop. Your Jellyfin account and other saved viewers stay available.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, modifier = Modifier.probe("remove-confirm")) { Text("Remove viewer") } }) }
+            remove?.let { a ->
+                val cancelFocus = remember(a.key) { FocusRequester() }
+                LaunchedEffect(a.key) { delay(100); cancelFocus.requestFocus() }
+                AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("Forget this viewer on ${a.server.name} on this desktop. Your Jellyfin account and other saved viewers stay available.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.focusRequester(cancelFocus).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { remove = null; controller.removeAccount(a.key) }, modifier = Modifier.probe("remove-confirm")) { Text("Remove viewer") } }) }
         }
     }
 }
@@ -234,7 +282,7 @@ private fun DetailPage(state: DesktopState, c: DesktopController) {
         if(state.seasons.isNotEmpty()) item {
             Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 CatalogHeading("Seasons",section=true)
-                Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) { state.seasons.forEach { s -> FilterChip(selected=state.selectedSeason?.id==s.id,onClick={c.selectSeason(s)},label={Text(s.name)},modifier=Modifier.probe("season:${s.id}")) } }
+                LazyRow(horizontalArrangement=Arrangement.spacedBy(10.dp)) { items(state.seasons, key={it.id}) { s -> FilterChip(selected=state.selectedSeason?.id==s.id,onClick={c.selectSeason(s)},label={Text(s.name)},modifier=Modifier.probe("season:${s.id}")) } }
             }
         }
         if(state.episodes.isNotEmpty()) item { CatalogHeading("Episodes",section=true) }
@@ -285,7 +333,7 @@ private fun SettingsPage(state:DesktopState,c:DesktopController) {
     val s=state.settings
     FormPage("Settings","Playback and viewing preferences for this desktop.") {
         CatalogHeading("Playback",section=true)
-        Choice("Video quality",listOf(0 to "Original / best compatible",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality") { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+        Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality") { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
         SettingSwitch("Explain video conversion","Tell me when this desktop needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
         SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
         Text("Volume · ${s.volume}%")

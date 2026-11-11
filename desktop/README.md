@@ -1,29 +1,65 @@
-# Desktop surface spike
+# Pictureshow for desktop
 
-MPL-2.0 Pictureshow code, dynamically loaded libmpv. This is a diagnostic app, not the desktop product.
+A native Compose Multiplatform viewer for Jellyfin on Windows, macOS and Linux,
+using the shared Pictureshow Kotlin core and dynamically loaded LGPL libmpv.
 
-With JDK 21 and a matching libmpv installed:
+With JDK 21, an architecture-matched LGPL libmpv and the matching native surface adapter:
 
 ```
 ./gradlew :desktop:test :desktop:spikeRuntime
-MPV_LIBRARY=/absolute/path/to/libmpv ./gradlew :desktop:run --args='render /path/to/generated.mkv evidence/render --auto'
-MPV_LIBRARY=/absolute/path/to/libmpv ./gradlew :desktop:run --args='wid /path/to/generated.mkv evidence/wid --auto'
+MPV_LIBRARY=/path/to/libmpv SPIKE_LAYER_BRIDGE=/path/to/native-adapter ./gradlew :desktop:run
 ```
 
-`desktop:vectorTest` executes core's existing compiled JVM vector suites with the desktop dependencies. Core source and tests remain unchanged. This preserves Kotlin friend-module access used by those suites.
+The default entry point is the viewer: connect to a server or discover one on the
+LAN; sign in with a password or Quick Connect; browse home shelves and library
+grids; sort; open a movie, series, season or episode; resume or start over; choose
+audio and subtitles; continue to the next episode; and set basic preferences.
+Saved tokens and preferences are committed atomically in the OS user data folder.
+Unreadable storage offers Retry. Native decoder capabilities are measured before
+negotiating playback; the server remains the authority for remembered progress
+and track choices. Video conversion explains its reason when a device limit
+requires it. A viewer-selected bitrate conversion does not show a device warning.
 
-`render` uses the libmpv OpenGL render API in a private JOGL context on macOS/Linux, or the D3D11 render API with the small native adapter on Windows, and reads RGBA8 pixels back, and draws the image in Compose/Skia. It is an honest SDR composition probe, with CPU copies and a 1280×720 ceiling, not a production performance or HDR solution. Render calls stay on the owning GPU thread, separate from player commands. JNA callbacks are retained through renderer teardown. It polls at 30 Hz in this spike; a product should use mpv frame callbacks and a GPU texture bridge.
+Use Tab/Shift+Tab or arrows to navigate, Enter to activate, Escape to close a menu,
+exit fullscreen and go back, F11/Alt+Enter for fullscreen, and Space/Left/Right
+for playback pause and ten-second seeks. Menus, cards, forms, selected states and
+settings use Compose semantics. The normal window is resizable; the Living-room
+size setting enlarges the same controls for distant use.
 
-`wid` passes a realized AWT Canvas native handle to mpv, leaving output/presentation with mpv. A deliberately overlapping Compose button tests native view stacking and hit testing. Interop blending is experimental; a successful surrounding control bar is not evidence that the overlapping button works.
+macOS and Windows compose controls over the qualified native HDR surface. Linux
+requires a Wayland compositor and uses the qualified native EGL video window;
+all track, seek, continuation and stop controls also remain in the accessible
+Compose application window. The native Linux video overlay has no independent
+AT-SPI bridge: use the application control window with a screen reader. X11-only
+video output and a single-window Linux accessibility integration remain owed.
+This development slice is not a parity or release qualification claim.
 
-Automation captures the actual app window as JPEG (800 px, quality 50), dumps mpv properties at each resize/fullscreen/subtitle stage, and uses Robot to click the overlapping Compose button. `sequence.txt` records whether the click reached Compose. All unattended audio is muted; `SPIKE_NULL_AUDIO=1` selects the null sink and cannot prove audible surround output. `audio-params` is decoded layout; `audio-out-params` is output layout.
+`:desktop:vectorTest` runs **every** repository vector contract through JVM
+runners, including the numeric HDR analyzer, and rejects unregistered or stale
+suites. See [VECTORS.md](VECTORS.md). The hosted `Desktop app` workflow builds and
+runs the vectors and a scripted viewer smoke against a disposable Jellyfin on
+all three OSes, plus the Android full gate. See
+[smoke setup](tools/app-smoke/README.md).
 
-Generate original CC0 media with `python desktop/tools/fixtures.py OUTPUT`: HEVC Main, Main10, AV1, silent AAC 5.1, SRT/ASS/PGS tracks. The PQ variant carries synthetic PQ metadata; it is not calibrated HDR content. Neither a 10-bit decoder nor PQ input proves HDR output. No media is fetched from any user's server.
+The diagnostic entry points remain available in the app build:
 
-The external libmpv used for development is not automatically a redistributable package. Shipping requires audited LGPL builds, complete matching sources/build recipes/notices, dynamic replacement, and an architecture-specific native dependency closure. Never bundle a development GPL build in an MPL-only distribution.
+```
+MainKt layer MEDIA EVIDENCE --sustain=125
+MainKt wayland MEDIA EVIDENCE --sustain=125
+```
 
-Windows CI builds `windows_d3d.cpp` against the headers in the pinned LGPL libmpv archive and sets `SPIKE_D3D_BRIDGE` to that DLL. D3D11 WARP is an explicit software device on hosted runners. `SKIKO_RENDER_API=SOFTWARE` avoids claiming a GPU-backed UI there. A failed or absent decoder/renderer fails the probe, while screenshots still require visual review.
+They preserve the qualified surface, HDR and pacing gates. See
+[NATIVE-SURFACES.md](NATIVE-SURFACES.md) and [numeric HDR](tools/hdr/README.md).
+Normal playback has no per-frame video CPU readback. Smoke runs mute audio;
+normal viewer playback enables its saved volume. Muted tests do not qualify
+speaker mapping or audible surround output.
 
-macOS runs in a GUI login session. Fullscreen uses Apple's JDK desktop extension (`FullScreenUtilities` / `Application.requestToggleFullScreen`) so JDK marshals AppKit operations itself. Retina click coordinates are converted from Compose pixels to AWT points. Where global Robot input is unavailable, the probe records a separately named application-local AWT click; that does not claim macOS global-input permission.
+## Packaging is a later slice
 
-Leg 128 adds production-shaped native surface candidates and separate geometry probes; see [NATIVE-SURFACES.md](NATIVE-SURFACES.md). The older readback and JDK fullscreen descriptions above document the original spike, whose surface gate failed.
+Development dependencies are not automatically redistributable packages.
+Installers need an audited architecture-specific LGPL dependency closure,
+matching source/build recipes and notices, dynamic library replacement, runtime
+codec receipts, Windows signing and installer, macOS signing/notarization and
+Intel/Apple-silicon distributions, Linux packages/Flatpak integration, upgrade
+and data-migration tests, native accessibility qualification and actual GPU/HDR
+hardware beta evidence. Never ship a development GPL libmpv in an MPL-only build.

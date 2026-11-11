@@ -48,6 +48,7 @@ fun desktopMain(args: Array<String>) {
                 controller.fullscreen(full)
             }
             LaunchedEffect(Unit) {
+                if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
                 window.minimumSize=Dimension(800,600)
                 controller.attachWindow(window)
                 controller.start()

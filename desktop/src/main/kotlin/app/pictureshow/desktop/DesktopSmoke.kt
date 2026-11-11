@@ -33,6 +33,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     }
     fun ready(route:DesktopRoute) = waitFor(route.name) { c.state.value.route==route && !c.state.value.busy }
     fun click(tag:String) {
+        waitFor("composed control $tag") { DesktopUiProbe.reveal.containsKey(tag) }
+        DesktopUiProbe.reveal[tag]?.invoke()
+        Thread.sleep(350)
         waitFor("control $tag") { DesktopUiProbe.bounds[tag]?.let{it.width>0&&it.height>0}==true }
         val b=DesktopUiProbe.bounds.getValue(tag)
         val origin=window.locationOnScreen
@@ -56,8 +59,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     }
     fun screenshot(name:String) {
         for((w,h) in listOf(1280 to 800,1920 to 1080)) {
-            SwingUtilities.invokeAndWait { windowState.position=WindowPosition.Absolute(0.dp,0.dp);windowState.size=DpSize(w.dp,h.dp);window.toFront();window.requestFocus() }
-            Thread.sleep(650)
+            SwingUtilities.invokeAndWait { if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); windowState.position=WindowPosition.Absolute(100.dp,60.dp);windowState.size=DpSize(w.dp,h.dp);window.toFront();window.requestFocus() }
+            robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
+            Thread.sleep(900)
             val bounds=window.bounds
             val original=robot.createScreenCapture(bounds)
             val scale=900.0/original.width.coerceAtLeast(original.height)
@@ -76,14 +80,23 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     try {
         ready(DesktopRoute.Servers);screenshot("01-server")
         click("server-address");type(server);click("connect");ready(DesktopRoute.SignIn);checks["server"]=true;screenshot("02-sign-in")
-        click("username");type(user);click("password");type(password);click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
+        click("username");type(user);click("password");type("wrong-password");click("sign-in");ready(DesktopRoute.SignIn)
+        check(c.state.value.error!=null) { "Wrong password did not show a recoverable error" };screenshot("02b-sign-in-error")
+        click("password");robot.keyPress(if(com.sun.jna.Platform.isMac()) KeyEvent.VK_META else KeyEvent.VK_CONTROL);key(KeyEvent.VK_A);robot.keyRelease(if(com.sun.jna.Platform.isMac()) KeyEvent.VK_META else KeyEvent.VK_CONTROL);type(password)
+        click("sign-in");ready(DesktopRoute.Home);checks["passwordSignIn"]=true
         waitFor("home rows") { c.state.value.homeRows.any { it.items.isNotEmpty() } };checks["home"]=true;screenshot("03-home")
         val library=firstLibrary();click("nav:library:${library.id}");ready(DesktopRoute.Library);waitFor("library items"){c.state.value.items.isNotEmpty()};checks["library"]=true;screenshot("04-library")
         click("sort");click("sort:DateCreated");waitFor("sort applied"){c.state.value.sortBy=="DateCreated"&&!c.state.value.busy};checks["sort"]=true
-        val movie=c.state.value.items.first{it.type=="Movie"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail")
+        val movie=c.state.value.items.first{it.name=="Signal One"};click("grid:${movie.id}");ready(DesktopRoute.Detail);checks["detail"]=true;screenshot("05-movie-detail")
+        key(KeyEvent.VK_ESCAPE);ready(DesktopRoute.Library)
+        waitFor("keyboard Back restores opener") { DesktopUiProbe.focus["grid:${movie.id}"]==true }
+        key(KeyEvent.VK_ENTER);ready(DesktopRoute.Detail)
         click("play");ready(DesktopRoute.Player)
         waitFor("decoded playback",60){c.state.value.playback?.ready==true};checks["playback"]=true
         check(c.state.value.playback!!.positionSeconds>=10){"Resume did not use fixture server progress"};checks["resume"]=true
+        val beforeFull=java.awt.Rectangle(window.bounds)
+        key(KeyEvent.VK_F11);waitFor("keyboard fullscreen"){window.bounds==window.graphicsConfiguration.bounds}
+        key(KeyEvent.VK_F11);waitFor("fullscreen restore"){window.bounds==beforeFull}
         val first=c.state.value.playback!!.positionSeconds
         waitFor("advancing playback",30){(c.state.value.playback?.positionSeconds?:0.0)>first+3};checks["progress"]=true
         screenshot("06-player")
@@ -91,6 +104,25 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val sub=c.state.value.playback!!.subtitleTracks.first();click("subtitles");screenshot("08-subtitle-menu");click("subtitles:${sub.index}");waitFor("subtitle choice"){c.state.value.playback?.subtitleIndex==sub.index};click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)
+        click("nav:library:${library.id}");ready(DesktopRoute.Library)
+        val archive=c.state.value.items.first{it.name=="Archive Signal"}
+        val qualityConversion=com.sun.jna.Platform.isWindows() || System.getenv("PICTURESHOW_SMOKE_FORCE_QUALITY")=="1"
+        if(qualityConversion) {
+            click("nav:settings");ready(DesktopRoute.Settings);click("quality");click("quality:4");ready(DesktopRoute.Settings)
+            click("nav:library:${library.id}");ready(DesktopRoute.Library)
+        }
+        click("grid:${archive.id}");ready(DesktopRoute.Detail);click("play");ready(DesktopRoute.Player)
+        waitFor("converted video decoded",60){c.state.value.playback?.ready==true}
+        check(c.state.value.playback!!.decision.method==app.pictureshow.core.playback.PlayMethod.Transcode) { "Unsupported codec was not converted" }
+        check((c.state.value.playback!!.notice!=null) != qualityConversion) { "Conversion notice must explain a device limit, never a viewer quality cap" }
+        screenshot("08b-conversion-notice")
+        waitFor("converted progress"){(c.state.value.playback?.positionSeconds?:0.0)>=3}
+        click("seek-forward")
+        waitFor("converted seek full timeline"){(c.state.value.playback?.positionSeconds?:0.0)>=13}
+        Thread.sleep(2000)
+        checks["conversion"]=true
+        click("stop");ready(DesktopRoute.Detail)
+        if(qualityConversion) { click("nav:settings");ready(DesktopRoute.Settings);click("quality");click("quality:0");ready(DesktopRoute.Settings) }
         click("nav:home");ready(DesktopRoute.Home)
         val shows=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="tvshows"||it.name.contains("Show",true)}
         click("nav:library:${shows.id}");ready(DesktopRoute.Library);waitFor("series"){c.state.value.items.any{it.type=="Series"}}
@@ -99,9 +131,23 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         val season=c.state.value.seasons.first();click("season:${season.id}");ready(DesktopRoute.Detail);waitFor("episodes"){c.state.value.episodes.size>=2};checks["episodes"]=true;screenshot("09-series-detail")
         val episode=c.state.value.episodes.first();click("episode:${episode.id}");ready(DesktopRoute.Detail);screenshot("10-episode-detail");click("play");ready(DesktopRoute.Player);waitFor("episode ready",60){c.state.value.playback?.ready==true}
         waitFor("next episode"){c.state.value.playback?.nextEpisode!=null};click("next-episode");ready(DesktopRoute.Player);waitFor("next episode playing",60){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["nextEpisode"]=true
+        click("stop");ready(DesktopRoute.Detail)
+        click("nav:home");ready(DesktopRoute.Home);click("nav:library:${shows.id}");ready(DesktopRoute.Library)
+        click("grid:${series.id}");ready(DesktopRoute.Detail);click("season:${season.id}");ready(DesktopRoute.Detail)
+        click("episode:${episode.id}");ready(DesktopRoute.Detail)
+        if(DesktopUiProbe.bounds["play-start"]!=null) click("play-start") else click("play")
+        ready(DesktopRoute.Player);waitFor("autoplay source ready",60){c.state.value.playback?.ready==true}
+        waitFor("autoplay successor available"){c.state.value.playback?.nextEpisode!=null}
+        val slider=DesktopUiProbe.bounds.getValue("seek");val origin=window.locationOnScreen;val pixelScale=window.graphicsConfiguration.defaultTransform.scaleX
+        val duration=c.state.value.playback!!.durationSeconds
+        val ratio=((duration-12)/duration).coerceIn(0.0,1.0)
+        robot.mouseMove(origin.x+((slider.left+slider.width*ratio)/pixelScale).roundToInt(),origin.y+(slider.center.y/pixelScale).roundToInt());robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+        waitFor("natural EOF autoplay",35){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["autoplayNext"]=true
         click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);screenshot("11-settings")
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
         click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
+        val removeKey=c.state.value.accounts.first().key
+        click("remove:$removeKey");screenshot("12b-remove-confirmation");click("remove-cancel")
         // Voluntary sign-out is tested before the second authentication method.
         click("account:${c.state.value.accounts.first().key}");ready(DesktopRoute.Home);click("nav:settings");ready(DesktopRoute.Settings);click("sign-out")
         waitFor("signed out"){c.state.value.account==null&&!c.state.value.busy}
@@ -114,10 +160,10 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("shortcuts");screenshot("14-keyboard-shortcuts");click("help-close")
         // Native Tab and Escape must act on the same viewer window after authentication.
         key(KeyEvent.VK_TAB);key(KeyEvent.VK_ESCAPE)
-        successful=checks.size==16&&checks.values.all{it}
+        successful=checks.size==18&&checks.values.all{it}
         File(out,"app-smoke-result.json").writeText("{\"pass\":$successful,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         check(successful)
-        println("SMOKE all 16 viewer flows passed")
+        println("SMOKE all 18 viewer flows passed")
     } catch(error:Throwable) {
         File(out,"app-smoke-result.json").writeText("{\"pass\":false,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
         System.err.println("SMOKE ${error.message}")
