@@ -1,0 +1,115 @@
+name: Desktop app
+on:
+  push:
+    branches: ["ci/137*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-app-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Desktop build and complete JVM vector contract
+        shell: bash
+        run: ./gradlew --no-daemon :desktop:test :desktop:vectorTest :desktop:spikeRuntime
+      - name: Smoke harness negative controls
+        run: python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
+      - name: Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential meson ninja-build pkgconf curl xz-utils libass-dev libplacebo-dev libgl-dev libegl-dev libgles2-mesa-dev libgbm-dev libudev-dev libwayland-dev wayland-protocols libdrm-dev libinput-dev libevdev-dev libxkbcommon-dev libpixman-1-dev liblcms2-dev libcairo2-dev libpango1.0-dev libjpeg-dev libwebp-dev libpng-dev hwdata edid-decode nasm python3 ffmpeg libgl1-mesa-dri libasound2t64 xvfb xauth
+      - name: Mac build prerequisites
+        if: runner.os == 'macOS'
+        run: brew install meson ninja pkgconf nasm libass libplacebo ffmpeg
+      - name: Build LGPL mpv and qualified native surface
+        if: runner.os != 'Windows'
+        run: bash desktop/tools/app-smoke/build-native.sh
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Windows pinned LGPL mpv and qualified D3D surface
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop/build | Out-Null
+          Invoke-WebRequest https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip -OutFile mpv.zip
+          if ((Get-FileHash mpv.zip -Algorithm SHA256).Hash.ToLower() -ne '8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce') { throw 'libmpv digest mismatch' }
+          Expand-Archive mpv.zip native
+          $header = 'native/include/mpv/client.h'
+          (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
+          cl /nologo /EHsc /LD /std:c++17 /I native/include desktop/src/native/windows_layer.cpp /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Native app adapter compile failed' }
+          choco install ffmpeg --no-progress -y
+      - name: Linux app against its disposable Jellyfin container
+        if: runner.os == 'Linux'
+        run: bash desktop/tools/app-smoke/linux-run.sh
+      - name: Mac app against its disposable Jellyfin portable server
+        if: runner.os == 'macOS'
+        run: |
+          export MPV_LIBRARY="$PWD/desktop/build/app-native/prefix/lib/libmpv.dylib"
+          export SPIKE_LAYER_BRIDGE="$PWD/desktop/build/app-native/libpictureshow_layer.dylib"
+          export SPIKE_NULL_AUDIO=1
+          python3 desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+      - name: Windows app against its disposable Jellyfin portable server
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem native -Recurse -Filter '*mpv*.dll' | Select-Object -First 1
+          $env:MPV_LIBRARY = $dll.FullName
+          $env:PATH = "$($dll.DirectoryName);C:\ProgramData\chocolatey\bin;$env:PATH"
+          $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
+          $env:SPIKE_NULL_AUDIO = '1'
+          $env:SPIKE_SOFTWARE_GPU = '1'
+          $env:SKIKO_RENDER_API = 'SOFTWARE'
+          python desktop/tools/app-smoke/run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop E2E smoke failed' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-app-${{ runner.os }}
+          retention-days: 7
+          path: |
+            desktop-evidence/**
+            desktop/build/test-results/**
+            desktop/build/reports/tests/**
+            core/build/test-results/**
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Android full regression gate
+        run: ./gradlew --no-daemon check assembleDebug
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-app-android-gate
+          retention-days: 7
+          path: |
+            app/build/test-results/**
+            app/build/reports/tests/**
+            core/build/test-results/**

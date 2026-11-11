@@ -1,0 +1,61 @@
+# Desktop application smoke
+
+`python desktop/tools/app-smoke/run.py --work PRIVATE_FRESH_DIRECTORY --evidence FRESH_EVIDENCE_DIRECTORY`
+
+The harness generates original CC0 H.264/AAC media, two audio languages, subtitles,
+posters, one movie and two episodes. It starts its own Jellyfin 10.11.11, creates an
+isolated viewer, seeds a 12-second resume point and launches the actual desktop
+runtime. Linux uses the pinned Jellyfin container; Windows and macOS use pinned
+official portable archives. The server and app have finite lifetimes and cleanup
+runs on failure too. No existing server can be selected. Do not upload the private
+work directory: it contains ephemeral credentials, server state and raw logs.
+
+The app entry point is:
+
+```
+MainKt app-smoke SERVER USER PASSWORD EVIDENCE
+```
+
+The app writes `quick-connect-request.json` with a newly issued `code`; the harness
+authorizes it as the fixture viewer and writes `quick-connect-approved.json`.
+The app must render and exercise its real screens and produce
+`app-smoke-result.json` with `pass: true` and named Boolean checks:
+
+```
+server, passwordSignIn, home, library, sort, detail, seasons, episodes,
+resume, playback, progress, audio, subtitles, nextEpisode, settings, quickConnect
+```
+
+The outer verifier also polls Jellyfin sessions independently, requiring active
+playback and an advancing reported position for the same item. An initial Start
+at a nonzero resume position does not count as progress. Missing checks, failed
+app exit, stale output directories, absent Quick Connect approval and static
+server progress all fail. Run verdict negative controls with:
+
+```
+python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
+```
+
+`build-native.sh` creates development smoke dependencies using LGPL-disabled-GPL
+FFmpeg and mpv plus the qualified native adapter. Linux retains stock Weston 16
+and uses `softpipe`; the AWT shell has its own Xvfb display. Windows uses the
+pinned upstream LGPL mpv archive and WARP on hosted CI. These software runs do not
+qualify physical HDR, speaker output, real-GPU performance or release packaging.
+The separate numeric HDR and pacing gates retain their existing entry points.
+
+The GitHub `Desktop app` workflow runs the JVM/vector gate and application smoke
+on free standard Linux, macOS and Windows hosted runners, with a separate Ubuntu
+Android `check assembleDebug` gate. Evidence includes the named app checks,
+independent server samples, library fixture provenance, generated-media license,
+native build hashes and test XML. Credentials and raw server/app logs are outside
+the artifact tree; only selected sanitized app errors/progress are published.
+
+Sources checked 2026-11-10: official [portable installation instructions](https://jellyfin.org/docs/general/installation/advanced/manual/),
+official [container instructions](https://jellyfin.org/docs/general/installation/container/),
+and versioned [macOS archives](https://repo.jellyfin.org/files/server/macos/stable/v10.11.11/) /
+[Windows archives](https://repo.jellyfin.org/files/server/windows/stable/v10.11.11/).
+Archive digests were computed from those exact downloads on that date; they are
+not claimed to be upstream signature verification. Docker digest matches the
+existing repository launch-fixture capture. Ad-hoc Mac server signing follows the
+official portable instructions and applies only to the disposable downloaded test
+server. Signing the Pictureshow application remains a separate packaging task.
