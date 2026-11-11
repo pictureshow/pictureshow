@@ -427,7 +427,7 @@ internal fun LiveTvScreen(
                                     true,
                                     Modifier.liveFocus("detail:cancel", recording != null || cancelling),
                                     !state.writing,
-                                    ::closeDetail
+                                    onClick = ::closeDetail
                                 )
                             }
                         }
@@ -437,6 +437,7 @@ internal fun LiveTvScreen(
                                     vm.save(it, state.draftSeries, false)
                                 }
                             }
+
                             schedule != null -> {
                                 if (cancelling) {
                                     item {
@@ -486,6 +487,7 @@ internal fun LiveTvScreen(
                                     }
                                 }
                             }
+
                             program != null -> item {
                                 LiveProgramDetail(program, state, account, tv, canAct, now, onPlay, {
                                     vm.defaults(program, false)
@@ -495,6 +497,7 @@ internal fun LiveTvScreen(
                                     selectedSeries = series
                                 }
                             }
+
                             recording != null -> item {
                                 LiveText(
                                     "Permanently delete the recorded file “${recording.name}”. Its recording schedule is a separate action.",
@@ -502,7 +505,9 @@ internal fun LiveTvScreen(
                                 )
                                 LiveAction("Delete recorded file", tv, enabled = !state.writing) { vm.delete(recording) }
                             }
+
                             state.policy?.access == false -> Unit
+
                             tab in listOf("Channels", "Guide") -> {
                                 if (!state.loading && state.channels.isEmpty() && state.error == null) {
                                     item {
@@ -580,6 +585,7 @@ internal fun LiveTvScreen(
                                     item { LiveListText("No matching channels.", tv) }
                                 }
                             }
+
                             tab == "Recordings" -> {
                                 liveRecordingShelves(
                                     state,
@@ -594,6 +600,7 @@ internal fun LiveTvScreen(
                                     focus = recordingFocus.takeIf { tv }
                                 )
                             }
+
                             tab == "Schedules" -> {
                                 if (state.policy?.manage !=
                                     true
