@@ -101,7 +101,7 @@ class LiveLayoutReviewTest {
         assertTrue(day.right <= later.left, "The bounded Now action must leave a visible day picker")
         val tick = compose.onNodeWithTag("live:tick-label:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val dayLabel = compose.onNodeWithText(
-            LiveTime(false, java.util.Locale.US, java.time.ZoneId.systemDefault(), now).day(0) + " ▾",
+            LiveTime(false, java.util.Locale.getDefault(), java.time.ZoneId.systemDefault(), System.currentTimeMillis()).day(0) + " ▾",
             useUnmergedTree = true
         )
             .getUnclippedBoundsInRoot()
