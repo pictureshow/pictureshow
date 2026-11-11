@@ -36,6 +36,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import app.pictureshow.core.Account
 import app.pictureshow.core.CatalogService
