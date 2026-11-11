@@ -59,7 +59,7 @@ internal class LiveRecordingFocus(private val platform: BringIntoViewSpec, priva
         if (lastGroup == null) return contentPadding
         // Until the last section is measured, reserve the viewport rather than briefly clamping its first focus request.
         val height = shelfHeights[lastGroup] ?: 0
-        return max(contentPadding, viewportHeight - height - safeTopInset())
+        return liveRecordingTrailingSpace(viewportHeight.toFloat(), height.toFloat(), safeTopInset(), contentPadding)
     }
 
     val verticalSpec: BringIntoViewSpec = object : BringIntoViewSpec {
@@ -71,18 +71,15 @@ internal class LiveRecordingFocus(private val platform: BringIntoViewSpec, priva
             val shelf = shelves[shelfGroup]?.takeIf { it.isAttached } ?: return fallback
             val heading = headings[shelfGroup] ?: return fallback
             val above = shelf.localPositionOf(card, Offset.Zero).y
-            val topInset = safeTopInset()
-            val available = (containerSize - topInset - safeBottomInset()).coerceAtLeast(0f)
-            val safeOffset = offset - topInset
-            val distance = focusedCardScrollDistance(safeOffset, size, available, margin, safeOffset - above)
-            return sectionTitleScrollDistance(
-                distance,
-                safeOffset,
+            return liveRecordingScrollDistance(
+                offset,
                 size,
-                available,
+                containerSize,
                 margin,
                 above,
-                (above - heading).coerceAtLeast(0f)
+                heading.toFloat(),
+                safeTopInset(),
+                safeBottomInset()
             )
         }
     }
@@ -104,3 +101,23 @@ internal class LiveRecordingFocus(private val platform: BringIntoViewSpec, priva
         return (viewport.positionInRoot().y + viewport.size.height - rootHeight * .95f).coerceAtLeast(0f)
     }
 }
+
+/** Platform-independent shelf pivot, retaining the native catalog's scaled-card and whole-heading safety rules. */
+internal fun liveRecordingScrollDistance(
+    offset: Float,
+    size: Float,
+    containerSize: Float,
+    margin: Float,
+    above: Float,
+    heading: Float,
+    topInset: Float,
+    bottomInset: Float
+): Float {
+    val available = (containerSize - topInset - bottomInset).coerceAtLeast(0f)
+    val safeOffset = offset - topInset
+    val distance = focusedCardScrollDistance(safeOffset, size, available, margin, safeOffset - above)
+    return sectionTitleScrollDistance(distance, safeOffset, size, available, margin, above, (above - heading).coerceAtLeast(0f))
+}
+
+internal fun liveRecordingTrailingSpace(viewportHeight: Float, shelfHeight: Float, topInset: Float, contentPadding: Float): Float =
+    max(contentPadding, viewportHeight - shelfHeight - topInset)

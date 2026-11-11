@@ -271,7 +271,13 @@ internal fun LiveStatus(label: String, tv: Boolean, status: String? = null) {
             )
         }
         if (tv) {
-            androidx.tv.material3.Text(label, color = content, style = androidx.tv.material3.MaterialTheme.typography.bodySmall)
+            androidx.tv.material3.Text(
+                label,
+                color = content,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = androidx.tv.material3.MaterialTheme.typography.bodySmall
+            )
         } else {
             androidx.compose.material3.Text(label, color = content, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
         }

@@ -123,6 +123,7 @@ internal class LiveFake : LiveTvService {
     var created = 0
     var deleted = 0
     var favoriteWrites = 0
+    var recordingRows = emptyList<MediaItem>()
     var seriesRows = emptyList<LiveSchedule>()
     var timerRows = emptyList<LiveSchedule>()
     var result = LiveWrite("ok", message = "Confirmed by server")
@@ -147,7 +148,7 @@ internal class LiveFake : LiveTvService {
         ClientResult.Success(LivePage(listOf(show), 1))
     }
     override suspend fun program(account: Account, id: String) = ClientResult.Success(show)
-    override suspend fun recordings(account: Account, startIndex: Int, limit: Int) = ClientResult.Success(ItemPage())
+    override suspend fun recordings(account: Account, startIndex: Int, limit: Int) = ClientResult.Success(ItemPage(recordingRows))
     override suspend fun timers(account: Account, series: Boolean) = ClientResult.Success(if (series) seriesRows else timerRows)
     override suspend fun defaults(account: Account, programId: String) =
         ClientResult.Success(LiveSchedule(buildJsonObject { put("Priority", 0) }))

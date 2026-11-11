@@ -6,7 +6,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveTime.kt",
     "app/src/main/kotlin/app/pictureshow/LiveGuideCell.kt",
     "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingFocus.kt"
   ],
   "cases": [
     {
@@ -521,7 +522,7 @@
       },
       "expected": {
         "title": "Painted windows",
-        "metadata": "S1 E7 \u00b7 Ends 6:30 PM \u00b7 2 min",
+        "metadata": "S1:E7 \u00b7 Ends 6:30 PM \u00b7 2m",
         "progress": 0.0
       }
     },
@@ -545,8 +546,8 @@
         "now": "2026-11-10T23:10:00Z"
       },
       "expected": {
-        "title": "S1 E5",
-        "metadata": "2 min",
+        "title": "S1:E5",
+        "metadata": "2m",
         "progress": null
       }
     },
@@ -682,7 +683,7 @@
       },
       "expected": {
         "title": "Actual episode",
-        "metadata": "<1 min",
+        "metadata": "1m",
         "progress": null
       }
     },
@@ -735,6 +736,135 @@
         "fontScale": 1.3
       },
       "expected": 36
+    },
+    {
+      "id": "live-presentation.recording-caption-height-1",
+      "operation": "recording-caption-height",
+      "input": {
+        "fontScale": 1,
+        "titleLineHeight": 20,
+        "metadataLineHeight": 16
+      },
+      "expected": 96
+    },
+    {
+      "id": "live-presentation.recording-caption-height-1.3",
+      "operation": "recording-caption-height",
+      "input": {
+        "fontScale": 1.3,
+        "titleLineHeight": 20,
+        "metadataLineHeight": 16
+      },
+      "expected": 117.6
+    },
+    {
+      "id": "recording-special-uses-catalog-format",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "IndexNumber": 3,
+          "ParentIndexNumber": 0,
+          "Status": "Completed",
+          "PremiereDate": "2026-11-10T23:00:00Z",
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Special E3",
+        "metadata": "2m",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-implausible-runtime-omitted",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Actual episode",
+          "SeriesName": "Series",
+          "RunTimeTicks": 864000000001
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Actual episode",
+        "metadata": "",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-shelf-pivot-with-safe-edges",
+      "operation": "recording-shelf-pivot",
+      "input": {
+        "offset": 300,
+        "size": 231,
+        "containerSize": 394,
+        "margin": 8,
+        "above": 64,
+        "heading": 32,
+        "topInset": 12,
+        "bottomInset": 11
+      },
+      "expected": 224
+    },
+    {
+      "id": "recording-shelf-large-card-keeps-heading-whole",
+      "operation": "recording-shelf-pivot",
+      "input": {
+        "offset": 300,
+        "size": 280,
+        "containerSize": 394,
+        "margin": 8,
+        "above": 72,
+        "heading": 36,
+        "topInset": 12,
+        "bottomInset": 11
+      },
+      "expected": 252
+    },
+    {
+      "id": "last-recording-shelf-can-reach-pivot",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 315,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 67
+    },
+    {
+      "id": "last-recording-shelf-unknown-reserves-viewport",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 0,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 382
+    },
+    {
+      "id": "tall-recording-shelf-keeps-content-padding",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 500,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 12
     }
   ]
 }

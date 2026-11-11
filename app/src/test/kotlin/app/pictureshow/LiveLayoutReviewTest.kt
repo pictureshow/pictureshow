@@ -15,8 +15,12 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -65,7 +69,8 @@ class LiveLayoutReviewTest {
         }
         val vm = LiveTvViewModel(account, fake)
         compose.setContent { PictureshowTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
-        compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:tab:Guide").assertIsSelected()
         val labels = listOf("Channels", "Guide", "Recordings", "Schedules", "Favorites", "Grid", "List").map {
             compose.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot()
         }
@@ -99,7 +104,11 @@ class LiveLayoutReviewTest {
         val day = compose.onNodeWithTag("live:guide-day").getUnclippedBoundsInRoot()
         val later = compose.onNodeWithTag("live:guide-later").getUnclippedBoundsInRoot()
         assertTrue(day.right <= later.left, "The bounded Now action must leave a visible day picker")
-        val tick = compose.onNodeWithTag("live:tick-label:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val tick = compose.onNode(
+            hasText(LiveTime(false, java.util.Locale.getDefault(), java.time.ZoneId.systemDefault(), now).clock(0)) and
+                hasAnyAncestor(hasTestTag("live:tick:0")),
+            useUnmergedTree = true
+        ).getUnclippedBoundsInRoot()
         val dayLabel = compose.onNodeWithText(
             LiveTime(false, java.util.Locale.getDefault(), java.time.ZoneId.systemDefault(), System.currentTimeMillis()).day(0) + " ▾",
             useUnmergedTree = true

@@ -31,13 +31,49 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(56, cases.size)
+        assertEquals(65, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "recording-shelf-pivot" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveRecordingScrollDistance(
+                        c.getValue("offset").jsonPrimitive.float,
+                        c.getValue("size").jsonPrimitive.float,
+                        c.getValue("containerSize").jsonPrimitive.float,
+                        c.getValue("margin").jsonPrimitive.float,
+                        c.getValue("above").jsonPrimitive.float,
+                        c.getValue("heading").jsonPrimitive.float,
+                        c.getValue("topInset").jsonPrimitive.float,
+                        c.getValue("bottomInset").jsonPrimitive.float
+                    ),
+                    0.001f,
+                    id
+                )
+                "recording-shelf-tail" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveRecordingTrailingSpace(
+                        c.getValue("viewportHeight").jsonPrimitive.float,
+                        c.getValue("shelfHeight").jsonPrimitive.float,
+                        c.getValue("topInset").jsonPrimitive.float,
+                        c.getValue("contentPadding").jsonPrimitive.float
+                    ),
+                    0.001f,
+                    id
+                )
+                "recording-caption-height" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveRecordingCaptionHeight(
+                        c.getValue("fontScale").jsonPrimitive.float,
+                        c.getValue("titleLineHeight").jsonPrimitive.float,
+                        c.getValue("metadataLineHeight").jsonPrimitive.float
+                    ),
+                    0.001f,
+                    id
+                )
                 "recording-metadata" -> {
                     val item = Json { ignoreUnknownKeys = true }.decodeFromJsonElement<app.pictureshow.core.MediaItem>(c.getValue("item"))
                     val time = LiveTime(
