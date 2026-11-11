@@ -10,6 +10,7 @@ import app.pictureshow.core.sync.SyncCommand
 import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
+import app.pictureshow.core.sync.syncCorrectionPosition
 import app.pictureshow.core.sync.syncDrift
 import app.pictureshow.core.sync.syncSameUnpauseTimeline
 import app.pictureshow.core.sync.syncScheduledPlaying
@@ -70,6 +71,20 @@ class SyncTimingVectorsTest {
                 "scheduled-position" -> {
                     val i = row.getValue("input").jsonObject
                     val value = syncScheduledPosition(i.getValue("command").jsonPrimitive.content, i.long("current"), i.long("target"))
+                    assertEquals(if (expected is JsonNull) null else expected.jsonPrimitive.long, value, row.toString())
+                }
+
+                "correction-position" -> {
+                    val i = row.getValue("input").jsonObject
+                    val value = syncCorrectionPosition(
+                        i.long("current"),
+                        i.long("target"),
+                        i.bool("playing"),
+                        i.long("sampledAt"),
+                        i.long("executionAt"),
+                        i.long("duration"),
+                        i.long("resolution")
+                    )
                     assertEquals(if (expected is JsonNull) null else expected.jsonPrimitive.long, value, row.toString())
                 }
 

@@ -96,6 +96,9 @@ internal interface SyncRenderer {
 
     /** Bypasses outgoing transport interception; returns whether a position seek was actually issued. */
     fun apply(positionTicks: Long? = null, playing: Boolean? = null, rate: Double = 1.0): Boolean
+
+    /** Autonomous correction may become unnecessary between the sampled decision and native execution. */
+    fun correct(positionTicks: Long, playing: Boolean, rate: Double, sampledAtMillis: Long): Boolean = apply(positionTicks, playing, rate)
 }
 
 internal data class SyncLocalSelection(val itemId: String, val startTicks: Long)
@@ -786,7 +789,8 @@ internal class SyncPlayHost(
             )
             return
         }
-        val now = anchor?.serverNowTicks(wall(), monotonic())
+        val targetSampleMillis = monotonic()
+        val now = anchor?.serverNowTicks(wall(), targetSampleMillis)
         if (now == null) {
             appliedUnpause = null
             pause("clock-unavailable", output)
@@ -844,6 +848,7 @@ internal class SyncPlayHost(
             return
         }
         tickTrace("drift", r)
+        val previousDrift = drift
         val decision = syncDrift(
             drift,
             r.positionTicks,
@@ -861,7 +866,10 @@ internal class SyncPlayHost(
                 "apply-before",
                 "source=correction action=${decision.action} targetTicks=${decision.targetTicks} playing=$playing " + stateFields(r)
             )
-            val changed = output.apply(decision.targetTicks, playing, decision.rate)
+            val changed = output.correct(decision.targetTicks, playing, decision.rate, targetSampleMillis)
+            // A decision is not an actual native seek. Skipped execution preserves
+            // the last real seek's cooldown rather than starting a new one.
+            drift = syncTransportApplied(previousDrift, monotonic(), changed)
             readiness = readiness.afterPositionApplied(changed)
             trace("apply-after", "source=correction positionChanged=$changed " + stateFields())
         } else {

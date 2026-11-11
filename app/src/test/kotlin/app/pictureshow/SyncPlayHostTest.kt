@@ -54,6 +54,9 @@ class SyncPlayHostTest {
         var value = SyncRendererState("local-item", 123_456_789L, 9_000_000_000L, true, false, true, true)
         val applied = mutableListOf<Applied>()
         var bufferOnSeek = false
+        var skipCorrectionAtExecution = false
+        override fun correct(positionTicks: Long, playing: Boolean, rate: Double, sampledAtMillis: Long): Boolean =
+            if (skipCorrectionAtExecution) false else apply(positionTicks, playing, rate)
         override fun snapshot() = value
         override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
             val positionChanged =
@@ -596,6 +599,28 @@ class SyncPlayHostTest {
         rig.host.tick()
         runCurrent()
         assertFalse(rig.operations().any { it in setOf("Buffering", "Unpause", "Seek") })
+    }
+
+    @Test fun aSkippedCorrectionExecutionDoesNotMoveTheLastActualSeekDeadline() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L))
+        runCurrent()
+        rig.renderer.applied.clear()
+        rig.renderer.skipCorrectionAtExecution = true
+        advanceTimeBy(2_000)
+        runCurrent()
+        rig.host.tick()
+        assertFalse(rig.renderer.applied.any { it.position != null })
+        // A fresh execution sample skipped the requested correction. A later
+        // genuine discrepancy can seek now; no imaginary seek starts a new2s wait.
+        rig.renderer.skipCorrectionAtExecution = false
+        rig.host.tick()
+        assertTrue(rig.renderer.applied.any { it.position != null })
     }
 
     @Test fun aFreshEmissionOfAnAppliedUnpauseResumesWithoutRepeatingItsPositionalSeek() = runTest {

@@ -601,6 +601,174 @@
         "showFeedback": true
       },
       "expected": 7000
+    },
+    {
+      "id": "correction-execution-native-catches-up-with-moving-target",
+      "op": "correction-position",
+      "input": {
+        "current": 369830000,
+        "target": 370348569,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 15,
+        "duration": 9000000000,
+        "resolution": 10000
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-positive-80ms-equality",
+      "op": "correction-position",
+      "input": {
+        "current": 50000000,
+        "target": 50800000,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-negative-80ms-equality",
+      "op": "correction-position",
+      "input": {
+        "current": 50800000,
+        "target": 50000000,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-positive-80ms-plus-tick",
+      "op": "correction-position",
+      "input": {
+        "current": 50000000,
+        "target": 50800001,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 1
+      },
+      "expected": 50800001
+    },
+    {
+      "id": "correction-execution-native-millisecond-resolution",
+      "op": "correction-position",
+      "input": {
+        "current": 50000000,
+        "target": 50800001,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 10000
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-target-still-advances-at-execution",
+      "op": "correction-position",
+      "input": {
+        "current": 10000000,
+        "target": 10000000,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 200,
+        "duration": 9000000000,
+        "resolution": 1
+      },
+      "expected": 12000000
+    },
+    {
+      "id": "correction-execution-paused-fractional-native-target",
+      "op": "correction-position",
+      "input": {
+        "current": 349630000,
+        "target": 349637516,
+        "playing": false,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 10000
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-paused-real-position-change",
+      "op": "correction-position",
+      "input": {
+        "current": 349630000,
+        "target": 350000000,
+        "playing": false,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 10000
+      },
+      "expected": 350000000
+    },
+    {
+      "id": "correction-execution-clock-reversed",
+      "op": "correction-position",
+      "input": {
+        "current": 10000000,
+        "target": 20000000,
+        "playing": true,
+        "sampledAt": 100,
+        "executionAt": 99,
+        "duration": 9000000000,
+        "resolution": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-invalid-resolution",
+      "op": "correction-position",
+      "input": {
+        "current": 10000000,
+        "target": 20000000,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 0,
+        "duration": 9000000000,
+        "resolution": 0
+      },
+      "expected": null
+    },
+    {
+      "id": "correction-execution-duration-clamp-without-overflow",
+      "op": "correction-position",
+      "input": {
+        "current": 0,
+        "target": 0,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 9223372036854775807,
+        "duration": 9223372036854775807,
+        "resolution": 1
+      },
+      "expected": 9223372036854775807
+    },
+    {
+      "id": "correction-execution-native-duration-end",
+      "op": "correction-position",
+      "input": {
+        "current": 80000000,
+        "target": 89000000,
+        "playing": true,
+        "sampledAt": 0,
+        "executionAt": 1000,
+        "duration": 90000000,
+        "resolution": 10000
+      },
+      "expected": 90000000
     }
   ]
 }

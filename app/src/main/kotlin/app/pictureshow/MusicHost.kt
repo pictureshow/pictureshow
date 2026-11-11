@@ -12,6 +12,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoItem
@@ -1127,7 +1128,13 @@ internal class MusicHost(
             )
         }
 
-        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
+        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean =
+            applyPosition(positionTicks, playing, rate, null)
+
+        override fun correct(positionTicks: Long, playing: Boolean, rate: Double, sampledAtMillis: Long): Boolean =
+            applyPosition(positionTicks, playing, rate, sampledAtMillis)
+
+        private fun applyPosition(requestedTicks: Long?, playing: Boolean?, rate: Double, sampledAtMillis: Long?): Boolean {
             val running = player ?: return false
             if (group() != null) {
                 // A preloaded local album must not advance or repeat while membership is being acquired.
@@ -1138,6 +1145,19 @@ internal class MusicHost(
             if (running.currentMediaItem?.mediaId != queue.committed.current) {
                 running.playWhenReady = false
                 return false
+            }
+            val positionTicks = if (sampledAtMillis != null && requestedTicks != null) {
+                app.pictureshow.core.sync.syncCorrectionPosition(
+                    running.currentPosition.coerceAtLeast(0) * Ticks.PER_MILLISECOND,
+                    requestedTicks,
+                    playing == true,
+                    sampledAtMillis,
+                    SystemClock.elapsedRealtime(),
+                    durationMs()?.let(::millisecondsToSyncTicks) ?: 0,
+                    resolutionTicks = Ticks.PER_MILLISECOND
+                )
+            } else {
+                requestedTicks
             }
             val positionChanged = positionTicks != null &&
                 kotlin.math.abs(running.currentPosition - positionTicks / Ticks.PER_MILLISECOND) > 1

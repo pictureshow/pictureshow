@@ -33,12 +33,14 @@ class PlaybackSeekFeedbackTest {
         val seeks = mutableListOf<Long>()
         private var seekable = true
         private var position = 1_000L
+        private var playing = false
         override fun getState(): State = State.Builder()
             .setAvailableCommands(
                 Player.Commands.Builder().apply {
                     add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
                     add(Player.COMMAND_GET_TIMELINE)
                     add(Player.COMMAND_RELEASE)
+                    add(Player.COMMAND_PLAY_PAUSE)
                     if (seekable) add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                 }.build()
             )
@@ -50,6 +52,7 @@ class PlaybackSeekFeedbackTest {
                 )
             )
             .setPlaybackState(Player.STATE_READY)
+            .setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(position)
             .build()
         override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int) = Futures.immediateVoidFuture().also {
@@ -57,6 +60,11 @@ class PlaybackSeekFeedbackTest {
             position = positionMs.takeUnless { it == C.TIME_UNSET } ?: 0
         }
         override fun handleRelease() = Futures.immediateVoidFuture()
+        override fun handleSetPlayWhenReady(playWhenReady: Boolean) = Futures.immediateVoidFuture().also { playing = playWhenReady }
+        fun moveTo(value: Long) {
+            position = value
+            invalidateState()
+        }
         fun allowSeek(value: Boolean) {
             seekable = value
             invalidateState()
@@ -84,6 +92,32 @@ class PlaybackSeekFeedbackTest {
                 player.release()
                 output.release()
             }
+        }
+    }
+
+    @Test fun aCorrectionResamplesLivePositionAndAdvancesItsTargetBeforeDecidingToSeek() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+        val player = LocalPlayer()
+        try {
+            val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+            host.playerSource = mutableStateOf(player)
+            host.duration = 600_000
+            player.moveTo(36_983)
+            // The host's older36.917s sample was117.8569ms behind37.0348569s.
+            // Fifteen milliseconds later the native position is36.983s: the
+            // moving target is37.0498569s, now inside the80ms execution band.
+            val changed = host.applySyncTimeline(370_348_569, true, 1.0, 0, executionNow = { 15 })
+            assertEquals(false, changed)
+            assertEquals(emptyList(), player.seeks)
+            assertEquals(true, player.playWhenReady)
+            assertNull(host.seekPreview)
+            // Explicit group transport retains its separate authoritative-position behavior.
+            assertEquals(true, host.applySyncTimeline(370_348_569, true, 1.0))
+            assertEquals(listOf(37_034L), player.seeks)
+            assertNull(host.seekPreview)
+        } finally {
+            player.release()
+            output.release()
         }
     }
 

@@ -103,6 +103,39 @@ fun syncSameUnpauseTimeline(applied: SyncCommand?, received: SyncCommand): Boole
     applied.positionTicks != null &&
     applied.positionTicks == received.positionTicks
 
+/** Recheck autonomous correction against live output, advancing its sampled target to execution. */
+fun syncCorrectionPosition(
+    currentTicks: Long,
+    targetTicks: Long,
+    playing: Boolean,
+    sampledAtMillis: Long,
+    executionAtMillis: Long,
+    durationTicks: Long,
+    resolutionTicks: Long = 1
+): Long? {
+    if (currentTicks < 0 ||
+        targetTicks < 0 ||
+        durationTicks < 0 ||
+        sampledAtMillis < 0 ||
+        executionAtMillis < sampledAtMillis ||
+        resolutionTicks <= 0
+    ) {
+        return null
+    }
+    val base = targetTicks.coerceAtMost(durationTicks)
+    val elapsed = executionAtMillis - sampledAtMillis
+    val target = if (!playing) {
+        base
+    } else if (elapsed > (durationTicks - base) / TICKS_PER_MILLISECOND) {
+        durationTicks
+    } else {
+        base + elapsed * TICKS_PER_MILLISECOND
+    }
+    val representable = target / resolutionTicks * resolutionTicks
+    val difference = currentTicks.coerceAtMost(durationTicks) - representable
+    return if ((playing && difference in -800_000L..800_000L) || difference == 0L) null else representable
+}
+
 /** A phase notification cannot turn an already-applied paused Seek into a playing timeline. */
 fun syncTimelinePlaying(command: String, appliedPlaying: Boolean): Boolean = command == "Unpause" || (command == "Seek" && appliedPlaying)
 

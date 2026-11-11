@@ -159,6 +159,45 @@ internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
     )
 }
 
+/** Shared by group transport and correction; only correction rechecks its live execution band. */
+internal fun PlaybackHostState.applySyncTimeline(
+    positionTicks: Long?,
+    playing: Boolean?,
+    rate: Double,
+    correctionSampledAtMillis: Long? = null,
+    executionNow: () -> Long = android.os.SystemClock::elapsedRealtime
+): Boolean = output.applySync {
+    output.traceNative("sync-before", "requestedTicks=$positionTicks requestedPlaying=$playing rate=$rate")
+    val active = player ?: return@applySync false
+    val current = active.currentPosition.coerceAtLeast(0)
+    val target = if (correctionSampledAtMillis != null && positionTicks != null) {
+        val end = duration.takeIf { it > 0 } ?: active.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0
+        app.pictureshow.core.sync.syncCorrectionPosition(
+            current * 10_000,
+            positionTicks,
+            playing == true,
+            correctionSampledAtMillis,
+            executionNow(),
+            end * 10_000,
+            resolutionTicks = 10_000
+        )
+    } else {
+        positionTicks
+    }
+    var changed = false
+    if (target != null && kotlin.math.abs(current - target / 10_000) > 1) {
+        seekToLocal(target / 10_000, revealControls = false)
+        changed = pendingSeek == null && state.seekTargetMs == null
+    }
+    if (active.playbackParameters.speed != rate.toFloat()) active.setPlaybackSpeed(rate.toFloat())
+    if (playing != null && active.playWhenReady != playing) active.playWhenReady = playing
+    output.traceNative(
+        "sync-after",
+        "requestedTicks=$positionTicks executionTicks=${target ?: -1} requestedPlaying=$playing sought=$changed rate=$rate"
+    )
+    changed
+}
+
 @Composable
 internal fun SyncPlaybackBinding(host: PlaybackHostState) {
     val sync: SyncPlayHost = koinInject()
@@ -170,25 +209,10 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             override val sourceIdentity: Any get() = host.player ?: host.output
             override val positionApplicationPending: Boolean get() = host.pendingSeek != null || host.state.seekTargetMs != null
             override fun snapshot(): SyncRendererState = host.syncRendererSnapshot()
-            override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
-                var positionChanged = false
-                host.output.applySync {
-                    host.output.traceNative("sync-before", "requestedTicks=$positionTicks requestedPlaying=$playing rate=$rate")
-                    if (positionTicks != null && kotlin.math.abs(host.output.position().milliseconds - positionTicks / 10_000) > 1) {
-                        host.seekToLocal(positionTicks / 10_000, revealControls = false)
-                        positionChanged = true
-                    }
-                    host.player?.let {
-                        if (it.playbackParameters.speed != rate.toFloat()) it.setPlaybackSpeed(rate.toFloat())
-                        if (playing != null && it.playWhenReady != playing) it.playWhenReady = playing
-                    }
-                    host.output.traceNative(
-                        "sync-after",
-                        "requestedTicks=$positionTicks requestedPlaying=$playing sought=$positionChanged rate=$rate"
-                    )
-                }
-                return positionChanged
-            }
+            override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean =
+                host.applySyncTimeline(positionTicks, playing, rate)
+            override fun correct(positionTicks: Long, playing: Boolean, rate: Double, sampledAtMillis: Long): Boolean =
+                host.applySyncTimeline(positionTicks, playing, rate, sampledAtMillis)
         }
     }
     DisposableEffect(sync, host, opening) {
