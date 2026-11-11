@@ -153,6 +153,9 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         key(KeyEvent.VK_ESCAPE);ready(DesktopRoute.Library)
         waitFor("keyboard Back restores opener") { DesktopUiProbe.focus["grid:${movie.id}"]==true }
         key(KeyEvent.VK_ENTER);ready(DesktopRoute.Detail)
+        waitFor("primary action keyboard focus") { DesktopUiProbe.focus["play"]==true }
+        screenshot("05d-primary-keyboard-focus",listOf(1280 to 800))
+        key(KeyEvent.VK_TAB);Thread.sleep(350);screenshot("05e-tab-keyboard-focus",listOf(1280 to 800))
         click("play");ready(DesktopRoute.Player)
         waitFor("decoded playback",60){c.state.value.playback?.ready==true};checks["playback"]=true
         check(c.state.value.playback!!.positionSeconds>=10){"Resume did not use fixture server progress"};checks["resume"]=true

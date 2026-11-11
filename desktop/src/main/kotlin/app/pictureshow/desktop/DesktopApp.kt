@@ -79,7 +79,7 @@ private fun Modifier.focusOutline(): Modifier {
 }
 
 @Composable
-internal fun DesktopTooltip(label: String, content: @Composable () -> Unit) {
+internal fun DesktopTooltip(label: String, above: Boolean = false, content: @Composable () -> Unit) {
     TooltipArea(
         tooltip = {
             Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) {
@@ -87,7 +87,11 @@ internal fun DesktopTooltip(label: String, content: @Composable () -> Unit) {
             }
         },
         delayMillis = 500,
-        tooltipPlacement = TooltipPlacement.CursorPoint(),
+        tooltipPlacement = TooltipPlacement.ComponentRect(
+            anchor = if (above) Alignment.TopCenter else Alignment.BottomCenter,
+            alignment = if (above) Alignment.TopCenter else Alignment.BottomCenter,
+            offset = DpOffset(0.dp, if (above) (-8).dp else 8.dp)
+        ),
         content = content
     )
 }
@@ -362,10 +366,10 @@ private fun LibraryPage(state: DesktopState, c: DesktopController) {
     LaunchedEffect(state.library?.id, state.sortBy, state.descending) { grid.scrollToItem(0) }
     LaunchedEffect(grid, state.items.size) { snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
             Choice("Sort", listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date"), state.sortBy, "sort") { c.browse(state.library!!, it, state.descending) }
-            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.padding(top = 4.dp).probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
+            OutlinedButton(onClick = { c.browse(state.library!!,state.sortBy,!state.descending) }, modifier = Modifier.probe("sort-direction")) { Text(if(state.descending) "Descending ↓" else "Ascending ↑") }
         }
         Text("${state.total} items", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.items.isEmpty() && !state.busy) Text("This library is empty.")
@@ -475,16 +479,16 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
 
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        DesktopTooltip("Back 10 seconds") { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
-                        DesktopTooltip(if (p.paused) "Play" else "Pause") { FilledIconButton(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
-                        DesktopTooltip("Forward 10 seconds") { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
+                        DesktopTooltip("Back 10 seconds", above = true) { IconButton(onClick={c.seek((p.positionSeconds-10).coerceAtLeast(0.0))},modifier=Modifier.probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
+                        DesktopTooltip(if (p.paused) "Play" else "Pause", above = true) { FilledIconButton(onClick=c::playerToggle,modifier=Modifier.probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
+                        DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier=Modifier.probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
                         Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
-                        DesktopTooltip("Fullscreen") { IconButton(onClick=fullscreen,modifier=Modifier.probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
+                        DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier=Modifier.probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
                         if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier=Modifier.heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
-                        DesktopTooltip("Stop playback") { IconButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
+                        DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier=Modifier.probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }
                     }
 
                 }
@@ -539,7 +543,7 @@ private fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,o
     SettingRow(title, caption) { Switch(value,onChange,Modifier.probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
-private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=null,onChoose:(T)->Unit) {
+private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick={expanded=true},modifier=Modifier.widthIn(max=buttonWidth).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
