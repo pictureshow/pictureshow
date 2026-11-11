@@ -91,6 +91,15 @@ class LiveLayoutReviewTest {
         if (tv) {
             val toolbar = compose.onNodeWithTag("live:toolbar").getUnclippedBoundsInRoot()
             val refresh = compose.onNodeWithContentDescription("Refresh").getUnclippedBoundsInRoot()
+            val refreshNode = compose.onNodeWithContentDescription("Refresh").fetchSemanticsNode()
+            val refreshButton = generateSequence(refreshNode) { it.parent }.first {
+                it.config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            }
+            assertEquals(
+                refreshButton.layoutInfo.width,
+                refreshButton.layoutInfo.height,
+                "The native circular Refresh button must remain square, rather than a compressed glyph-sized target"
+            )
             assertTrue(
                 refresh.top >= toolbar.top && refresh.bottom <= toolbar.bottom,
                 "The native refresh target and focus paint fit inside the detail toolbar: $refresh / $toolbar"
