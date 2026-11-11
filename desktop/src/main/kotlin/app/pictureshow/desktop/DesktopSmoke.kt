@@ -237,7 +237,11 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 it.subtitleStartSeconds==0.0 && it.subtitleEndSeconds==180.0 &&
                 it.positionSeconds?.let { position -> position>=0.0 && position<180.0 }==true &&
                 it.initialSubtitleIndex in setOf(-1, sub.index) }==true }
-        screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
+        val firstSubtitleId=requireNotNull(trackReceipt("subtitle-selection")?.subtitleId)
+        screenshot("08c-subtitles-on");screenshot("08d-subtitles-on-minimum",listOf(800 to 600));click("subtitles");click("subtitles:-1");waitFor("subtitle Off"){c.state.value.playback?.subtitleIndex== -1};waitFor("native subtitle Off") { trackReceipt("subtitle-off")?.let { it.subtitleId==null }==true }
+        click("subtitles");click("subtitles:${sub.index}")
+        waitFor("cached subtitle reselect without duplicate native track") { trackReceipt("subtitle-reselected")?.let { it.subtitleId==firstSubtitleId && it.subtitleExternal==true && it.subtitleText.contains("Pictureshow original CC0 subtitle") }==true }
+        click("subtitles");click("subtitles:-1");waitFor("native subtitle Off after reselect") { trackReceipt("subtitle-off-final")?.let { it.subtitleId==null }==true };checks["subtitles"]=true
         click("pause");waitFor("paused"){c.state.value.playback?.paused==true};click("pause");waitFor("unpaused"){c.state.value.playback?.paused==false}
         click("stop");ready(DesktopRoute.Detail)
         click("nav:library:${library.id}");ready(DesktopRoute.Library)
