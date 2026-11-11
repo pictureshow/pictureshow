@@ -19,6 +19,10 @@ Unreadable storage offers Retry. Native decoder capabilities are measured before
 negotiating playback; the server remains the authority for remembered progress
 and track choices. Video conversion explains its reason when a device limit
 requires it. A viewer-selected bitrate conversion does not show a device warning.
+Text subtitles use a full-timeline, authenticated same-origin delivery URL, so
+resuming after a cue starts does not depend on finding an earlier embedded packet.
+Selected bitmap tracks negotiate their own embedding profile; mixing bitmap
+embedding into the text profile can change Jellyfin's subtitle delivery choice.
 
 Use Tab/Shift+Tab or arrows to navigate, Enter to activate, Escape to close a menu,
 exit fullscreen and go back, F11/Alt+Enter for fullscreen, and Space/Left/Right
