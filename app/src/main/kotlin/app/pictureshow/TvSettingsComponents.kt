@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -291,7 +291,8 @@ internal fun TvSettingsRow(
     leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val isFocused by interaction.collectIsFocusedAsState()
+    var isFocused by remember { mutableStateOf(false) }
+    val nativeFocus = Modifier.onFocusChanged { isFocused = it.isFocused }
     val rowFocus = remember { FocusRequester() }
     val supportingColor = if (isFocused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
     // ListItem's selectable Surface always adds Selected, including when false.
@@ -328,14 +329,18 @@ internal fun TvSettingsRow(
         Box(modifier.then(accessibilityModifier).fillMaxWidth()) {
             TvSettingsNativeRow(
                 title, supportingText,
-                Modifier.focusRequester(
-                    rowFocus
-                ),
+                Modifier.focusRequester(rowFocus).then(nativeFocus),
                 enabled, false, supportingColor, interaction, onClick, trailing, leading
             )
         }
     } else {
-        TvSettingsNativeRow(title, supportingText, modifier, enabled, selected, supportingColor, interaction, onClick, trailing, leading)
+        TvSettingsNativeRow(
+            title, supportingText,
+            modifier.then(
+                nativeFocus
+            ),
+            enabled, selected, supportingColor, interaction, onClick, trailing, leading
+        )
     }
 }
 

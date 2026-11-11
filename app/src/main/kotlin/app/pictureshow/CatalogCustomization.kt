@@ -933,9 +933,9 @@ internal fun NamedCatalogPicker(
                     initial + (if (selectAny != null) 2 else 1)
                 }
             )
-            keyboard?.hide()
             withFrameNanos { }
             if (hasChoice) choiceFocus.requestFocus() else first.requestFocus()
+            keyboard?.hide()
         }
     }
 }
