@@ -2078,6 +2078,30 @@
         "latest:one",
         "latest:two"
       ]
+    },
+    {
+      "id": "command-has-no-selection",
+      "operation": "control-selection",
+      "input": {
+        "selected": null
+      },
+      "expected": false
+    },
+    {
+      "id": "unselected-radio-retains-selection-state",
+      "operation": "control-selection",
+      "input": {
+        "selected": false
+      },
+      "expected": true
+    },
+    {
+      "id": "selected-radio-retains-selection-state",
+      "operation": "control-selection",
+      "input": {
+        "selected": true
+      },
+      "expected": true
     }
   ]
 }

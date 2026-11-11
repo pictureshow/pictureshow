@@ -69,6 +69,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+import app.pictureshow.core.hasControlSelection
 
 /** One focus target per row. The trailing control is a state indicator, never a second button. */
 @Composable
@@ -234,7 +235,7 @@ internal fun TvSettingsRow(
     val interaction = remember { MutableInteractionSource() }
     var focused by remember { mutableStateOf(false) }
     val supportingColor = if (focused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
-    if (selected == null) {
+    if (!hasControlSelection(selected)) {
         // tv-material1.1 ListItem always adds Selected semantics. Commands and value openers
         // use its non-selectable Surface primitive, retaining the same shared row layout.
         val shape = RoundedCornerShape(8.dp)
@@ -266,7 +267,7 @@ internal fun TvSettingsRow(
         return
     }
     ListItem(
-        selected, onClick,
+        selected == true, onClick,
         headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }

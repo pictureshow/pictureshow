@@ -99,3 +99,6 @@ fun sortDirectionLabel(descending: Boolean): String = if (descending) "Descendin
 
 /** Initial preferences must resolve before an editor can expose or mutate a default layout. */
 fun canOpenHomeEditor(preferencesReady: Boolean): Boolean = preferencesReady
+
+/** Commands have no selection state; unselected radio choices still have one. */
+fun hasControlSelection(selected: Boolean?): Boolean = selected != null

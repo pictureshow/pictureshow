@@ -257,6 +257,9 @@ class HomeBrowseVectorsTest {
                     }
                     Json.encodeToJsonElement(result.order)
                 }
+                "control-selection" -> JsonPrimitive(
+                    hasControlSelection(Json.decodeFromJsonElement<Boolean?>(input.getValue("selected")))
+                )
                 "filter-presentation" -> {
                     val filters = Json.decodeFromJsonElement<LibraryFilters>(input.getValue("filters"))
                     buildJsonObject {
