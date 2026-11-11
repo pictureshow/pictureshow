@@ -141,6 +141,14 @@ private final class PresentationInertPlayer: AVPlayer {
         XCTAssertFalse(notice.active, "A same-viewing source change cannot restart the notice clock")
         notice.close()
     }
+    func testTransportUsesViewerConversionVocabularyWhileInfoRetainsMethod() async throws {
+        let converting = try await session()
+        XCTAssertEqual(converting.status, "Converting")
+        XCTAssertEqual(converting.playbackInfoSections.first?.rows.first { $0.id == "Method" }?.value, "Transcode")
+        let compatible = try await session(conversion: false)
+        XCTAssertEqual(compatible.status, "", "Compatible playback needs no protocol or delivery-method status on the transport")
+        XCTAssertEqual(compatible.playbackInfoSections.first?.rows.first { $0.id == "Method" }?.value, "Direct play")
+    }
     func testPlaybackInfoUsesCoreReasonsAndSeparatesReceivedFormatsFromServerMetadata() async throws {
         let session = try await session()
         XCTAssertEqual(session.playbackInfoReasons.count, 3)
@@ -213,6 +221,12 @@ private final class PresentationInertPlayer: AVPlayer {
         XCTAssertNil(session.speedLimitation, "A previous title's output limitation cannot follow the new viewing after its speed resets")
     }
     #if os(tvOS)
+    func testNativeInformationTabNamesItsPlaybackContents() async throws {
+        let session = try await session()
+        let controller = PictureshowPlayerViewController()
+        controller.installInformation(session: session)
+        XCTAssertEqual(controller.customInfoViewControllers.map(\.title), ["Playback"])
+    }
     func testTVContinuationRetainsActionsWhenPausedNumberDisappears() async throws {
         let session = try await session()
         let next = try XCTUnwrap(session.nextItem)
@@ -220,10 +234,15 @@ private final class PresentationInertPlayer: AVPlayer {
         coordinator.updateContinuation(next, countdown: 4, visible: true)
         let play = try XCTUnwrap(coordinator.continuationContextActions.first)
         let cancel = try XCTUnwrap(coordinator.continuationContextActions.last)
+        XCTAssertEqual(play.title, "Play next: Following episode (4)")
+        XCTAssertEqual(coordinator.continuationTransportActions.first?.title, play.title)
+        XCTAssertNil(play.image, "A text action keeps the episode visible in AVKit’s transport")
+        XCTAssertNil(cancel.image, "Cancel stays a word rather than an anonymous transport icon")
         coordinator.updateContinuation(next, countdown: nil, visible: true)
         XCTAssertTrue(coordinator.continuationContextActions.first === play)
         XCTAssertTrue(coordinator.continuationContextActions.last === cancel)
-        XCTAssertEqual(play.title, "Play now")
+        XCTAssertEqual(play.title, "Play next: Following episode")
+        XCTAssertEqual(coordinator.continuationTransportActions.first?.title, play.title)
         XCTAssertEqual(cancel.title, "Cancel")
         XCTAssertFalse(coordinator.continuationTransportActions.first!.title.contains("("))
         coordinator.updateContinuation(next, countdown: nil, visible: false)

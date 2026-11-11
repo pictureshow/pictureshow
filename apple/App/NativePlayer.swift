@@ -138,22 +138,6 @@ private struct PlayerActionStyle: ButtonStyle {
 }
 #endif
 
-nonisolated private func trackDescriptionParts(_ stream: MediaStream) -> [String] {
-    var parts = [stream.label]
-    let lower = stream.label.lowercased()
-    let labelTokens = lower.split { !$0.isLetter && !$0.isNumber && $0 != "-" }
-    // Short language codes must be whole tokens: "en" inside "Commentary"
-    // does not tell a viewer that the track is English.
-    if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !labelTokens.contains(Substring(language.lowercased())) { parts.append(name) }
-    if let title = stream.title, !title.isEmpty, !lower.contains(title.lowercased()) { parts.append(title) }
-    if let codec = stream.codec, !lower.contains(codec.lowercased()) { parts.append(codec.uppercased()) }
-    if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
-    if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
-    if stream.isHearingImpaired && !lower.contains("hearing impaired") && !lower.contains("sdh") { parts.append("Hearing impaired") }
-    if stream.isDefault && !lower.contains("default") { parts.append("Default") }
-    return parts
-}
-
 private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
 
 struct TrackLabel: Identifiable, Sendable, Equatable {
@@ -213,10 +197,9 @@ struct TrackMenuPresentation: Identifiable, Equatable {
 
     nonisolated static func build(_ streams: [MediaStream], generation: Int) -> PreparedTrackMenu {
         func labels(_ type: String) -> [TrackLabel] {
-            streams.filter { $0.type == type }.map {
-                let parts = trackDescriptionParts($0), index = "Stream \($0.index)"
-                return TrackLabel(id: $0.index, title: (parts + [index]).joined(separator: " · "),
-                                  menuTitle: ([index] + parts).joined(separator: " · "))
+            let tracks = streams.filter { $0.type == type }
+            return zip(tracks, PlaybackTrackLabels.labels(tracks)).map { stream, label in
+                TrackLabel(id: stream.index, title: label, menuTitle: label)
             }
         }
         return PreparedTrackMenu(generation: generation, audio: labels("Audio"), subtitles: labels("Subtitle"))
@@ -397,6 +380,8 @@ struct PlayerOptions: View {
                 #endif
             }
             .minimumTouchListRows()
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
             .accessibilityIdentifier("playerOptionsList")
             #if os(tvOS)
             .contentMargins(.horizontal, 32, for: .scrollContent)
@@ -418,6 +403,7 @@ struct PlayerOptions: View {
             #endif
             }
         }
+        .background(Theme.background)
         #if os(tvOS)
         .onExitCommand { closePanel() }
         #endif
@@ -569,7 +555,11 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.onBackgroundSurfaceFocus = backgroundSurfaceFocus
         controller.updateOptionsPresentation(kind: panelKind, session: session, close: closePanel)
         let continuation = session.nextCardVisible ? session.nextItem : nil
+        let previousContinuationTitle = context.coordinator.continuationTransportActions.first?.title
         context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown, visible: session.nextCardVisible)
+        if previousContinuationTitle != context.coordinator.continuationTransportActions.first?.title {
+            controller.requestTransportTitleRefresh()
+        }
         // Keep the early loading action while its sheet is open. Rebuild the
         // complete native menu after Back/selection dismisses that sheet.
         let preparedSignature = session.trackLabels.openMenu == nil ? session.trackLabels.prepared?.generation ?? -1 : -1
@@ -631,7 +621,7 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.publishTransportTitleRefreshIfReady()
         var contextActions: [UIAction] = []
         if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
-            contextActions.append(UIAction(title: "Skip \(segment.type.rawValue)", identifier: .init("skipSegment")) { _ in session.skip() })
+            contextActions.append(UIAction(title: "Skip \(segment.type.rawValue.lowercased())", identifier: .init("skipSegment")) { _ in session.skip() })
         }
         contextActions += context.coordinator.continuationContextActions
         let actionSignature = (session.skipSegment?.id ?? "") + "|" + contextActions.map { $0.identifier.rawValue }.joined(separator: "|")
@@ -664,25 +654,24 @@ struct NativePlayer: UIViewControllerRepresentable {
             if continuationID != next.id {
                 continuationID = next.id
                 func play(_ identifier: String) -> UIAction {
-                    UIAction(title: identifier == "playNext" ? countdown.map { "Next (\($0))" } ?? "Play now" : "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? ""), image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
+                    UIAction(title: "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? ""), identifier: .init(identifier)) { [weak self] _ in
                         guard let self, self.session.nextItem?.id == next.id, self.session.nextCardVisible else { return }
                         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
                         Task { await self.session.advance() }
                     }
                 }
                 func cancel(_ identifier: String) -> UIAction {
-                    UIAction(title: identifier == "cancelNext" ? "Cancel" : "Cancel next episode", image: UIImage(systemName: "xmark.circle"), identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                    UIAction(title: "Cancel", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
                 continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
                 actionSignature = "" // A different episode may have the same action identifiers.
             }
-            // Keep the narrow contextual pill readable; the transport action
-            // retains the episode name. Reuse actions across countdown ticks.
-            continuationContextActions.first?.title = countdown.map { "Next (\($0))" } ?? "Play now"
-            #if os(tvOS)
-            continuationTransportActions.first?.title = "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? "")
-            #endif
+            // Both native surfaces name the episode, even when pausing hides the
+            // countdown. Retain action identity across every clock update.
+            let title = "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? "")
+            continuationContextActions.first?.title = title
+            continuationTransportActions.first?.title = title
         }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool {
             #if DEBUG
@@ -855,7 +844,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     }
     func installInformation(session: PlaybackSession) {
         let info = PlaybackInformationController(rootView: NativeViewingInformation(session: session))
-        info.title = "Pictureshow"
+        info.title = "Playback"
         info.preferredContentSize = CGSize(width: 1200, height: 250)
         info.onVisibilityChange = { [weak self, weak session] visible in
             self?.setInformationVisible(visible)
@@ -1023,12 +1012,16 @@ private struct NativeViewingInformation: View {
                 Text(session.subtitleTimingExplanation).font(.caption)
                 if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                 SeekOptions(session: session)
+                VStack(alignment: .leading, spacing: 20) {
+                    PlaybackInfoRows(session: session)
+                }
                 if let warning = session.reportError ?? session.extrasError { Text(warning).foregroundStyle(.orange) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
                 #if os(tvOS)
-                .background(Theme.surface.opacity(0.95))
+                .background(Theme.background)
                 #endif
         }
+        .background(Theme.background)
     }
 }
 

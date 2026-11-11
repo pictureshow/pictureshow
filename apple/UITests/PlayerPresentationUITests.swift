@@ -498,15 +498,15 @@ final class PlayerPresentationUITests: XCTestCase {
         #if os(tvOS)
         let playNext = app.cells.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", "playNextTransport", "Play next: Following synthetic episode")).firstMatch
         XCTAssertTrue(playNext.waitForExistence(timeout: 10))
-        XCTAssertFalse(playNext.label.contains("("), "Paused continuation keeps Play now but has no countdown number")
+        XCTAssertFalse(playNext.label.contains("("), "Paused continuation keeps the named Play next action but has no countdown number")
         activate(playNext, select: false)
         record("132 paused next episode Play next focused label")
-        activate(nativeAction(id: "cancelNextTransport", prefix: "Cancel next episode"), select: false)
+        activate(nativeAction(id: "cancelNextTransport", prefix: "Cancel"), select: false)
         record("132 paused next episode Cancel focused label")
         #else
         let playNext = app.buttons["playNext"]
         XCTAssertTrue(playNext.waitForExistence(timeout: 10))
-        XCTAssertFalse(app.staticTexts["nextCountdown"].exists, "Paused continuation keeps Play now but has no countdown number")
+        XCTAssertFalse(app.staticTexts["nextCountdown"].exists, "Paused continuation keeps the named Play next action but has no countdown number")
         XCTAssertTrue(app.buttons["cancelNext"].exists)
         try assertNextCardGeometry(landmark: "paused portrait or tablet")
         if phone {
@@ -560,7 +560,7 @@ final class PlayerPresentationUITests: XCTestCase {
         let pausedDeadline = ProcessInfo.processInfo.systemUptime + 5
         while trailingNumber(playNext.label) != nil && ProcessInfo.processInfo.systemUptime < pausedDeadline { }
         XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
-        let cancel = nativeAction(id: "cancelNextTransport", prefix: "Cancel next episode")
+        let cancel = nativeAction(id: "cancelNextTransport", prefix: "Cancel")
         activate(cancel)
         #else
         activate(app.buttons["playerPlayPause"])

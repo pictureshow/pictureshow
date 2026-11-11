@@ -57,3 +57,22 @@ Report ordering (PLAY-20): build each body when its serialized command executes,
 Android release lifecycle evidence logs `lifecycle foreground=<bool> paused=<bool> positionMs=<n>`, READY includes paused/foreground, and actual playing transitions log `play-state playing=<bool> paused=<bool> foreground=<bool> positionMs=<n>`. Report outcomes append the immutable body field `paused=<bool|omitted>` (omitted for Stop); a response to a body sent before stopping can complete later, identified by its sequence and elapsed time.
 
 Caption default retention (PLAY-10): before applying the system caption language or ranking, retain `DefaultSubtitleStreamIndex=-1` as Off or a nonnegative default that identifies an actual subtitle stream in the selected source. A default pointing to an absent stream or to audio/video is unusable and permits caption fallback, as does null/omitted. Jellyfin does not identify whether a valid default was remembered or chosen by its own language/default rules, so retain both, even in a different/unknown language or for image/forced subtitles. This can retain a server-selected image track that requires burn-in; honoring the per-item selection takes precedence over the text-first fallback. System captions fill a missing selection, rather than replacing the server selection. On Jellyfin 12, remembered Off is -1 and a computed no-default is null/omitted; do not collapse those values before this decision. Do not add a competing per-device remembered-choice store: the server is the cross-client authority. Reopening without a new panel choice still has automatic report provenance under PLAY-20, and omits the subtitle index in reports; accepting the server default is not a fresh explicit viewer choice. `caption-index` vectors define retention and fallback for all platforms.
+
+
+### Shared track chooser labels (PLAY-08)
+
+Audio and subtitle chooser labels use the same rules on Android, Apple and web, enforced by
+`vectors/track-labels.json`. Build labels for each chooser separately in its visible order. The
+server stream index remains the selection identity and is never viewer copy.
+
+Use the English language name when available, then codec and audio channel layout (mono, stereo,
+5.1, 7.1, otherwise N channels). Preserve a descriptive server `Title`; `DisplayTitle` is not a
+substitute for this rule. Avoid repeating a language, complete codec/layout phrase or metadata flag
+already named by that title. Phrase matching respects Unicode letter/number boundaries and literal
+format punctuation; a negated `Non-Forced` phrase does not claim a Forced flag.
+
+Add Default only when exactly one track in a chooser with multiple tracks is marked default.
+Add Forced, SDH and External when applicable unless the title already names that complete flag.
+Use `Track N` (one-based chooser order) for tracks without a language, and to distinguish otherwise
+identical labels. Resolve collisions again if a server title itself contains such a suffix.
+A known-language track with a unique descriptive label has no number. Empty choosers yield no labels.

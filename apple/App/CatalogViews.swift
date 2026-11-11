@@ -90,7 +90,8 @@ struct CatalogShelf: View {
                     LazyHStack(alignment: .top, spacing: 20) {
                         ForEach(items) { item in
                             if boundaryVisible(for: item.id, start: true) { boundary(start: true, item: item) }
-                            Button { opener = item.id; remember(item.id); open(item) } label: { CatalogCard(item: item, wide: wide) }
+                            VStack(alignment: .leading, spacing: 9) {
+                            Button { opener = item.id; remember(item.id); open(item) } label: { CatalogCard(item: item, wide: wide, artworkOnly: televisionArtworkOnly) }
                                 .buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id)
                                 .accessibilityFocused($readerFocused, equals: item.id)
                                 .accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
@@ -107,6 +108,10 @@ struct CatalogShelf: View {
                                     else if edge == .top { readerFocused = "shelfHeading" }
                                     #endif
                                 }
+                                #if os(tvOS)
+                                CatalogCard(item: item, wide: wide, metadataOnly: true).accessibilityHidden(true)
+                                #endif
+                            }
                             if boundaryVisible(for: item.id, start: false) { boundary(start: false, item: item) }
                         }
                     }.padding(.horizontal, horizontalInset).padding(.vertical, 14)
@@ -124,6 +129,13 @@ struct CatalogShelf: View {
                     }
             }
         }
+    }
+    private var televisionArtworkOnly: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
     }
     private func boundaryVisible(for id: String, start: Bool) -> Bool {
         #if os(tvOS)
@@ -162,25 +174,25 @@ private struct CatalogShelfHeading: ViewModifier {
 }
 
 #if os(tvOS)
-/// Visible selection stays independent of native remote focus. The reserved
-/// glyph slot keeps neighbouring labels still as the selected choice changes.
+/// A checkmark communicates selection independently from remote focus. Resting
+/// labels keep white ink; only the native focused white platter uses dark ink.
 struct TelevisionChoiceLabel: View {
     let title: String
     let selected: Bool
     @Environment(\.isFocused) private var focused
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark").opacity(selected ? 1 : 0).accessibilityHidden(true)
+            if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
             Text(title)
         }
         .fontWeight(.semibold)
-        .foregroundStyle(focused || selected ? Theme.background : Color.primary)
+        .foregroundStyle(focused ? Theme.background : Color.white)
     }
 }
 struct TelevisionChoiceStyle: ViewModifier {
     let selected: Bool
     func body(content: Content) -> some View {
-        content.buttonStyle(.bordered).tint(selected ? Theme.accent : Color.gray)
+        content.buttonStyle(.bordered).tint(.white)
     }
 }
 #endif
@@ -189,14 +201,20 @@ struct CatalogCard: View {
     let item: MediaItem
     var wide = false
     var fillsAvailableWidth = false
+    var artworkOnly = false
+    var metadataOnly = false
     @ScaledMetric private var fontScale: CGFloat = 1
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            artwork.clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(alignment: .bottom) { if item.progress > 0 { ProgressView(value: item.progress).tint(Theme.accent).padding(8) } }
+            if !metadataOnly {
+                artwork.clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .bottom) { if item.progress > 0 { ProgressView(value: item.progress).tint(Theme.accent).padding(8) } }
+            }
+            if !artworkOnly {
             Text(item.name).modifier(TokenFont(DesignTokens.labelSize, weight: .medium)).lineLimit(fontScale > CGFloat(GridNavigation.unboundedTitleFontScale) ? nil : 2).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
             Text(item.cardSubtitle).modifier(TokenFont(DesignTokens.captionSize)).foregroundStyle(Theme.muted).lineLimit(2)
             HStack { if item.isWatched { Label("Watched", systemImage: "checkmark.circle.fill") }; if item.userData.isFavorite { Image(systemName: "heart.fill") }; if let count = item.userData.unplayedItemCount, count > 0 { Text("\(count) unplayed") } }.font(.caption).foregroundStyle(Theme.accent)
+            }
         }
         .frame(width: fillsAvailableWidth ? nil : wide ? Theme.wideCardWidth : Theme.cardWidth, alignment: .leading)
         .frame(maxWidth: fillsAvailableWidth ? .infinity : nil, alignment: .leading)
@@ -211,6 +229,11 @@ struct CatalogCard: View {
     }
 }
 
+#if os(tvOS)
+struct PosterButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Button(configuration).buttonStyle(.card) }
+}
+#else
 struct PosterButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { PosterButton(configuration: configuration) }
     private struct PosterButton: View {
@@ -234,6 +257,8 @@ struct PosterButtonStyle: ButtonStyle {
         }
     }
 }
+
+#endif
 
 // A single sizing layer: native bordered styles add padding outside a label's
 // minimum height. These touch actions instead include their 48 pt floor here.
@@ -637,24 +662,29 @@ struct LibraryView: View {
                     VStack(alignment: .leading, spacing: 16) { sortButtons }
                 }
                 #else
-                HStack(spacing: 8) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { touchSortMenu; directionButton }
+                    VStack(spacing: 8) { touchSortMenu; directionButton }
+                }
+                #endif
+            }
+        }.id("gridHeader")
+    }
+    #if os(iOS)
+    private var touchSortMenu: some View {
                     Menu {
                         Picker("Sort by", selection: $sort) { Text("Name").tag("SortName"); Text("Date added").tag("DateCreated"); Text("Release date").tag("PremiereDate") }
                     } label: {
                         HStack(spacing: 6) {
                             Text(GridNavigation.stripDetail(sortBy: sort, descending: false).components(separatedBy: ",")[0])
                             Image(systemName: "chevron.down").font(.caption)
-                        }.frame(maxWidth: .infinity)
+                        }.lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(maxWidth: .infinity)
                     }
                     .catalogActionStyle().accessibilityLabel("Sort by")
                     .accessibilityValue(GridNavigation.stripDetail(sortBy: sort, descending: false).components(separatedBy: ",")[0])
                     .accessibilityIdentifier("librarySort")
-                    directionButton
-                }
-                #endif
-            }
-        }.id("gridHeader")
     }
+    #endif
     @ViewBuilder private var sortButtons: some View {
         ForEach(["SortName", "DateCreated", "PremiereDate"], id: \.self) { value in
             Button { navigation.cancel(); sort = value } label: {
@@ -679,22 +709,18 @@ struct LibraryView: View {
         Button { navigation.cancel(); descending.toggle() } label: {
             Label(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up")
                 #if os(iOS)
-                .frame(maxWidth: .infinity)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false).frame(maxWidth: .infinity)
                 #endif
         }
             .catalogActionStyle().accessibilityIdentifier("sortDirection").focused($focused, equals: "sortDirection").accessibilityFocused($readerFocused, equals: "sortDirection")
     }
     private func gridCard(_ item: MediaItem, index: Int, columns: Int, proxy: ScrollViewProxy) -> some View {
-        Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item, fillsAvailableWidth: true) }
+        VStack(alignment: .leading, spacing: 9) {
+        Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item, fillsAvailableWidth: true, artworkOnly: televisionArtworkOnly) }
             .buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).accessibilityFocused($readerFocused, equals: item.id)
             .id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
             .onAppear { if index >= page.items.count - 8, page.next < page.total, page.error == nil { Task { await load() } } }
             #if os(tvOS)
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(key: CatalogCardHeights.self, value: [item.id: geometry.size.height])
-                }
-            }
             .onMoveCommand { direction in
                 switch direction {
                 case .up: move(index: index, columns: columns, down: false, proxy: proxy)
@@ -710,6 +736,24 @@ struct LibraryView: View {
                 else { navigation.cancel() }
                 #endif
             }
+            #if os(tvOS)
+            CatalogCard(item: item, fillsAvailableWidth: true, metadataOnly: true).accessibilityHidden(true)
+            #endif
+        }
+        #if os(tvOS)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: CatalogCardHeights.self, value: [item.id: geometry.size.height])
+            }
+        }
+        #endif
+    }
+    private var televisionArtworkOnly: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
     }
     private func move(index: Int, columns: Int, down: Bool, proxy: ScrollViewProxy) {
         landingTask?.cancel()

@@ -168,7 +168,8 @@ final class NativeTrackHTTPFixture {
         if app.keyboards.firstMatch.exists { XCUIRemote.shared.press(.menu) }
         #else
         let done = app.buttons["dismissSignInKeyboard"]
-        if done.exists && done.isHittable { done.tap() }
+        if app.keyboards.firstMatch.exists && done.exists && !done.frame.isEmpty
+            && app.windows.firstMatch.frame.intersects(done.frame) && done.isHittable { done.tap() }
         if !signIn.isHittable { app.swipeUp() }
         #endif
         activate(signIn)

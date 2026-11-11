@@ -40,6 +40,21 @@ private final class MenuWorkerGate: @unchecked Sendable {
         let reached = await Task.detached { gate.entered.wait(timeout: .now() + 5) == .success }.value
         XCTAssertTrue(reached, "The metadata worker must start without an open request")
     }
+    func testViewerLabelsMatchCoreWhileKeepingSourceIndexesInternal() throws {
+        let metadata: [[String: Any]] = [
+            ["Index": 12, "Type": "Audio", "Language": "en", "Codec": "aac", "Channels": 2, "IsDefault": true],
+            ["Index": 37, "Type": "Subtitle", "Language": "en", "Codec": "srt", "IsDefault": true],
+            ["Index": 0, "Type": "Video", "Codec": "h264"]
+        ]
+        let streams = try JSONDecoder().decode([MediaStream].self, from: JSONSerialization.data(withJSONObject: metadata))
+        let menu = TrackLabelCache.build(streams, generation: 9)
+        XCTAssertEqual(menu.generation, 9)
+        XCTAssertEqual(menu.audio, [TrackLabel(id: 12, title: "English · AAC stereo", menuTitle: "English · AAC stereo")])
+        XCTAssertEqual(menu.subtitles, [TrackLabel(id: 37, title: "English · SRT", menuTitle: "English · SRT")])
+        XCTAssertFalse((menu.audio + menu.subtitles).contains { $0.title.contains("Stream ") || $0.menuTitle.contains("Stream ") })
+        XCTAssertEqual(menu.audio.map(\.title), PlaybackTrackLabels.labels(streams.filter { $0.type == "Audio" }))
+        XCTAssertEqual(menu.subtitles.map(\.title), PlaybackTrackLabels.labels(streams.filter { $0.type == "Subtitle" }))
+    }
     func testBothMenusStartAtMetadataArrivalOffMainAndEarlyOpenGetsOneCompleteMenu() async throws {
         let gate = MenuWorkerGate()
         defer { gate.release.signal() }

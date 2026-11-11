@@ -288,6 +288,32 @@ jobs:
               raise SystemExit("Actual VoiceOver acceptance requires exactly one passed test and zero failures/skips: " + json.dumps(result))
           PYVOICEOVER
 
+      - name: Verify native catalog layout and TV pixel contrast
+        id: catalog-visual
+        if: startsWith(github.ref, 'refs/heads/ci/132') && steps.ios-tests.outputs.built == 'true' && steps.tvos-tests.outputs.built == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          IOS_SIMULATOR_ID: ${{ steps.simulators.outputs.ios_udid }}
+          TVOS_SIMULATOR_ID: ${{ steps.simulators.outputs.tvos_udid }}
+        run: |
+          set -o pipefail
+          for platform in iOS tvOS; do
+            if [[ "$platform" == iOS ]]; then device="$IOS_SIMULATOR_ID"; else device="$TVOS_SIMULATOR_ID"; fi
+            xcrun simctl terminate "$device" app.pictureshow || true
+            xcrun simctl uninstall "$device" app.pictureshow || true
+            xcodebuild \
+              -project apple/Pictureshow.xcodeproj \
+              -scheme "Pictureshow-$platform" \
+              -destination "platform=$platform Simulator,id=$device" \
+              -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+              -parallel-testing-enabled NO \
+              -only-testing:"Pictureshow-$platform-UITests/CatalogPresentationUITests/testNativeCatalogSortPagingSeasonRetentionAndConversionPreference" \
+              -resultBundlePath "apple-test-results/$platform-catalog-visual.xcresult" \
+              test-without-building CODE_SIGNING_ALLOWED=NO \
+              2>&1 | tee "apple-test-results/$platform-catalog-visual.log" || exit 1
+          done
+
       - name: Run Swift core tests and shared vectors
         id: core-package
         if: steps.apple-source.outputs.available == 'true'
@@ -369,9 +395,14 @@ jobs:
           TRANSPORT_PACKAGE_OUTCOME: ${{ steps.transport-package.outcome }}
           COLD_REPEAT_REQUIRED: ${{ startsWith(github.ref, 'refs/heads/ci/132') }}
           COLD_REPEAT_OUTCOME: ${{ steps.cold-subtitle-repeat.outcome }}
+          CATALOG_VISUAL_OUTCOME: ${{ steps.catalog-visual.outcome }}
         run: |
           if [[ "$COLD_REPEAT_REQUIRED" == true && "$COLD_REPEAT_OUTCOME" != success ]]; then
             echo "Cold subtitle repetition did not succeed: $COLD_REPEAT_OUTCOME"
+            exit 1
+          fi
+          if [[ "$COLD_REPEAT_REQUIRED" == true && "$CATALOG_VISUAL_OUTCOME" != success ]]; then
+            echo "Native catalog visual regressions did not succeed: $CATALOG_VISUAL_OUTCOME"
             exit 1
           fi
           for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$IOS_VOICEOVER_OUTCOME" "$TVOS_VOICEOVER_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do

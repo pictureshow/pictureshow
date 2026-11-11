@@ -389,6 +389,12 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertEqual(sortField.frame.height, direction.frame.height, accuracy: 2)
         XCTAssertEqual(sortField.frame.width, direction.frame.width, accuracy: 2, "Both halves of sort retain stable equal-width targets")
         #endif
+        #if os(tvOS)
+        // The card owns focus. Selected field and secondary direction must both
+        // retain readable resting ink; selection is not a disabled appearance.
+        assertNativeButtonPixels(app.buttons["sort-SortName"], app: app, style: "selected choice", text: "Name")
+        assertNativeButtonPixels(app.buttons["sortDirection"], app: app, style: "secondary action", text: "Ascending")
+        #endif
         capture("132 catalog grid large font", app: app)
         #if os(iOS)
         if UIDevice.current.userInterfaceIdiom == .pad {
@@ -539,6 +545,17 @@ final class CatalogPresentationUITests: XCTestCase {
         reveal(detailHeading, app: app)
         XCTAssertFalse(app.navigationBars.staticTexts[detailHeading.label].exists, "The display heading must not be duplicated by a truncated inline title")
         #endif
+        #if os(tvOS)
+        focus(app.buttons["play"], app: app)
+        assertNativeButtonPixels(app.buttons["play"], app: app, style: "focused primary", focused: true)
+        capture("132 round2 TV Play focused single system focus", app: app)
+        assertNativeButtonPixels(seasonOne, app: app, style: "selected season choice", text: "Season 1")
+        assertNativeButtonPixels(app.buttons["favorite"], app: app, style: "detail secondary action", text: "Add favorite")
+        assertNativeButtonPixels(app.buttons["playOnDevice"], app: app, style: "native Menu secondary action", text: "Play on TV")
+        focus(app.buttons["watched"], app: app)
+        assertNativeButtonPixels(app.buttons["watched"], app: app, style: "focused secondary", focused: true)
+        capture("132 round2 TV secondary focused Play resting accent", app: app)
+        #endif
         capture("132 series seasons and episodes", app: app)
         fixture.holdSeasonTwo(true)
         activate(seasonTwo, app: app)
@@ -628,6 +645,68 @@ final class CatalogPresentationUITests: XCTestCase {
         #endif
     }
     #if os(tvOS)
+    /// Measure actual screenshot pixels, never the declared SwiftUI colors. A
+    /// central crop excludes the platter outline/shadow, so a white focus border
+    /// cannot hide the previous dark-on-slate label defect. Native text has many
+    /// opaque interior pixels; antialiasing edges are not treated as label ink.
+    private func assertNativeButtonPixels(_ element: XCUIElement, app: XCUIApplication, style: String, focused: Bool = false, text: String? = nil,
+                                               file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(element.exists, file: file, line: line)
+        XCTAssertEqual(ownsNativeFocus(element, app: app), focused, "Sample the required actual focus state: \(style)", file: file, line: line)
+        let image = XCUIScreen.main.screenshot().image
+        guard let source = image.cgImage else { XCTFail("Missing screenshot pixels", file: file, line: line); return }
+        let scaleX = CGFloat(source.width) / app.frame.width
+        let scaleY = CGFloat(source.height) / app.frame.height
+        let frame: CGRect
+        if let text {
+            let label = element.staticTexts.matching(NSPredicate(format: "label == %@", text)).firstMatch
+            XCTAssertTrue(label.exists, "Measure the actual text glyph bounds independently from its checkmark/icon", file: file, line: line)
+            guard label.exists else { return }
+            frame = label.frame
+            XCTAssertTrue(element.frame.contains(frame), "The measured text belongs to this control", file: file, line: line)
+        } else {
+            frame = element.frame.insetBy(dx: element.frame.width * 0.12, dy: element.frame.height * 0.27)
+        }
+        let pixels = CGRect(x: (frame.minX - app.frame.minX) * scaleX, y: (frame.minY - app.frame.minY) * scaleY,
+                            width: frame.width * scaleX, height: frame.height * scaleY).integral
+        guard let crop = source.cropping(to: pixels) else { XCTFail("No visible label crop: \(style)", file: file, line: line); return }
+        let width = crop.width, height = crop.height
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height)); return true
+        }
+        XCTAssertTrue(rendered, file: file, line: line)
+        func linear(_ byte: UInt8) -> Double {
+            let value = Double(byte) / 255
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminances = stride(from: 0, to: rgba.count, by: 4).map {
+            0.2126 * linear(rgba[$0]) + 0.7152 * linear(rgba[$0 + 1]) + 0.0722 * linear(rgba[$0 + 2])
+        }.sorted()
+        guard !luminances.isEmpty else { XCTFail("Empty label crop", file: file, line: line); return }
+        let bins = Dictionary(grouping: luminances, by: { Int($0 * 128) })
+        let backgroundBin = bins.max(by: { $0.value.count < $1.value.count })!.value.sorted()
+        let background = backgroundBin[backgroundBin.count / 2]
+        if focused {
+            // Every role gets the same near-white native focused platter. The old
+            // focused-secondary lavender has luminance about0.57 and fails here.
+            print("LEG132_FOCUS_PLATTER style=\(style) backgroundLuminance=\(background)")
+            XCTAssertGreaterThanOrEqual(background, 0.75, "Focus must use the native near-white treatment for every role", file: file, line: line)
+            return
+        }
+        // Find ink by its difference from the dominant background, including
+        // dark ink. Never pre-filter for passing contrast or include the checkmark.
+        let ink = luminances.filter { abs($0 - background) > 0.02 }
+        let foreground = ink.isEmpty ? background : ink[ink.count / 2]
+        let ratio = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+        print("LEG132_PIXEL_CONTRAST style=\(style) id=\(element.identifier) text=\(text ?? "") ratio=\(ratio) backgroundLuminance=\(background) inkLuminance=\(foreground) inkPixels=\(ink.count) sampledPixels=\(luminances.count)")
+        XCTAssertGreaterThanOrEqual(ink.count, max(12, luminances.count / 500), "A meaningful population of resting text ink must be visible: \(style)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(ratio, 4.5, "Actual resting label contrast: \(style)", file: file, line: line)
+    }
+
     private func assertTVLandingVisible(_ card: XCUIElement, app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         let measuredViewport = app.descendants(matching: .any).matching(identifier: "catalogViewport").firstMatch
         XCTAssertTrue(measuredViewport.exists, "The fixture-only probe must expose the actual catalog GeometryReader viewport", file: file, line: line)
