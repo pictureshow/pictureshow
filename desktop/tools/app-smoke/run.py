@@ -88,6 +88,19 @@ def sanitized(text: str, *private_values: str) -> str:
     return text
 
 
+def selected_app_output(text: str, *private_values: str) -> str:
+    prefixes = ("SMOKE ", "Exception in thread", "Caused by:", "java.lang.", "kotlin.")
+    lines = []
+    for line in text.splitlines():
+        # These smoke diagnostics contain only stage/class/app-frame identity.
+        # Reject malformed additions instead of admitting arbitrary messages.
+        native_type = re.fullmatch(r"DESKTOP_PLAYER_FAILURE stage=(?:factory|profile|open) type=[A-Za-z0-9_.$]+", line)
+        native_frame = re.fullmatch(r"DESKTOP_PLAYER_FRAME app\.pictureshow\.desktop\.[A-Za-z0-9_.$]+:-?[0-9]+", line)
+        if line.startswith(prefixes) or native_type or native_frame:
+            lines.append(sanitized(line, *private_values))
+    return "\n".join(lines) + "\n"
+
+
 def fixture_diagnostics(api: "API", evidence: Path, error: Exception) -> None:
     """Publish enough to diagnose a probe failure, without raw logs or tokens."""
     result = {"errorType": type(error).__name__, "error": sanitized(str(error), api.token)}
@@ -622,12 +635,8 @@ def run_app(args, viewer: API, password: str, ids: dict, evidence: Path):
                     process.wait(timeout=10)
             # Logs may carry app URL tokens, passwords or native server paths. Keep
             # raw logs local; publish only expected progress and failure messages.
-            lines = []
-            for line in raw_log.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.startswith(("SMOKE ", "Exception in thread", "Caused by:", "java.lang.", "kotlin.")):
-                    line = sanitized(line, password, viewer.token)
-                    lines.append(line)
-            (evidence / "app-output.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            (evidence / "app-output.txt").write_text(selected_app_output(
+                raw_log.read_text(encoding="utf-8", errors="replace"), password, viewer.token), encoding="utf-8")
             # Keep the independent observations even when the app fails before
             # its receipt. A failure must not discard the only server evidence.
             write_json(evidence / "server-session-observations.json", {"samples": samples,

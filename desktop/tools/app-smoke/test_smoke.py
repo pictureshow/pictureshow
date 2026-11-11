@@ -148,6 +148,23 @@ class SmokeVerdictTest(unittest.TestCase):
             self.assertNotIn(secret, cleaned)
         self.assertIn("Failed", cleaned)
 
+    def test_player_failure_keeps_class_and_app_frame_without_raw_messages(self):
+        text = "\n".join([
+            "DESKTOP_PLAYER_FAILURE stage=open type=java.lang.UnsatisfiedLinkError",
+            "DESKTOP_PLAYER_FRAME app.pictureshow.desktop.NativeDesktopPlayback.open:188",
+            "DESKTOP_PLAYER_FAILURE stage=open type=java.lang.Exception https://example.invalid/private?api_key=abc",
+            "DESKTOP_PLAYER_FRAME /tmp/private/token:32",
+            "Raw mpv message password=pw",
+            "SMOKE ready https://example.invalid/private?api_key=abc",
+        ])
+        cleaned = smoke.selected_app_output(text, "pw", "abc")
+        self.assertIn("type=java.lang.UnsatisfiedLinkError", cleaned)
+        self.assertIn("NativeDesktopPlayback.open:188", cleaned)
+        self.assertEqual(1, cleaned.count("DESKTOP_PLAYER_FAILURE"))
+        self.assertEqual(1, cleaned.count("DESKTOP_PLAYER_FRAME"))
+        for private in ["example.invalid", "abc", "private", "password", "Raw mpv"]:
+            self.assertNotIn(private, cleaned)
+
     def test_encoder_observer_samples_concurrently_and_stops(self):
         sampled = threading.Event()
         def observe(_api):
