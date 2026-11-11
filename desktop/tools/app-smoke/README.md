@@ -90,7 +90,11 @@ Display receipts are included in the CI artifact. These setup wrappers refuse
 to mutate a display outside a GitHub runner.
 
 The Mac wrapper sets `PICTURESHOW_SMOKE_4K=1` for additional 3840x2160 Home,
-detail and Settings captures. The normal 1280x800 and 1920x1080 screen inventory
+detail and Settings captures, clipped to the display's usable work area so the
+OS menu bar cannot cover app controls. The paint sidecar records requested and
+actual dimensions and work-area origin. A bounded paint retry rejects blank or
+near-uniform app pixels below the menu/title strip even when semantics exist.
+The normal 1280x800 and 1920x1080 screen inventory
 remains required. This checks large-window Compose layout on an owned virtual
 display; player capture, numeric HDR and pacing keep their separate sizes and
 qualification boundaries. An undersized or half-resolution virtual mode fails

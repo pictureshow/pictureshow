@@ -27,6 +27,27 @@ internal fun fixtureSubtitleText(stream: java.io.InputStream): String {
     return bytes.toString(java.nio.charset.StandardCharsets.UTF_8)
 }
 
+/** Reject blank/near-uniform window captures even when the semantic tree exists. */
+internal fun fixtureCaptureContent(image: BufferedImage): Pair<Double, Double> {
+    val histogram=HashMap<Int,Int>()
+    var sum=0.0;var squared=0.0;var samples=0
+    // Exclude the title/menu strip: an OS menu bar cannot witness app paint.
+    for(y in minOf(64,image.height/4) until image.height step 4) for(x in 0 until image.width step 4) {
+        val rgb=image.getRGB(x,y);val r=rgb shr 16 and 255;val g=rgb shr 8 and 255;val b=rgb and 255
+        val luminance=.2126*r+.7152*g+.0722*b
+        sum+=luminance;squared+=luminance*luminance;samples++
+        val bucket=((r shr 4) shl 8) or ((g shr 4) shl 4) or (b shr 4)
+        histogram[bucket]=(histogram[bucket] ?: 0)+1
+    }
+    require(samples>0)
+    val variance=(squared/samples-(sum/samples)*(sum/samples)).coerceAtLeast(0.0)
+    val nonDominant=1.0-(histogram.values.maxOrNull() ?: 0).toDouble()/samples
+    return variance to nonDominant
+}
+
+internal fun fixtureSeekLanded(before:Double,after:Double):Boolean =
+    before.isFinite() && after.isFinite() && after-before in 9.5..10.5
+
 internal fun fixtureDeliveredCue(text: String, sourceStart: Double, sourceEnd: Double): Pair<Double, Double> {
     val lines = text.removePrefix("\uFEFF").replace("\r\n", "\n").trim().lines()
     require(lines.size == 3 && lines[0] == "1" && lines[2] == "Pictureshow original CC0 subtitle") { "Fixture delivery must contain exactly the original cue" }
@@ -87,15 +108,25 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         }
     }
     fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null, focusTag:String? = null) {
-        for((w,h) in sizes) {
+        for((requestedWidth,requestedHeight) in sizes) {
+            var w=requestedWidth;var h=requestedHeight
+            var workArea=java.awt.Rectangle()
             SwingUtilities.invokeAndWait {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
                 val wantedX=System.getenv("PICTURESHOW_SMOKE_WINDOW_X")?.toInt() ?: window.x
                 val wantedY=System.getenv("PICTURESHOW_SMOKE_WINDOW_Y")?.toInt() ?: window.y
                 val display=java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }.firstOrNull { it.contains(wantedX,wantedY) } ?: window.graphicsConfiguration.bounds
                 check(display.width>=w && display.height>=h) { "Smoke needs a display at least ${w}x${h}; got ${display.width}x${display.height}" }
-                val targetX=display.x+minOf(100,display.width-w)
-                val targetY=display.y+minOf(60,display.height-h)
+                val configuration=java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration }.first { it.bounds==display }
+                val insets=java.awt.Toolkit.getDefaultToolkit().getScreenInsets(configuration)
+                val usable=java.awt.Rectangle(display.x+insets.left,display.y+insets.top,display.width-insets.left-insets.right,display.height-insets.top-insets.bottom)
+                workArea=usable
+                // Optional 4K catalog captures use the actual work area so the OS
+                // menu bar cannot hide the app header. Required sizes stay exact.
+                if(w>=3200) { w=minOf(w,usable.width);h=minOf(h,usable.height) }
+                check(usable.width>=w && usable.height>=h) { "Requested window does not fit the visible work area: $usable" }
+                val targetX=usable.x+minOf(100,usable.width-w)
+                val targetY=usable.y+minOf(60,usable.height-h)
                 windowState.position=WindowPosition.Absolute(targetX.dp,targetY.dp)
                 windowState.size=DpSize(w.dp,h.dp)
                 // Drive the native resize on the EDT as a real window-manager
@@ -147,7 +178,22 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 SwingUtilities.invokeAndWait { requireNotNull(DesktopUiProbe.requestFocus[tag]).requestFocus() }
                 waitFor("capture focus $tag") { DesktopUiProbe.focus[tag]==true }
             }
-            val original=robot.createScreenCapture(bounds)
+            var original=robot.createScreenCapture(bounds)
+            var content=fixtureCaptureContent(original)
+            val paintDeadline=System.nanoTime()+5_000_000_000L
+            while(content.first<4.0 || content.second<.002) {
+                check(System.nanoTime()<paintDeadline) { "Near-uniform app capture $name at ${w}x${h}: variance=${content.first}, nonDominant=${content.second}" }
+                SwingUtilities.invokeAndWait { window.repaint() }
+                Thread.sleep(200)
+                original=robot.createScreenCapture(bounds)
+                content=fixtureCaptureContent(original)
+            }
+            File(screens,"$name-${w}x${h}.paint.json").writeText(buildJsonObject {
+                put("luminanceVariance",content.first);put("nonDominantFraction",content.second)
+                put("requestedWidth",requestedWidth);put("requestedHeight",requestedHeight)
+                put("actualWidth",w);put("actualHeight",h);put("paintVerified",true)
+                put("workAreaX",workArea.x);put("workAreaY",workArea.y);put("workAreaWidth",workArea.width);put("workAreaHeight",workArea.height)
+            }.toString()+"\n")
             focusTag?.let { tag -> check(DesktopUiProbe.focus[tag]==true) { "Focus moved before capture completed" } }
 
             if(name=="02b-sign-in-error" && w==1920) {
@@ -309,7 +355,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         click("pause");waitFor("converted paused"){c.state.value.playback?.let{it.ready&&it.paused}==true}
         val convertedBeforeSeek=requireNotNull(c.state.value.playback).positionSeconds
         click("seek-forward")
-        waitFor("converted seek full timeline"){c.state.value.playback?.let{it.paused&&it.positionSeconds>=convertedBeforeSeek+9.5}==true}
+        waitFor("converted seek full timeline"){c.state.value.playback?.let{it.paused&&fixtureSeekLanded(convertedBeforeSeek,it.positionSeconds)}==true}
         val convertedAfterSeek=requireNotNull(c.state.value.playback).positionSeconds
         click("pause");waitFor("converted resumed"){c.state.value.playback?.let{!it.paused&&it.positionSeconds>=convertedAfterSeek+.5}==true}
         Thread.sleep(2000)
