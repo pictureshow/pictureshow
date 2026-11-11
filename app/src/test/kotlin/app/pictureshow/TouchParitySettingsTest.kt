@@ -137,7 +137,7 @@ class TouchParitySettingsTest {
         settings()
         val toggle = compose.onNodeWithTag("touch:settings:conversion-notice").performScrollTo().getBoundsInRoot()
         val passthrough = compose.onNodeWithTag("touch:settings:passthrough").getBoundsInRoot()
-        val next = compose.onNodeWithText("Font size").getBoundsInRoot()
+        val next = compose.onNodeWithText("Subtitle size").getBoundsInRoot()
         assertTrue(passthrough.bottom <= toggle.top, "the notice follows passthrough")
         assertTrue(toggle.bottom <= next.top, "no other setting comes between them")
     }
