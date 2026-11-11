@@ -66,6 +66,11 @@ PY
   -I"$prefix/include" -L"$prefix/lib" -lmpv -Wl,-rpath,"$prefix/lib" \
   -framework Cocoa -framework OpenGL -framework Metal -framework QuartzCore -framework IOSurface \
   -o "$build/libpictureshow_layer.dylib"
+ clang -O2 -fobjc-arc desktop/tools/app-smoke/macos-preflight.m \
+  -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics \
+  -o "$build/macos-native-preflight"
+ "$build/macos-native-preflight" "$build/libpictureshow_layer.dylib" \
+  > desktop-evidence/native-build/macos-preflight.json
 else
  fetch https://github.com/mpv-player/mpv/archive/refs/tags/v0.41.0.tar.gz ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209 mpv.tar.gz
  meson setup "$build/mpv-build" "$build/source/mpv-0.41.0" --prefix="$prefix" --auto-features=disabled \
