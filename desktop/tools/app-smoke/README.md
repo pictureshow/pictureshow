@@ -76,7 +76,7 @@ The separate numeric HDR and pacing gates retain their existing entry points.
 
 Hosted screenshots require a display large enough for the entire requested
 window. Linux uses its owned 1920x1080 Xvfb at origin zero. The hosted-only Mac
-wrapper creates an additional unmirrored 2048x1280 virtual display, verifies its
+wrapper creates an additional unmirrored 3840x2160 virtual display, verifies its
 reported bounds, positions the app there, and stops the helper after the smoke
 even on failure. Its lease is at most 900 seconds; existing HDR helper calls keep
 their 1280x720 size and 120-second maximum. Existing physical displays retain
@@ -85,6 +85,13 @@ modes, tests a mode of at least 1920x1080, applies it dynamically without regist
 writes, then verifies the actual mode and records its origin and system DPI.
 Display receipts are included in the CI artifact. These setup wrappers refuse
 to mutate a display outside a GitHub runner.
+
+The Mac wrapper sets `PICTURESHOW_SMOKE_4K=1` for additional 3840x2160 Home,
+detail and Settings captures. The normal 1280x800 and 1920x1080 screen inventory
+remains required. This checks large-window Compose layout on an owned virtual
+display; player capture, numeric HDR and pacing keep their separate sizes and
+qualification boundaries. An undersized or half-resolution virtual mode fails
+before the app launches.
 
 The GitHub `Desktop app` workflow runs the JVM/vector gate and application smoke
 on free standard Linux, macOS and Windows hosted runners, with a separate Ubuntu

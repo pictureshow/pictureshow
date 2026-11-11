@@ -12,8 +12,8 @@ import time
 def smoke_origin(receipt):
     if (receipt.get("phase") != "virtual" or not receipt.get("online") or
             receipt.get("mirrored") or receipt.get("main") or
-            receipt.get("width", 0) < 2048 or receipt.get("height", 0) < 1280):
-        raise RuntimeError("Smoke needs its own online, unmirrored 2048x1280 virtual display")
+            receipt.get("width", 0) < 3840 or receipt.get("height", 0) < 2160):
+        raise RuntimeError("Smoke needs its own online, unmirrored 3840x2160 virtual display")
     return int(receipt["x"]), int(receipt["y"])
 
 
@@ -26,7 +26,7 @@ def main():
     subprocess.run(["clang", "-O2", "-fobjc-arc", "desktop/tools/hdr/macos_virtual.m",
                     "-framework", "Cocoa", "-o", str(helper)], check=True)
     with (evidence / "virtual.jsonl").open("w") as output, (evidence / "helper-errors.log").open("w") as errors:
-        process = subprocess.Popen([str(helper), "--create", "0", "900", "2048", "1280"],
+        process = subprocess.Popen([str(helper), "--create", "0", "900", "3840", "2160"],
                                    stdout=output, stderr=errors)
         try:
             deadline = time.monotonic() + 20
@@ -47,7 +47,8 @@ def main():
             if not receipt:
                 raise RuntimeError("Virtual display did not become ready within 20 seconds")
             x, y = smoke_origin(receipt)
-            env = dict(os.environ, PICTURESHOW_SMOKE_WINDOW_X=str(x), PICTURESHOW_SMOKE_WINDOW_Y=str(y))
+            env = dict(os.environ, PICTURESHOW_SMOKE_WINDOW_X=str(x), PICTURESHOW_SMOKE_WINDOW_Y=str(y),
+                       PICTURESHOW_SMOKE_4K="1")
             (evidence / "smoke-screen.json").write_text(json.dumps(receipt, indent=2) + "\n")
             subprocess.run([sys.executable, "desktop/tools/app-smoke/run.py", *sys.argv[1:]],
                            env=env, check=True, timeout=840)

@@ -22,13 +22,14 @@ display_spec.loader.exec_module(display)
 class DisplayBoundsTest(unittest.TestCase):
     def receipt(self):
         return {"phase": "virtual", "online": 1, "mirrored": 0, "main": 0,
-                "width": 2048, "height": 1280, "x": 1074, "y": -30}
+                "width": 3840, "height": 2160, "x": 1074, "y": -30}
 
     def test_virtual_origin_is_preserved(self):
         self.assertEqual((1074, -30), display.smoke_origin(self.receipt()))
 
     def test_clipped_or_physical_display_is_rejected(self):
-        for field, value in [("width", 1024), ("height", 768), ("main", 1),
+        for field, value in [("width", 1024), ("height", 768), ("width", 2048),
+                             ("height", 1280), ("width", 3839), ("height", 2159), ("main", 1),
                              ("mirrored", 1), ("online", 0), ("phase", "before")]:
             with self.subTest(field=field):
                 receipt = self.receipt()
