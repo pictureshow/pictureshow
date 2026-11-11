@@ -61,6 +61,7 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "catalog-announcement" -> JsonPrimitive(catalogAnnouncement(Json.decodeFromJsonElement(input.getValue("item"))))
                     "detail-play-item" -> detailPlayItem(
                         Json.decodeFromJsonElement(input.getValue("item")),
                         Json.decodeFromJsonElement(input.getValue("nextUp")),
