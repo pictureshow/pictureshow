@@ -6,8 +6,8 @@ package app.pictureshow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -36,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,28 +48,34 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick as semanticClick
 import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.requestFocus as semanticRequestFocus
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.RadioButton
+import androidx.tv.material3.RadioButtonDefaults
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
-import app.pictureshow.core.hasControlSelection
 
 /** One focus target per row. The trailing control is a state indicator, never a second button. */
 @Composable
@@ -85,11 +91,8 @@ internal fun TvSettingsToggleRow(
         title,
         supportingText,
         enabled = enabled,
-        modifier = modifier.semantics {
-            role = Role.Switch
-            toggleableState = ToggleableState(checked)
-            stateDescription = if (checked) "On" else "Off"
-        },
+        modifier = modifier,
+        checked = checked,
         onClick = { onToggle(!checked) },
         trailing = { Switch(checked, onCheckedChange = null, enabled = enabled, modifier = Modifier.clearAndSetSemantics {}) }
     )
@@ -101,9 +104,34 @@ internal fun TvSettingsActionRow(
     modifier: Modifier = Modifier,
     supportingText: String? = null,
     enabled: Boolean = true,
+    navigation: Boolean = false,
+    summary: String? = null,
     onClick: () -> Unit
 ) {
-    TvSettingsRow(title, supportingText, modifier, enabled = enabled, onClick = onClick)
+    TvSettingsRow(
+        title,
+        supportingText ?: summary,
+        modifier,
+        enabled = enabled,
+        onClick = onClick,
+        trailing = if (navigation) ({ TvSettingsChevron() }) else null
+    )
+}
+
+/** Starts on the same 16dp inner text edge as a settings row. */
+@Composable
+internal fun TvSettingsSectionHeader(title: String, modifier: Modifier = Modifier, supportingText: String? = null) {
+    Column(modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+        Text(
+            title,
+            Modifier.semantics {
+                heading()
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleSmall
+        )
+        supportingText?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
+    }
 }
 
 /** OK opens all options; Left/Right are optional shortcuts that also work in a long main-page list. */
@@ -116,17 +144,17 @@ internal fun <T> TvSettingsChoiceRow(
     modifier: Modifier = Modifier,
     supportingText: String? = null,
     enabled: Boolean = true,
+    optionSupportingText: ((T) -> String?)? = null,
     onSelect: (T) -> Unit
 ) {
     require(values.isNotEmpty())
     val opener = remember { FocusRequester() }
     var picker by remember { mutableStateOf(false) }
     var restoreOpener by remember { mutableStateOf(false) }
-    TvSettingsValueRow(
+    TvSettingsRow(
         title,
-        label(value),
-        supportingText = supportingText,
-        modifier = modifier.focusRequester(opener).semantics { stateDescription = label(value) }.onPreviewKeyEvent { event ->
+        supportingText,
+        modifier = modifier.focusRequester(opener).onPreviewKeyEvent { event ->
             if (!enabled || event.key !in listOf(Key.DirectionLeft, Key.DirectionRight)) {
                 false
             } else {
@@ -138,14 +166,31 @@ internal fun <T> TvSettingsChoiceRow(
             }
         },
         enabled = enabled,
-        onClick = { picker = true }
-
+        valueLabel = label(value),
+        onClick = { picker = true },
+        trailing = {
+            Row(
+                Modifier.widthIn(max = 160.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    label(value),
+                    Modifier.weight(1f, fill = false),
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                TvSettingsChevron()
+            }
+        }
     )
     if (picker) {
         TvSettingsChoicePicker(title, value, values, label, onSelect, onClose = {
             picker = false
             restoreOpener = true
-        })
+        }, supportingText = optionSupportingText)
     }
     LaunchedEffect(picker, restoreOpener) {
         if (!picker && restoreOpener) {
@@ -166,7 +211,7 @@ internal fun TvSettingsValueRow(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    TvSettingsRow(title, supportingText, modifier, enabled = enabled, onClick = onClick, trailing = {
+    TvSettingsRow(title, supportingText, modifier, enabled = enabled, valueLabel = value, onClick = onClick, trailing = {
         Row(
             Modifier.widthIn(max = 160.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -215,7 +260,17 @@ internal fun <T> TvSettingsChoicePicker(
                     onSelect(option)
                     onClose()
                 },
-                trailing = { TvSettingsRadioIndicator(option == value) }
+                trailing = {
+                    RadioButton(
+                        option == value,
+                        onClick = null,
+                        modifier = Modifier.testTag("tv-settings:radio:$index").clearAndSetSemantics {},
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = LocalContentColor.current,
+                            unselectedColor = LocalContentColor.current
+                        )
+                    )
+                }
             )
         }
     }
@@ -228,57 +283,92 @@ internal fun TvSettingsRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean? = null,
+    checked: Boolean? = null,
+    valueLabel: String? = null,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
-    var focused by remember { mutableStateOf(false) }
-    val supportingColor = if (focused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
-    if (!hasControlSelection(selected)) {
-        // tv-material1.1 ListItem always adds Selected semantics. Commands and value openers
-        // use its non-selectable Surface primitive, retaining the same shared row layout.
-        val shape = RoundedCornerShape(8.dp)
-        androidx.tv.material3.Surface(
-            onClick = onClick,
-            modifier = modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .onFocusChanged { focused = it.isFocused }
-                .semantics(mergeDescendants = true) { role = Role.Button }
-                .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, shape) else Modifier),
-            enabled = enabled,
-            interactionSource = interaction,
-            shape = ClickableSurfaceDefaults.shape(shape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-            colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                leading?.invoke()
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.bodyLarge)
-                    supportingText?.let { Text(it, color = LocalContentColor.current, style = MaterialTheme.typography.bodyMedium) }
-                }
-                trailing?.invoke()
-            }
+    val isFocused by interaction.collectIsFocusedAsState()
+    val rowFocus = remember { FocusRequester() }
+    val supportingColor = if (isFocused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    // ListItem's selectable Surface always adds Selected, including when false.
+    // Only a radio option is selectable: switches must expose their real checked
+    // state and ordinary choices/actions must never become unchecked checkboxes.
+    val accessibilityModifier = Modifier.clearAndSetSemantics {
+        this[SemanticsProperties.Text] = listOfNotNull(title, valueLabel, supportingText).map { AnnotatedString(it) }
+        focused = isFocused
+        role = if (checked != null) Role.Switch else Role.Button
+        if (checked != null) {
+            toggleableState = ToggleableState(checked)
+            stateDescription = if (checked) "On" else "Off"
+        } else if (valueLabel != null) {
+            stateDescription = valueLabel
         }
-        return
+        if (enabled) {
+            semanticClick {
+                onClick()
+                true
+            }
+        } else {
+            disabled()
+        }
+        semanticRequestFocus {
+            rowFocus.requestFocus()
+            true
+        }
     }
+    // Clearing semantics only hides descendant LayoutNodes. ListItem prepends
+    // Selected to its own node, so the truthful non-radio semantics must live on
+    // a separate parent. Native key handling and the single focus target remain
+    // on the child ListItem, including focusable disabled rows.
+    if (selected == null) {
+        Box(modifier.then(accessibilityModifier).fillMaxWidth()) {
+            TvSettingsNativeRow(
+                title, supportingText,
+                Modifier.focusRequester(
+                    rowFocus
+                ),
+                enabled, false, supportingColor, interaction, onClick, trailing, leading
+            )
+        }
+    } else {
+        TvSettingsNativeRow(title, supportingText, modifier, enabled, selected, supportingColor, interaction, onClick, trailing, leading)
+    }
+}
+
+@Composable
+private fun TvSettingsNativeRow(
+    title: String,
+    supportingText: String?,
+    modifier: Modifier,
+    enabled: Boolean,
+    selected: Boolean,
+    supportingColor: Color,
+    interaction: MutableInteractionSource,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)?,
+    leading: (@Composable () -> Unit)?
+) {
     ListItem(
-        selected == true, onClick,
-        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
+        selected, onClick,
+        // ListItem adds 12dp on each vertical edge. A centred 32dp minimum
+        // headline gives a 56dp one-line row even when the font's glyph box is
+        // shorter than its nominal line height, without top-aligning the text.
+        headlineContent = {
+            Box(Modifier.heightIn(min = if (supportingText == null) 32.dp else 0.dp), contentAlignment = Alignment.Center) {
+                Text(title, Modifier.testTag("tv-settings:label:$title"), style = MaterialTheme.typography.bodyLarge)
+            }
+        },
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
-        leadingContent = leading?.let { content ->
-            { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
-        },
+        leadingContent = leading,
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).onFocusChanged { focused = it.isFocused },
+        modifier = modifier.fillMaxWidth(),
         enabled = enabled,
         scale = ListItemDefaults.scale(focusedScale = 1f),
         interactionSource = interaction
@@ -333,12 +423,12 @@ internal fun TvSettingsPanel(
             ) {
                 Text(
                     title,
-                    Modifier.padding(horizontal = 24.dp, vertical = 20.dp).semantics {
+                    Modifier.padding(horizontal = 28.dp, vertical = 20.dp).semantics {
                         heading()
                     },
                     style = MaterialTheme.typography.headlineSmall
                 )
-                preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) { it() } }
+                preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
                 if (scrollContent) {
                     TvSettingsList(Modifier.weight(1f), content)
                 } else {
@@ -361,7 +451,7 @@ internal fun TvSettingsPanel(
                         }
                     }
                 }
-                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() } }
+                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp)) { it() } }
             }
         }
         LaunchedEffect(firstFocus) {
@@ -384,15 +474,33 @@ internal fun TvSettingsList(modifier: Modifier = Modifier, content: @Composable 
         )
         if (scroll.canScrollBackward) {
             Box(
-                Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter).testTag("tv-settings:fade-top")
+                Modifier.fillMaxWidth().height(32.dp).align(Alignment.TopCenter).testTag("tv-settings:fade-top")
                     .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
             )
         }
         if (scroll.canScrollForward) {
             Box(
-                Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
+                Modifier.fillMaxWidth().height(40.dp).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
                     .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
             )
+        }
+        if (scroll.canScrollBackward || scroll.canScrollForward) {
+            val indicator = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f)
+            Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 4.dp, top = 8.dp, bottom = 8.dp)) {
+                Canvas(Modifier.width(2.dp).fillMaxHeight().testTag("tv-settings:scroll-indicator")) {
+                    val viewport = size.height
+                    val thumb = (viewport * viewport / (viewport + scroll.maxValue)).coerceAtLeast(32.dp.toPx()).coerceAtMost(viewport)
+                    val top = if (scroll.maxValue > 0) (viewport - thumb) * scroll.value / scroll.maxValue else 0f
+                    drawRoundRect(
+                        indicator,
+                        topLeft = Offset(0f, top),
+                        size = androidx.compose.ui.geometry.Size(size.width, thumb),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                            size.width / 2
+                        )
+                    )
+                }
+            }
         }
     }
 }

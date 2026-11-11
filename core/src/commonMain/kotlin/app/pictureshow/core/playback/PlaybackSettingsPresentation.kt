@@ -5,6 +5,36 @@ package app.pictureshow.core.playback
 
 /** Viewer-facing labels; stored protocol and enum identifiers never become UI choices. */
 object PlaybackSettingsPresentation {
+    private val passthroughOrder = listOf(
+        PassthroughEncoding.AC3,
+        PassthroughEncoding.EAC3,
+        PassthroughEncoding.EAC3_JOC,
+        PassthroughEncoding.TRUEHD,
+        PassthroughEncoding.DTS,
+        PassthroughEncoding.DTS_HD
+    )
+
+    fun canConfigurePassthrough(passthrough: Boolean, downmix: Boolean, supported: Boolean) = passthrough && !downmix && supported
+
+    /** The saved permission and current receiver detection are different facts. */
+    fun passthroughSummary(
+        enabled: Boolean,
+        supported: Set<PassthroughEncoding>,
+        checking: Boolean = false,
+        downmix: Boolean = false
+    ): String {
+        val permission = if (enabled) "On when a compatible receiver is connected." else "Off."
+        val capability = when {
+            checking -> "Checking connected receiver support."
+            supported.isEmpty() -> if (enabled) "None detected now." else "No compatible receiver detected now."
+            else -> "Detected now: ${passthroughOrder.filter {
+                it in supported
+            }.joinToString(", ", transform = ::passthroughLabel)}."
+        }
+        val output = if (enabled && downmix) " Downmix is on, so passthrough is not used." else ""
+        return "$permission$output $capability"
+    }
+
     fun subtitleSizeLabel(value: SubtitleSize) = subtitleValueLabel(value.name)
     fun subtitleBackgroundLabel(value: SubtitleBackground) = subtitleValueLabel(value.name)
     fun subtitleValueLabel(value: String) = when (value) {
@@ -34,12 +64,16 @@ object PlaybackSettingsPresentation {
         CapabilityOverride.Disable -> if (hdr) "Off (convert to SDR)" else "Off"
     }
     fun capabilityConsequence(value: CapabilityOverride, hdr: Boolean) = when (value) {
-        CapabilityOverride.Force -> "Only if your TV supports it but Automatic gets it wrong. Video may fail to play."
+        CapabilityOverride.Force -> "Only if your device supports it but Automatic gets it wrong. Video may fail to play."
         CapabilityOverride.Disable -> if (hdr) {
             "Converts HDR video to SDR. This may require video conversion on your server."
         } else {
             "Uses another supported format or converts the video. This may require conversion on your server."
         }
-        CapabilityOverride.Detected -> "Uses the formats your TV and player support. HDR switches automatically with the video."
+        CapabilityOverride.Detected -> if (hdr) {
+            "Plays HDR when this device and display support it."
+        } else {
+            "Plays Dolby Vision when this device and display support it."
+        }
     }
 }

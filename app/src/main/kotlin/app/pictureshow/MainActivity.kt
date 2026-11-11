@@ -94,6 +94,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.playback.PassthroughEncoding
 import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
@@ -919,10 +920,12 @@ internal fun Pictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val settingsContext = LocalContext.current
                 var accepted by remember { mutableStateOf("Checking…") }
+                var supportedPassthrough by remember { mutableStateOf(emptySet<PassthroughEncoding>()) }
                 DisposableEffect(Unit) {
                     val probe = DeviceCapabilityProbe(settingsContext)
                     fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
-                        accepted = passthroughEncodingLabels(capabilities.audioOutput.passthrough)
+                        supportedPassthrough = capabilities.audioOutput.passthrough
+                        accepted = passthroughEncodingLabels(supportedPassthrough)
                     }
                     update(probe.snapshot())
                     probe.start(::update)
@@ -937,7 +940,8 @@ internal fun Pictureshow(
                     onBack = { nav.popBackStack() },
                     onThisTv = { nav.navigate("this-tv") },
                     onAbout = { nav.navigate("about") },
-                    onSupport = { nav.navigate("supporter") }
+                    onSupport = { nav.navigate("supporter") },
+                    supportedPassthrough = supportedPassthrough
                 )
             }
         }

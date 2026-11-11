@@ -3,26 +3,32 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.pictureshow.core.playback.PlaybackQualityPresentation
 
 /** Both presentations show all choices; opening the menu never changes the request. */
@@ -50,31 +56,87 @@ internal fun PlayerQualityMenu(
         )
         return
     }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Quality") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()).selectableGroup().testTag("player:quality-menu")) {
-                PlaybackQualityPresentation.choices.forEach { choice ->
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                            .selectable(selected = value == choice, role = Role.RadioButton, onClick = {
-                                onSelect(choice)
-                                onClose()
-                            }).testTag("player:quality-choice:${choice ?: "auto"}").padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BoxWithConstraints {
+            val compact = maxHeight < 480.dp
+            Box(Modifier.padding(horizontal = 24.dp, vertical = if (compact) 16.dp else 24.dp)) {
+                Surface(
+                    modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth().semantics { paneTitle = "Quality" },
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 640.dp)
+                            .padding(horizontal = 24.dp, vertical = if (compact) 12.dp else 24.dp)
                     ) {
-                        RadioButton(selected = value == choice, onClick = null)
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(PlaybackQualityPresentation.choiceLabel(choice), style = MaterialTheme.typography.bodyLarge)
-                            supporting(choice)?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Quality",
+                            Modifier.semantics { heading() }.padding(bottom = if (compact) 8.dp else 12.dp),
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Box(Modifier.weight(1f, fill = false)) {
+                            Column(
+                                Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                                    .selectableGroup().testTag("player:quality-menu")
+                            ) {
+                                if (compact) {
+                                    Text(
+                                        "Scroll for more options",
+                                        modifier = Modifier.testTag("player:quality-scroll-hint").padding(bottom = 8.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                PlaybackQualityPresentation.choices.forEach { choice ->
+                                    val note = supporting(choice)
+                                    TouchRadioRow(
+                                        selected = value == choice,
+                                        modifier = Modifier.heightIn(min = 56.dp)
+                                            .testTag("player:quality-choice:${choice ?: "auto"}").padding(vertical = 4.dp),
+                                        onClick = {
+                                            onSelect(choice)
+                                            onClose()
+                                        },
+                                        alignToFirstLine = note != null
+                                    ) {
+                                        Column(
+                                            Modifier.weight(1f).then(
+                                                if (note !=
+                                                    null
+                                                ) {
+                                                    Modifier.alignBy(TouchRadioLabelCenter)
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                        ) {
+                                            Text(
+                                                PlaybackQualityPresentation.choiceLabel(choice),
+                                                modifier = Modifier.testTag(
+                                                    "player:quality-label:${choice ?: "auto"}"
+                                                ).touchRadioLabelCenter(),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            note?.let {
+                                                Text(
+                                                    it,
+                                                    modifier = Modifier.padding(top = 4.dp),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
                         }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Cancel") } }
-    )
+        }
+    }
 }

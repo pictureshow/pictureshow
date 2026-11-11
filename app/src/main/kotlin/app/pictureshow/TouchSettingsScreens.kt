@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
+import app.pictureshow.core.playback.PlaybackSettingsPresentation
 
 @Composable
 internal fun TouchSettings(
@@ -55,6 +57,7 @@ internal fun TouchSettings(
     onRemote: () -> Unit = {},
     onThisDevice: () -> Unit = {},
     onDownloads: () -> Unit = {},
+    supportedPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet(),
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
     onCastEnabled: (Boolean) -> Unit = {},
@@ -95,14 +98,21 @@ internal fun TouchSettings(
             "Changes are saved immediately and apply the next time you open the player."
         ) {
             TouchChoice(
-                "Max streaming bitrate",
+                "Home limit",
                 local.bitrateMbps,
                 PlaybackPreferences.BITRATES,
-                { it?.let { value -> "$value Mbps" } ?: "Auto (200 Mbps)" }
+                ::bitrateLabel,
+                supporting = "Shortcut to Network quality. On the same network as your server; a lower limit may convert the video.",
+                optionSupporting = ::bitrateOptionSupporting
             ) { value -> onLocal { it.copy(bitrateMbps = value) } }
             TouchSwitchRow(
                 "Audio passthrough",
-                "Audio output accepts: $acceptedAudio",
+                PlaybackSettingsPresentation.passthroughSummary(
+                    local.passthrough,
+                    supportedPassthrough,
+                    acceptedAudio == "Checking…",
+                    downmix = local.tuning.downmix
+                ),
                 local.passthrough,
                 "touch:settings:passthrough"
             ) { checked -> onLocal { it.copy(passthrough = checked) } }
@@ -115,10 +125,22 @@ internal fun TouchSettings(
             TouchChoice("Music quality", local.musicQuality, musicQualityOptions.map { it.first }, ::musicQualityLabel) { value ->
                 onLocal { it.copy(musicQuality = value) }
             }
-            TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
+            TouchChoice(
+                "Font size",
+                local.subtitleSize,
+                SubtitleSize.entries,
+                { settingLabel(it.name) },
+                supporting = "Shortcut to Subtitle appearance, including its live preview."
+            ) { value ->
                 onLocal { it.copy(subtitleSize = value) }
             }
-            TouchChoice("Subtitle background", local.subtitleBackground, SubtitleBackground.entries, { settingLabel(it.name) }) { value ->
+            TouchChoice(
+                "Background",
+                local.subtitleBackground,
+                SubtitleBackground.entries,
+                { settingLabel(it.name) },
+                supporting = "Shortcut to Subtitle appearance, including its live preview."
+            ) { value ->
                 onLocal { it.copy(subtitleBackground = value) }
             }
             TouchHelper("Default follows Android caption settings. Image subtitles keep their appearance from the file.")
@@ -170,7 +192,9 @@ internal fun TouchSettings(
             TouchNavRow("About Pictureshow", onClick = onAbout)
         }
     }
-    advanced?.let { group -> AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }) }
+    advanced?.let { group ->
+        AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }, supportedPassthrough = supportedPassthrough)
+    }
 }
 
 /** A heading owns the gap above it and the rows under it, so a row's spacing never comes from the page's column. */
@@ -251,6 +275,55 @@ private fun settingLabel(value: String): String = when (value) {
     else -> value
 }
 
+/** A group dialog hosts its picker in place; main-page choices still use one native AlertDialog. */
+internal data class TouchChoicePanel(
+    val title: String,
+    val selectedIndex: Int,
+    val labels: List<String>,
+    val notes: List<String?>,
+    val enabled: Boolean,
+    val onSelect: (Int) -> Unit
+)
+
+internal val LocalTouchChoicePanel = staticCompositionLocalOf<((TouchChoicePanel) -> Unit)?> { null }
+
+@Composable
+internal fun TouchChoiceOptions(panel: TouchChoicePanel, onSelected: (Int) -> Unit) {
+    val shortWindow = isShortTouchWindow()
+    LazyColumn {
+        item(key = "scroll-hint") {
+            if (shortWindow) Text("Scroll for more options", style = MaterialTheme.typography.bodySmall)
+        }
+        items(panel.labels.size) { index ->
+            val note = panel.notes[index]
+            TouchRadioRow(
+                index == panel.selectedIndex,
+                modifier = Modifier.testTag("touch:choice-option:$index"),
+                enabled = panel.enabled,
+                onClick = { onSelected(index) },
+                alignToFirstLine = note != null
+            ) {
+                Column(Modifier.weight(1f).then(if (note != null) Modifier.alignBy(TouchRadioLabelCenter) else Modifier)) {
+                    Text(
+                        panel.labels[index],
+                        modifier = Modifier.testTag("touch:choice-label:$index").touchRadioLabelCenter(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    note?.let {
+                        Text(
+                            it,
+                            modifier = Modifier.padding(top = 4.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun <T> TouchChoice(
     title: String,
@@ -259,31 +332,29 @@ internal fun <T> TouchChoice(
     label: (T) -> String,
     enabled: Boolean = true,
     supporting: String? = null,
+    optionSupporting: ((T) -> String?)? = null,
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    Column {
-        TouchValueRow(title, label(value), enabled) { open = true }
-        supporting?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+    val host = LocalTouchChoicePanel.current
+    fun panel() = TouchChoicePanel(
+        title,
+        values.indexOf(value),
+        values.map(label),
+        values.map { optionSupporting?.invoke(it) },
+        enabled
+    ) { index -> onSelect(values[index]) }
+    TouchValueRow(title, label(value), enabled, supporting) {
+        if (host != null) host(panel()) else open = true
     }
     if (open) {
-        val shortWindow = isShortTouchWindow()
         AlertDialog(
             onDismissRequest = { open = false },
             title = { Text(title) },
             text = {
-                LazyColumn {
-                    item(key = "scroll-hint") {
-                        if (shortWindow) Text("Scroll for more options", style = MaterialTheme.typography.bodySmall)
-                    }
-                    items(values) { option ->
-                        TouchRadioRow(option == value, enabled = enabled, onClick = {
-                            onSelect(option)
-                            open = false
-                        }) { Text(label(option), modifier = Modifier.weight(1f)) }
-                    }
+                TouchChoiceOptions(panel()) { index ->
+                    onSelect(values[index])
+                    open = false
                 }
             },
             confirmButton = { TextButton(onClick = { open = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } }

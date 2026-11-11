@@ -22,9 +22,20 @@ class SettingsPresentationVectorsTest {
         for (element in suite.getValue("cases").jsonArray) {
             val case = element.jsonObject
             val input = case.getValue("input").jsonObject
-            val value = input.getValue("value").jsonPrimitive.content
+            val value = input["value"]?.jsonPrimitive?.content.orEmpty()
             val presentation = PlaybackSettingsPresentation
-            val actual = when (case.getValue("operation").jsonPrimitive.content) {
+            val actual: Any = when (case.getValue("operation").jsonPrimitive.content) {
+                "passthrough-configurable" -> presentation.canConfigurePassthrough(
+                    input.getValue("passthrough").jsonPrimitive.boolean,
+                    input.getValue("downmix").jsonPrimitive.boolean,
+                    input.getValue("supported").jsonPrimitive.boolean
+                )
+                "passthrough-summary" -> presentation.passthroughSummary(
+                    input.getValue("enabled").jsonPrimitive.boolean,
+                    input.getValue("supported").jsonArray.map { PassthroughEncoding.valueOf(it.jsonPrimitive.content) }.toSet(),
+                    input.getValue("checking").jsonPrimitive.boolean,
+                    input.getValue("downmix").jsonPrimitive.boolean
+                )
                 "subtitle-label" -> presentation.subtitleValueLabel(value)
                 "credits-label" -> presentation.postCreditsLabel(PostCredits.valueOf(value))
                 "channel-label" -> presentation.audioChannelLabel(input.getValue("value").takeUnless { it == JsonNull }?.jsonPrimitive?.int)
@@ -39,7 +50,12 @@ class SettingsPresentationVectorsTest {
                 )
                 else -> error("Unhandled settings presentation operation")
             }
-            assertEquals(case.getValue("expected"), JsonPrimitive(actual), case.getValue("id").jsonPrimitive.content)
+            val primitive = when (actual) {
+                is Boolean -> JsonPrimitive(actual)
+                is String -> JsonPrimitive(actual)
+                else -> error("Unsupported presentation result")
+            }
+            assertEquals(case.getValue("expected"), primitive, case.getValue("id").jsonPrimitive.content)
         }
     }
 }

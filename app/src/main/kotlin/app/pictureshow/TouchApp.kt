@@ -559,10 +559,12 @@ internal fun TouchPictureshow(
                     val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
                     val screen by vm.state.collectAsStateWithLifecycle()
                     var accepted by remember { mutableStateOf("Checking…") }
+                    var supportedPassthrough by remember { mutableStateOf(emptySet<app.pictureshow.core.playback.PassthroughEncoding>()) }
                     DisposableEffect(Unit) {
                         val probe = DeviceCapabilityProbe(context)
                         fun update(value: app.pictureshow.core.playback.DeviceCapabilities) {
                             accepted = passthroughEncodingLabels(value.audioOutput.passthrough)
+                            supportedPassthrough = value.audioOutput.passthrough
                         }
                         update(probe.snapshot())
                         probe.start(::update)
@@ -587,6 +589,7 @@ internal fun TouchPictureshow(
                         onRemote = { nav.navigate("remote") },
                         onThisDevice = { nav.navigate("this-device") },
                         onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                        supportedPassthrough = supportedPassthrough,
                         castEnabled = castSwitchState(castState.capability, castStored),
                         onCastEnabled = cast::setEnabled,
                         onUpdateServices = settingsContext::openPlayServicesListing.takeIf {

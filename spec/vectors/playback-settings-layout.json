@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-settings-layout",
+  "cases": [
+    {
+      "id": "playback-settings-layout.subtitle-landscape-360-font1.3",
+      "operation": "settings-first-row-visible",
+      "input": {
+        "widthDp": 800,
+        "heightDp": 360,
+        "fontScale": 1.3,
+        "group": "Subtitle appearance",
+        "currentValue": "Default",
+        "secondRowTitle": "Text color",
+        "surface": "touch"
+      },
+      "expected": {
+        "firstRowFullyVisible": true,
+        "currentValueFullyVisible": true,
+        "doneFullyVisible": true,
+        "secondRowTitleVisible": true,
+        "previewLabelsCentered": true,
+        "maximumDialogWidthDp": 600,
+        "choicePickerWindowCount": 1,
+        "previewBesideChoices": true,
+        "previewHeightDp": 64,
+        "maximumPreviewHeightOffsetDp": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.choice-consequence-target",
+      "operation": "settings-choice-target",
+      "input": {
+        "title": "Quality",
+        "value": "Auto",
+        "choices": [
+          "Auto",
+          "20 Mbps"
+        ],
+        "consequence": "A lower limit may convert the video."
+      },
+      "expected": {
+        "consequenceInsideClickTarget": true
+      }
+    },
+    {
+      "id": "playback-settings-layout.radio-first-line-font1.3",
+      "operation": "settings-radio-first-line",
+      "input": {
+        "title": "Home limit",
+        "fontScale": 1.3,
+        "choices": [
+          "Auto",
+          "20 Mbps"
+        ],
+        "notes": [
+          "Up to 200 Mbps; this is a ceiling, not unlimited.",
+          null
+        ]
+      },
+      "expected": {
+        "maximumCenterOffsetDp": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.choice-returns-to-scrolled-opener",
+      "operation": "settings-choice-scroll-return",
+      "input": {
+        "group": "Subtitle appearance",
+        "fontScale": 1.3,
+        "scrollTargetTitle": "Image subtitle opacity"
+      },
+      "expected": {
+        "choicePickerWindowCount": 1,
+        "maximumScrollReturnOffsetDp": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.allocated-portrait-supersedes-stale-window-hint",
+      "operation": "settings-allocated-viewport-wins",
+      "input": {
+        "widthDp": 411,
+        "heightDp": 842,
+        "fontScale": 1.3,
+        "group": "Subtitle appearance",
+        "currentValue": "Default",
+        "outerHintSequence": [
+          {
+            "widthDp": 800,
+            "heightDp": 360
+          },
+          {
+            "widthDp": 411,
+            "heightDp": 842
+          },
+          {
+            "widthDp": 800,
+            "heightDp": 360
+          }
+        ]
+      },
+      "expected": {
+        "previewAboveChoices": true,
+        "listFillsContentWidth": true,
+        "maximumHorizontalEdgeOffsetDp": 1,
+        "firstRowFullyVisible": true,
+        "currentValueFullyVisible": true,
+        "doneFullyVisible": true,
+        "previewHeightDp": 108,
+        "maximumPreviewHeightOffsetDp": 1
+      }
+    },
+    {
+      "id": "playback-settings-layout.player-quality-landscape-overflow-font1.3",
+      "operation": "player-quality-short-window-overflow",
+      "input": {
+        "widthDp": 720,
+        "heightDp": 360,
+        "fontScale": 1.3,
+        "automaticContext": "Automatic: Home limit 200 Mbps",
+        "selectMbps": 4,
+        "reductionNotice": "Quality limit reduced to 20 Mbps to avoid buffering.",
+        "platformDefaultDialogWidthDp": 320
+      },
+      "expected": {
+        "overflowHint": "Scroll for more options",
+        "selectionCountOnOpen": 0,
+        "selectionCountAfterChoice": 1,
+        "closeCountAfterChoice": 1,
+        "minimumContentWidthDp": 480
+      }
+    }
+  ]
+}

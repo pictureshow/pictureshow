@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -32,6 +33,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -85,6 +88,7 @@ class TvSettingsComponentsTest {
             }
         }
         compose.onNodeWithTag("choice").assertIsFocused()
+        assertNull(compose.onNodeWithTag("choice").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected))
         key("choice", Key.DirectionCenter)
         compose.onNodeWithTag("tv-settings:option:2").assertIsFocused().assertIsSelected()
         key("tv-settings:panel", Key.DirectionUp)
@@ -140,8 +144,14 @@ class TvSettingsComponentsTest {
         compose.onNodeWithTag("toggle").assertIsFocused().assertIsOn()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
         compose.onAllNodes(hasClickAction()).assertCountEquals(2)
+        assertNull(compose.onNodeWithTag("toggle").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected))
+        assertNull(compose.onNodeWithTag("next").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected))
         key("toggle", Key.DirectionCenter)
         compose.runOnIdle { assertEquals(false, checked) }
+        assertEquals(
+            androidx.compose.ui.state.ToggleableState.Off,
+            compose.onNodeWithTag("toggle").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState)
+        )
         key("toggle", Key.DirectionDown)
         compose.onNodeWithTag("next").assertIsFocused()
         key("next", Key.DirectionCenter)
@@ -225,6 +235,7 @@ class TvSettingsComponentsTest {
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
                     val first = remember { FocusRequester() }
                     TvSettingsPanel("Subtitle appearance", {}, first, preview = { Text("Live preview", Modifier.height(100.dp)) }) {
+                        TvSettingsSectionHeader("Subtitle styles")
                         repeat(12) { index ->
                             TvSettingsActionRow(
                                 "Setting $index",
@@ -244,12 +255,22 @@ class TvSettingsComponentsTest {
         assertEquals(root.boundsInRoot.height, node.boundsInRoot.height, .5f, "The panel fills available window height")
         val title = compose.onNodeWithText("Subtitle appearance").getUnclippedBoundsInRoot()
         val preview = compose.onNodeWithText("Live preview").getUnclippedBoundsInRoot()
+        val header = compose.onNodeWithText("Subtitle styles").getUnclippedBoundsInRoot()
+        assertEquals(bounds.left + 28.dp, title.left)
+        assertEquals(title.left, header.left)
         compose.onNodeWithTag("row:0").assertIsFocused()
         compose.onNodeWithTag("tv-settings:fade-bottom").assertExists()
+        assertEquals(
+            40.dp,
+            compose.onNodeWithTag("tv-settings:fade-bottom").getUnclippedBoundsInRoot().bottom -
+                compose.onNodeWithTag("tv-settings:fade-bottom").getUnclippedBoundsInRoot().top
+        )
+        val indicator = compose.onNodeWithTag("tv-settings:scroll-indicator").getUnclippedBoundsInRoot()
+        assertEquals(2.dp, indicator.right - indicator.left)
         repeat(11) { key("tv-settings:panel", Key.DirectionDown) }
         compose.onNodeWithTag("row:11").assertIsFocused().assertIsDisplayed()
-        val support = compose.onNodeWithText(
-            "Explanation for setting 11 that stays inside its focused row.",
+        val support = compose.onNode(
+            hasText("Explanation for setting 11 that stays inside its focused row.") and !hasClickAction(),
             useUnmergedTree = true
         ).getUnclippedBoundsInRoot()
         val row = compose.onNodeWithTag("row:11").getUnclippedBoundsInRoot()
@@ -257,6 +278,52 @@ class TvSettingsComponentsTest {
         assertEquals(title, compose.onNodeWithText("Subtitle appearance").getUnclippedBoundsInRoot())
         assertEquals(preview, compose.onNodeWithText("Live preview").getUnclippedBoundsInRoot())
         compose.onNodeWithTag("tv-settings:fade-top").assertExists()
+        val topFade = compose.onNodeWithTag("tv-settings:fade-top").getUnclippedBoundsInRoot()
+        assertEquals(32.dp, topFade.bottom - topFade.top)
         compose.onNodeWithText("Done").assertDoesNotExist()
+    }
+
+    @Test fun currentPickerOptionCanBeAcceptedAndSingleLineContentsAreCentred() {
+        var value by mutableStateOf(20)
+        compose.setContent {
+            MaterialTheme {
+                TvSettingsChoiceRow("Quality", value, listOf(10, 20, 40), { "$it Mbps" }, Modifier.testTag("choice")) { value = it }
+            }
+        }
+        compose.onNodeWithTag("choice").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        val row = compose.onNodeWithTag("tv-settings:option:1").getUnclippedBoundsInRoot()
+        val text = compose.onNodeWithTag("tv-settings:label:20 Mbps", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val radio = compose.onNodeWithTag("tv-settings:radio:1", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(56.dp, row.bottom - row.top)
+        // Compose places whole pixels: an odd-pixel glyph box cannot share the
+        // exact centre of an even-pixel row. Allow at most one physical pixel.
+        val onePixel = (1f / compose.activity.resources.displayMetrics.density).dp
+        assertTrue(kotlin.math.abs(((row.top + row.bottom) / 2 - (text.top + text.bottom) / 2).value) <= onePixel.value)
+        assertEquals((row.top + row.bottom) / 2, (radio.top + radio.bottom) / 2)
+        compose.onNodeWithTag("tv-settings:option:1").assertIsFocused().assertIsSelected()
+        key("tv-settings:panel", Key.DirectionCenter)
+        compose.onNodeWithTag("tv-settings:panel").assertDoesNotExist()
+        compose.onNodeWithTag("choice").assertIsFocused()
+        compose.runOnIdle { assertEquals(20, value) }
+    }
+
+    @Test fun shortChoiceValueKeepsItsCeilingInThePickerRatherThanTheTrailingSlot() {
+        compose.setContent {
+            MaterialTheme {
+                TvSettingsChoiceRow(
+                    "Home limit",
+                    null as Int?,
+                    listOf(null, 20),
+                    ::bitrateLabel,
+                    Modifier.testTag("choice"),
+                    optionSupportingText = ::bitrateOptionSupporting
+                ) {}
+            }
+        }
+        compose.onNodeWithTag("choice").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
+        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.").assertDoesNotExist()
+        compose.onNodeWithTag("choice").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("tv-settings:option:0").assertIsFocused().assertIsSelected()
+        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.", useUnmergedTree = true).assertIsDisplayed()
     }
 }
