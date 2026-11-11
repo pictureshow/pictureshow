@@ -32,6 +32,32 @@ static int (*supports)(CGDirectDisplayID),(*enabled)(CGDirectDisplayID);
 static unsigned int (*bits)(CGDirectDisplayID),(*pixelBits)(CGDirectDisplayID);
 static volatile sig_atomic_t stopping;
 static void signalHandler(int n){stopping=1;}
+// WindowServer can initially choose a scaled mode even with hiDPI disabled.
+// Select by the public mode's logical dimensions, only on our newly created
+// display. Existing HDR probes deliberately keep their original default mode.
+static BOOL ensureLogicalSize(CGDirectDisplayID id,unsigned width,unsigned height) {
+ CFArrayRef modes=NULL;NSDate *ready=[NSDate dateWithTimeIntervalSinceNow:10];
+ while(!modes && !stopping && ready.timeIntervalSinceNow>0){
+  [[NSRunLoop currentRunLoop]runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.1]];
+  modes=CGDisplayCopyAllDisplayModes(id,(__bridge CFDictionaryRef)@{(__bridge NSString*)kCGDisplayShowDuplicateLowResolutionModes:@YES});
+ }
+ if(!modes)return NO;
+ CGDisplayModeRef selected=NULL;
+ for(CFIndex i=0;i<CFArrayGetCount(modes);i++){
+  CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(modes,i);
+  fprintf(stderr,"candidate logical=%zux%zu pixels=%zux%zu\n",CGDisplayModeGetWidth(m),CGDisplayModeGetHeight(m),CGDisplayModeGetPixelWidth(m),CGDisplayModeGetPixelHeight(m));
+  if(CGDisplayModeGetWidth(m)==width && CGDisplayModeGetHeight(m)==height){
+   selected=m;
+   if(CGDisplayModeGetPixelWidth(m)==width && CGDisplayModeGetPixelHeight(m)==height)break;
+  }
+ }
+ CGError error=selected?CGDisplaySetDisplayMode(id,selected,NULL):kCGErrorFailure;
+ CFRelease(modes);
+ if(error!=kCGErrorSuccess){fprintf(stderr,"Requested logical virtual mode unavailable: %d\n",error);return NO;}
+ CGRect bounds=CGDisplayBounds(id);
+ fprintf(stderr,"selected logical bounds=%.0fx%.0f\n",bounds.size.width,bounds.size.height);
+ return bounds.size.width==width && bounds.size.height==height;
+}
 static void receipt(const char *phase,CGDirectDisplayID id) {
  CGRect r=CGDisplayBounds(id);NSScreen *screen=nil;
  for(NSScreen *s in NSScreen.screens)if([s.deviceDescription[@"NSScreenNumber"] unsignedIntValue]==id){screen=s;break;}
@@ -63,6 +89,7 @@ int main(int argc,const char **argv){@autoreleasepool{
  // Position only the new virtual display; leave all existing displays untouched.
  CGDisplayConfigRef config;CGError ce=CGBeginDisplayConfiguration(&config);
  if(ce==kCGErrorSuccess){ce=CGConfigureDisplayOrigin(config,vd.displayID,(int)CGRectGetMaxX(mainRect)+50,(int)mainRect.origin.y);if(ce==kCGErrorSuccess)ce=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);else CGCancelDisplayConfiguration(config);}
+ if(argc==6 && !ensureLogicalSize(vd.displayID,width,height))return 6;
  fprintf(stderr,"virtualID=%u transferFunction=%u originTransaction=%d pid=%d\n",vd.displayID,mode.transferFunction,ce,getpid());
  NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:seconds];
  while(!stopping && deadline.timeIntervalSinceNow>0){[[NSRunLoop currentRunLoop]runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];receipt("virtual",vd.displayID);if(CGMainDisplayID()!=mainBefore){fputs("Unexpected main-display change; ending probe\n",stderr);return 5;}}
