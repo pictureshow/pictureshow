@@ -60,8 +60,18 @@ class LiveLayoutReviewTest {
                 put("RecordNewOnly", kotlinx.serialization.json.JsonPrimitive(true))
             }
         )
-        compose.setContent { androidx.tv.material3.MaterialTheme { LiveScheduleEditor(schedule, true, true, false, false) {} } }
+        val current = androidx.compose.runtime.mutableStateOf(schedule)
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveScheduleEditor(current.value, true, true, false, false) {} } }
         compose.onNodeWithTag("live:editor:review").assertIsDisplayed().assertIsFocused()
+        compose.runOnIdle {
+            current.value = app.pictureshow.core.livetv.LiveSchedule(
+                kotlinx.serialization.json.buildJsonObject {
+                    put("Name", kotlinx.serialization.json.JsonPrimitive("Generated occurrence"))
+                    put("PostPaddingSeconds", kotlinx.serialization.json.JsonPrimitive(0))
+                }
+            )
+        }
+        compose.onNodeWithTag("live:editor:PostPaddingSeconds").assertIsDisplayed().assertIsFocused()
     }
 
     @Test

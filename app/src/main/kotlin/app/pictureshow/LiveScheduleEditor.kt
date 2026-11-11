@@ -75,7 +75,12 @@ internal fun LiveScheduleEditor(
             }
             LiveAction("Review settings", tv, textInset, enabled = !busy) { confirmed = false }
         } else {
-            LiveAction("Review ${if (existing) "changes" else "recording"}", tv, textInset, enabled = !busy) { confirmed = true }
+            LiveAction(
+                "Review ${if (existing) "changes" else "recording"}",
+                tv,
+                textInset.liveFocus("editor:review", tv && firstPadding == null, enabled = !busy),
+                enabled = !busy
+            ) { confirmed = true }
         }
         val padding = listOf(0, 1, 2, 5, 10, 15).map { minutes ->
             JsonPrimitive(minutes * 60) to if (minutes ==
