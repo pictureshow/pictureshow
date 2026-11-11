@@ -96,7 +96,9 @@ jobs:
           export SPIKE_SOFTWARE_GPU=1
           export SKIKO_RENDER_API=SOFTWARE
           export PICTURESHOW_SMOKE_NATIVE_CLOSE=1
-          python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke
+          # Additional 4K catalog captures and playing/native-close tail need a
+          # finite budget beyond the normal 240-second two-size smoke.
+          python3 desktop/tools/app-smoke/macos-run.py --work desktop/build/disposable-app-smoke --evidence desktop-evidence/app-smoke --timeout 420
       - name: Windows app against its disposable Jellyfin portable server
         if: runner.os == 'Windows'
         shell: pwsh
