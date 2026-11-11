@@ -29,7 +29,7 @@ fun desktopMain(args: Array<String>) {
         val state = rememberWindowState(width=1280.dp,height=800.dp,position=if(smoke && System.getenv("PICTURESHOW_SMOKE_WINDOW_X")!=null) WindowPosition.Absolute(System.getenv("PICTURESHOW_SMOKE_WINDOW_X").toInt().dp,(System.getenv("PICTURESHOW_SMOKE_WINDOW_Y") ?: "0").toInt().dp) else WindowPosition.PlatformDefault)
         var closing by remember { mutableStateOf(false) }
         var full by remember { mutableStateOf(false) }
-        var keys by remember { mutableStateOf<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
+        val keys = remember { java.util.concurrent.atomic.AtomicReference<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
         var restore by remember { mutableStateOf<java.awt.Rectangle?>(null) }
         fun close() {
             if(closing) return
@@ -39,7 +39,7 @@ fun desktopMain(args: Array<String>) {
                 SwingUtilities.invokeLater { exitApplication() }
             }.start()
         }
-        Window(onCloseRequest=::close,state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys(it)}) {
+        Window(onCloseRequest=::close,state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys.get().invoke(it)}) {
             fun fullscreen() {
                 val bounds=if(!full) { restore=java.awt.Rectangle(window.bounds);window.graphicsConfiguration.bounds } else restore ?: window.bounds
                 state.placement=WindowPlacement.Floating
@@ -73,7 +73,7 @@ fun desktopMain(args: Array<String>) {
                             TextButton(onClick=::close,contentPadding=PaddingValues(horizontal=16.dp),modifier=Modifier.height(32.dp)) { Text("×",Modifier.clearAndSetSemantics { contentDescription="Close window" }) }
                         }
                     }
-                    Box(Modifier.weight(1f)) { DesktopApp(controller,::fullscreen,full) { keys = it } }
+                    Box(Modifier.weight(1f)) { DesktopApp(controller,::fullscreen,full) { keys.set(it) } }
                 }
             }
         }
