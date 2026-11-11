@@ -119,9 +119,10 @@ internal fun <T> TvSettingsChoiceRow(
     val opener = remember { FocusRequester() }
     var picker by remember { mutableStateOf(false) }
     var restoreOpener by remember { mutableStateOf(false) }
-    TvSettingsRow(
+    TvSettingsValueRow(
         title,
-        supportingText,
+        label(value),
+        supportingText = supportingText,
         modifier = modifier.focusRequester(opener).semantics { stateDescription = label(value) }.onPreviewKeyEvent { event ->
             if (!enabled || event.key !in listOf(Key.DirectionLeft, Key.DirectionRight)) {
                 false
@@ -134,22 +135,8 @@ internal fun <T> TvSettingsChoiceRow(
             }
         },
         enabled = enabled,
-        onClick = { picker = true },
-        trailing = {
-            Row(
-                Modifier.widthIn(max = 160.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    label(value),
-                    Modifier.weight(1f, fill = false),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                TvSettingsChevron()
-            }
-        }
+        onClick = { picker = true }
+
     )
     if (picker) {
         TvSettingsChoicePicker(title, value, values, label, onSelect, onClose = {
@@ -164,6 +151,40 @@ internal fun <T> TvSettingsChoiceRow(
             restoreOpener = false
         }
     }
+}
+
+/** A value/chevron row also supports specialized pickers without duplicating its visual role. */
+@Composable
+internal fun TvSettingsValueRow(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    supportingText: String? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    TvSettingsRow(title, supportingText, modifier, enabled = enabled, onClick = onClick, trailing = {
+        Row(
+            Modifier.widthIn(max = 160.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(value, Modifier.weight(1f, fill = false), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
+            TvSettingsChevron()
+        }
+    })
+}
+
+/** The indicator follows its row's contrasting foreground in both focused and resting states. */
+@Composable
+internal fun TvSettingsRadioIndicator(checked: Boolean) {
+    val color = LocalContentColor.current
+    RadioButton(
+        checked,
+        onClick = null,
+        modifier = Modifier.clearAndSetSemantics {},
+        colors = androidx.tv.material3.RadioButtonDefaults.colors(selectedColor = color, unselectedColor = color)
+    )
 }
 
 @Composable
@@ -191,7 +212,7 @@ internal fun <T> TvSettingsChoicePicker(
                     onSelect(option)
                     onClose()
                 },
-                trailing = { RadioButton(option == value, onClick = null, modifier = Modifier.clearAndSetSemantics {}) }
+                trailing = { TvSettingsRadioIndicator(option == value) }
             )
         }
     }
@@ -217,7 +238,9 @@ internal fun TvSettingsRow(
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
-        leadingContent = leading?.let { content -> { content() } },
+        leadingContent = leading?.let { content ->
+            { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
+        },
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
