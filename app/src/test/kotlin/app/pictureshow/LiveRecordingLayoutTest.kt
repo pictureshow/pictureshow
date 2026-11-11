@@ -145,7 +145,10 @@ class LiveRecordingLayoutTest {
         assertTrue(caption.bottom - caption.top <= 100.dp, "TV has no touch overflow row to reserve")
         val title = compose.onAllNodesWithTag("live:recording:title", useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
         val meta = compose.onAllNodesWithTag("live:recording:metadata", useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
-        assertTrue(meta.top - title.top <= 28.dp, "Blank reserve belongs below related caption lines")
+        assertTrue(
+            meta.top - title.bottom in 0.dp..5.dp,
+            "Title and metadata retain the4dp gap, including native focus scaling; title=$title metadata=$meta"
+        )
         val status = compose.onNodeWithTag("live:recording:status:r", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(status.bottom <= caption.top, "Recording state belongs on the artwork")
         compose.onNodeWithTag("live:r:r").assert(hasContentDescription("Actual episode", substring = true))

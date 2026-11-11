@@ -115,7 +115,7 @@ class LiveTvScreensTest {
         compose.onNodeWithText("Confirm recording").performScrollTo().performClick()
         compose.onNodeWithText("Select at least one valid day without duplicates.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, writes) }
-        compose.onNodeWithText("Review settings").performScrollTo().performClick()
+        compose.onNodeWithText("Edit options").performScrollTo().performClick()
         compose.onNodeWithText("Monday: Off").performScrollTo().performClick()
         compose.onNodeWithText("Review recording").performScrollTo().performClick()
         compose.onNodeWithText("Confirm recording").performScrollTo().performClick()

@@ -110,19 +110,44 @@ internal fun Modifier.liveFocus(key: String, wanted: Boolean, enabled: Boolean =
 
 /** Actions only: tabs, list items, filters and program cells use their own native roles. */
 @Composable
-internal fun LiveAction(label: String, tv: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun LiveAction(
+    label: String,
+    tv: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    primary: Boolean = true,
+    onClick: () -> Unit
+) {
     if (tv) {
-        androidx.tv.material3.Button(
-            onClick,
-            modifier.heightIn(min = 40.dp),
-            enabled = enabled,
-            contentPadding = PaddingValues(16.dp, 10.dp)
-        ) {
+        val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
             androidx.tv.material3.Text(label)
         }
+        if (primary) {
+            androidx.tv.material3.Button(
+                onClick,
+                modifier.heightIn(min = 40.dp),
+                enabled = enabled,
+                contentPadding = PaddingValues(16.dp, 10.dp),
+                content = content
+            )
+        } else {
+            androidx.tv.material3.OutlinedButton(
+                onClick,
+                modifier.heightIn(min = 40.dp),
+                enabled = enabled,
+                contentPadding = PaddingValues(16.dp, 10.dp),
+                content = content
+            )
+        }
     } else {
-        androidx.compose.material3.Button(onClick, modifier.heightIn(min = 48.dp), enabled = enabled) {
-            androidx.compose.material3.Text(label)
+        if (primary) {
+            androidx.compose.material3.Button(onClick, modifier.heightIn(min = 48.dp), enabled = enabled) {
+                androidx.compose.material3.Text(label)
+            }
+        } else {
+            androidx.compose.material3.OutlinedButton(onClick, modifier.heightIn(min = 48.dp), enabled = enabled) {
+                androidx.compose.material3.Text(label)
+            }
         }
     }
 }
@@ -180,6 +205,7 @@ internal fun liveIcon(kind: String): ImageVector {
                     lineTo(if (right) 6f else 18f, 6f)
                     close()
                 }
+
                 "trash" -> {
                     moveTo(5f, 6f)
                     lineTo(19f, 6f)
@@ -196,6 +222,7 @@ internal fun liveIcon(kind: String): ImageVector {
                     lineTo(3f, 5f)
                     close()
                 }
+
                 "warning" -> {
                     moveTo(12f, 2f)
                     lineTo(23f, 22f)
@@ -212,6 +239,7 @@ internal fun liveIcon(kind: String): ImageVector {
                     lineTo(11f, 19f)
                     close()
                 }
+
                 "more" -> {
                     listOf(5f, 12f, 19f).forEach { x ->
                         moveTo(x, 10f)
@@ -220,6 +248,7 @@ internal fun liveIcon(kind: String): ImageVector {
                         close()
                     }
                 }
+
                 "refresh" -> {
                     moveTo(20f, 4f)
                     lineTo(20f, 11f)
@@ -230,6 +259,7 @@ internal fun liveIcon(kind: String): ImageVector {
                     arcTo(8f, 8f, 0f, true, true, 17.5f, 6.5f)
                     close()
                 }
+
                 else -> {
                     moveTo(12f, 2f)
                     lineTo(15f, 8f)

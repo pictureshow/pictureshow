@@ -1917,7 +1917,8 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithText("Current program").assertIsDisplayed()
         compose.onNodeWithText("Generated channel", substring = true).assertIsDisplayed()
-        compose.onNodeWithContentDescription("Paused · 17 sec behind live").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Live playback status").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused · 17 sec behind live"))
         assertEquals("−0:17", behindLiveClock(17_000))
         compose.onNodeWithText("−0:17").assertDoesNotExist()
         val range = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
@@ -1933,8 +1934,8 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { host.liveWindow = host.liveWindow?.copy(durationMs = 30_000, defaultPositionMs = 27_000) }
         settled()
         assertEquals(
-            listOf(spoken),
-            compose.onNodeWithTag("touch:live-status").fetchSemanticsNode().config[SemanticsProperties.ContentDescription]
+            spoken,
+            compose.onNodeWithTag("touch:live-status").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         )
         val slider = bounds("touch:scrubber")
         val chip = bounds("touch:go-live")
@@ -1944,7 +1945,7 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { assertEquals(25_000, decoder.seeks.last()) }
         compose.runOnIdle { host.position = 27_000 }
         settled()
-        compose.onNodeWithText("LIVE").assertIsDisplayed()
+        compose.onNodeWithText("Go live").assertIsDisplayed()
         compose.onNodeWithTag("touch:go-live").assertIsEnabled()
     }
 
@@ -1962,9 +1963,32 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithTag("touch:scrubber").assertIsNotEnabled()
         compose.onNodeWithTag("touch:back10").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Paused · Buffer expired. Go live to resume.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Live playback status").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused · Buffer expired. Go live to resume."))
         compose.onNodeWithTag("touch:go-live").assertIsEnabled()
         compose.runOnIdle { assertTrue(decoder.playWhenReady.not()) }
+    }
+
+    @Test fun liveEdgeDisablesWholePhoneForwardButtonGestureAndReaderAction() {
+        launch(paused = false, live = true)
+        compose.runOnIdle {
+            host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
+            host.position = 27_000
+        }
+        settled()
+        compose.onNodeWithTag("touch:forward10").assertIsNotEnabled()
+        compose.onNodeWithTag("touch:back10").assertIsEnabled()
+        val edge = compose.onNodeWithTag("touch:go-live").fetchSemanticsNode().config
+        assertTrue(!edge.contains(SemanticsActions.OnClick), "Playing edge is a status, not an inert action")
+        val gestures = compose.onNodeWithTag("touch:gestures")
+        assertTrue(gestures.fetchSemanticsNode().config[SemanticsActions.CustomActions].none { it.label == "Forward 10 seconds" })
+        val before = compose.runOnIdle { decoder.seeks.size }
+        gestures.performTouchInput { doubleClick(Offset(size.width * .8f, size.height * .5f)) }
+        compose.runOnIdle { assertEquals(before, decoder.seeks.size, "An edge double tap must not request an ineffective seek") }
+        compose.runOnIdle { host.position = 10_000 }
+        settled()
+        compose.onNodeWithTag("touch:forward10").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(20_000, decoder.seeks.last()) }
     }
 
     private fun launch(

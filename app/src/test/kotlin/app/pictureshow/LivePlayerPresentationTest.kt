@@ -99,8 +99,10 @@ class LivePlayerPresentationTest {
                 }
             }
         }
-        compose.onNodeWithText("LIVE").assertIsDisplayed()
-        compose.onNodeWithTag("player:go-live").assertIsNotEnabled()
+        compose.onNodeWithText("Live", useUnmergedTree = true).assertIsDisplayed()
+        val badge = compose.onNodeWithTag("player:go-live").fetchSemanticsNode().config
+        assertTrue(!badge.contains(SemanticsActions.OnClick), "Playing edge is a status without a click action")
+        assertTrue(!badge.contains(SemanticsActions.RequestFocus), "Playing edge is not a remote focus stop")
         compose.runOnIdle { paused.value = true }
         val chip = compose.onNodeWithTag("player:go-live").assertIsEnabled()
         chip.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }

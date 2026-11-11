@@ -154,3 +154,47 @@ Recording shelves reuse the catalog episode/runtime formatter, including special
 TV recording shelves use the native catalog focus policy vertically: move a newly focused shelf so its whole heading reaches the content pivot when the heading and scaled card fit, keep focus paint inside the safe area, and avoid partially clipped headings when they do not fit together. Reserve measured trailing space so the last shelf reaches the same pivot; each horizontal shelf retains its platform horizontal focus policy. The pivot and last-shelf padding cases are in `live-presentation.json`.
 
 A channel with loaded programmes but no current airing says Nothing on now; No guide data is reserved for no programme coverage in the loaded window. The channel row and focused preview use the same distinction. Recording scheduled markers are decorative6dp circles pinned to the cell’s top/end6dp inset, independent of title length or font scale; the full cell announcement owns the status. Phone filter controls share a56dp centred band across Channels and Guide. In linear Guide, date navigation precedes the scrolling content in a Column; it never overlays channel headings. Incompatible tab/grid/list layouts own separate scroll state and begin at the first visible content after switching; Back from details retains the destination’s focus/scroll restoration.
+
+### Recording review presentation
+
+The recording editor uses an expandable list row for More options, with Button role and Collapsed/Expanded reader state.
+Review replaces editable settings with full-colour, noninteractive summary rows, including selected days and priority even
+when More options was collapsed. Confirm is the filled primary action; Edit options is outlined and returns to editing.
+Both share an action row where they fit. Review performs no recording write; only the explicit Confirm submits the validated
+schedule. Priority -2/-1/0/1/2 is Lowest/Low/Normal/High/Highest. Unknown priority values remain unchanged and display Provider
+setting. Selected weekdays appear in Monday-to-Sunday order; an empty selection says No days selected and still fails the
+existing save validation. The presentation vectors cover these rules; ordinary settings rows and player controls retain their defaults.
+
+### Live transport and fresh accessibility queries
+
+Playing at the measured live edge shows a static, full-contrast Live status without a click or input-focus action.
+When paused at the edge, Go live remains an explicit resume action. Live-only Play/Pause and Go live slots reserve
+96 dp multiplied by at least the current font scale; other player layouts retain their existing defaults. The
+phone timeline reserves the same live-status slot, so the seek track does not change width when state changes.
+The visible status and clock use the same measured two-second at-edge threshold: no negative clock accompanies
+Live or Paused · At live edge. Behind playback shows a negative clock, with Paused when appropriate. Expired,
+unavailable, and unknown positions retain explicit reasons and never invent a live distance. Forward actions are
+unavailable at the measured live edge or with an unavailable/expired range, while back-seek remains tied to the
+actual buffer. Ordinary playback keeps its existing forward rules.
+
+Automatic live-window ticks must not announce every second. The quiet Compose accessibility description stays
+stable until a deliberate playback action, but a fresh native accessibility query returns the current measured
+position and behind-live distance for both the position control and status. The phone status has the stable name
+Live playback status and a separate queried state. The native range/provider and SetProgress action remain intact.
+The reader sequence vector models a paused position of10s in a30s window/default27s, then a50s window/default47s:
+fresh queries say17s then37s behind; loss of seekability reports Time shift unavailable. These modeled numbers are
+a contract test, not a claim about a particular decoder's default-position offset.
+
+### Schedule sections and loading ownership
+
+Series rules remain their own section. An occurrence with an observed EndDate at or before now belongs to Past,
+including cancelled or failed history. Upcoming requires a valid future StartDate and an EndDate after StartDate.
+Other current, missing, invalid or unknown intervals belong to Scheduled. Preserve every server row and its relative
+order within its section. A row's lazy-list and focus identity is s:series:<id> or s:timer:<id>, independent of the
+time-dependent section; crossing a time boundary must not break Back restoration or confuse a rule with an occurrence.
+Phone schedule metadata keeps the channel and its unbroken time range adjacent; the channel yields space first.
+Muted status badges use the platform's visible surface container and its matching on-colour.
+
+The floating phone pull indicator is owned only by an actual pull gesture while that request is loading. Entry,
+toolbar, TV and write activity use the thin header progress indicator. Completing even an immediate pull request
+releases gesture ownership, so a later toolbar refresh cannot inherit a stale floating indicator.

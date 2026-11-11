@@ -72,7 +72,7 @@ internal fun LiveProgramAction(
     onClick: () -> Unit
 ) {
     if (tv) {
-        LiveAction(label, true, modifier, enabled, onClick)
+        LiveAction(label, true, modifier, enabled, primary, onClick)
     } else {
         val content: @Composable RowScope.() -> Unit = {
             if (playIcon) {

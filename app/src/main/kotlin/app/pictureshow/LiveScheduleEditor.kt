@@ -4,17 +4,26 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.livetv.LiveSchedule
 import app.pictureshow.core.livetv.editSchedule
@@ -60,20 +69,22 @@ internal fun LiveScheduleEditor(
                 textInset
             )
             validationError?.let { LiveText(it, tv, textInset, warning = true) }
-            LiveAction(
-                if (existing) "Confirm save changes" else "Confirm recording",
-                tv,
-                textInset.liveFocus("editor:confirm", tv),
-                !busy
-            ) {
-                runCatching { editSchedule(original, JsonObject(edits), series) }
-                    .onSuccess {
-                        validationError = null
-                        onSave(it)
-                    }
-                    .onFailure { validationError = it.message ?: "Review the recording options before saving." }
+            FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LiveAction(
+                    if (existing) "Confirm save changes" else "Confirm recording",
+                    tv,
+                    Modifier.liveFocus("editor:confirm", tv),
+                    !busy
+                ) {
+                    runCatching { editSchedule(original, JsonObject(edits), series) }
+                        .onSuccess {
+                            validationError = null
+                            onSave(it)
+                        }
+                        .onFailure { validationError = it.message ?: "Review the recording options before saving." }
+                }
+                LiveAction("Edit options", tv, enabled = !busy, primary = false) { confirmed = false }
             }
-            LiveAction("Review settings", tv, textInset, enabled = !busy) { confirmed = false }
         } else {
             LiveAction(
                 "Review ${if (existing) "changes" else "recording"}",
@@ -108,7 +119,8 @@ internal fun LiveScheduleEditor(
                     padding,
                     tv,
                     enabled,
-                    Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed)
+                    Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed),
+                    readOnly = confirmed
                 ) { edits = edits + (key to it) }
             }
         }
@@ -136,7 +148,8 @@ internal fun LiveScheduleEditor(
                         }?.second ?: "Provider setting",
                         choices,
                         tv,
-                        enabled
+                        enabled,
+                        readOnly = confirmed
                     ) {
                         edits =
                             edits + (key to it)
@@ -164,7 +177,8 @@ internal fun LiveScheduleEditor(
                         }
                     },
                     tv,
-                    enabled
+                    enabled,
+                    readOnly = confirmed
                 ) { edits = edits + ("KeepUpTo" to it) }
             }
             if ("KeepUntil" in original.fields) {
@@ -177,41 +191,39 @@ internal fun LiveScheduleEditor(
                     "UntilDate" -> "On the scheduled date"
                     else -> "Provider setting"
                 }
-                LiveOption("Delete", label, choices, tv, enabled) { edits = edits + ("KeepUntil" to it) }
+                LiveOption("Delete", label, choices, tv, enabled, readOnly = confirmed) { edits = edits + ("KeepUntil" to it) }
             }
             if ("Days" in original.fields) {
-                LiveText("Days", tv, textInset, small = true)
                 val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
-                FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday").forEach { day ->
-                        LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled) {
-                            val next = if (day in days) days - day else days + day
-                            edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
+                if (confirmed) {
+                    LiveOptionSummary("Days", liveRecordingDaysLabel(days), tv)
+                } else {
+                    LiveText("Days", tv, textInset, small = true)
+                    FlowRow(
+                        textInset,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        liveRecordingWeekdays.forEach { day ->
+                            LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled) {
+                                val next = if (day in days) days - day else days + day
+                                edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
+                            }
                         }
                     }
                 }
             }
         }
         if ("Priority" in original.fields) {
-            Box(textInset) {
-                LiveChip("More options", more, tv, enabled) { more = !more }
-            }
-            if (more) {
+            if (!confirmed) LiveOptionsDisclosure(more, tv, enabled) { more = !more }
+            if (more || confirmed) {
                 LiveOption(
                     "Priority",
-                    merged["Priority"]?.jsonPrimitive?.contentOrNull ?: "Default",
-                    (-2..2).map {
-                        JsonPrimitive(it) to
-                            when (it) {
-                                -2 -> "Lowest"
-                                -1 -> "Low"
-                                0 -> "Normal"
-                                1 -> "High"
-                                else -> "Highest"
-                            }
-                    },
+                    liveRecordingPriorityLabel(merged["Priority"]?.jsonPrimitive?.contentOrNull),
+                    (-2..2).map { JsonPrimitive(it) to liveRecordingPriorityLabel(it.toString()) },
                     tv,
-                    enabled
+                    enabled,
+                    readOnly = confirmed
                 ) {
                     edits =
                         edits + ("Priority" to it)
@@ -230,10 +242,13 @@ private fun LiveOption(
     tv: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
     onSelect: (JsonPrimitive) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
-    if (tv) {
+    if (readOnly) {
+        LiveOptionSummary(title, value, tv)
+    } else if (tv) {
         androidx.tv.material3.ListItem(
             selected = false,
             onClick = { open = true },
@@ -265,4 +280,65 @@ private fun LiveOption(
 @Composable
 private fun BoxOption(modifier: Modifier, content: @Composable () -> Unit) {
     androidx.compose.foundation.layout.Box(modifier) { content() }
+}
+
+internal val liveRecordingWeekdays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+internal fun liveRecordingDaysLabel(days: Set<String>): String =
+    liveRecordingWeekdays.filter { it in days }.joinToString().ifEmpty { "No days selected" }
+
+internal fun liveRecordingPriorityLabel(value: String?): String = when (value) {
+    "-2" -> "Lowest"
+    "-1" -> "Low"
+    "0" -> "Normal"
+    "1" -> "High"
+    "2" -> "Highest"
+    else -> "Provider setting"
+}
+
+@Composable
+private fun LiveOptionSummary(title: String, value: String, tv: Boolean) {
+    val modifier = Modifier.testTag("live:summary:$title").semantics(mergeDescendants = true) {}
+    if (tv) {
+        Row(
+            modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            LiveText(title, true, Modifier.weight(1f))
+            LiveText(value, true)
+        }
+    } else {
+        TouchValueSummary(title, value, modifier)
+    }
+}
+
+@Composable
+private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val modifier = Modifier.testTag("live:editor:more").semantics {
+        stateDescription = if (expanded) "Expanded" else "Collapsed"
+        role = Role.Button
+    }
+    val icon: @Composable () -> Unit = {
+        val target = Modifier.size(20.dp).graphicsLayer { rotationZ = if (expanded) 90f else 0f }
+        if (tv) {
+            androidx.tv.material3.Icon(touchActionIcon("chevron-right"), null, target)
+        } else {
+            androidx.compose.material3.Icon(touchActionIcon("chevron-right"), null, target)
+        }
+    }
+    if (tv) {
+        androidx.tv.material3.ListItem(
+            selected = false,
+            onClick = onClick,
+            headlineContent = { LiveText("More options", true) },
+            trailingContent = icon,
+            modifier = modifier.fillMaxWidth(),
+            enabled = enabled,
+            scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f),
+            colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+        )
+    } else {
+        TouchValueRow("More options", if (expanded) "Expanded" else "Collapsed", enabled, modifier, icon, onClick)
+    }
 }

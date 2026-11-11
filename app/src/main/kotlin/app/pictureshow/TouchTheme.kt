@@ -175,12 +175,30 @@ private fun RowScope.TouchRowText(title: String, supporting: String?, enabled: B
 
 /** A list row with a current value under its name; it opens the choice. */
 @Composable
-internal fun TouchValueRow(title: String, value: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun TouchValueRow(
+    title: String,
+    value: String,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
-    ) { TouchRowText(title, value, enabled) }
+    ) {
+        TouchRowText(title, value, enabled)
+        trailing?.invoke()
+    }
+}
+
+/** Read-only values retain the same keyline and text colour as editable values. */
+@Composable
+internal fun TouchValueSummary(title: String, value: String, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp)) {
+        TouchRowText(title, value, true)
+    }
 }
 
 /** A list row that goes somewhere: a name, an optional line, and a chevron. */

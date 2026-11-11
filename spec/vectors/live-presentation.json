@@ -8,7 +8,10 @@
     "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt",
     "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt",
     "app/src/main/kotlin/app/pictureshow/LiveRecordingFocus.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveGuideNavigation.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveGuideNavigation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveScheduleEditor.kt",
+    "app/src/main/kotlin/app/pictureshow/LivePlayerPresentation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt"
   ],
   "cases": [
     {
@@ -927,6 +930,516 @@
         "linear": false
       },
       "expected": "Channels"
+    },
+    {
+      "id": "live-presentation.recording-priority--2",
+      "operation": "recording-priority",
+      "input": {
+        "value": "-2"
+      },
+      "expected": "Lowest"
+    },
+    {
+      "id": "live-presentation.recording-priority--1",
+      "operation": "recording-priority",
+      "input": {
+        "value": "-1"
+      },
+      "expected": "Low"
+    },
+    {
+      "id": "live-presentation.recording-priority-0",
+      "operation": "recording-priority",
+      "input": {
+        "value": "0"
+      },
+      "expected": "Normal"
+    },
+    {
+      "id": "live-presentation.recording-priority-1",
+      "operation": "recording-priority",
+      "input": {
+        "value": "1"
+      },
+      "expected": "High"
+    },
+    {
+      "id": "live-presentation.recording-priority-2",
+      "operation": "recording-priority",
+      "input": {
+        "value": "2"
+      },
+      "expected": "Highest"
+    },
+    {
+      "id": "live-presentation.recording-priority-7",
+      "operation": "recording-priority",
+      "input": {
+        "value": "7"
+      },
+      "expected": "Provider setting"
+    },
+    {
+      "id": "live-presentation.recording-priority-None",
+      "operation": "recording-priority",
+      "input": {
+        "value": null
+      },
+      "expected": "Provider setting"
+    },
+    {
+      "id": "live-presentation.recording-days-week-order",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Friday",
+          "Monday"
+        ]
+      },
+      "expected": "Monday, Friday"
+    },
+    {
+      "id": "live-presentation.recording-days-none",
+      "operation": "recording-days",
+      "input": {
+        "days": []
+      },
+      "expected": "No days selected"
+    },
+    {
+      "id": "live-presentation.playing-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.threshold-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.paused-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "paused": true,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused \u00b7 At live edge",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.playing-behind",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "",
+        "clock": "\u22120:03"
+      }
+    },
+    {
+      "id": "live-presentation.paused-behind",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "paused": true,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused",
+        "clock": "\u22120:03"
+      }
+    },
+    {
+      "id": "live-presentation.unavailable",
+      "operation": "live-readout",
+      "input": {
+        "window": null,
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": false
+      },
+      "expected": {
+        "status": "Time shift unavailable",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.unknown-position",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live position unavailable",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.expired",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": true,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused \u00b7 Buffer expired",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.forward-edge",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 27000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-behind",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "expired": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.forward-expired",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "expired": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-unknown",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": null,
+        "position": 24000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-ordinary",
+      "operation": "live-forward",
+      "input": {
+        "live": false,
+        "window": null,
+        "position": 24000,
+        "expired": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.fresh-reader-query-growth",
+      "operation": "live-reader-sequence",
+      "input": {
+        "position": 10000,
+        "paused": true,
+        "steps": [
+          {
+            "duration": 30000,
+            "default": 27000,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
+            "default": 47000,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
+            "default": 47000,
+            "seekable": false
+          }
+        ]
+      },
+      "expected": [
+        "Paused \u00b7 17 sec behind live",
+        "Paused \u00b7 37 sec behind live",
+        "Time shift unavailable"
+      ]
+    },
+    {
+      "id": "live-presentation.schedule-past-cancelled",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T17:00:00Z",
+          "EndDate": "2026-11-10T18:00:00Z",
+          "Status": "Cancelled"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Past"
+    },
+    {
+      "id": "live-presentation.schedule-future",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T19:00:00Z",
+          "EndDate": "2026-11-10T20:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Upcoming"
+    },
+    {
+      "id": "live-presentation.schedule-active",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T17:00:00Z",
+          "EndDate": "2026-11-10T19:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Scheduled"
+    },
+    {
+      "id": "live-presentation.schedule-missing",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": null,
+          "EndDate": null,
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Scheduled"
+    },
+    {
+      "id": "live-presentation.schedule-invalid",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "bad",
+          "EndDate": "bad",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Scheduled"
+    },
+    {
+      "id": "live-presentation.schedule-invalid-future",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T20:00:00Z",
+          "EndDate": "2026-11-10T19:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Scheduled"
+    },
+    {
+      "id": "live-presentation.schedule-focus-False",
+      "operation": "schedule-focus",
+      "input": {
+        "fields": {
+          "Id": "same"
+        },
+        "series": false
+      },
+      "expected": "s:timer:same"
+    },
+    {
+      "id": "live-presentation.schedule-focus-True",
+      "operation": "schedule-focus",
+      "input": {
+        "fields": {
+          "Id": "same"
+        },
+        "series": true
+      },
+      "expected": "s:series:same"
+    },
+    {
+      "id": "live-presentation.refresh-idle",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": false,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.refresh-initial",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-gesture",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": false,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": true,
+        "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.refresh-tv",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": true,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-write",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": true,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-ended",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": false,
+        "tv": false,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": false
+      }
     }
   ]
 }

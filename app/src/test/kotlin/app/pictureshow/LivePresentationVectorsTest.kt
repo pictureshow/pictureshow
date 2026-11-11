@@ -31,23 +31,126 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(72, cases.size)
+        assertEquals(109, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
+            fun liveWindow(element: kotlinx.serialization.json.JsonElement?): app.pictureshow.core.playback.ObservedLiveWindow? {
+                if (element == null || element == kotlinx.serialization.json.JsonNull) return null
+                val w = element.jsonObject
+                return app.pictureshow.core.playback.ObservedLiveWindow(
+                    100_000,
+                    w.getValue("duration").jsonPrimitive.long,
+                    w.getValue("default").jsonPrimitive.long,
+                    w.getValue("seekable").jsonPrimitive.boolean
+                )
+            }
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "schedule-group" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScheduleGroup(
+                        app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
+                        Instant.parse(value("now")).toEpochMilli()
+                    ),
+                    id
+                )
+
+                "schedule-focus" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScheduleFocusKey(
+                        app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
+                        c.getValue("series").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+
+                "refresh" -> {
+                    val actual = liveRefreshPresentation(
+                        c.getValue("loading").jsonPrimitive.boolean,
+                        c.getValue("writing").jsonPrimitive.boolean,
+                        c.getValue("tv").jsonPrimitive.boolean,
+                        c.getValue("pulled").jsonPrimitive.boolean
+                    )
+                    assertEquals(
+                        envelope.getValue("expected"),
+                        buildJsonObject {
+                            put("pullRefreshing", actual.pullRefreshing)
+                            put("headerLoading", actual.headerLoading)
+                        },
+                        id
+                    )
+                }
+
+                "live-readout" -> {
+                    val actual = liveTimelineReadout(
+                        liveWindow(c["window"]),
+                        c.getValue("position").jsonPrimitive.long,
+                        c.getValue("paused").jsonPrimitive.boolean,
+                        c.getValue("expired").jsonPrimitive.boolean,
+                        c.getValue("canTimeShift").jsonPrimitive.boolean
+                    )
+                    assertEquals(
+                        envelope.getValue("expected"),
+                        buildJsonObject {
+                            put("status", actual.status)
+                            put("clock", actual.clock)
+                        },
+                        id
+                    )
+                }
+
+                "live-forward" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveForwardSeekAllowed(
+                        c.getValue("live").jsonPrimitive.boolean,
+                        liveWindow(c["window"]),
+                        c.getValue("position").jsonPrimitive.long,
+                        c.getValue("expired").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+
+                "live-reader-sequence" -> {
+                    val actual = c.getValue("steps").jsonArray.map { step ->
+                        val window = liveWindow(step)!!
+                        kotlinx.serialization.json.JsonPrimitive(
+                            liveTimelineLabel(
+                                c.getValue("paused").jsonPrimitive.boolean,
+                                window.canTimeShift,
+                                false,
+                                window.behindLiveMs(c.getValue("position").jsonPrimitive.long)
+                            )
+                        )
+                    }
+                    assertEquals(envelope.getValue("expected"), kotlinx.serialization.json.JsonArray(actual), id)
+                }
+
+                "recording-priority" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveRecordingPriorityLabel(c.getValue("value").jsonPrimitive.contentOrNull),
+                    id
+                )
+
+                "recording-days" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveRecordingDaysLabel(c.getValue("days").jsonArray.map { it.jsonPrimitive.content }.toSet()),
+                    id
+                )
+
                 "channel-idle-label" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveChannelIdleLabel(c.getValue("hasPrograms").jsonPrimitive.boolean),
                     id
                 )
+
                 "scroll-owner" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveScrollOwner(value("tab"), c.getValue("linear").jsonPrimitive.boolean),
                     id
                 )
+
                 "recording-shelf-pivot" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveRecordingScrollDistance(
@@ -63,6 +166,7 @@ class LivePresentationVectorsTest {
                     0.001f,
                     id
                 )
+
                 "recording-shelf-tail" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveRecordingTrailingSpace(
@@ -74,6 +178,7 @@ class LivePresentationVectorsTest {
                     0.001f,
                     id
                 )
+
                 "recording-caption-height" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveRecordingCaptionHeight(
@@ -84,6 +189,7 @@ class LivePresentationVectorsTest {
                     0.001f,
                     id
                 )
+
                 "recording-metadata" -> {
                     val item = Json { ignoreUnknownKeys = true }.decodeFromJsonElement<app.pictureshow.core.MediaItem>(c.getValue("item"))
                     val time = LiveTime(
@@ -99,6 +205,7 @@ class LivePresentationVectorsTest {
                     }
                     assertEquals(envelope.getValue("expected"), actual, id)
                 }
+
                 "focus-shift" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideFocusShift(
@@ -110,6 +217,7 @@ class LivePresentationVectorsTest {
                     0.001f,
                     id
                 )
+
                 "schedule-status" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveScheduleStatus(
@@ -118,6 +226,7 @@ class LivePresentationVectorsTest {
                     ),
                     id
                 )
+
                 "initial-focus" -> {
                     val programs = c.getValue("programs").jsonArray.map {
                         val p = it.jsonObject
@@ -134,6 +243,7 @@ class LivePresentationVectorsTest {
                         id
                     )
                 }
+
                 "window-start" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     Instant.ofEpochMilli(
@@ -141,18 +251,21 @@ class LivePresentationVectorsTest {
                     ).toString(),
                     id
                 )
+
                 "ruler-height" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideRulerHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
                     0.001f,
                     id
                 )
+
                 "lane-height" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideLaneHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
                     0.001f,
                     id
                 )
+
                 "recording-dot" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.boolean,
                     app.pictureshow.core.livetv.LiveProgram(
@@ -162,16 +275,19 @@ class LivePresentationVectorsTest {
                     ).hasRecordingTimer(),
                     id
                 )
+
                 "tick" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideTickX(c.getValue("tick").jsonPrimitive.int),
                     id
                 )
+
                 "text" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.boolean,
                     liveGuideShowsText(c.getValue("width").jsonPrimitive.float),
                     id
                 )
+
                 else -> {
                     val time =
                         LiveTime(

@@ -29,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,8 @@ class LiveLayoutReviewTest {
                 LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
             }
         }
-        compose.onNodeWithTag("live:c:c14").performScrollTo()
+        compose.onNodeWithTag("live:content-list").performScrollToNode(hasTestTag("live:c:c14"))
+        compose.onNodeWithTag("live:c:c14").assertIsDisplayed()
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("List").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         val bar = compose.onNodeWithTag("live:guide-time").assertIsDisplayed().getUnclippedBoundsInRoot()
@@ -114,6 +116,7 @@ class LiveLayoutReviewTest {
                 LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
             }
         }
+        compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithTag("live:c:c").assertIsFocused()
         assertEquals(2, compose.onAllNodesWithText("Nothing on now", useUnmergedTree = true).fetchSemanticsNodes().size)
         compose.onNodeWithText("No guide data").assertDoesNotExist()
