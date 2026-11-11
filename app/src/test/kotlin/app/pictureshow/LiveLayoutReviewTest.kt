@@ -60,6 +60,46 @@ class LiveLayoutReviewTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
 
+    @Test fun staleTvProgramDetailExplainsTheGuardAndRefreshesWithoutLeavingDetails() = staleDetailRefresh(true)
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun stalePhoneProgramDetailExplainsTheGuardAndRefreshesWithoutLeavingDetails() = staleDetailRefresh(false)
+
+    private fun staleDetailRefresh(tv: Boolean) {
+        val clock = System.currentTimeMillis()
+        var fetchedAt = clock - 360_000
+        val fake = LiveFake().apply {
+            show =
+                show.copy(
+                    startDate = Instant.ofEpochMilli(clock - 60_000).toString(),
+                    endDate = Instant.ofEpochMilli(clock + 1_800_000).toString()
+                )
+        }
+        val vm = LiveTvViewModel(account, fake) { fetchedAt }
+        var played = 0
+        compose.setContent {
+            if (tv) {
+                PictureshowTheme { LiveTvScreen(vm, account, true, { played++ }, {}, {}) }
+            } else {
+                TouchTheme { LiveTvScreen(vm, account, false, { played++ }, {}, {}) }
+            }
+        }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:p:p").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:program:watch").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithText("Guide is out of date. Refresh before scheduling or tuning.").assertIsDisplayed()
+        compose.runOnIdle { fetchedAt = System.currentTimeMillis() - 1_000 }
+        compose.onNodeWithContentDescription("Refresh").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
+            it()
+        }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithText("Guide is out of date. Refresh before scheduling or tuning.").assertDoesNotExist()
+        compose.onNodeWithTag("live:program:watch").assertIsDisplayed().assertIsEnabled()
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { assertEquals(1, played, "An explicit refresh restores activation without silently tuning") }
+    }
+
     @Test fun failedColdGuideReadNeverClaimsThatAnAdministratorMustAddXmltvOrThatTuningWorks() {
         val fake = LiveFake().apply { failPrograms = true }
         compose.setContent {

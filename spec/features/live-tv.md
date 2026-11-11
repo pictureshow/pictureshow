@@ -211,3 +211,8 @@ only after a successful empty read. Cached programmes remain readable with their
 Guide-read availability is independent of errors from favorite, schedule, or delete writes. A failed mutation preserves
 the last successful guide (including its successful-empty explanation) and does not disable tuning. Only a failed
 guide refresh establishes the stale/unavailable read state; clearing a write error does not clear that read state.
+
+Stale or offline reference notices remain visible in program, recording and schedule detail/edit/review screens as
+well as the guide. A snapshot older than five minutes explains that the guide is out of date; a clock before its fetch
+instant reports freshness unavailable. Detail toolbars retain an explicit Refresh action. Refreshing preserves the open
+detail and restores actions only after a successful fresh read; it never tunes or submits a recording by itself.

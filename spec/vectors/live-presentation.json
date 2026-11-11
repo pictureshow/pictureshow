@@ -1550,6 +1550,94 @@
         "error": null
       },
       "expected": true
+    },
+    {
+      "id": "live-presentation.guide-notice-fresh",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 1001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-boundary",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301000
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-expired",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301001
+      },
+      "expected": "Guide is out of date. Refresh before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-clock-before-fetch",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1001,
+        "now": 1000
+      },
+      "expected": "Guide freshness is unavailable. Refresh before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-offline-cached",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": true,
+        "fetchedAt": 1000,
+        "now": 1001
+      },
+      "expected": "Saved guide is for reference. Reconnect before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-offline-cold",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": true,
+        "fetchedAt": null,
+        "now": 1001
+      },
+      "expected": "Saved guide is for reference. Reconnect before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-refreshing",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": true,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-missing",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": null,
+        "now": 1001
+      },
+      "expected": null
     }
   ]
 }

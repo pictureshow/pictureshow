@@ -218,8 +218,8 @@ internal fun LiveTvScreen(
                         LiveText("${if (state.offline) "Offline · last loaded" else "Updated"} ${time.clock(it)}", true, small = true)
                     }
                     if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", true) { showSearch = !showSearch }
-                    LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
                 }
+                LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
             }
         } else if (!tv) {
             androidx.compose.material3.TopAppBar(
@@ -228,8 +228,8 @@ internal fun LiveTvScreen(
                 actions = {
                     if (!detail) {
                         if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", false) { showSearch = !showSearch }
-                        LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
                     }
+                    LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
                 }
             )
         }
@@ -366,11 +366,9 @@ internal fun LiveTvScreen(
             LiveText(it, tv, Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp), warning = true, small = true)
         }
         state.notice?.let { LiveText(it, tv, Modifier.padding(8.dp), small = true) }
-        if (!detail &&
-            state.offline
-        ) {
+        state.guideReferenceNotice(now)?.let { notice ->
             LiveText(
-                "Saved guide is for reference. Reconnect before scheduling or tuning.",
+                notice,
                 tv,
                 Modifier.padding(8.dp),
                 warning = true,

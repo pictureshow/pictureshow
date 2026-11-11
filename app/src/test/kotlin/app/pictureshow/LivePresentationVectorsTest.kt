@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(119, cases.size)
+        assertEquals(127, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -136,6 +136,16 @@ class LivePresentationVectorsTest {
                 "recording-days" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveRecordingDaysLabel(c.getValue("days").jsonArray.map { it.jsonPrimitive.content }.toSet()),
+                    id
+                )
+
+                "guide-reference-notice" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                    LiveTvState(
+                        loading = c.getValue("loading").jsonPrimitive.boolean,
+                        offline = c.getValue("offline").jsonPrimitive.boolean,
+                        fetchedAt = c["fetchedAt"]?.jsonPrimitive?.contentOrNull?.toLong()
+                    ).guideReferenceNotice(c.getValue("now").jsonPrimitive.long),
                     id
                 )
 
