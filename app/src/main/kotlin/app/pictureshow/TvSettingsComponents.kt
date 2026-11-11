@@ -119,7 +119,7 @@ internal fun TvSettingsActionRow(
 
 /** Starts on the same 16dp inner text edge as a settings row. */
 @Composable
-internal fun TvSettingsSectionHeader(title: String, supportingText: String? = null, modifier: Modifier = Modifier) {
+internal fun TvSettingsSectionHeader(title: String, modifier: Modifier = Modifier, supportingText: String? = null) {
     Column(modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
         Text(
             title,

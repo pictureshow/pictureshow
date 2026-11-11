@@ -135,3 +135,6 @@ setting row, its current value and Done remain visible; the remaining settings a
 TV accessibility rows expose one truthful role: ordinary choices/actions are not checkable, toggles expose their actual on/off state, and only radio options expose selected state. Focused and selected radio states remain distinguishable. Short current values stay on one line; ceilings and other qualifiers belong to the picker option's supporting text. Panel titles and section headings share the row-text edge; scrolling has fades and a persistent position cue whenever content extends beyond the viewport.
 
 Audio output includes its own Audio passthrough control. Each format permission is configurable only while passthrough is enabled, stereo downmix is off, and the connected output reports that format. An unavailable control retains its stored permission for a later compatible connection; it never adds unsupported formats to the server profile. This dependency truth table is frozen in `settings-presentation.json`.
+
+Receiver-format summaries use the same viewer-facing Dolby Digital, Dolby Digital Plus, Dolby Atmos, Dolby TrueHD,
+DTS and DTS-HD names as their individual controls. Diagnostic codec identifiers do not replace these names in Settings.

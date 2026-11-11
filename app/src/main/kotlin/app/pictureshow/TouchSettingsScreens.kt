@@ -103,10 +103,12 @@ internal fun TouchSettings(
             ) { value -> onLocal { it.copy(bitrateMbps = value) } }
             TouchSwitchRow(
                 "Audio passthrough",
-                if (supportedPassthrough.isEmpty()) {
-                    "No supported surround formats are detected."
-                } else {
-                    "Supported receiver formats: $acceptedAudio"
+                when {
+                    acceptedAudio == "Checking…" -> "Checking receiver support…"
+                    supportedPassthrough.isEmpty() -> "No supported surround formats are detected."
+                    else ->
+                        "Supported receiver formats: " +
+                            supportedPassthrough.sortedBy { it.ordinal }.joinToString(", ", transform = ::passthroughLabel)
                 },
                 local.passthrough,
                 "touch:settings:passthrough"
