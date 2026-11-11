@@ -123,11 +123,19 @@ class IndependentSubtitlePlaybackTest {
         Fixture().use { f ->
             f.open()
             f.until { f.player.playbackState == Player.STATE_READY }
-            assertEquals(1, f.requests.size, "Only selected subtitle may open; requests=${f.requests}")
-            assertEquals("/sub1.srt", f.requests.single())
+            // Optional subtitle loading is independent of video readiness. Its
+            // HTTP worker may reach the held server after the READY callback.
+            f.until { f.requests.isNotEmpty() }
+            assertEquals(Player.STATE_READY, f.player.playbackState,
+                "A held selected subtitle response must not withdraw video readiness")
+            val requested = synchronized(f.requests) { f.requests.toList() }
+            assertEquals(1, requested.size, "Only selected subtitle may open; requests=$requested")
+            assertEquals("/sub1.srt", requested.single())
             assertTrue(f.texts.none { it.contains("Caption") })
             f.release.countDown()
             f.until { f.texts.any { it.contains("Caption 1") } }
+            assertEquals(requested, synchronized(f.requests) { f.requests.toList() },
+                "Other subtitles must stay idle through selected cue delivery")
             assertNull(f.player.playerError)
             assertEquals(Player.STATE_READY, f.player.playbackState)
         }

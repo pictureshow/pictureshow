@@ -45,3 +45,8 @@ input method and observed utterances; a test declaration or an accessibility-tre
 A requested full repository gate records Apple CI, CI, Android device CI and Web CI on the same commit. Workflow
 path filters can omit an unrelated platform on an Apple-only push, so record which workflows actually ran before
 calling a gate complete. A green subset does not establish the omitted platforms.
+
+Video READY and the arrival of an optional subtitle HTTP request are independent observations. A native subtitle
+regression first establishes READY while the response is held, waits separately for the selected request to reach
+the fixture, and verifies the player stays READY before releasing that response. Keep the request-count and cue
+assertions: readiness alone does not establish that only the selected subtitle loaded or that its cue arrived.
