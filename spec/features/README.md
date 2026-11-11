@@ -30,3 +30,18 @@ The manifests describe existing scope: Jellyfin client, video catalog/playback, 
 Launch draft revision (2026-11-03): minimum server 10.10; isolated tests on 10.10.7, 10.11.11 and 12.4, unchanged household 12.0.0 acceptance. Web downloads save originals through the browser (OFF-13); the web in-app offline library is explicitly Later (OFF-14). Cast/AirPlay SyncPlay is Later; launch requires Leave group before casting. Web gapless remains required. Numbered subcriteria have individual status; their parent row passes only when all pass.
 
 Apple native integration evidence and output limitations are tracked in [Apple parity](../../apple/PARITY.md). The native adapter tests cover screen wiring independently of shared policy vectors; receiver output and spoken accessibility require their own platform evidence.
+
+## Native presentation evidence
+
+A core/vector pass establishes the portable policy. Native UI acceptance also needs the actual controls, focus,
+scrolling, lifecycle and recovery paths on each supported input and screen family. Apple integration and its
+remaining qualification boundaries are tracked in [`apple/PARITY.md`](../../apple/PARITY.md).
+
+For PLAY-27, mount the pending-notice observer before playback becomes ready or space becomes available, and
+verify that the real banner appears; testing the timer model alone does not establish that the banner can mount.
+For APP-04 and CAT-18/19, label/focus snapshots and actual reader speech are separate evidence. Record the runtime,
+input method and observed utterances; a test declaration or an accessibility-tree element is not a speech pass.
+
+A requested full repository gate records Apple CI, CI, Android device CI and Web CI on the same commit. Workflow
+path filters can omit an unrelated platform on an Apple-only push, so record which workflows actually ran before
+calling a gate complete. A green subset does not establish the omitted platforms.

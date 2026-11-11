@@ -266,7 +266,15 @@ final class CatalogPresentationUITests: XCTestCase {
         #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
         #endif
-        let fixture = try CatalogPresentationHTTPFixture()
+        #if os(iOS)
+        // A tall iPad fits the six-card TV fixture without scrolling. Supply
+        // enough real rows to exercise the pinned context rather than claiming
+        // a silent strip while the ordinary heading is still visible.
+        let pageSize = UIDevice.current.userInterfaceIdiom == .pad ? 12 : 6
+        #else
+        let pageSize = 6
+        #endif
+        let fixture = try CatalogPresentationHTTPFixture(pageSize: pageSize)
         defer { fixture.stop() }
         let app = XCUIApplication()
         #if os(tvOS)
@@ -342,6 +350,9 @@ final class CatalogPresentationUITests: XCTestCase {
             XCUIDevice.shared.orientation = .portrait
             XCTAssertTrue(waitUntil { app.windows.firstMatch.frame.height > app.windows.firstMatch.frame.width })
         }
+        #endif
+        #if os(iOS)
+        reveal(app.buttons["item-catalog-\(pageSize - 1)"], app: app)
         #endif
         XCTAssertTrue(waitUntil { fixture.heldPages > 0 }, "Near-end paging must issue a real second-page HTTP request")
         #if os(tvOS)
@@ -706,7 +717,10 @@ private final class CatalogPresentationHTTPFixture {
     var lastSort: String { lock.lock(); defer { lock.unlock() }; return sort }
     var lastDirection: String { lock.lock(); defer { lock.unlock() }; return direction }
     var failedPageResponses: Int { lock.lock(); defer { lock.unlock() }; return failedResponses }
-    init() throws {
+    private let pageSize: Int
+    init(pageSize: Int = 6) throws {
+        precondition(pageSize > 0)
+        self.pageSize = pageSize
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
         listener = try NWListener(using: parameters, on: .any)
@@ -773,8 +787,8 @@ private final class CatalogPresentationHTTPFixture {
                 body = ["Items": ids.split(separator: ",").map { String($0) == "catalog-series" ? series() : movie(String($0)) }]
             } else {
                 let start = Int(query["startindex"] ?? "0") ?? 0
-                let all = [series()] + (1...11).map { movie("catalog-\($0)") }
-                body = ["Items": Array(all.dropFirst(start).prefix(6)), "TotalRecordCount": all.count]
+                let all = [series()] + (1..<(pageSize * 2)).map { movie("catalog-\($0)") }
+                body = ["Items": Array(all.dropFirst(start).prefix(pageSize)), "TotalRecordCount": all.count]
                 lock.lock(); pageCount += 1; sort = query["sortby"] ?? ""; direction = query["sortorder"] ?? ""
                 let fail = start > 0 && failuresRemaining > 0
                 if fail { failuresRemaining -= 1; failedResponses += 1 }
