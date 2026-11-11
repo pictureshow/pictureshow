@@ -12,10 +12,10 @@ import androidx.compose.ui.unit.dp
 
 /** Small local Material-style glyphs for desktop actions; keeps desktop free of an icons dependency. */
 object DesktopGlyph {
-    val TransportBack by lazy { outlineGlyph("TransportBack") { moveTo(19f,12f); curveTo(19f,16.4f,15.4f,20f,11f,20f); curveTo(6.6f,20f,3f,16.4f,3f,12f); curveTo(3f,7.6f,6.6f,4f,11f,4f); curveTo(14f,4f,16.7f,5.6f,18.1f,8f); moveTo(18f,4f); lineTo(18f,8f); lineTo(14f,8f) } }
+    val TransportBack by lazy { outlineGlyph("TransportBack") { moveTo(5f,12f); curveTo(5f,16.4f,8.6f,20f,13f,20f); curveTo(17.4f,20f,21f,16.4f,21f,12f); curveTo(21f,7.6f,17.4f,4f,13f,4f); curveTo(10f,4f,7.3f,5.6f,5.9f,8f); moveTo(6f,4f); lineTo(6f,8f); lineTo(10f,8f) } }
     val Play by lazy { glyph("Play") { moveTo(7f,4f); lineTo(20f,12f); lineTo(7f,20f); close() } }
     val Pause by lazy { glyph("Pause") { moveTo(6f,4f); lineTo(10f,4f); lineTo(10f,20f); lineTo(6f,20f); close(); moveTo(14f,4f); lineTo(18f,4f); lineTo(18f,20f); lineTo(14f,20f); close() } }
-    val TransportForward by lazy { outlineGlyph("TransportForward") { moveTo(5f,12f); curveTo(5f,7.6f,8.6f,4f,13f,4f); curveTo(17.4f,4f,21f,7.6f,21f,12f); curveTo(21f,16.4f,17.4f,20f,13f,20f); curveTo(10f,20f,7.3f,18.4f,5.9f,16f); moveTo(6f,20f); lineTo(6f,16f); lineTo(10f,16f) } }
+    val TransportForward by lazy { outlineGlyph("TransportForward") { moveTo(19f,12f); curveTo(19f,16.4f,15.4f,20f,11f,20f); curveTo(6.6f,20f,3f,16.4f,3f,12f); curveTo(3f,7.6f,6.6f,4f,11f,4f); curveTo(14f,4f,16.7f,5.6f,18.1f,8f); moveTo(18f,4f); lineTo(18f,8f); lineTo(14f,8f) } }
     val Audio by lazy { glyph("Audio") { moveTo(3f,9f); lineTo(7f,9f); lineTo(12f,5f); lineTo(12f,19f); lineTo(7f,15f); lineTo(3f,15f); close(); moveTo(15f,9f); curveTo(17f,11f,17f,13f,15f,15f); close(); moveTo(18f,6f); curveTo(22f,10f,22f,14f,18f,18f); lineTo(16f,16f); curveTo(19f,13f,19f,11f,16f,8f); close() } }
     val Subtitles by lazy { glyph("Subtitles") { moveTo(3f,5f); lineTo(21f,5f); lineTo(21f,19f); lineTo(3f,19f); close(); moveTo(6f,9f); lineTo(18f,9f); lineTo(18f,11f); lineTo(6f,11f); close(); moveTo(6f,14f); lineTo(13f,14f); lineTo(13f,16f); lineTo(6f,16f); close() } }
     val Stop by lazy { glyph("Stop") { moveTo(5f,5f); lineTo(19f,5f); lineTo(19f,19f); lineTo(5f,19f); close() } }

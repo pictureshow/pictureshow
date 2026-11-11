@@ -332,7 +332,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null
         val dimensions=mpv?.get("osd-dimensions")?.let { Json.parseToJsonElement(it) } ?: return null
         val (top,bottom)=viewportMargins.get()
-        return buildJsonObject { put("topRatio",top);put("bottomRatio",bottom);put("dimensions",dimensions) }.toString()
+        val submitted = surface?.let { target -> layer?.ps_receipt(target) }?.let { Json.parseToJsonElement(it).jsonObject["submittedFrames"] }
+        return buildJsonObject { put("topRatio",top);put("bottomRatio",bottom);put("dimensions",dimensions);put("submittedFrames",submitted ?: JsonNull) }.toString()
     }
     private fun applyViewport() {
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return

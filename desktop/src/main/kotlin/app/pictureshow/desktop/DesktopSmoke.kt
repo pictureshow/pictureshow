@@ -97,6 +97,31 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             }
             val bounds=window.bounds
             check(bounds.width==w && bounds.height==h && window.graphicsConfiguration.bounds.contains(bounds)) { "Requested ${w}x${h} window not visible; actual=$bounds display=${window.graphicsConfiguration.bounds}" }
+            // Validate actual output and wait for post-resize native submissions
+            // before capturing pixels, not after the image has already been taken.
+            if(c.state.value.route==DesktopRoute.Player && c.state.value.playback?.ready==true && !com.sun.jna.Platform.isLinux()) {
+                var receipt:String?=null
+                var firstSubmission:Long?=null
+                val initialPosition=c.state.value.playback?.positionSeconds ?: 0.0
+                waitFor("whole video clears header and controls") {
+                    receipt=c.videoViewportReceipt()
+                    receipt?.let {
+                        val data=Json.parseToJsonElement(it).jsonObject
+                        val top=data.getValue("topRatio").jsonPrimitive.double
+                        val bottom=data.getValue("bottomRatio").jsonPrimitive.double
+                        val dimensions=data.getValue("dimensions").jsonObject
+                        val height=dimensions.getValue("h").jsonPrimitive.double
+                        val submitted=data.getValue("submittedFrames").jsonPrimitive.longOrNull ?: return@let false
+                        if(firstSubmission==null) firstSubmission=submitted
+                        val transform=window.graphicsConfiguration.defaultTransform
+                        val exactDimensions=dimensions.getValue("w").jsonPrimitive.double==(w*transform.scaleX) && height==(h*transform.scaleY)
+                        exactDimensions && submitted>=firstSubmission!!+4 &&
+                            (c.state.value.playback?.positionSeconds ?: 0.0)>initialPosition+0.25 &&
+                            top>0 && bottom>0 && height>0 && dimensions.getValue("mt").jsonPrimitive.double>=top*height-2 && dimensions.getValue("mb").jsonPrimitive.double>=bottom*height-2
+                    } ?: false
+                }
+                File(screens,"$name-${w}x${h}.viewport.json").writeText(requireNotNull(receipt)+"\n")
+            }
             val original=robot.createScreenCapture(bounds)
             if(name=="02b-sign-in-error" && w==1920) {
                 val username=DesktopUiProbe.bounds.getValue("username")
@@ -131,21 +156,6 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             small.createGraphics().let { g->g.drawImage(original,0,0,small.width,small.height,null);g.dispose() }
             val target=File(screens,"$name-${w}x${h}.jpg")
             ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
-            if(c.state.value.route==DesktopRoute.Player && c.state.value.playback?.ready==true && !com.sun.jna.Platform.isLinux()) {
-                var receipt:String?=null
-                waitFor("whole video clears header and controls") {
-                    receipt=c.videoViewportReceipt()
-                    receipt?.let {
-                        val data=Json.parseToJsonElement(it).jsonObject
-                        val top=data.getValue("topRatio").jsonPrimitive.double
-                        val bottom=data.getValue("bottomRatio").jsonPrimitive.double
-                        val dimensions=data.getValue("dimensions").jsonObject
-                        val height=dimensions.getValue("h").jsonPrimitive.double
-                        top>0 && bottom>0 && height>0 && dimensions.getValue("mt").jsonPrimitive.double>=top*height-2 && dimensions.getValue("mb").jsonPrimitive.double>=bottom*height-2
-                    } ?: false
-                }
-                File(screens,"$name-${w}x${h}.viewport.json").writeText(requireNotNull(receipt)+"\n")
-            }
             val accessibleRows=mutableListOf<String>()
             SwingUtilities.invokeAndWait {
                 fun visit(a: javax.accessibility.Accessible?, depth:Int) {
