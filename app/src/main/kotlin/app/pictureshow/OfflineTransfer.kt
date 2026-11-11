@@ -28,7 +28,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Call
-import okhttp3.OkHttpClient
 import okhttp3.Request
 
 internal class OfflineHttpResponse(
@@ -295,28 +294,27 @@ internal class OfflineResourceTransfer(
 private fun isDiskFull(e: IOException): Boolean = e.message.orEmpty().contains("ENOSPC") || e.message.orEmpty().contains("No space left")
 
 /** OkHttp drops Authorization on a cross-origin redirect by itself. */
-internal fun offlineOkHttp(): OfflineHttp {
-    val client: OkHttpClient = PlaybackMedia.createPlaybackHttpClient().newBuilder()
+internal fun offlineOkHttp(
+    client: Call.Factory = PlaybackMedia.createPlaybackHttpClient().newBuilder()
         // A conversion may say nothing for a long while before its first bytes.
         .readTimeout(180, TimeUnit.SECONDS)
         .build()
-    return OfflineHttp { url, headers, range, onCall ->
-        val request = Request.Builder().url(url).apply {
-            headers.forEach { (name, value) -> header(name, value) }
-            // A compressed body would make Content-Length and resume offsets lie.
-            header("Accept-Encoding", "identity")
-            if (range != null) header("Range", range)
-        }.build()
-        val call: Call = client.newCall(request)
-        onCall { call.cancel() }
-        val response = call.execute()
-        OfflineHttpResponse(
-            response.code,
-            { name -> response.header(name) },
-            response.body.byteStream(),
-            response.body.contentLength().takeIf { it >= 0 }
-        ) {
-            response.close()
-        }
+): OfflineHttp = OfflineHttp { url, headers, range, onCall ->
+    val request = Request.Builder().url(url).apply {
+        headers.forEach { (name, value) -> header(name, value) }
+        // A compressed body would make Content-Length and resume offsets lie.
+        header("Accept-Encoding", "identity")
+        if (range != null) header("Range", range)
+    }.build()
+    val call: Call = client.newCall(request)
+    onCall { call.cancel() }
+    val response = call.execute()
+    OfflineHttpResponse(
+        response.code,
+        { name -> response.header(name) },
+        response.body.byteStream(),
+        response.body.contentLength().takeIf { it >= 0 }
+    ) {
+        response.close()
     }
 }

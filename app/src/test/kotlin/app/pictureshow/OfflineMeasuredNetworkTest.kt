@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowNetwork
 import org.robolectric.shadows.ShadowNetworkCapabilities
 
 /**
@@ -32,6 +33,22 @@ class OfflineMeasuredNetworkTest {
         if (notMetered) shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
         shadowOf(manager).setNetworkCapabilities(requireNotNull(manager.activeNetwork), capabilities)
         return measuredNetwork(context)
+    }
+
+    @Test fun `job network rather than default network determines policy and sockets`() {
+        network(NetworkCapabilities.TRANSPORT_WIFI)
+        val selected = ShadowNetwork.newInstance(134)
+        val capabilities = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capabilities).addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+        shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(manager).setNetworkCapabilities(selected, capabilities)
+        assertEquals(OfflineNetwork.unmetered, measuredNetwork(context))
+        assertEquals(OfflineNetwork.metered, measuredNetwork(context, selected))
+        val base = okhttp3.OkHttpClient()
+        val routed = offlineNetworkClient(base, selected)
+        org.junit.Assert.assertSame(selected.socketFactory, routed.socketFactory)
+        org.junit.Assert.assertNotSame(base.connectionPool, routed.connectionPool)
+        org.junit.Assert.assertNotSame(base.dns, routed.dns)
     }
 
     @Test fun `no active network is none`() {
