@@ -640,9 +640,9 @@ internal fun NamedCatalogPicker(
     }
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
-    val focusTarget = namedPickerFocusTarget(choices.isNotEmpty(), selectAny != null, selectedKeys.isNotEmpty())
-    val focusAny = focusTarget == "any"
     var searchEditing by remember(account.key, kind, parentId) { mutableStateOf(false) }
+    val focusTarget = namedPickerFocusTarget(choices.isNotEmpty(), selectAny != null, selectedKeys.isNotEmpty(), searchEditing)
+    val focusAny = focusTarget == "any"
     val searchField = remember { FocusRequester() }
     val title = when (kind) {
         "BoxSet" -> "Choose a collection"
@@ -652,7 +652,15 @@ internal fun NamedCatalogPicker(
         "Persons" -> "Choose a person"
         else -> "Choose a row"
     }
-    val initialFocus = if (tv && !searchEditing && focusTarget != "search") choiceFocus else first
+    val initialFocus = if (tv) {
+        when (focusTarget) {
+            "search-field" -> searchField
+            "choice", "any" -> choiceFocus
+            else -> first
+        }
+    } else {
+        first
+    }
     CatalogEditor(title, {
         if (tv && searchEditing) {
             keyboard?.hide()

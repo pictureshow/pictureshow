@@ -39,7 +39,8 @@ class HomeBrowseVectorsTest {
                     namedPickerFocusTarget(
                         input.getValue("hasChoices").jsonPrimitive.content == "true",
                         input.getValue("hasAny").jsonPrimitive.content == "true",
-                        input.getValue("hasSelection").jsonPrimitive.content == "true"
+                        input.getValue("hasSelection").jsonPrimitive.content == "true",
+                        input["editing"]?.jsonPrimitive?.content == "true"
                     )
                 )
                 "title-count-label" -> Json.encodeToJsonElement(titleCountLabel(input.getValue("count").jsonPrimitive.content.toInt()))

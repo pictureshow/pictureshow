@@ -87,7 +87,8 @@ fun VideoResolution.summary(): String = when (this) {
 }
 
 /** A missing selected person never removes the remaining focus escape routes. */
-fun namedPickerFocusTarget(hasChoices: Boolean, hasAny: Boolean, hasSelection: Boolean): String = when {
+fun namedPickerFocusTarget(hasChoices: Boolean, hasAny: Boolean, hasSelection: Boolean, editing: Boolean = false): String = when {
+    editing -> "search-field"
     !hasChoices && !hasAny -> "search"
     hasAny && (!hasSelection || !hasChoices) -> "any"
     else -> "choice"

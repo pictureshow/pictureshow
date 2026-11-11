@@ -1,6 +1,6 @@
 # Viewer home and library browsing
 
-Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 102 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
+Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 110 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
 
 | ID | Viewer behavior | Acceptance |
 |---|---|---|
@@ -34,3 +34,5 @@ Specialized Year, Resolution and Person pickers use the same value-row/chevron p
 If a named search has no choices, closing TV search editing focuses the search action. An unresolved current person does not clear the filter or expose cached metadata: Any remains an unselected, focusable escape choice until the viewer selects it.
 
 TV Back leaves named search editing before closing the picker. The current/Any target is also the shared panel’s initial focus target, including when a previously selected person no longer resolves.
+
+During explicit TV search editing, the shared panel’s focus target is the attached editable search field; the replaced search action is not a valid focus target until editing ends. Eight further focus cases cover editing with every combination of results, Any and current selection.

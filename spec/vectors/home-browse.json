@@ -1930,6 +1930,94 @@
         "hasSelection": true
       },
       "expected": "choice"
+    },
+    {
+      "id": "named-editing-focus-False-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
     }
   ]
 }
