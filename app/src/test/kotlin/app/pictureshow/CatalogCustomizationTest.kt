@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
@@ -224,7 +226,8 @@ class CatalogCustomizationTest {
                 }, {})
             }
         }
-        compose.onNodeWithText("Restore default layout").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("home:reset-opener"))
+        compose.onNodeWithTag("home:reset-opener").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
         compose.onNodeWithTag("home:reset-cancel").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(before, preferences) }
@@ -253,7 +256,7 @@ class CatalogCustomizationTest {
                 )
             }
         }
-        compose.onNodeWithTag("home:nextup:series").performScrollTo()
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("home:nextup:series"))
         compose.onNodeWithText("Removed from Next up").assertIsDisplayed()
         compose.onNodeWithText("Restore all removed series").assertDoesNotExist()
         compose.onNodeWithTag("home:nextup:series").performSemanticsAction(SemanticsActions.OnClick)
@@ -329,6 +332,35 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:choice:first").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
     }
 
+    @Test fun tvNamedPickerHasNoEditableFieldUntilSearchIsActivated() {
+        service.named = { ClientResult.Success(ItemPage(listOf(MediaItem("p", "A person")), 1)) }
+        compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Persons", select = {}, close = {}) } }
+        compose.onNodeWithTag("catalog:choice:p").assertIsFocused()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
+        compose.onNodeWithTag("catalog:search").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(hasSetTextAction()).assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test fun personAnyClearsOnlyThePersonConstraint() {
+        var applied: LibraryFilters? = null
+        val before = LibraryFilters(genre = "Animation", personId = "p", unwatched = true)
+        compose.setContent {
+            MaterialTheme {
+                LibraryFilterEditor(CatalogGridState(account, library, filters = before), service, {
+                    applied =
+                        it
+                }, {})
+            }
+        }
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("filters:person"))
+        compose.onNodeWithTag("filters:person").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("catalog:choice:any").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("filters:person").assertIsFocused()
+        compose.onNodeWithTag("filters:apply").performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { assertEquals(before.copy(personId = null), applied) }
+    }
+
     @Test fun deniedLibraryCannotResolveSavedPersonMetadata() {
         service.detail = { id ->
             if (id == library.id) {
@@ -351,6 +383,8 @@ class CatalogCustomizationTest {
         }
         compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Genres", select = {}, close = {}) } }
         compose.onNodeWithText("Old choice").assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
+        compose.onNodeWithTag("catalog:search").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNode(hasSetTextAction()).performTextInput("replacement")
         compose.onNodeWithText("Old choice").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(350)
@@ -369,6 +403,8 @@ class CatalogCustomizationTest {
             }
         }
         compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Genres", select = {}, close = {}) } }
+        compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
+        compose.onNodeWithTag("catalog:search").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNode(hasSetTextAction()).performTextInput("new")
         compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithText("New permitted choice").assertIsDisplayed()

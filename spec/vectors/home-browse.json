@@ -1794,6 +1794,62 @@
           }
         }
       }
+    },
+    {
+      "id": "title-count-1",
+      "operation": "title-count-label",
+      "input": {
+        "count": 1
+      },
+      "expected": "1 title"
+    },
+    {
+      "id": "title-count-2",
+      "operation": "title-count-label",
+      "input": {
+        "count": 2
+      },
+      "expected": "2 titles"
+    },
+    {
+      "id": "resolution-summary-ANY",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "ANY"
+      },
+      "expected": "Any"
+    },
+    {
+      "id": "resolution-summary-SD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "SD"
+      },
+      "expected": "SD"
+    },
+    {
+      "id": "resolution-summary-HD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "HD"
+      },
+      "expected": "HD"
+    },
+    {
+      "id": "resolution-summary-FULL_HD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "FULL_HD"
+      },
+      "expected": "Full HD"
+    },
+    {
+      "id": "resolution-summary-UHD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "UHD"
+      },
+      "expected": "4K and above"
     }
   ]
 }

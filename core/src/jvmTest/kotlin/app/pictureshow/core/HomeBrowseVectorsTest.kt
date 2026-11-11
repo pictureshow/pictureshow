@@ -35,6 +35,10 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "title-count-label" -> Json.encodeToJsonElement(titleCountLabel(input.getValue("count").jsonPrimitive.content.toInt()))
+                "resolution-summary" -> Json.encodeToJsonElement(
+                    VideoResolution.valueOf(input.getValue("resolution").jsonPrimitive.content).summary()
+                )
                 "reset-home-layout" -> Json.encodeToJsonElement(
                     resetHomeLayout(
                         Json.decodeFromJsonElement<HomePreferences>(input.getValue("preferences")),

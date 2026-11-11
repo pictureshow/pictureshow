@@ -7,6 +7,7 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -39,6 +40,31 @@ class CatalogRevisionPresentationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Cinema", "https://media.example.test", "12"), User("v", "Viewer"), "fake")
     private val library = MediaItem("movies", "Movies", "CollectionFolder", collectionType = "movies")
+
+    @Test fun tvListRowsKeepPosterBoundedAndMoreThanOneTitleVisible() {
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme {
+                CatalogGrid(
+                    CatalogGridState(
+                        account,
+                        library,
+                        items = listOf(MediaItem("one", "First movie", "Movie"), MediaItem("two", "Second movie", "Movie")),
+                        loading = false,
+                        list = true
+                    ),
+                    {
+                    },
+                    {},
+                    { _, _ -> },
+                    {}
+                )
+            }
+        }
+        val row = compose.onNodeWithTag("grid:one")
+        val bounds = row.getUnclippedBoundsInRoot()
+        assertTrue(bounds.bottom - bounds.top <= 130.dp, "TV List must bound the poster within a compact row")
+        compose.onNodeWithTag("grid:two").assertIsDisplayed()
+    }
 
     @Test fun filteredEmptyTvFocusesClearAndCountsEachActiveFacet() {
         var cleared = false

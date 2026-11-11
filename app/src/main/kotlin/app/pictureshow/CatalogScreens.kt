@@ -962,7 +962,8 @@ fun CatalogGrid(
                         item = item,
                         account = state.account,
                         wide = state.list || item.type == "Episode",
-                        width = if (state.list) 240.dp else null,
+                        width = null,
+                        compact = state.list,
                         onClick = { onOpen(item) },
                         modifier = Modifier.focusRequester(requester).testTag("grid:${item.id}").onFocusChanged {
                             if (it.isFocused) {
@@ -3315,7 +3316,8 @@ internal fun CatalogCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp? = if (wide) 240.dp else 144.dp,
-    selected: Boolean? = null
+    selected: Boolean? = null,
+    compact: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
@@ -3353,59 +3355,94 @@ internal fun CatalogCard(
             }
         )
     ) {
-        // The inset keyline keeps poster pixels away from the outline's inside edge. The card owns
-        // the outline and scale, so there is still one focus border at the original geometry.
-        Column(
-            Modifier.clearAndSetSemantics {}.then(
-                if (focused ||
-                    selected == true
-                ) {
-                    Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
-                } else {
-                    Modifier
-                }
-            )
-        ) {
-            Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
-                CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
-                val badge = when {
-                    item.isEmptyContainer -> null
-                    item.isWatched -> "✓ Watched"
-                    item.userData.unplayedItemCount != null -> "${item.userData.unplayedItemCount} unplayed"
-                    else -> null
-                }
-                if (badge != null) {
-                    Text(
-                        badge,
-                        modifier = Modifier.align(Alignment.TopEnd).background(Color(0xDD202635)).padding(5.dp),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                if (item.userData.isFavorite) {
-                    Text("♥", modifier = Modifier.align(Alignment.TopStart).background(Color(0xDD202635)).padding(5.dp))
-                }
-                val fraction = progress(item).coerceIn(0f, 1f)
-                if (fraction > 0f && !item.isWatched && !item.isEmptyContainer) {
-                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
-                        Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
+        if (compact) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 108.dp).padding(12.dp).clearAndSetSemantics {
+                },
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CatalogArtwork(item, account, false, Modifier.width(56.dp).height(84.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(item.name, style = MaterialTheme.typography.titleSmall)
+                    if (item.type ==
+                        "Episode"
+                    ) {
+                        Text(
+                            listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
+                    Text(
+                        listOfNotNull(
+                            item.productionYear?.toString(),
+                            runtimeLabel(item.runTimeTicks),
+                            item.officialRating
+                        ).filter(String::isNotBlank).joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    val status = listOfNotNull(
+                        if (item.isWatched) "Watched" else null,
+                        if (item.userData.isFavorite) "Favorite" else null
+                    ).joinToString(" · ")
+                    if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall)
                 }
             }
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    item.name,
-                    maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall
+        } else {
+            // The inset keyline keeps poster pixels away from the outline's inside edge. The card owns
+            // the outline and scale, so there is still one focus border at the original geometry.
+            Column(
+                Modifier.clearAndSetSemantics {}.then(
+                    if (focused ||
+                        selected == true
+                    ) {
+                        Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
+                    } else {
+                        Modifier
+                    }
                 )
-                if (item.type == "Episode") {
+            ) {
+                Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
+                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
+                    val badge = when {
+                        item.isEmptyContainer -> null
+                        item.isWatched -> "✓ Watched"
+                        item.userData.unplayedItemCount != null -> "${item.userData.unplayedItemCount} unplayed"
+                        else -> null
+                    }
+                    if (badge != null) {
+                        Text(
+                            badge,
+                            modifier = Modifier.align(Alignment.TopEnd).background(Color(0xDD202635)).padding(5.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    if (item.userData.isFavorite) {
+                        Text("♥", modifier = Modifier.align(Alignment.TopStart).background(Color(0xDD202635)).padding(5.dp))
+                    }
+                    val fraction = progress(item).coerceIn(0f, 1f)
+                    if (fraction > 0f && !item.isWatched && !item.isEmptyContainer) {
+                        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
+                            Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
+                        }
+                    }
+                }
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
-                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
+                        item.name,
+                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = CatalogMuted,
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.titleSmall
                     )
+                    if (item.type == "Episode") {
+                        Text(
+                            listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
+                            maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = CatalogMuted,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         }

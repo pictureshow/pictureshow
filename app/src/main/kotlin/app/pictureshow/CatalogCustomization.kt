@@ -59,7 +59,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
@@ -91,6 +90,8 @@ import app.pictureshow.core.namedPickerChoices
 import app.pictureshow.core.nextUpSeriesHint
 import app.pictureshow.core.offerRestoreAllSeries
 import app.pictureshow.core.resetHomeLayout
+import app.pictureshow.core.summary
+import app.pictureshow.core.titleCountLabel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -180,6 +181,44 @@ private fun <T> CatalogChoiceRow(
     }
 }
 
+/** Custom year/person pickers retain the shared value-row role and opener restoration. */
+@Composable
+private fun CatalogPickerRow(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    picker: @Composable (() -> Unit) -> Unit
+) {
+    val tv = usesTvInterface(LocalContext.current)
+    val opener = remember { FocusRequester() }
+    var choosing by remember { mutableStateOf(false) }
+    var restore by remember { mutableStateOf(false) }
+    if (tv) {
+        TvSettingsValueRow(title, value, modifier.focusRequester(opener), enabled = enabled, onClick = { choosing = true })
+    } else {
+        ListItem(
+            headlineContent = { Text(title) },
+            supportingContent = { Text(value) },
+            trailingContent = { Icon(touchActionIcon("chevron-right"), null) },
+            modifier = modifier.clickable(enabled = enabled) { choosing = true }.semantics { stateDescription = value }
+        )
+    }
+    if (choosing) {
+        picker {
+            choosing = false
+            restore = true
+        }
+    }
+    LaunchedEffect(choosing, restore) {
+        if (tv && !choosing && restore) {
+            withFrameNanos { }
+            opener.requestFocus()
+            restore = false
+        }
+    }
+}
+
 @Composable
 private fun CatalogToggleRow(
     title: String,
@@ -250,10 +289,11 @@ private fun <T> CatalogChoicePicker(
     values: List<T>,
     label: (T) -> String,
     select: (T) -> Unit,
-    close: () -> Unit
+    close: () -> Unit,
+    supportingText: ((T) -> String?)? = null
 ) {
     if (usesTvInterface(LocalContext.current)) {
-        TvSettingsChoicePicker(title, value, values, label, select, close)
+        TvSettingsChoicePicker(title, value, values, label, select, close, supportingText)
     } else {
         val first = remember { FocusRequester() }
         val index = values.indexOf(value).coerceAtLeast(0)
@@ -263,6 +303,7 @@ private fun <T> CatalogChoicePicker(
                 val selected = values[i] == value
                 ListItem(
                     headlineContent = { Text(label(values[i])) },
+                    supportingContent = supportingText?.invoke(values[i])?.let { { Text(it) } },
                     trailingContent = { RadioButton(selected, onClick = null) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("catalog:option:$i")
                         .semantics {
@@ -533,7 +574,8 @@ internal fun NamedCatalogPicker(
     select: (MediaItem) -> Unit,
     close: () -> Unit,
     selectedKeys: Set<String> = emptySet(),
-    pickingHomeRows: Boolean = false
+    pickingHomeRows: Boolean = false,
+    selectAny: (() -> Unit)? = null
 ) {
     val tv = usesTvInterface(LocalContext.current)
     val first = remember { FocusRequester() }
@@ -597,6 +639,8 @@ internal fun NamedCatalogPicker(
     }
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
+    var searchEditing by remember(account.key, kind, parentId) { mutableStateOf(false) }
+    val searchField = remember { FocusRequester() }
     val title = when (kind) {
         "BoxSet" -> "Choose a collection"
         "Playlist" -> "Choose a playlist"
@@ -607,19 +651,33 @@ internal fun NamedCatalogPicker(
     }
     CatalogEditor(title, close, first, list) {
         item("search") {
-            OutlinedTextField(
-                query,
-                { query = it.take(200) },
-                label = { Text("Find by name") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(first),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    requested = query.trim()
-                    page = 0
-                    keyboard?.hide()
-                })
-            )
+            if (tv && !searchEditing) {
+                TvSettingsActionRow(
+                    "Find by name",
+                    Modifier.focusRequester(first).testTag("catalog:search"),
+                    supportingText = query.ifBlank {
+                        null
+                    }
+                ) {
+                    searchEditing =
+                        true
+                }
+            } else {
+                OutlinedTextField(
+                    query,
+                    { query = it.take(200) },
+                    label = { Text("Find by name") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(if (tv) searchField else first),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        requested = query.trim()
+                        page = 0
+                        keyboard?.hide()
+                        searchEditing = false
+                    })
+                )
+            }
         }
         if (loading) item("loading") { Text("Loading…") }
         error?.let {
@@ -636,11 +694,38 @@ internal fun NamedCatalogPicker(
         ) {
             item("empty") { Text(if (requested.isBlank()) "No choices available" else "No matches for “$requested”") }
         }
+        if (selectAny != null) {
+            item("any-choice") {
+                val checked = selectedKeys.isEmpty()
+                val modifier = (if (checked) Modifier.focusRequester(choiceFocus) else Modifier).testTag("catalog:choice:any")
+                    .semantics {
+                        selected = checked
+                        stateDescription = if (checked) "Selected" else ""
+                    }
+                if (tv) {
+                    TvSettingsRow("Any", null, modifier, selected = checked, onClick = selectAny, trailing = {
+                        TvSettingsRadioIndicator(checked)
+                    })
+                } else {
+                    ListItem(headlineContent = {
+                        Text("Any")
+                    }, trailingContent = { RadioButton(checked, onClick = null) }, modifier = modifier.clickable(onClick = selectAny))
+                }
+            }
+        }
         items(choices, key = MediaItem::id) { item ->
             val checked = selected(item)
             val count = item.recursiveItemCount ?: item.childCount
-            val support = if (pickingHomeRows) homePinPickerSupport(checked, count) else count?.let { "$it titles" }
-            val modifier = (if (choices.indexOf(item) == initial) Modifier.focusRequester(choiceFocus) else Modifier)
+            val support = if (pickingHomeRows) homePinPickerSupport(checked, count) else count?.let(::titleCountLabel)
+            val modifier = (
+                if (choices.indexOf(item) == initial &&
+                    (selectAny == null || selectedKeys.isNotEmpty())
+                ) {
+                    Modifier.focusRequester(choiceFocus)
+                } else {
+                    Modifier
+                }
+                )
                 .testTag("catalog:choice:${item.id}").semantics {
                     this.selected = checked
                     stateDescription =
@@ -663,7 +748,7 @@ internal fun NamedCatalogPicker(
                         if (pickingHomeRows) {
                             if (checked) androidx.tv.material3.Icon(touchActionIcon("check"), "On your home")
                         } else {
-                            androidx.tv.material3.RadioButton(checked, onClick = null, modifier = Modifier.clearAndSetSemantics {})
+                            TvSettingsRadioIndicator(checked)
                         }
                     }
                 )
@@ -690,9 +775,21 @@ internal fun NamedCatalogPicker(
             item { CatalogCommand("More choices", { page += 60 }, enabled = !loading) }
         }
     }
-    LaunchedEffect(loading, requested, page, currentChoices) {
-        if (tv && !loading && choices.isNotEmpty() && query.isBlank()) {
-            list.scrollToItem(initial + 1)
+    LaunchedEffect(searchEditing) {
+        if (tv && searchEditing) {
+            list.scrollToItem(0)
+            withFrameNanos { }
+            searchField.requestFocus()
+            keyboard?.show()
+        }
+    }
+    BackHandler(enabled = tv && searchEditing) {
+        keyboard?.hide()
+        searchEditing = false
+    }
+    LaunchedEffect(loading, requested, page, currentChoices, searchEditing) {
+        if (tv && !loading && !searchEditing && (choices.isNotEmpty() || selectAny != null)) {
+            list.scrollToItem(if (selectAny != null && selectedKeys.isEmpty()) 1 else initial + (if (selectAny != null) 2 else 1))
             withFrameNanos { }
             choiceFocus.requestFocus()
             keyboard?.hide()
@@ -703,7 +800,20 @@ internal fun NamedCatalogPicker(
 @Composable
 private fun CatalogPersonAvatar(item: MediaItem, account: Account) {
     Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
-        Text(item.name.split(' ').mapNotNull { it.firstOrNull() }.take(2).joinToString(""), style = MaterialTheme.typography.titleSmall)
+        Text(
+            item.name.split(' ').mapNotNull {
+                it.firstOrNull()
+            }.take(2).joinToString(""),
+            style = MaterialTheme.typography.titleSmall,
+            color = if (usesTvInterface(
+                    LocalContext.current
+                )
+            ) {
+                androidx.tv.material3.LocalContentColor.current
+            } else {
+                androidx.compose.material3.LocalContentColor.current
+            }
+        )
         imageUrl(account.server, item, 80)?.let {
             AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
         }
@@ -754,7 +864,6 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
-    var personPicker by remember { mutableStateOf(false) }
     var personLabel by remember { mutableStateOf("Selected person") }
     LaunchedEffect(state.account.key, state.parent.id, draft.personId) {
         personLabel = "Selected person"
@@ -804,15 +913,14 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
             ) { draft = draft.copy(genre = it) }
         }
         item {
-            var choosingYear by remember { mutableStateOf(false) }
-            CatalogActionRow(
-                "Year · ${draft.year ?: "Any"}",
-                { choosingYear = true },
+            CatalogPickerRow(
+                "Year",
+                draft.year?.toString() ?: "Any",
                 Modifier.testTag("filters:year"),
-                enabled =
-                !loading && error == null
-            )
-            if (choosingYear) CatalogYearPicker(draft.year, facets.years, { draft = draft.copy(year = it) }) { choosingYear = false }
+                enabled = !loading && error == null
+            ) { done ->
+                CatalogYearPicker(draft.year, facets.years, { draft = draft.copy(year = it) }, done)
+            }
         }
         item {
             CatalogChoiceRow(
@@ -825,28 +933,33 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
             ) { draft = draft.copy(officialRating = it) }
         }
         item {
-            CatalogChoiceRow(
-                "Resolution",
-                draft.resolution,
-                VideoResolution.entries,
-                {
+            CatalogPickerRow("Resolution", draft.resolution.summary(), Modifier.testTag("filters:resolution")) { done ->
+                CatalogChoicePicker("Resolution", draft.resolution, VideoResolution.entries, { it.summary() }, {
+                    draft =
+                        draft.copy(resolution = it)
+                }, done, supportingText = {
                     if (it ==
                         VideoResolution.ANY
                     ) {
-                        "Any"
+                        null
                     } else {
-                        it.label
+                        it.label.substringAfter('(').removeSuffix(")")
                     }
-                },
-                Modifier.testTag("filters:resolution")
-            ) { draft = draft.copy(resolution = it) }
+                })
+            }
         }
         item {
-            CatalogActionRow("Person · ${if (draft.personId == null) "Any" else personLabel}", {
-                personPicker = true
-            }, Modifier.testTag("filters:person"))
+            CatalogPickerRow("Person", if (draft.personId == null) "Any" else personLabel, Modifier.testTag("filters:person")) { done ->
+                NamedCatalogPicker(state.account, service, "Persons", state.parent.id, {
+                    draft = draft.copy(personId = it.id)
+                    personLabel = it.name
+                    done()
+                }, done, selectedKeys = setOfNotNull(draft.personId), selectAny = {
+                    draft = draft.copy(personId = null)
+                    done()
+                })
+            }
         }
-        if (draft.personId != null) item { CatalogCommand("Clear person", { draft = draft.copy(personId = null) }) }
         if (loading) item { Text("Loading choices…") }
         error?.let {
             item {
@@ -856,12 +969,5 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
                 }
             }
         }
-    }
-    if (personPicker) {
-        NamedCatalogPicker(state.account, service, "Persons", state.parent.id, {
-            draft = draft.copy(personId = it.id)
-            personLabel = it.name
-            personPicker = false
-        }, { personPicker = false }, selectedKeys = setOfNotNull(draft.personId))
     }
 }
