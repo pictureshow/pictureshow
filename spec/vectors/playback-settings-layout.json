@@ -54,12 +54,15 @@
           "20 Mbps"
         ],
         "notes": [
-          "Up to 200 Mbps; this is a ceiling, not unlimited.",
+          "Up to 200 Mbps",
           null
         ]
       },
       "expected": {
-        "maximumCenterOffsetDp": 1
+        "maximumCenterOffsetDp": 1,
+        "overflowHint": "Scroll for more options",
+        "overflowHintVisible": false,
+        "overflowHintPresentation": "stateDescription"
       }
     },
     {
@@ -117,7 +120,7 @@
         "widthDp": 720,
         "heightDp": 360,
         "fontScale": 1.3,
-        "automaticContext": "Automatic: Home limit 200 Mbps",
+        "automaticContext": "Up to 200 Mbps on your home network",
         "selectMbps": 4,
         "reductionNotice": "Quality limit reduced to 20 Mbps to avoid buffering.",
         "platformDefaultDialogWidthDp": 320
@@ -127,7 +130,40 @@
         "selectionCountOnOpen": 0,
         "selectionCountAfterChoice": 1,
         "closeCountAfterChoice": 1,
-        "minimumContentWidthDp": 480
+        "minimumContentWidthDp": 480,
+        "overflowHintVisible": false,
+        "overflowHintPresentation": "stateDescription"
+      }
+    },
+    {
+      "id": "playback-settings-layout.contextual-main-settings-copy",
+      "operation": "main-settings-contextual-copy",
+      "input": {
+        "rows": [
+          {
+            "tag": "settings:bitrate",
+            "title": "Home quality limit",
+            "panelTitle": "Home limit",
+            "supporting": "For streaming on your home network. Also in Network quality."
+          },
+          {
+            "tag": "settings:size",
+            "title": "Subtitle size",
+            "panelTitle": "Font size",
+            "supporting": "Sets subtitle text size. Also in Subtitle appearance, with a live preview."
+          },
+          {
+            "tag": "settings:background",
+            "title": "Subtitle background",
+            "panelTitle": "Background",
+            "supporting": "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
+          }
+        ]
+      },
+      "expected": {
+        "segmentCaption": "Changes apply the next time you open the player.",
+        "segmentCaptionCount": 1,
+        "shortcutMetaCopyCount": 0
       }
     }
   ]

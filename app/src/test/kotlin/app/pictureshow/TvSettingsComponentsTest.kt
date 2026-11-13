@@ -338,9 +338,9 @@ class TvSettingsComponentsTest {
             }
         }
         compose.onNodeWithTag("choice").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
-        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.").assertDoesNotExist()
+        compose.onNodeWithText("Up to 200 Mbps").assertDoesNotExist()
         compose.onNodeWithTag("choice").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("tv-settings:option:0").assertIsFocused().assertIsSelected()
-        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Up to 200 Mbps", useUnmergedTree = true).assertIsDisplayed()
     }
 }

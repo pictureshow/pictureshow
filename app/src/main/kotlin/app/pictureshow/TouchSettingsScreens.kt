@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
@@ -98,11 +99,11 @@ internal fun TouchSettings(
             "Changes are saved immediately and apply the next time you open the player."
         ) {
             TouchChoice(
-                "Home limit",
+                "Home quality limit",
                 local.bitrateMbps,
                 PlaybackPreferences.BITRATES,
                 ::bitrateLabel,
-                supporting = "Shortcut to Network quality. On the same network as your server; a lower limit may convert the video.",
+                supporting = "For streaming on your home network. Also in Network quality.",
                 optionSupporting = ::bitrateOptionSupporting
             ) { value -> onLocal { it.copy(bitrateMbps = value) } }
             TouchSwitchRow(
@@ -126,20 +127,20 @@ internal fun TouchSettings(
                 onLocal { it.copy(musicQuality = value) }
             }
             TouchChoice(
-                "Font size",
+                "Subtitle size",
                 local.subtitleSize,
                 SubtitleSize.entries,
                 { settingLabel(it.name) },
-                supporting = "Shortcut to Subtitle appearance, including its live preview."
+                supporting = "Sets subtitle text size. Also in Subtitle appearance, with a live preview."
             ) { value ->
                 onLocal { it.copy(subtitleSize = value) }
             }
             TouchChoice(
-                "Background",
+                "Subtitle background",
                 local.subtitleBackground,
                 SubtitleBackground.entries,
                 { settingLabel(it.name) },
-                supporting = "Shortcut to Subtitle appearance, including its live preview."
+                supporting = "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
             ) { value ->
                 onLocal { it.copy(subtitleBackground = value) }
             }
@@ -148,7 +149,7 @@ internal fun TouchSettings(
         TouchSection("More playback settings") {
             playbackGroups.forEach { group -> TouchNavRow(group) { advanced = group } }
         }
-        TouchSection("Skip segments") {
+        TouchSection("Skip segments", "Changes apply the next time you open the player.") {
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
                 TouchChoice(
                     segmentLabel(type).replaceFirstChar { it.uppercase() },
@@ -157,7 +158,6 @@ internal fun TouchSettings(
                     { if (it == SegmentMode.Automatic) "Skip automatically" else it.name }
                 ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
             }
-            TouchHelper("Ask shows a skip button during playback.")
         }
         TouchSection("Your server preferences", "These follow your account to other Jellyfin apps.") {
             if (state.loading) TouchHelper("Loading server preferences…")
@@ -290,10 +290,7 @@ internal val LocalTouchChoicePanel = staticCompositionLocalOf<((TouchChoicePanel
 @Composable
 internal fun TouchChoiceOptions(panel: TouchChoicePanel, onSelected: (Int) -> Unit) {
     val shortWindow = isShortTouchWindow()
-    LazyColumn {
-        item(key = "scroll-hint") {
-            if (shortWindow) Text("Scroll for more options", style = MaterialTheme.typography.bodySmall)
-        }
+    LazyColumn(Modifier.testTag("touch:choice-options").semantics { if (shortWindow) stateDescription = "Scroll for more options" }) {
         items(panel.labels.size) { index ->
             val note = panel.notes[index]
             TouchRadioRow(

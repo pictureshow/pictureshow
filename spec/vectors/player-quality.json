@@ -39,7 +39,7 @@
         "network": "Home",
         "configuredBitrate": 200000000
       },
-      "expected": "Automatic: Home limit 200 Mbps"
+      "expected": "Up to 200 Mbps on your home network"
     },
     {
       "id": "player-quality.remote-context",
@@ -48,7 +48,7 @@
         "network": "Remote",
         "configuredBitrate": 20000000
       },
-      "expected": "Automatic: Remote limit 20 Mbps"
+      "expected": "Up to 20 Mbps away from home"
     },
     {
       "id": "player-quality.metered-context",
@@ -57,7 +57,7 @@
         "network": "Metered",
         "configuredBitrate": 4000000
       },
-      "expected": "Automatic: Metered limit 4 Mbps"
+      "expected": "Up to 4 Mbps on mobile data or a metered hotspot"
     },
     {
       "id": "player-quality.reduced",

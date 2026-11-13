@@ -156,12 +156,12 @@ internal fun PlaybackSettingsScreen(
         )
         TvSettingsList(Modifier.weight(1f)) {
             TvSettingsChoiceRow(
-                "Home limit",
+                "Home quality limit",
                 local.bitrateMbps,
                 PlaybackPreferences.BITRATES,
                 label = ::bitrateLabel,
                 modifier = Modifier.focusRequester(first).testTag("settings:bitrate"),
-                supportingText = "Shortcut to the same home limit in Network quality.",
+                supportingText = "For streaming on your home network. Also in Network quality.",
                 optionSupportingText = ::bitrateOptionSupporting
             ) { value -> onLocal { it.copy(bitrateMbps = value) } }
             TvSettingsToggleRow(
@@ -169,7 +169,7 @@ internal fun PlaybackSettingsScreen(
                 local.passthrough,
                 Modifier.testTag("settings:passthrough"),
                 supportingText =
-                "Shortcut to Audio output. " + app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
+                app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
                     local.passthrough,
                     supportedPassthrough,
                     checking = acceptedAudio.startsWith("Checking"),
@@ -206,20 +206,20 @@ internal fun PlaybackSettingsScreen(
                 optionSupportingText = { if (it == "server-allowed") "Anyone this server allows" else null }
             ) { value -> onLocal { it.copy(remoteReceiver = value) } }
             TvSettingsChoiceRow(
-                "Font size",
+                "Subtitle size",
                 local.subtitleSize,
                 SubtitleSize.entries,
                 ::subtitleSizeLabel,
                 Modifier.testTag("settings:size"),
-                supportingText = "Shortcut to the same font size in Subtitle appearance. Default follows Android captions."
+                supportingText = "Sets subtitle text size. Also in Subtitle appearance, with a live preview."
             ) { value -> onLocal { it.copy(subtitleSize = value) } }
             TvSettingsChoiceRow(
-                "Background",
+                "Subtitle background",
                 local.subtitleBackground,
                 SubtitleBackground.entries,
                 ::subtitleBackgroundLabel,
                 Modifier.testTag("settings:background"),
-                supportingText = "Shortcut to the same background in Subtitle appearance, with a live preview."
+                supportingText = "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
             ) { value -> onLocal { it.copy(subtitleBackground = value) } }
             playbackGroups.forEach { group ->
                 val requester = remember(group) { FocusRequester() }
@@ -238,15 +238,14 @@ internal fun PlaybackSettingsScreen(
                     }
                 ) { advanced = group }
             }
-            TvSettingsSectionHeader("Skip segments")
+            TvSettingsSectionHeader("Skip segments", supportingText = "Changes apply the next time you open the player.")
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
                 TvSettingsChoiceRow(
                     segmentLabel(type).replaceFirstChar { it.uppercase() },
                     local.segmentModes[type] ?: SegmentMode.Ask,
                     SegmentMode.entries,
                     { if (it == SegmentMode.Automatic) "Skip automatically" else it.name },
-                    Modifier.testTag("settings:segment:$type"),
-                    supportingText = "Ask shows a skip button. Changes apply next time you open the player."
+                    Modifier.testTag("settings:segment:$type")
                 ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
             }
             TvSettingsSectionHeader("Your server preferences")

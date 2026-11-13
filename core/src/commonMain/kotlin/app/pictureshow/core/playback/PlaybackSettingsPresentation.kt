@@ -58,10 +58,19 @@ object PlaybackSettingsPresentation {
         PassthroughEncoding.DTS -> "DTS"
         PassthroughEncoding.DTS_HD -> "DTS-HD"
     }
-    fun capabilityLabel(value: CapabilityOverride, hdr: Boolean) = when (value) {
+    fun burnConsequence(value: SubtitleBurnIn) = when (value) {
+        SubtitleBurnIn.Always ->
+            "The server draws every subtitle into the video. This converts the video, " +
+                "and your subtitle style and timing settings won't apply."
+        SubtitleBurnIn.ImageOnly ->
+            "Image subtitles are burned into the video, requiring video conversion. Supported text " +
+                "subtitles can still use your style. Unsupported text may also need conversion."
+        else -> "Plays supported subtitles on this device. Your server converts the video when a selected subtitle cannot play here."
+    }
+    fun capabilityLabel(value: CapabilityOverride) = when (value) {
         CapabilityOverride.Detected -> "Automatic"
         CapabilityOverride.Force -> "Always on"
-        CapabilityOverride.Disable -> if (hdr) "Off (convert to SDR)" else "Off"
+        CapabilityOverride.Disable -> "Off"
     }
     fun capabilityConsequence(value: CapabilityOverride, hdr: Boolean) = when (value) {
         CapabilityOverride.Force -> "Only if your device supports it but Automatic gets it wrong. Video may fail to play."
