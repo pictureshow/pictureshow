@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -242,19 +242,21 @@ internal fun <T> TvSettingsChoicePicker(
 }
 
 @Composable
-private fun TvSettingsRow(
+internal fun TvSettingsRow(
     title: String,
-    supportingText: String?,
+    supportingText: String? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean? = null,
     checked: Boolean? = null,
     valueLabel: String? = null,
     onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)? = null
+    trailing: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val isFocused by interaction.collectIsFocusedAsState()
+    var isFocused by remember { mutableStateOf(false) }
+    val nativeFocus = Modifier.onFocusChanged { isFocused = it.isFocused }
     val rowFocus = remember { FocusRequester() }
     val supportingColor = if (isFocused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
     // ListItem's selectable Surface always adds Selected, including when false.
@@ -291,14 +293,18 @@ private fun TvSettingsRow(
         Box(modifier.then(accessibilityModifier).fillMaxWidth()) {
             TvSettingsNativeRow(
                 title, supportingText,
-                Modifier.focusRequester(
-                    rowFocus
-                ),
-                enabled, false, supportingColor, interaction, onClick, trailing
+                Modifier.focusRequester(rowFocus).then(nativeFocus),
+                enabled, false, supportingColor, interaction, onClick, trailing, leading
             )
         }
     } else {
-        TvSettingsNativeRow(title, supportingText, modifier, enabled, selected, supportingColor, interaction, onClick, trailing)
+        TvSettingsNativeRow(
+            title, supportingText,
+            modifier.then(
+                nativeFocus
+            ),
+            enabled, selected, supportingColor, interaction, onClick, trailing, leading
+        )
     }
 }
 
@@ -312,7 +318,8 @@ private fun TvSettingsNativeRow(
     supportingColor: Color,
     interaction: MutableInteractionSource,
     onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)?
+    trailing: (@Composable () -> Unit)?,
+    leading: (@Composable () -> Unit)?
 ) {
     ListItem(
         selected, onClick,
@@ -327,6 +334,7 @@ private fun TvSettingsNativeRow(
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
+        leadingContent = leading,
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
@@ -367,13 +375,16 @@ internal fun TvSettingsPanel(
     firstFocus: FocusRequester,
     modifier: Modifier = Modifier,
     preview: (@Composable () -> Unit)? = null,
+    footer: (@Composable () -> Unit)? = null,
+    contentFocusKey: Any? = Unit,
+    panelWidth: androidx.compose.ui.unit.Dp = 420.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler(onBack = onClose)
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, windowTitle = title)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
             Column(
-                modifier.widthIn(max = 420.dp).fillMaxWidth().fillMaxHeight()
+                modifier.widthIn(max = panelWidth).fillMaxWidth().fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                     .testTag("tv-settings:panel").semantics {
                         paneTitle = title
@@ -389,9 +400,10 @@ internal fun TvSettingsPanel(
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
                 TvSettingsList(Modifier.weight(1f), content)
+                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() } }
             }
         }
-        LaunchedEffect(firstFocus) {
+        LaunchedEffect(firstFocus, contentFocusKey) {
             withFrameNanos { }
             firstFocus.requestFocus()
         }

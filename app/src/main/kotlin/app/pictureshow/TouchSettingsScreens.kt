@@ -76,7 +76,7 @@ internal fun TouchSettings(
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
             TouchNavRow("Downloads", onClick = onDownloads)
-            TouchNavRow("Watch together", onClick = onSyncPlay)
+            TouchNavRow(androidx.compose.ui.res.stringResource(R.string.sync_title), onClick = onSyncPlay)
             castEnabled?.let {
                 TouchSwitchRow(
                     "Google Cast",

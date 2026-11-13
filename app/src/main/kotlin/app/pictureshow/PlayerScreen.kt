@@ -664,6 +664,7 @@ internal fun PlayerItemScreen(
                 }
                 LaunchedEffect(error) { errorFocus.requestFocus() }
             }
+            SyncPlayerChip(host.sync, Modifier.align(Alignment.TopStart).padding(36.dp).widthIn(max = 640.dp), tv = true)
             // Keep opener nodes composed while the sibling modal hides this player tree.
             if (controlsVisible || (controls && extraPanel != null && error == null && !switching)) {
                 Column(
@@ -725,7 +726,6 @@ internal fun PlayerItemScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Button(scale = playerButtonScale(), onClick = { host.sync?.show() }) { Text("Watch together") }
                         PlaybackToggle(
                             paused,
                             showPlayButton,
@@ -785,6 +785,11 @@ internal fun PlayerItemScreen(
                                 .playerTouchClick { openExtraPanel("Playback info", infoFocus) }
                         ) {
                             Text("Playback info")
+                        }
+                        Button(scale = playerButtonScale(), onClick = {
+                            host.sync?.show()
+                        }, modifier = Modifier.testTag("player:syncplay")) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
                         }
                         Button(
                             scale = playerButtonScale(),

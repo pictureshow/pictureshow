@@ -84,6 +84,7 @@ const pendingPortSuites = new Set([
     "cast-session",
     "grid-navigation",
     "sync-clock",
+    "sync-presentation",
     "sync-application",
     "sync-drift",
     "sync-state",

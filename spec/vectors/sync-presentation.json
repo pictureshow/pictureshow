@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-presentation",
+  "cases": [
+    {
+      "id": "current-ready-estimate",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 0,
+      "uncertaintyTicks": 400000,
+      "expected": "IN_SYNC"
+    },
+    {
+      "id": "boundary-estimate",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": -1000000,
+      "uncertaintyTicks": 500000,
+      "expected": "IN_SYNC"
+    },
+    {
+      "id": "clock-unavailable",
+      "op": "quality",
+      "usableClock": false,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 0,
+      "uncertaintyTicks": 400000,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "renderer-unready",
+      "op": "quality",
+      "usableClock": true,
+      "ready": false,
+      "applied": true,
+      "errorTicks": 0,
+      "uncertaintyTicks": 400000,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "unapplied-command",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": false,
+      "errorTicks": 0,
+      "uncertaintyTicks": 400000,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "unknown-error",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": null,
+      "uncertaintyTicks": 400000,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "unknown-uncertainty",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 0,
+      "uncertaintyTicks": null,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "uncertain-clock",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 0,
+      "uncertaintyTicks": 500001,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "catching-up",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 1000001,
+      "uncertaintyTicks": 400000,
+      "expected": "CATCHING_UP"
+    },
+    {
+      "id": "catching-up-boundary",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": -10000000,
+      "uncertaintyTicks": 400000,
+      "expected": "CATCHING_UP"
+    },
+    {
+      "id": "out-of-sync",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": 10000001,
+      "uncertaintyTicks": 400000,
+      "expected": "OUT_OF_SYNC"
+    },
+    {
+      "id": "overflow-distance",
+      "op": "quality",
+      "usableClock": true,
+      "ready": true,
+      "applied": true,
+      "errorTicks": -9223372036854775808,
+      "uncertaintyTicks": 400000,
+      "expected": "OUT_OF_SYNC"
+    },
+    {
+      "id": "title-current",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        1,
+        2
+      ],
+      "entries": [
+        "e1",
+        "e2"
+      ],
+      "asked": [
+        "e1",
+        "e2"
+      ],
+      "expected": true
+    },
+    {
+      "id": "title-account-replaced",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "b",
+        1,
+        2
+      ],
+      "entries": [
+        "e1"
+      ],
+      "asked": [
+        "e1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "title-membership-replaced",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        2,
+        2
+      ],
+      "entries": [
+        "e1"
+      ],
+      "asked": [
+        "e1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "title-queue-replaced",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        1,
+        3
+      ],
+      "entries": [
+        "e2"
+      ],
+      "asked": [
+        "e1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "title-entry-removed",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        1,
+        2
+      ],
+      "entries": [
+        "e2"
+      ],
+      "asked": [
+        "e1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "title-no-requested-entry",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        1,
+        2
+      ],
+      "entries": [
+        "e1"
+      ],
+      "asked": [],
+      "expected": false
+    },
+    {
+      "id": "waiting-buffer-is-group",
+      "op": "phase",
+      "phase": "Waiting",
+      "reason": "Buffer",
+      "expected": "WAITING_BUFFER"
+    },
+    {
+      "id": "waiting-ready-not-all-ready",
+      "op": "phase",
+      "phase": "Waiting",
+      "reason": "Ready",
+      "expected": "WAITING"
+    },
+    {
+      "id": "waiting-seek",
+      "op": "phase",
+      "phase": "Waiting",
+      "reason": "Seek",
+      "expected": "WAITING_SEEK"
+    },
+    {
+      "id": "playing-not-qualification",
+      "op": "phase",
+      "phase": "Playing",
+      "reason": "Ready",
+      "expected": "PLAYING"
+    },
+    {
+      "id": "unknown-phase",
+      "op": "phase",
+      "phase": "FutureState",
+      "reason": null,
+      "expected": "EMPTY"
+    },
+    {
+      "id": "names-capped-without-inferred-you-or-ready",
+      "op": "people",
+      "names": [
+        "Morgan",
+        "Morgan",
+        "Sam",
+        "Riley",
+        "Jordan",
+        "Casey"
+      ],
+      "visible": [
+        "Morgan",
+        "Morgan",
+        "Sam",
+        "Riley"
+      ],
+      "remaining": 2
+    }
+  ]
+}

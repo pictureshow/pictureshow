@@ -58,6 +58,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 internal interface SyncPlayGateway {
     suspend fun groups(account: Account): ClientResult<List<SyncGroup>>
+    suspend fun title(account: Account, itemId: String): ClientResult<String?> = ClientResult.Success(null)
     suspend fun access(account: Account): ClientResult<String>
     suspend fun time(account: Account): ClientResult<SyncUtcTime>
     suspend fun send(account: Account, request: SyncRequest): Int
@@ -127,6 +128,13 @@ internal class SyncPlayHost(
     private var account: Account? = null
     internal var membership by mutableStateOf(SyncMembership())
         private set
+    private var titleScope: app.pictureshow.core.sync.SyncTitleScope? = null
+    private var titleQueue: List<Pair<String, String>> = emptyList()
+    private val titles = mutableMapOf<String, String?>()
+    private val titleRequests = mutableSetOf<String>()
+    private var noticeRevision = 0L
+    private var titleRevision = 0L
+    private var waitReason: String? = null
     private var leavePending = false
 
     // Local Joining intent alone cannot have changed server membership. Preserve this through recovery/rejoin.
@@ -225,19 +233,27 @@ internal class SyncPlayHost(
         val target = account ?: return
         val version = sequence
         mutable.value =
-            mutable.value.copy(busy = true, policy = "None", policyKnown = false, policyFailed = false, groups = emptyList(), status = "")
+            mutable.value.copy(
+                busy = true,
+                policy = "None",
+                policyKnown = false,
+                policyFailed = false,
+                groups = emptyList(),
+                status = "",
+                notice = null
+            )
         scope.launch {
             when (val policy = gateway.access(target)) {
                 is ClientResult.Failure -> {
                     if (!current(target, version)) return@launch
                     mutable.value = mutable.value.copy(busy = false, policyFailed = true)
-                    note(policy.error.message)
+                    note(policy.error.message, SyncNoticeKind.ACCESS_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.REFRESH)
                     return@launch
                 }
 
                 is ClientResult.Success -> {
                     if (!current(target, version)) return@launch
-                    mutable.value = mutable.value.copy(policy = policy.value, policyKnown = true, status = "")
+                    mutable.value = mutable.value.copy(policy = policy.value, policyKnown = true, status = "", notice = null)
                 }
             }
             if (!mutable.value.accessAllowed) {
@@ -257,7 +273,7 @@ internal class SyncPlayHost(
 
                 is ClientResult.Failure -> if (current(target, version)) {
                     mutable.value = mutable.value.copy(busy = false)
-                    note(groups.error.message)
+                    note(groups.error.message, SyncNoticeKind.GROUPS_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.REFRESH)
                 }
             }
         }
@@ -304,6 +320,19 @@ internal class SyncPlayHost(
         )
         if (after === before || after == before) return
         membership = after
+        if (event is SyncEvent.Joined || after.generation != before.generation || !after.active) waitReason = null
+        if (event is SyncEvent.State) waitReason = event.reason
+        if (after.phase !in setOf("Error", "Reconnecting") && event is SyncEvent.State) {
+            mutable.value = mutable.value.copy(notice = null)
+        }
+        if (event is SyncEvent.Denied) {
+            val kind = when (event.reason) {
+                "LibraryAccessDenied" -> SyncNoticeKind.LIBRARY_DENIED
+                "GroupDoesNotExist", "NotInGroup" -> SyncNoticeKind.GROUP_UNAVAILABLE
+                else -> SyncNoticeKind.ACCESS_DENIED
+            }
+            note(after.notice.orEmpty(), kind, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
+        }
         if (event is SyncEvent.Joined) serverMembershipPossible = true
         if (event is SyncEvent.Left) serverMembershipPossible = false
         trace("membership", stateFields())
@@ -324,7 +353,12 @@ internal class SyncPlayHost(
             appliedUnpause = null
             publish()
             // A fresh deliberate rejoin is visible; avoid loops on unknown future event types.
-            note(after.notice ?: "Synchronization needs a fresh group snapshot. Leave and join again.")
+            note(
+                after.notice ?: "Synchronization needs a fresh group snapshot. Leave and join again.",
+                SyncNoticeKind.REJOIN,
+                SyncNoticeTone.ERROR,
+                SyncNoticeAction.REJOIN
+            )
             return
         }
         if (event is SyncEvent.Joined && createQueue) {
@@ -355,7 +389,7 @@ internal class SyncPlayHost(
         if (reusePrepared && entry != null) {
             awaitingSource = null
             openingEntry = null
-            note("Group queue updated. Waiting for renderer readiness.")
+            note("Group queue updated. Waiting for renderer readiness.", SyncNoticeKind.PREPARING)
             requestedOpen = entry.playlistItemId
             val prepared = renderer?.snapshot()
             val start = prepared?.takeIf { it.seekable && it.durationTicks > 0 }?.let {
@@ -386,7 +420,8 @@ internal class SyncPlayHost(
             pause("resolve-failed")
             membership = membership.copy(phase = "Error", notice = "Library access denied or media unavailable. Leave to recover.")
             trace("membership", stateFields())
-            note(requireNotNull(membership.notice))
+            note(requireNotNull(membership.notice), SyncNoticeKind.LIBRARY_DENIED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
+            publish()
         }
         return ok
     }
@@ -396,26 +431,46 @@ internal class SyncPlayHost(
     private fun begin(request: SyncRequest, group: String?, creating: Boolean) {
         val target = account ?: return
         if (!connected && membershipSocket == null) {
-            note("Waiting for the server connection. Try again when connected.")
+            note(
+                "Waiting for the server connection. Try again when connected.",
+                SyncNoticeKind.CONNECTION,
+                SyncNoticeTone.WARNING,
+                SyncNoticeAction.REFRESH
+            )
             return
         }
         val local = renderer?.snapshot()
         if (local != null && (!local.seekable || local.durationTicks <= 0)) {
-            note("Watch together is unavailable for live, infinite or offline sources. Open an online movie, episode or song first.")
+            note(
+                "Watch together is unavailable for live, infinite or offline sources. Open an online movie, episode or song first.",
+                SyncNoticeKind.SOURCE_UNAVAILABLE,
+                SyncNoticeTone.WARNING
+            )
             return
         }
         val presentation = state.value
         if (!presentation.policyKnown) {
-            note("Refresh to confirm watch-together access before joining a group.")
+            note(
+                "Refresh to confirm watch-together access before joining a group.",
+                SyncNoticeKind.CHECK_ACCESS,
+                SyncNoticeTone.WARNING,
+                SyncNoticeAction.REFRESH
+            )
             return
         }
         val policy = presentation.policy
         if (!presentation.accessAllowed || (creating && policy != "CreateAndJoinGroups")) {
-            note("This viewer is not allowed to ${if (creating) "create" else "join"} a group.")
+            note(
+                "This viewer is not allowed to ${if (creating) "create" else "join"} a group.",
+                SyncNoticeKind.ACCESS_DENIED,
+                SyncNoticeTone.ERROR,
+                SyncNoticeAction.REFRESH
+            )
             return
         }
         sequence++
         operation?.cancel()
+        mutable.value = mutable.value.copy(notice = null)
         membership = beginSyncJoin(membership, group)
         createQueue = creating
         pause("join")
@@ -441,7 +496,12 @@ internal class SyncPlayHost(
                 if (!opened) {
                     membership = membership.copy(phase = "Reconnecting")
                     publish()
-                    note("Could not refresh the group connection. Leave and try joining again.")
+                    note(
+                        "Could not refresh the group connection. Leave and try joining again.",
+                        SyncNoticeKind.REJOIN,
+                        SyncNoticeTone.ERROR,
+                        SyncNoticeAction.REJOIN
+                    )
                     return@launch
                 }
             }
@@ -465,7 +525,10 @@ internal class SyncPlayHost(
                         "The server denied this group request."
                     } else {
                         "Group request not confirmed. Refresh before trying again."
-                    }
+                    },
+                    SyncNoticeKind.REQUEST_FAILED,
+                    SyncNoticeTone.ERROR,
+                    SyncNoticeAction.REFRESH
                 )
                 return@launch
             }
@@ -475,7 +538,12 @@ internal class SyncPlayHost(
             delay(10_000)
             if (membership.group == null || (membership.queue == null && membership.group?.state != "Idle")) {
                 pause("join-snapshot-timeout")
-                note("The server has not supplied a complete group snapshot. Leave and join again.")
+                note(
+                    "The server has not supplied a complete group snapshot. Leave and join again.",
+                    SyncNoticeKind.SNAPSHOT,
+                    SyncNoticeTone.ERROR,
+                    SyncNoticeAction.REJOIN
+                )
             }
         }
     }
@@ -488,6 +556,7 @@ internal class SyncPlayHost(
         serverMembershipPossible = false
         sequence++
         operation?.cancel()
+        mutable.value = mutable.value.copy(notice = null)
         membership = leaveSync(membership)
         leavePending = false
         joiningSocket?.cancel()
@@ -499,7 +568,7 @@ internal class SyncPlayHost(
         createQueue = false
         ignoreWait = false
         publish()
-        note("Left Watch together. This device is paused; the group can keep playing.")
+        note("Left Watch together. This device is paused; the group can keep playing.", SyncNoticeKind.LEFT)
         val version = sequence
         if (target != null && hadMembership) {
             scope.launch {
@@ -509,7 +578,12 @@ internal class SyncPlayHost(
                 if (status !in 200..299 && !participating) {
                     leavePending = true
                     mutable.value = mutable.value.copy(phase = "Reconnecting")
-                    note("This device is paused. The server has not confirmed Leave; reconnect and leave again.")
+                    note(
+                        "This device is paused. The server has not confirmed Leave; reconnect and leave again.",
+                        SyncNoticeKind.LEAVE_UNCONFIRMED,
+                        SyncNoticeTone.ERROR,
+                        SyncNoticeAction.LEAVE
+                    )
                 }
             }
         } else {
@@ -635,7 +709,10 @@ internal class SyncPlayHost(
                 send(syncTransport(if (command == "next") "NextItem" else "PreviousItem", playlistItemId = entry.playlistItemId))
             }
 
-            "speed" -> note("Watch together uses the shared 1× timeline; synchronization adjusts this device when needed.")
+            "speed" -> note(
+                "Watch together uses the shared 1× timeline; synchronization adjusts this device when needed.",
+                SyncNoticeKind.SPEED
+            )
         }
         return true
     }
@@ -689,7 +766,12 @@ internal class SyncPlayHost(
         }
         if (!connected || membership.group == null || membership.phase in setOf("Error", "Reconnecting")) {
             trace("request-rejected", "operation=${request.operation} gate=membership connected=$connected phase=${membership.phase}")
-            note("Group controls are unavailable until membership and synchronization are refreshed.")
+            note(
+                "Group controls are unavailable until membership and synchronization are refreshed.",
+                SyncNoticeKind.REJOIN,
+                SyncNoticeTone.ERROR,
+                SyncNoticeAction.REJOIN
+            )
             return null
         }
         val version = sequence
@@ -702,7 +784,10 @@ internal class SyncPlayHost(
                         "The server denied this group request."
                     } else {
                         "Group request not confirmed. Refresh before repeating it."
-                    }
+                    },
+                    SyncNoticeKind.REQUEST_FAILED,
+                    SyncNoticeTone.ERROR,
+                    SyncNoticeAction.REJOIN
                 )
             }
         }
@@ -760,10 +845,16 @@ internal class SyncPlayHost(
             )
             completed = true
             next.best?.let { send(syncPing(it.networkRttMillis)) }
+            if (anchor != null && mutable.value.notice?.kind == SyncNoticeKind.CLOCK) mutable.value = mutable.value.copy(notice = null)
             if (anchor == null) {
                 appliedUnpause = null
                 pause("clock-calibration")
-                note("Synchronization unavailable: no valid server clock samples. Leave or try joining again.")
+                note(
+                    "Synchronization unavailable: no valid server clock samples. Leave or try joining again.",
+                    SyncNoticeKind.CLOCK,
+                    SyncNoticeTone.ERROR,
+                    SyncNoticeAction.REJOIN
+                )
             }
         } finally {
             if (!completed) trace("clock-unfinished", "attempt=$attempt current=${current(target, version)}")
@@ -789,6 +880,14 @@ internal class SyncPlayHost(
     }
 
     internal fun tick() {
+        try {
+            tickRenderer()
+        } finally {
+            publish()
+        }
+    }
+
+    private fun tickRenderer() {
         val output = renderer ?: run {
             tickTrace("no-renderer")
             return
@@ -797,7 +896,12 @@ internal class SyncPlayHost(
         if (participating && r.ready && !r.seekable) {
             appliedUnpause = null
             pause("source-ineligible", output)
-            note("Watch together is unavailable for this source. Leave the group to play it separately.")
+            note(
+                "Watch together is unavailable for this source. Leave the group to play it separately.",
+                SyncNoticeKind.SOURCE_UNAVAILABLE,
+                SyncNoticeTone.ERROR,
+                SyncNoticeAction.LEAVE
+            )
         }
         pendingSource?.let { pending ->
             if (pending.token !== rendererToken ||
@@ -817,7 +921,7 @@ internal class SyncPlayHost(
                 if (send(request) != null) {
                     awaitingSource = pending
                     pendingSource = null
-                    note("Waiting for the server to update the group queue.")
+                    note("Waiting for the server to update the group queue.", SyncNoticeKind.QUEUE_PENDING)
                 }
             }
         }
@@ -849,7 +953,12 @@ internal class SyncPlayHost(
         if (now == null) {
             appliedUnpause = null
             pause("clock-unavailable", output)
-            note("Synchronization unavailable: refresh the server clock by joining again.")
+            note(
+                "Synchronization unavailable: refresh the server clock by joining again.",
+                SyncNoticeKind.CLOCK,
+                SyncNoticeTone.ERROR,
+                SyncNoticeAction.REJOIN
+            )
             tickTrace("clock-unavailable", r)
             return
         }
@@ -933,9 +1042,7 @@ internal class SyncPlayHost(
         }
         val errorMs = (r.positionTicks - target.positionTicks) / 10_000
         val uncertainty = (anchor?.uncertaintyTicks ?: Long.MAX_VALUE) / 10_000
-        note(
-            "${if (uncertainty <= 50) "Renderer timing — not yet qualified" else "Not qualified"} · drift $errorMs ms · clock uncertainty ±$uncertainty ms"
-        )
+        diagnostic("ui-estimate", "driftMs=$errorMs uncertaintyMs=$uncertainty")
     }
 
     private fun rendererOwnsEntry(snapshot: SyncRendererState, entryId: String): Boolean {
@@ -1136,6 +1243,9 @@ internal class SyncPlayHost(
     }
 
     private fun resetClock(reason: String) {
+        waitReason = null
+        mutable.value =
+            mutable.value.copy(quality = app.pictureshow.core.sync.SyncQuality.UNKNOWN, localPlayback = SyncLocalPlayback.UNAVAILABLE)
         appliedUnpause = null
         preparedUnpause = null
         trace("clock-reset", "reason=$reason nextAnchorGeneration=${anchorGeneration + 1} " + stateFields())
@@ -1285,24 +1395,120 @@ internal class SyncPlayHost(
             diagnosticSink("$event uptimeMs=${monotonic()} $fields")
         }
     }
-    private fun note(text: String) {
-        mutable.value = mutable.value.copy(status = text)
+    private fun note(text: String, kind: SyncNoticeKind, tone: SyncNoticeTone = SyncNoticeTone.INFO, action: SyncNoticeAction? = null) {
+        // Raw server/legacy strings remain diagnostic only. A transient notice cannot hide an actionable error.
+        val existing = mutable.value.notice
+        val next = SyncNotice(kind, tone, action)
+        val revision = ++noticeRevision
+        mutable.value = mutable.value.copy(
+            status = text,
+            notice = if (existing?.tone == SyncNoticeTone.ERROR && tone == SyncNoticeTone.INFO) existing else next
+        )
+        if (tone == SyncNoticeTone.INFO) {
+            scope.launch {
+                delay(4_000)
+                if (noticeRevision == revision && mutable.value.notice == next) mutable.value = mutable.value.copy(notice = null)
+            }
+        }
     }
+
     private fun publish() {
         trace("published", stateFields())
         val q = membership.queue
+        val entries = q?.entries.orEmpty()
+        val target = account
+        val signature = entries.map { it.playlistItemId to it.itemId }
+        val oldScope = titleScope
+        if (oldScope?.account != target?.key || oldScope?.membership != membership.generation) {
+            titles.clear()
+            titleRequests.clear()
+            titleQueue = emptyList()
+        }
+        if (signature != titleQueue || oldScope?.account != target?.key || oldScope?.membership != membership.generation) {
+            titleQueue = signature
+            titleRevision++
+            titleRequests.clear()
+        }
+        val lookupScope = app.pictureshow.core.sync.SyncTitleScope(target?.key.orEmpty(), membership.generation, titleRevision)
+        titleScope = lookupScope
+        val snapshot = renderer?.snapshot()
+        val current = q?.current
+        val ownsEntry = current != null &&
+            snapshot?.itemId == current.itemId &&
+            (openingEntry == null || snapshot.playlistItemId == current.playlistItemId)
+        val local = when {
+            !participating || !ownsEntry || snapshot == null -> SyncLocalPlayback.UNAVAILABLE
+            snapshot.buffering -> SyncLocalPlayback.BUFFERING
+            snapshot.ready && snapshot.seekable && snapshot.durationTicks > 0 -> SyncLocalPlayback.READY
+            else -> SyncLocalPlayback.PREPARING
+        }
+        val now = monotonic()
+        val serverNow = anchor?.takeUnless { it.needsRefresh(now) }?.serverNowTicks(wall(), now)
+        val command = timeline?.takeIf { it.playlistItemId == current?.playlistItemId }
+        val estimate = if (serverNow != null && command != null && snapshot != null) {
+            syncTarget(
+                command.positionTicks ?: snapshot.positionTicks,
+                command.whenMs,
+                serverNow,
+                syncTimelinePlaying(command.command, timelinePlaying),
+                snapshot.durationTicks
+            )?.takeIf { it.delayMillis == 0L }
+        } else {
+            null
+        }
+        val quality = app.pictureshow.core.sync.syncQuality(
+            connected && membership.hasSnapshot && serverNow != null && membership.phase in setOf("Playing", "Paused"),
+            local == SyncLocalPlayback.READY,
+            timelineApplied && renderer?.positionApplicationPending == false,
+            estimate?.let { snapshot?.positionTicks?.minus(it.positionTicks) },
+            anchor?.uncertaintyTicks
+        )
+        val recovery = when {
+            membership.phase == "Error" -> mutable.value.notice?.takeIf { it.tone == SyncNoticeTone.ERROR }
+                ?: SyncNotice(SyncNoticeKind.PLAYBACK_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
+            membership.phase == "Reconnecting" -> SyncNotice(
+                SyncNoticeKind.REJOIN,
+                SyncNoticeTone.ERROR,
+                if (membership.groupId != null) SyncNoticeAction.REJOIN else SyncNoticeAction.LEAVE
+            )
+            else -> mutable.value.notice
+        }
         mutable.value = mutable.value.copy(
             phase = membership.phase, groupId = membership.groupId, groupName = membership.group?.name,
             participants = membership.group?.participants.orEmpty(), ignoreWait = ignoreWait,
             repeat = q?.repeatMode ?: "RepeatNone", shuffle = q?.shuffleMode ?: "Sorted",
-            queue = q?.entries.orEmpty().map {
+            queue = entries.map { entry ->
                 SyncPlayQueueRow(
-                    it.playlistItemId,
-                    "Item ${q?.entries?.indexOf(it)?.plus(1)}",
-                    it == q?.current
+                    entry.playlistItemId,
+                    titles[entry.itemId],
+                    entry == q?.current,
+                    entry.itemId,
+                    titles.containsKey(entry.itemId) && titles[entry.itemId] == null
                 )
             },
-            status = membership.notice ?: mutable.value.status
+            quality = quality, localPlayback = local, waitReason = waitReason,
+            notice = recovery, status = membership.notice ?: mutable.value.status
         )
+        if (target != null) {
+            entries.map { it.itemId }.distinct().filter { it !in titles && titleRequests.add(it) }.forEach { item ->
+                val requestedEntries = signature.filter { it.second == item }.map { it.first }.toSet()
+                scope.launch {
+                    val result = gateway.title(target, item)
+                    if (account?.key != target.key ||
+                        account?.accessToken != target.accessToken ||
+                        !app.pictureshow.core.sync.syncAcceptTitle(
+                            lookupScope,
+                            titleScope ?: return@launch,
+                            titleQueue.map { it.first }.toSet(),
+                            requestedEntries
+                        )
+                    ) {
+                        return@launch
+                    }
+                    titles[item] = (result as? ClientResult.Success)?.value?.takeUnless { it.isBlank() }
+                    publish()
+                }
+            }
+        }
     }
 }

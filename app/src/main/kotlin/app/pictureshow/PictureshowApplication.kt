@@ -132,6 +132,13 @@ class PictureshowApplication : Application() {
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate),
                             object : SyncPlayGateway {
                                 override suspend fun groups(account: Account) = client().groups(account)
+                                override suspend fun title(account: Account, itemId: String): app.pictureshow.core.ClientResult<String?> =
+                                    when (val item = get<CatalogService>().item(account, itemId)) {
+                                        is app.pictureshow.core.ClientResult.Success -> app.pictureshow.core.ClientResult.Success(
+                                            item.value.name
+                                        )
+                                        is app.pictureshow.core.ClientResult.Failure -> item
+                                    }
                                 override suspend fun access(account: Account) = client().access(account)
                                 override suspend fun time(account: Account) = client().utcTime(account)
                                 override suspend fun send(account: Account, request: app.pictureshow.core.sync.SyncRequest) =

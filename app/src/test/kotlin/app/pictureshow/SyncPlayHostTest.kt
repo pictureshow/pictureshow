@@ -87,6 +87,13 @@ class SyncPlayHostTest {
         val renderer = Renderer()
         val opens = mutableListOf<SyncOpen>()
         val diagnostics = mutableListOf<String>()
+        val titleCalls = mutableListOf<Pair<Account, String>>()
+        val titleGates = mutableListOf<CompletableDeferred<String?>>()
+        override suspend fun title(account: Account, itemId: String): ClientResult<String?> {
+            titleCalls += account to itemId
+            val gate = titleGates.removeFirstOrNull()
+            return ClientResult.Success(if (gate != null) withContext(NonCancellable) { gate.await() } else null)
+        }
         var policy = "CreateAndJoinGroups"
         var httpStatus = 204
         var sendGate: CompletableDeferred<Unit>? = null
@@ -212,6 +219,129 @@ class SyncPlayHostTest {
                 }
             )
         }.toString()
+    }
+
+    @Test fun titleReplyFromRemovedQueueCannotLabelItsReplacement() = runTest {
+        val rig = Rig(this)
+        val old = CompletableDeferred<String?>()
+        val replacement = CompletableDeferred<String?>()
+        rig.titleGates += old
+        rig.titleGates += replacement
+        rig.join()
+        rig.snapshot()
+        assertEquals(null, rig.host.state.value.queue.single().title)
+        rig.queue("second-item", "entry-b")
+        runCurrent()
+        assertEquals("second-item", rig.host.state.value.queue.single().itemId)
+        old.complete("The old film")
+        runCurrent()
+        assertEquals(null, rig.host.state.value.queue.single().title)
+        replacement.complete("The new film")
+        runCurrent()
+        assertEquals("The new film", rig.host.state.value.queue.single().title)
+        assertEquals("entry-b", rig.host.state.value.queue.single().id)
+    }
+
+    @Test fun accountAndMembershipReplacementRejectOldTitleReplies() = runTest {
+        val rig = Rig(this)
+        val oldAccount = CompletableDeferred<String?>()
+        rig.titleGates += oldAccount
+        rig.join()
+        rig.snapshot()
+        rig.host.bind(other)
+        oldAccount.complete("Private old title")
+        runCurrent()
+        assertEquals("Bea", rig.host.state.value.viewer)
+        assertTrue(rig.host.state.value.queue.isEmpty())
+        val oldMembership = CompletableDeferred<String?>()
+        rig.titleGates += oldMembership
+        rig.join()
+        rig.snapshot()
+        rig.host.leave()
+        runCurrent()
+        rig.join()
+        rig.snapshot()
+        oldMembership.complete("Prior membership title")
+        runCurrent()
+        assertEquals(null, rig.host.state.value.queue.single().title)
+        assertTrue(rig.host.state.value.queue.single().titleUnavailable)
+    }
+
+    @Test fun queueTitlesPreserveDuplicatePlaylistEntriesAndUseOneLookup() = runTest {
+        val rig = Rig(this)
+        val title = CompletableDeferred<String?>()
+        rig.titleGates += title
+        rig.join()
+        rig.joined()
+        rig.host.receive(
+            rig.update(
+                "PlayQueue",
+                buildJsonObject {
+                    put("Reason", "NewPlaylist")
+                    put("LastUpdate", syncUtcTimestamp(rig.wall()))
+                    put(
+                        "Playlist",
+                        JsonArray(
+                            listOf("one", "two").map { entry ->
+                                buildJsonObject {
+                                    put("ItemId", "same-film")
+                                    put("PlaylistItemId", entry)
+                                }
+                            }
+                        )
+                    )
+                    put("PlayingItemIndex", 1)
+                    put("StartPositionTicks", 0)
+                    put("IsPlaying", false)
+                    put("RepeatMode", "RepeatNone")
+                    put("ShuffleMode", "Sorted")
+                }
+            )
+        )
+        runCurrent()
+        title.complete("A real film title")
+        runCurrent()
+        assertEquals(listOf("one", "two"), rig.host.state.value.queue.map { it.id })
+        assertEquals(listOf("A real film title", "A real film title"), rig.host.state.value.queue.map { it.title })
+        assertEquals(listOf(false, true), rig.host.state.value.queue.map { it.current })
+        assertEquals(listOf(account to "same-film"), rig.titleCalls)
+    }
+
+    @Test fun clockErrorSurvivesInformationalSpeedNoticeAndTicksWithoutNumericUiStatus() = runTest {
+        val rig = Rig(this)
+        rig.failClock = true
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        assertEquals(SyncNoticeKind.CLOCK, rig.host.state.value.notice?.kind)
+        assertTrue(rig.host.transport("speed"))
+        repeat(8) { rig.host.tick() }
+        assertEquals(SyncNoticeKind.CLOCK, rig.host.state.value.notice?.kind)
+        assertEquals(SyncNoticeTone.ERROR, rig.host.state.value.notice?.tone)
+        assertEquals(SyncNoticeAction.REJOIN, rig.host.state.value.notice?.action)
+        assertEquals(app.pictureshow.core.sync.SyncQuality.UNKNOWN, rig.host.state.value.quality)
+        assertFalse(rig.host.state.value.status.contains("drift"))
+    }
+
+    @Test fun waitingReasonIsGroupOnlyAndClearedOnRejoin() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Waiting")
+                    put("Reason", "Buffer")
+                }
+            )
+        )
+        assertEquals("Buffer", rig.host.state.value.waitReason)
+        assertEquals(listOf("Ana", "Bea"), rig.host.state.value.participants)
+        assertEquals(app.pictureshow.core.sync.SyncQuality.UNKNOWN, rig.host.state.value.quality)
+        rig.host.join("g")
+        assertEquals(null, rig.host.state.value.waitReason)
+        assertTrue(rig.host.state.value.participants.isEmpty())
     }
 
     @Test fun diagnosticSnapshotsIncludeTheNoRendererGateWithoutRepeatingWithinOneSecond() = runTest {

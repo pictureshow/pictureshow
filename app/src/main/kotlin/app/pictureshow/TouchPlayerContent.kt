@@ -410,6 +410,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             }
         }
 
+        SyncPlayerChip(
+            host.sync,
+            Modifier.align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp).widthIn(max = 440.dp)
+        )
+
         if (controlsVisible) {
             Column(
                 // The scrim reaches the screen's edges behind a cutout; only its content keeps to the safe area (TOUCH-10).
@@ -424,7 +430,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Button(onClick = { host.sync?.show() }) { Text("Watch together") }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         host.item.name,
@@ -513,6 +518,14 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     }
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
+                    add { placement ->
+                        TextButton(onClick = {
+                            host.sync?.show()
+                            ui.interact()
+                        }, modifier = placement.testTag("touch:syncplay")) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
+                        }
+                    }
                     TouchPlayerSheet.entries.forEach { sheet ->
                         if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
                             add { placement ->

@@ -71,6 +71,7 @@ class CorpusVectorsTest {
                 setOf(
                     "sync-application",
                     "sync-clock",
+                    "sync-presentation",
                     "sync-drift",
                     "sync-membership-registration",
                     "sync-queue",

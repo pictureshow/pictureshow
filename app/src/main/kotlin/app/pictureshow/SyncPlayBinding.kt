@@ -113,20 +113,20 @@ internal fun SyncPlayCoordinator(
     if (sync.pendingExternalRoute != null) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = sync::cancelExternalRoute,
-            title = { androidx.compose.material3.Text("Leave Watch together before casting?") },
+            title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_title)) },
             text = {
                 androidx.compose.material3.Text(
-                    "Casting uses the receiver's clock. Leave the group to continue there; the other participants keep their group."
+                    androidx.compose.ui.res.stringResource(R.string.sync_cast_explanation)
                 )
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = sync::leaveForExternalRoute) {
-                    androidx.compose.material3.Text("Leave group and cast")
+                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_confirm))
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = sync::cancelExternalRoute) {
-                    androidx.compose.material3.Text("Cancel")
+                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cancel))
                 }
             }
         )

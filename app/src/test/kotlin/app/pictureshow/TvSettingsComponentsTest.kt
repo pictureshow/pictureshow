@@ -70,6 +70,27 @@ class TvSettingsComponentsTest {
         compose.waitForIdle()
     }
 
+    @Test fun commandAndUnselectedChoiceKeepDifferentSemanticsAndNativeFocus() {
+        compose.setContent {
+            MaterialTheme {
+                val first = remember { FocusRequester() }
+                TvSettingsPanel("Roles", {}, first) {
+                    TvSettingsRow("Join group", "Two people watching", Modifier.focusRequester(first).testTag("command"), onClick = {})
+                    TvSettingsRow("Repeat off", selected = false, modifier = Modifier.testTag("choice"), onClick = {})
+                }
+            }
+        }
+        compose.onNodeWithTag("command").assertIsFocused().assert(
+            SemanticsMatcher("command is not selected or toggleable") {
+                it.config.getOrNull(SemanticsProperties.Selected) == null &&
+                    it.config.getOrNull(SemanticsProperties.ToggleableState) == null
+            }
+        )
+        compose.onNodeWithTag("choice").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        key("tv-settings:panel", Key.DirectionDown)
+        compose.onNodeWithTag("choice").assertIsFocused()
+    }
+
     @Test fun choiceOpensCurrentRadioSelectsDirectlyRestoresOpenerAndSupportsBothStepDirections() {
         var value by mutableStateOf(20)
         compose.setContent {
