@@ -83,6 +83,7 @@ androidComponents.onVariants { variant ->
 }
 
 dependencies {
+    implementation(project(":ui-shared"))
     implementation(project(":core"))
     implementation(libs.play.billing)
     implementation(libs.play.services.cast.framework)

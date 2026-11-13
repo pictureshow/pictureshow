@@ -19,7 +19,7 @@ abstract class GenerateLicenseCatalog extends DefaultTask {
 def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
 def catalogModule = { id ->
     if (id instanceof ModuleComponentIdentifier) return true
-    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':media3-ffmpeg']) return false
+    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':ui-shared', ':media3-ffmpeg']) return false
     throw new GradleException("Unmapped runtime dependency $id: publish module metadata or add an explicit license mapping.")
 }
 def runtimeArtifacts = providers.provider {

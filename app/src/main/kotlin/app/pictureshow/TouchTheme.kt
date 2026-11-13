@@ -34,11 +34,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.LastBaseline
@@ -57,17 +55,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun TouchTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Color(0xFFD0BCFF),
-            secondary = Color(0xFFCCC2DC),
-            background = Color(0xFF10131C),
-            surface = Color(0xFF10131C),
-            surfaceContainer = Color(0xFF202330),
-            surfaceContainerHigh = Color(0xFF262A38),
-            surfaceContainerHighest = Color(0xFF30344A)
-        )
-    ) {
+    app.pictureshow.ui.PictureshowTheme {
         Surface(Modifier.fillMaxSize(), content = content)
     }
 }

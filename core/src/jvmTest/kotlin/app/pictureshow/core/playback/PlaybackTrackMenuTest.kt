@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) Legitimate LLC.
  */
-package app.pictureshow
+package app.pictureshow.core.playback
 
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType

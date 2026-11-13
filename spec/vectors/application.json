@@ -6810,6 +6810,220 @@
       },
       "expected": false,
       "source": "CAT-07; DetailHeaderTest"
-    }
+    },
+    {
+        "id": "detail-primary-next",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "series",
+            "Type": "Series"
+          },
+          "nextUp": [
+            {
+              "Id": "next",
+              "Type": "Episode"
+            }
+          ],
+          "episodes": [
+            {
+              "Id": "first",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": "next"
+      },
+      {
+        "id": "detail-primary-unplayed",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "played",
+              "Type": "Episode",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": "unplayed"
+      },
+      {
+        "id": "detail-primary-all-played",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "played",
+              "Type": "Episode",
+              "UserData": {
+                "Played": true
+              }
+            }
+          ]
+        },
+        "expected": "played"
+      },
+      {
+        "id": "detail-primary-empty",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Type": "Season"
+          },
+          "nextUp": [],
+          "episodes": []
+        },
+        "expected": null
+      },
+      {
+        "id": "detail-primary-container",
+        "operation": "detail-play-item",
+        "input": {
+          "item": {
+            "Id": "folder",
+            "Type": "Folder"
+          },
+          "nextUp": [],
+          "episodes": [
+            {
+              "Id": "episode",
+              "Type": "Episode"
+            }
+          ]
+        },
+        "expected": null
+      },
+      {
+        "id": "track-label-forced",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "en",
+              "Codec": "srt",
+              "IsForced": true,
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "expected": [
+          "English · SRT · Forced · SDH"
+        ]
+      },
+      {
+        "id": "track-label-distinct",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Language": "en",
+              "Codec": "aac",
+              "Channels": 2
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Language": "en",
+              "Codec": "aac",
+              "Channels": 2
+            }
+          ]
+        },
+        "expected": [
+          "English · AAC stereo · Track 1",
+          "English · AAC stereo · Track 2"
+        ]
+      },
+    {
+        "id": "catalog-announcement-episode",
+        "operation": "catalog-announcement",
+        "input": {
+          "item": {
+            "Id": "episode",
+            "Name": "An Episode",
+            "Type": "Episode",
+            "SeriesName": "A Series",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 3,
+            "UserData": {
+              "Played": true
+            }
+          }
+        },
+        "expected": "An Episode, A Series, Season 2, Episode 3, Watched"
+      },
+      {
+        "id": "catalog-announcement-season-count",
+        "operation": "catalog-announcement",
+        "input": {
+          "item": {
+            "Id": "season",
+            "Name": "Season 2",
+            "Type": "Season",
+            "UserData": {
+              "UnplayedItemCount": 4,
+              "IsFavorite": true
+            }
+          }
+        },
+        "expected": "Season 2, 4 unplayed, Favorite"
+      },
+      {
+        "id": "catalog-announcement-empty",
+        "operation": "catalog-announcement",
+        "input": {
+          "item": {
+            "Id": "empty",
+            "Name": "Empty collection",
+            "Type": "BoxSet",
+            "ChildCount": 0,
+            "UserData": {
+              "Played": true,
+              "UnplayedItemCount": 0,
+              "PlaybackPositionTicks": 600000000
+            }
+          }
+        },
+        "expected": "Empty collection"
+      },
+      {
+        "id": "catalog-announcement-resume",
+        "operation": "catalog-announcement",
+        "input": {
+          "item": {
+            "Id": "movie",
+            "Name": "A Movie",
+            "Type": "Movie",
+            "ProductionYear": 2026,
+            "UserData": {
+              "PlaybackPositionTicks": 600000000,
+              "IsFavorite": true
+            }
+          }
+        },
+        "expected": "A Movie, 2026, Resume from 1:00, Favorite"
+      }
   ]
 }

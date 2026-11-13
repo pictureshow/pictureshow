@@ -1,0 +1,15 @@
+{
+  "feature": "desktop-hdr-output",
+  "reference": "ST 2084 and linear D65 BT.2020 to extended BT.709; signal units, not physical photometry",
+  "sdrReferenceWhiteNits": 203,
+  "scRgbReferenceWhiteNits": 80,
+  "pqAnchors": [
+    {"nits": 0, "code": 0.0000007309559},
+    {"nits": 100, "code": 0.508078421517},
+    {"nits": 203, "code": 0.580688881042},
+    {"nits": 1000, "code": 0.751827096247}
+  ],
+  "rgb2020Nits": [100, 0, 0],
+  "expectedScRgb": [2.07561375, -0.1556875, -0.02268875],
+  "forbiddenOutcomes": ["HDR clipped to SDR white", "PQ tone-mapped before OS handoff", "negative scRGB channels clipped", "SDR diffuse-white scaling changed"]
+}
