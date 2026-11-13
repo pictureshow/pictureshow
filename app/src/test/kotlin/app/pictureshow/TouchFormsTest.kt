@@ -219,7 +219,9 @@ class TouchFormsTest {
                 )
             }
         }
-        compose.onNodeWithText("Auto (200 Mbps)").performScrollTo().performClick()
+        compose.onNodeWithText("Home quality limit").assertTextContains("Auto").performScrollTo().performClick()
+        compose.onNodeWithTag("touch:choice-option:0").assertIsSelected()
+            .assertTextContains("Up to 200 Mbps")
         compose.onNodeWithText("10 Mbps").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(10, chosen) }
         compose.onNodeWithText("Loading server preferences…").performScrollTo().assertIsDisplayed()

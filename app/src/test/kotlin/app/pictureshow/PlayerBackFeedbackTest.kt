@@ -16,6 +16,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
@@ -95,6 +97,45 @@ class PlayerBackFeedbackTest {
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
             exits == 1
+        }
+    }
+
+    @Test fun actualTvQualityButtonOpensExplicitChoicesAndReturnsFocusAfterSelection() {
+        launch(false)
+        fun readyPaused() {
+            compose.runOnIdle {
+                val decision = Media3PlaybackOutput::class.java.getDeclaredField("current")
+                    .apply { isAccessible = true }.get(output) as app.pictureshow.core.playback.PlayDecision
+                output.player.value!!.pause()
+                output.onReady(decision, output.position(), output.position().milliseconds)
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+            }
+            compose.waitForIdle()
+        }
+        readyPaused()
+        compose.onNodeWithTag("player:quality").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.onNodeWithText("Auto").assertIsFocused().assertIsSelected()
+        val firstPlayer = output.player.value
+        compose.onNodeWithText("40 Mbps").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            output.player.value != null && output.player.value !== firstPlayer
+        }
+        readyPaused()
+        compose.onNodeWithText("Quality · 40 Mbps").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag("player:quality").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.onNodeWithText("40 Mbps").assertIsFocused().assertIsSelected()
+        val manualPlayer = output.player.value
+        compose.onNodeWithText("Auto").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            output.player.value != null && output.player.value !== manualPlayer
+        }
+        readyPaused()
+        compose.onNodeWithText("Quality · Auto").assertIsDisplayed().assertIsFocused()
+        compose.runOnIdle {
+            assertTrue(!output.player.value!!.playWhenReady)
+            assertEquals(0, exits)
         }
     }
 

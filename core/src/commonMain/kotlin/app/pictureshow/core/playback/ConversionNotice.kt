@@ -51,7 +51,12 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
          * [subtitleIndex] is the selected subtitle stream (-1 for Off). Reason codes compare case-insensitively.
          * Returns null when no notice applies.
          */
-        fun of(decision: PlayDecision, subtitleIndex: Int, device: String = DEVICE): ConversionNotice? {
+        fun of(
+            decision: PlayDecision,
+            subtitleIndex: Int,
+            device: String = DEVICE,
+            tuning: PlaybackTuning = PlaybackTuning()
+        ): ConversionNotice? {
             if (decision.method != PlayMethod.Transcode) return null
             val reasons = decision.transcodeReasons.map { it.lowercase() }.toSet()
             val burnedIn = "subtitlecodecnotsupported" in reasons &&
@@ -59,11 +64,30 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
             // A copied video stream is a remux, so its video reasons did not force encoding. Burning subtitles
             // into the picture always re-encodes it, so a burn-in report wins over a `VideoCodec=copy` URL.
             val copied = PlaybackInformation.method(decision) != "Transcode" || PlaybackInformation.videoCopied(decision)
-            val subtitle = (SUBTITLE to SUBTITLE_FIX).takeIf { burnedIn }
+            val subtitleFix = when (tuning.subtitleBurnIn) {
+                SubtitleBurnIn.Always -> "Set subtitle burn-in to Automatic in Playback settings, or turn subtitles off."
+                SubtitleBurnIn.Automatic, SubtitleBurnIn.ImageOnly -> SUBTITLE_FIX
+            }
+            val subtitleReason = if (tuning.subtitleBurnIn == SubtitleBurnIn.Always) {
+                "Your subtitle burn-in setting requires conversion for %s."
+            } else {
+                SUBTITLE
+            }
+            val subtitle = (subtitleReason to subtitleFix).takeIf { burnedIn }
             val (why, fix) = when {
                 copied -> subtitle
                 else -> categories.firstOrNull { (codes) -> codes.any(reasons::contains) }?.let { it.second to it.third } ?: subtitle
             } ?: return null
+            if (why == categories[1].second &&
+                (tuning.hdr == CapabilityOverride.Disable || tuning.dolbyVision == CapabilityOverride.Disable) &&
+                !copied
+            ) {
+                return ConversionNotice(
+                    title(device),
+                    "HDR or Dolby Vision is disabled in Playback settings.",
+                    "Use detected HDR and Dolby Vision support in Playback settings to try original video."
+                )
+            }
             return ConversionNotice(title(device), why.replace("%s", device), fix)
         }
     }

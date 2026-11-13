@@ -36,6 +36,8 @@ import app.pictureshow.core.PlaybackExtrasClient
 import app.pictureshow.core.UserConfigurationClient
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.playback.PlaybackNetwork
+import app.pictureshow.core.playback.PostCredits
 import io.ktor.client.HttpClient
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +47,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 /** A pending or failed optional lookup is not evidence that this is the last episode. */
@@ -64,6 +67,7 @@ internal class PlaybackHostState(
     private val onExit: () -> Unit,
     /** Null where this device isn't a remote-control target (REM-09: Android TV only). */
     val remote: RemoteTargetHost? = null,
+    val startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.SavedResume,
     /** The bytes belong to this device's download, regardless of current network availability. */
     val localCopy: Boolean = false
 ) {
@@ -71,6 +75,48 @@ internal class PlaybackHostState(
     val reportScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     var sync: SyncPlayHost? = null
     var localPreferences by mutableStateOf(PlaybackPreferences())
+    val initialPositionMs get() = app.pictureshow.core.playback.PlaybackStartPosition.of(startMs, startOrigin, localPreferences.tuning)
+    var network by mutableStateOf(PlaybackNetwork.Remote)
+    private var qualitySelection by mutableStateOf(app.pictureshow.core.playback.PlaybackQualitySelection())
+    var estimatedBandwidth: Long?
+        get() = qualitySelection.estimatedBandwidth
+        set(value) {
+            qualitySelection = qualitySelection.copy(estimatedBandwidth = value)
+        }
+    val qualityOverrideMbps get() = qualitySelection.overrideMbps
+    private var qualityGuard = BandwidthQualityGuard()
+    val effectiveSettings get() = localPreferences.deviceSettings(network, estimatedBandwidth, qualityOverrideMbps)
+    val qualityLabel get() = app.pictureshow.core.playback.PlaybackQualityPresentation.choiceLabel(qualityOverrideMbps)
+    private val configuredQualityBitrate get() = localPreferences.deviceSettings(network).maxStreamingBitrate
+    val automaticQualityContext get() = app.pictureshow.core.playback.PlaybackQualityPresentation.automaticContext(
+        network,
+        configuredQualityBitrate
+    )
+    val adaptiveQualityNotice get() = app.pictureshow.core.playback.PlaybackQualityPresentation.reductionNotice(
+        qualityOverrideMbps,
+        effectiveSettings.maxStreamingBitrate,
+        configuredQualityBitrate
+    )
+    val creditsCountdown get() = localPreferences.tuning.postCredits == PostCredits.NextEpisode
+
+    /** Keep post-credits scenes by waiting for the actual end, even when an outro marker exists. */
+    fun nextTriggerMs(): Long? = playbackNextTriggerMs(duration, segments, creditsCountdown)
+
+    /** A deliberate choice belongs to this viewing. Auto starts fresh at the configured network limit. */
+    fun setQualityOverride(mbps: Int?) {
+        val selected = qualitySelection.choose(mbps)
+        val changed = selected != qualitySelection
+        qualitySelection = selected
+        qualityGuard = BandwidthQualityGuard()
+        if (changed) controller?.routeChanged()
+    }
+    fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long) {
+        if (!localPreferences.tuning.autoAdjustQuality || qualityOverrideMbps != null || state.preparing || atEnd) return
+        val lower = qualityGuard.reduction(effectiveSettings.maxStreamingBitrate, estimate, bytes, nowMs) ?: return
+        estimatedBandwidth = lower
+        PlaybackDiagnostics.write("quality-adjust cap=${effectiveSettings.maxStreamingBitrate} network=${network.name}")
+        controller?.routeChanged()
+    }
     var subtitleDelayMs by mutableIntStateOf(0)
     var probe by mutableStateOf<DeviceCapabilityProbe?>(null)
     var controller by mutableStateOf<PlaybackSession?>(null)
@@ -287,8 +333,9 @@ internal fun rememberPlaybackHostState(
     }
     val latestNext by rememberUpdatedState(onNext)
     val latestExit by rememberUpdatedState(onExit)
+    val startOrigin = LocalPlaybackStartOrigin.current
     val host = remember {
-        PlaybackHostState(item, startMs, output, { latestNext(it) }, { latestExit() }, remote, localCopy = offline != null)
+        PlaybackHostState(item, startMs, output, { latestNext(it) }, { latestExit() }, remote, startOrigin, localCopy = offline != null)
     }
     val emptyState = remember { MutableStateFlow(PlaybackState()) }
     host.stateSource = (host.controller?.state ?: emptyState).collectAsState()
@@ -415,6 +462,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val pauseIntent by output.pauseIntent.collectAsState()
     SyncPlaybackBinding(host)
     host.remote?.let { RemoteTargetBinding(host, it, account, catalog, paused) }
+    AndroidFrameRateMatch(host.player, host.localPreferences.tuning.matchFrameRate)
     with(host) {
         DisposableEffect(player) {
             val active = player
@@ -428,8 +476,11 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         LaunchedEffect(Unit) {
             try {
                 localPreferences = preferences.read()
-                output.passthroughEnabled = localPreferences.passthrough
-                val activeProbe = DeviceCapabilityProbe(context, localPreferences.deviceSettings())
+                network = playbackNetwork(context, account.server.url)
+                output.passthroughEnabled = localPreferences.passthrough && !localPreferences.tuning.downmix
+                output.matchFrameRate = localPreferences.tuning.matchFrameRate
+                output.disabledPassthrough = localPreferences.tuning.disabledPassthrough
+                val activeProbe = DeviceCapabilityProbe(context, effectiveSettings)
                 probe = activeProbe
                 val clientIdentity =
                     ClientIdentity(
@@ -457,7 +508,9 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         java.util.UUID.randomUUID().toString(),
                         0
                     ),
-                    offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
+                    offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, {
+                        activeProbe.snapshot().copy(settings = effectiveSettings)
+                    }, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
                     }.let { server ->
                         handoff?.gateway?.invoke(server) ?: offlineAwareGateway(context, account, item.id, identity, server)
@@ -506,9 +559,11 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         ended = true
                     }
                 }
+                output.onBandwidthEstimate =
+                    { estimate, bytes -> bandwidthSample(estimate, bytes, android.os.SystemClock.elapsedRealtime()) }
                 activeProbe.start { session.routeChanged() }
                 PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
-                session.start(startMs, handoff?.tracks)
+                session.start(initialPositionMs, handoff?.tracks)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -561,12 +616,27 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
             }
         }
         LaunchedEffect(player) {
+            var networkCheck = 0
             while (true) {
-                player?.let {
-                    position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
-                    duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
+                val currentNetwork = if (networkCheck++ % 20 == 0 && controller != null) {
+                    playbackNetwork(context, account.server.url)
+                } else {
+                    null
                 }
-                view.keepScreenOn = player?.playWhenReady == true && state.error == null
+                // DNS runs on IO. Explicitly return native player/window work to Main, including with
+                // Compose continuation interceptors that may resume the surrounding effect on IO.
+                withContext(Dispatchers.Main.immediate) {
+                    if (currentNetwork != null && network != currentNetwork) {
+                        network = currentNetwork
+                        estimatedBandwidth = null
+                        controller?.routeChanged()
+                    }
+                    player?.let {
+                        position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
+                        duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
+                    }
+                    view.keepScreenOn = player?.playWhenReady == true && state.error == null
+                }
                 delay(500)
             }
         }
@@ -588,6 +658,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 if (!exitRequested && !switching) PlaybackDiagnostics.write("exit-request item=${item.id} reason=dispose")
                 exitRequested = true
                 view.keepScreenOn = false
+                output.onBandwidthEstimate = { _, _ -> }
                 probe?.close()
                 tiles?.close()
                 if (controller != null) {

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "suite": "player-quality",
+  "cases": [
+    {
+      "id": "player-quality.choices",
+      "operation": "choices",
+      "input": {},
+      "expected": [
+        "Auto",
+        "120 Mbps",
+        "80 Mbps",
+        "40 Mbps",
+        "20 Mbps",
+        "10 Mbps",
+        "4 Mbps"
+      ]
+    },
+    {
+      "id": "player-quality.automatic",
+      "operation": "label",
+      "input": {
+        "overrideMbps": null
+      },
+      "expected": "Auto"
+    },
+    {
+      "id": "player-quality.manual",
+      "operation": "label",
+      "input": {
+        "overrideMbps": 40
+      },
+      "expected": "40 Mbps"
+    },
+    {
+      "id": "player-quality.home-context",
+      "operation": "context",
+      "input": {
+        "network": "Home",
+        "configuredBitrate": 200000000
+      },
+      "expected": "Up to 200 Mbps on your home network"
+    },
+    {
+      "id": "player-quality.remote-context",
+      "operation": "context",
+      "input": {
+        "network": "Remote",
+        "configuredBitrate": 20000000
+      },
+      "expected": "Up to 20 Mbps away from home"
+    },
+    {
+      "id": "player-quality.metered-context",
+      "operation": "context",
+      "input": {
+        "network": "Metered",
+        "configuredBitrate": 4000000
+      },
+      "expected": "Up to 4 Mbps on mobile data or a metered hotspot"
+    },
+    {
+      "id": "player-quality.reduced",
+      "operation": "notice",
+      "input": {
+        "overrideMbps": null,
+        "activeBitrate": 4000000,
+        "configuredBitrate": 20000000
+      },
+      "expected": "Quality limit reduced to 4 Mbps to avoid buffering."
+    },
+    {
+      "id": "player-quality.small-reduction",
+      "operation": "notice",
+      "input": {
+        "overrideMbps": null,
+        "activeBitrate": 800,
+        "configuredBitrate": 4000000
+      },
+      "expected": "Quality limit reduced to <1 kbps to avoid buffering."
+    },
+    {
+      "id": "player-quality.manual-not-reduced",
+      "operation": "notice",
+      "input": {
+        "overrideMbps": 4,
+        "activeBitrate": 4000000,
+        "configuredBitrate": 20000000
+      },
+      "expected": null
+    },
+    {
+      "id": "player-quality.unchanged",
+      "operation": "notice",
+      "input": {
+        "overrideMbps": null,
+        "activeBitrate": 20000000,
+        "configuredBitrate": 20000000
+      },
+      "expected": null
+    },
+    {
+      "id": "player-quality.return-auto",
+      "operation": "choose",
+      "input": {
+        "overrideMbps": 40,
+        "estimatedBandwidth": 6000000,
+        "chooseMbps": null
+      },
+      "expected": {
+        "overrideMbps": null,
+        "estimatedBandwidth": null
+      }
+    },
+    {
+      "id": "player-quality.retry-auto",
+      "operation": "choose",
+      "input": {
+        "overrideMbps": null,
+        "estimatedBandwidth": 6000000,
+        "chooseMbps": null
+      },
+      "expected": {
+        "overrideMbps": null,
+        "estimatedBandwidth": null
+      }
+    },
+    {
+      "id": "player-quality.manual-choice",
+      "operation": "choose",
+      "input": {
+        "overrideMbps": null,
+        "estimatedBandwidth": 6000000,
+        "chooseMbps": 120
+      },
+      "expected": {
+        "overrideMbps": 120,
+        "estimatedBandwidth": null
+      }
+    },
+    {
+      "id": "player-quality.manual-eighty",
+      "operation": "label",
+      "input": {
+        "overrideMbps": 80
+      },
+      "expected": "80 Mbps"
+    }
+  ]
+}

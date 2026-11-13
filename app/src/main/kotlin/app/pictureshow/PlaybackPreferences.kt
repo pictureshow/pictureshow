@@ -11,13 +11,16 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
+import app.pictureshow.core.playback.PlaybackPreferenceJson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 typealias PlaybackPreferences = app.pictureshow.core.playback.PlaybackPreferences
 
-val PlaybackPreferences.appearance get() = SubtitleAppearance(subtitleSize, subtitleBackground)
+val PlaybackPreferences.appearance get() = SubtitleAppearance(subtitleSize, subtitleBackground, subtitleStyle)
 
 class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) {
     val values: Flow<PlaybackPreferences> = preferences.data.map(::decode)
@@ -32,6 +35,8 @@ class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) 
             data[CONVERSION_NOTICE] = next.conversionNotice
             data[MUSIC_QUALITY] = next.musicQuality
             data[REMOTE_RECEIVER] = next.remoteReceiver
+            data[TUNING] = json.encodeToString(next.tuning)
+            data[STYLE] = json.encodeToString(next.subtitleStyle.normalized())
             data[SIZE] = next.subtitleSize.name
             data[BACKGROUND] = next.subtitleBackground.name
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
@@ -49,11 +54,20 @@ class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) 
         conversionNotice = data[CONVERSION_NOTICE],
         musicQuality = data[MUSIC_QUALITY],
         remoteReceiver = data[REMOTE_RECEIVER]
+    ).copy(
+        tuning = PlaybackPreferenceJson.tuning(data[TUNING]),
+        subtitleStyle = PlaybackPreferenceJson.style(data[STYLE])
     )
 
     private fun segmentKey(type: SegmentType) = stringPreferencesKey("segment_${type.name.lowercase()}")
 
     private companion object {
+        val json = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        val TUNING = stringPreferencesKey("playback_tuning")
+        val STYLE = stringPreferencesKey("subtitle_style")
         val BITRATE = intPreferencesKey("playback_bitrate_mbps")
         val PASSTHROUGH = booleanPreferencesKey("playback_passthrough")
         val CONVERSION_NOTICE = booleanPreferencesKey("playback_conversion_notice")

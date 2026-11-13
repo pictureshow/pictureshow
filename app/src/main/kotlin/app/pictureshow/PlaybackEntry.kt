@@ -83,7 +83,12 @@ private fun validatedEntry(id: String, positionMs: Long?): ParsedPlaybackEntry =
 internal sealed interface ResolvedPlaybackEntry {
     data object NormalStartup : ResolvedPlaybackEntry
     data object Unavailable : ResolvedPlaybackEntry
-    data class Open(val item: MediaItem, val positionMs: Long, val syncOpen: SyncOpen? = null) : ResolvedPlaybackEntry
+    data class Open(
+        val item: MediaItem,
+        val positionMs: Long,
+        val startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.SavedResume,
+        val syncOpen: SyncOpen? = null
+    ) : ResolvedPlaybackEntry
 }
 
 private const val SYNC_OPEN_GENERATION = "sync.open.generation"
@@ -127,6 +132,7 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
     }
     return ResolvedPlaybackEntry.Open(
         item,
-        app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs)
+        app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs),
+        if (entry.positionMs == null) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
     )
 }

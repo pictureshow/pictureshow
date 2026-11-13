@@ -16,7 +16,8 @@ package app.pictureshow.core.playback
 object DeviceProfileBuilder {
     private const val FULL_HD_WIDTH = 1920
 
-    fun build(capabilities: DeviceCapabilities): DeviceProfile {
+    fun build(detected: DeviceCapabilities): DeviceProfile {
+        val capabilities = PlaybackCapabilityPolicy.effective(detected)
         val reportedVideo = capabilities.videoDecoders.map(::withConservativeProfile)
         val video = selectVideoDecoders(reportedVideo)
         val audio = audioChannelLimits(capabilities)
@@ -28,7 +29,7 @@ object DeviceProfileBuilder {
             directPlayProfiles = directPlayProfiles(video.keys, audio.keys),
             transcodingProfiles = transcodingProfiles(capabilities, video.keys, audio.keys),
             codecProfiles = guardedVideoCodecProfiles(reportedVideo, video, capabilities.display) + audioCodecProfiles(audio),
-            subtitleProfiles = subtitleProfiles()
+            subtitleProfiles = subtitleProfiles(capabilities.settings.tuning.subtitleBurnIn)
         )
     }
 
@@ -205,7 +206,9 @@ object DeviceProfileBuilder {
                 limits[encoding.codec] = maxOf(limits[encoding.codec] ?: 0, encoding.maxChannels)
             }
         }
-        return limits
+        val tuning = capabilities.settings.tuning.normalized()
+        val channelCap = if (tuning.downmix) 2 else tuning.maxAudioChannels
+        return if (channelCap == null) limits else limits.mapValues { (_, channels) -> minOf(channels, channelCap) }
     }
 
     private fun directPlayProfiles(video: Set<VideoCodec>, audio: Set<AudioCodec>): List<DirectPlayProfile> =
@@ -525,7 +528,7 @@ object DeviceProfileBuilder {
         )
     }
 
-    private fun subtitleProfiles(): List<SubtitleProfile> {
+    private fun subtitleProfiles(policy: SubtitleBurnIn): List<SubtitleProfile> {
         val embedded = Media3Formats.containers.flatMap { container ->
             container.embeddedSubtitles.map {
                 SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Embed, container = container.serverNames)
@@ -534,7 +537,12 @@ object DeviceProfileBuilder {
         val external = Media3Formats.externalTextSubtitles.map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.External) }
         // Image subtitles in a transcode (HLS cannot carry them) are burned in.
         val burnIn = listOf("pgssub", "dvdsub", "dvbsub").map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Encode) }
-        return embedded + external + burnIn
+        return when (policy) {
+            SubtitleBurnIn.Automatic -> embedded + external + burnIn
+            SubtitleBurnIn.Always -> (embedded.mapNotNull { it.format } + Media3Formats.externalTextSubtitles + listOf("dvbsub"))
+                .distinct().map { SubtitleProfile(format = it, method = SubtitleDeliveryMethod.Encode) }
+            SubtitleBurnIn.ImageOnly -> embedded.filter { it.format !in setOf("pgssub", "dvdsub", "dvbsub") } + external + burnIn
+        }
     }
 
     private fun lessThanEqual(property: ProfileConditionValue, value: String) =

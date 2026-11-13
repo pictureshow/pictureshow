@@ -49,10 +49,14 @@ class PlayerRecoveryNavigationTest {
                     Text("Detail")
                 }
                 composable(
-                    "player?item={item}&start={start}",
+                    "player?item={item}&start={start}&savedResume={savedResume}",
                     arguments = listOf(
                         navArgument("item") { type = NavType.StringType },
-                        navArgument("start") { type = NavType.LongType }
+                        navArgument("start") { type = NavType.LongType },
+                        navArgument("savedResume") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
                     )
                 ) {
                     PlayerRestoration(first, onRestore = { recoverPlaybackEntry(nav, it) }) { onCurrent ->

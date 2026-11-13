@@ -21,11 +21,18 @@ data class PlaybackPreferences(
     /** REM-09: off, same-viewer or server-allowed. Server policy stays the ceiling. */
     val remoteReceiver: String = "same-viewer",
     /** MUS-06: auto, original, 256 or 128. */
-    val musicQuality: String = "auto"
+    val musicQuality: String = "auto",
+    val tuning: PlaybackTuning = PlaybackTuning(),
+    val subtitleStyle: SubtitleStyle = SubtitleStyle()
 ) {
-    fun deviceSettings() = PlaybackSettings(
-        maxStreamingBitrate = bitrateMbps?.times(1_000_000) ?: PlaybackSettings.DEFAULT_MAX_STREAMING_BITRATE,
-        passthroughEnabled = passthrough
+    fun deviceSettings(
+        network: PlaybackNetwork = PlaybackNetwork.Home,
+        estimatedBandwidth: Long? = null,
+        qualityOverrideMbps: Int? = null
+    ) = PlaybackSettings(
+        maxStreamingBitrate = tuning.bitrate(bitrateMbps, network, estimatedBandwidth, qualityOverrideMbps),
+        passthroughEnabled = passthrough,
+        tuning = tuning.normalized()
     )
 
     companion object {

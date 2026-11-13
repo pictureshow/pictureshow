@@ -61,6 +61,8 @@ internal fun PlaybackInformationContent(
     subtitleIndex: Int,
     qualityMbps: Int?,
     player: Player?,
+    tuning: app.pictureshow.core.playback.PlaybackTuning = app.pictureshow.core.playback.PlaybackTuning(),
+    activeBitrate: Int? = null,
     onClose: () -> Unit
 ) {
     val closeFocus = remember { FocusRequester() }
@@ -76,7 +78,7 @@ internal fun PlaybackInformationContent(
     Text(PlaybackInformation.method(decision), style = MaterialTheme.typography.titleMedium)
     Text("↑ / ↓ scroll · Back closes", style = MaterialTheme.typography.labelMedium)
     val tracks = rememberReceivedTracks(player)
-    playbackInformationSections(decision, audioIndex, subtitleIndex, qualityMbps, tracks).forEach { section ->
+    playbackInformationSections(decision, audioIndex, subtitleIndex, qualityMbps, tracks, tuning, activeBitrate).forEach { section ->
         InformationSection(section.title) {
             section.lines.forEach { line ->
                 if (section.reasons) Text(line, style = MaterialTheme.typography.bodyMedium) else Text(line)
@@ -107,11 +109,13 @@ internal fun playbackInformationSections(
     audioIndex: Int,
     subtitleIndex: Int,
     qualityMbps: Int?,
-    tracks: Tracks
+    tracks: Tracks,
+    tuning: app.pictureshow.core.playback.PlaybackTuning = app.pictureshow.core.playback.PlaybackTuning(),
+    activeBitrate: Int? = null
 ): List<PlaybackInformationSection> = buildList {
     val source = decision.mediaSource
     if (decision.method == app.pictureshow.core.playback.PlayMethod.Transcode) {
-        val why = PlaybackInformation.reasons(decision, qualityMbps)
+        val why = PlaybackInformation.reasons(decision, qualityMbps, tuning, activeBitrate)
         add(PlaybackInformationSection("Why the server converts this stream", why, reasons = true))
     }
     val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }

@@ -19,7 +19,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.MaterialTheme
-import app.pictureshow.core.SegmentType
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -38,10 +37,7 @@ class SettingsOrderTest {
     val timeLimit = PerTestTimeLimit(180)
 
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val viewerSettings = listOf("settings:bitrate", "settings:passthrough", "settings:conversion-notice") +
-        listOf("settings:music-quality", "settings:phone-remote", "settings:size", "settings:background") +
-        SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
-        listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode")
+    private val viewerSettings = settingsViewerTags
 
     private fun open() {
         val report = ThisTvReport("Decoder\nReported capability", "{}")
@@ -102,6 +98,10 @@ class SettingsOrderTest {
             compose.onNodeWithTag(tag).assertIsFocused()
         }
         key(Key.DirectionDown)
+        compose.onNodeWithTag("settings:supporter").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("settings:about").assertIsFocused()
+        key(Key.DirectionDown)
         compose.onNodeWithTag("settings:this-tv").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionCenter)
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Refresh capabilities").assertExists() }.isSuccess }
@@ -114,7 +114,7 @@ class SettingsOrderTest {
     @Test
     fun backFromAboutLandsOnAboutNotTheFirstSetting() {
         open()
-        key(Key.DirectionUp)
+        compose.walkSettingsFromHomeTo("settings:about")
         compose.onNodeWithTag("settings:about").assertIsFocused()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("about:licenses").assertIsFocused()

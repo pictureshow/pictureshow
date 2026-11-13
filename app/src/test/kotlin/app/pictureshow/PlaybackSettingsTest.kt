@@ -70,11 +70,19 @@ class PlaybackSettingsTest {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitForIdle()
         }
+        fun chooseNext() {
+            center()
+            compose.onNodeWithTag("tv-settings:panel").performKeyInput {
+                pressKey(Key.DirectionDown)
+                pressKey(Key.DirectionCenter)
+            }
+            compose.waitForIdle()
+        }
         fun down(tag: String) {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             compose.onNodeWithTag(tag).assertIsFocused()
         }
-        center()
+        chooseNext()
         assertEquals(120, state.local.bitrateMbps)
         down("settings:passthrough")
         center()
@@ -84,30 +92,31 @@ class PlaybackSettingsTest {
         assertEquals(false, state.local.conversionNotice)
         down("settings:music-quality")
         assertEquals("auto", state.local.musicQuality)
-        center()
+        chooseNext()
         assertEquals(musicQualityOptions[1].first, state.local.musicQuality)
         down("settings:phone-remote")
-        center()
+        chooseNext()
         assertEquals("server-allowed", state.local.remoteReceiver)
         down("settings:size")
-        center()
+        chooseNext()
         assertEquals(SubtitleSize.Small, state.local.subtitleSize)
         down("settings:background")
-        center()
+        chooseNext()
         assertEquals(SubtitleBackground.None, state.local.subtitleBackground)
+        playbackGroups.forEach { down("settings:advanced:$it") }
         app.pictureshow.core.SegmentType.entries.filter { it != app.pictureshow.core.SegmentType.Unknown }.forEach { type ->
             down("settings:segment:$type")
-            center()
+            chooseNext()
             assertEquals(app.pictureshow.core.SegmentMode.Automatic, state.local.segmentModes[type])
         }
         down("settings:audio-language")
-        center()
+        chooseNext()
         assertEquals("spa", state.configuration!!.audioLanguage)
         down("settings:subtitle-language")
-        center()
+        chooseNext()
         assertEquals("spa", state.configuration!!.subtitleLanguage)
         down("settings:subtitle-mode")
-        center()
+        chooseNext()
         assertEquals("OnlyForced", state.configuration!!.subtitleMode)
         compose.runOnIdle {
             compose.activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
