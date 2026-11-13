@@ -875,7 +875,7 @@ class TouchPlayerControlsTest {
         val title = bounds("touch:title")
         assertTrue(title.right <= quality.left)
         assertTrue(quality.right <= bounds("touch:panel").right)
-        assertTrue(quality.bottom <= bounds("touch:toggle").top)
+        assertTrue(bounds("touch:toggle").bottom <= quality.top, "Transport stays above the bottom title/Quality panel")
         assertTrue(quality.right - quality.left >= 48.dp)
         val before = host.position
         compose.onNodeWithTag("touch:quality").performClick()
