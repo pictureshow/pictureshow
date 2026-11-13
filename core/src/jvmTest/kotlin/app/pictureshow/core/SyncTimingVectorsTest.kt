@@ -47,6 +47,24 @@ class SyncTimingVectorsTest {
         cases("sync-clock").forEach { row ->
             val expected = row.getValue("expected")
             when (row.getValue("op").jsonPrimitive.content) {
+                "prepared-future-unpause" -> {
+                    val i = row.getValue("input").jsonObject
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        app.pictureshow.core.sync.syncPreparedUnpause(
+                            i.getValue("command").jsonPrimitive.content,
+                            i.bool("future"),
+                            i.bool("ready"),
+                            i.bool("buffering"),
+                            i.bool("unpaused"),
+                            i.bool("pending"),
+                            i.long("current"),
+                            i.long("base")
+                        ),
+                        row.toString()
+                    )
+                }
+
                 "unpause-replay-rate" -> {
                     val i = row.getValue("input").jsonObject
                     assertEquals(

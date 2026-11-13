@@ -97,6 +97,26 @@ fun syncScheduledPosition(command: String, currentTicks: Long, targetTicks: Long
         targetTicks
     }
 
+/** A future resume can keep an already prepared, paused source instead of seeking at a late wake. */
+fun syncPreparedUnpause(
+    command: String,
+    acceptedFuture: Boolean,
+    ready: Boolean,
+    buffering: Boolean,
+    unpaused: Boolean,
+    positionApplicationPending: Boolean,
+    currentTicks: Long,
+    baseTicks: Long
+): Boolean = command == "Unpause" &&
+    acceptedFuture &&
+    ready &&
+    !buffering &&
+    !unpaused &&
+    !positionApplicationPending &&
+    currentTicks >= 0 &&
+    baseTicks >= 0 &&
+    currentTicks - baseTicks in -800_000L..800_000L
+
 /** A Ready response may freshly emit an Unpause whose positional timeline already took effect. */
 fun syncSameUnpauseTimeline(applied: SyncCommand?, received: SyncCommand): Boolean = applied != null &&
     applied.command == "Unpause" &&

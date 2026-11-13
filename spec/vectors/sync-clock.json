@@ -1025,6 +1025,201 @@
         "allowsRate": true
       },
       "expected": 1
+    },
+    {
+      "id": "future-unpause-prepared-submillisecond",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": true
+    },
+    {
+      "id": "future-unpause-late-receipt",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": false,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-not-ready",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": false,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-buffering",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": true,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-already-unpaused",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": true,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-pending-position",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": true,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-other-command",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Seek",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-aligned-positive-boundary",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1954757848,
+        "base": 1953957848
+      },
+      "expected": true
+    },
+    {
+      "id": "future-unpause-aligned-negative-boundary",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953157848,
+        "base": 1953957848
+      },
+      "expected": true
+    },
+    {
+      "id": "future-unpause-past-positive-boundary",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1954757849,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-past-negative-boundary",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953157847,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-invalid-current",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": -1,
+        "base": 1953957848
+      },
+      "expected": false
+    },
+    {
+      "id": "future-unpause-invalid-base",
+      "op": "prepared-future-unpause",
+      "input": {
+        "command": "Unpause",
+        "future": true,
+        "ready": true,
+        "buffering": false,
+        "unpaused": false,
+        "pending": false,
+        "current": 1953950000,
+        "base": -1
+      },
+      "expected": false
     }
   ]
 }

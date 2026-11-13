@@ -169,6 +169,8 @@ internal class SyncPlayHost(
         val command: app.pictureshow.core.sync.SyncCommand
     )
     private var appliedUnpause: AppliedUnpause? = null
+    private data class PreparedUnpause(val binding: AppliedUnpause, val clockGeneration: Long)
+    private var preparedUnpause: PreparedUnpause? = null
     private var drift = SyncDriftState()
     private var readiness = SyncReadinessState()
     private var stoppedEntry: String? = null
@@ -548,7 +550,10 @@ internal class SyncPlayHost(
             "accepted=true candidateToken=${traceToken(token)} replacedToken=${traceToken(rendererToken)} " +
                 "openGeneration=${opening?.generation ?: -1} openEntry=${traceId(opening?.entryId)} " + stateFields(next.snapshot())
         )
-        if (rendererToken !== token || renderer !== next) appliedUnpause = null
+        if (rendererToken !== token || renderer !== next) {
+            appliedUnpause = null
+            preparedUnpause = null
+        }
         rendererToken = token
         renderer = next
         if (opening != null && opening.entryId == openingEntry) openingEntry = null
@@ -567,6 +572,7 @@ internal class SyncPlayHost(
         if (rendererToken !== token) return
         renderer = null
         appliedUnpause = null
+        preparedUnpause = null
         rendererToken = null
         pendingSource = null
         awaitingSource = null
@@ -590,6 +596,7 @@ internal class SyncPlayHost(
             return
         }
         if (!membership.hasSnapshot || value.itemId != current.itemId || openingEntry != null) return
+        preparedUnpause = null
         readiness = readiness.afterPositionApplied(true)
         drift = syncTransportApplied(drift, monotonic(), true)
         trace("position-applied", "source=native-callback " + stateFields(value))
@@ -940,14 +947,55 @@ internal class SyncPlayHost(
         return true
     }
 
-    private fun alreadyAppliedUnpause(command: SyncCommand): Boolean = appliedUnpause?.let {
+    private fun sameBoundUnpause(binding: AppliedUnpause?, command: SyncCommand): Boolean = binding?.let {
         it.token === rendererToken &&
             it.renderer === renderer &&
             it.sourceIdentity === renderer?.sourceIdentity &&
             it.generation == membership.generation &&
             app.pictureshow.core.sync.syncSameUnpauseTimeline(it.command, command)
     } == true
+    private fun alreadyAppliedUnpause(command: SyncCommand): Boolean = sameBoundUnpause(appliedUnpause, command)
+
+    private fun sourcePreparedForUnpause(command: SyncCommand, acceptedFuture: Boolean, output: SyncRenderer): Boolean {
+        val r = output.snapshot()
+        return membership.hasSnapshot &&
+            command.playlistItemId == membership.queue?.current?.playlistItemId &&
+            r.itemId == membership.queue?.current?.itemId &&
+            rendererOwnsEntry(r, command.playlistItemId) &&
+            r.seekable &&
+            r.durationTicks > 0 &&
+            app.pictureshow.core.sync.syncPreparedUnpause(
+                command.command,
+                acceptedFuture,
+                r.ready,
+                r.buffering,
+                r.unpaused,
+                output.positionApplicationPending,
+                r.positionTicks,
+                command.positionTicks ?: -1
+            )
+    }
+
     private fun schedule(command: SyncCommand, retainedPlaying: Boolean? = null) {
+        preparedUnpause = preparedUnpause?.takeIf {
+            it.clockGeneration == anchorGeneration && sameBoundUnpause(it.binding, command)
+        }
+        // Preparation is admitted while the command is future, never manufactured by a late retry.
+        val receiptNow = anchor?.serverNowTicks(wall(), monotonic())
+        val commandWhen = millisecondsToSyncTicks(command.whenMs)
+        val preparingOutput = renderer
+        if (preparedUnpause == null &&
+            receiptNow != null &&
+            commandWhen != null &&
+            commandWhen > receiptNow &&
+            preparingOutput != null &&
+            sourcePreparedForUnpause(command, true, preparingOutput)
+        ) {
+            preparedUnpause = PreparedUnpause(
+                AppliedUnpause(rendererToken, preparingOutput, preparingOutput.sourceIdentity, membership.generation, command),
+                anchorGeneration
+            )
+        }
         if (!alreadyAppliedUnpause(command)) appliedUnpause = null
         scheduled?.cancel()
         // Acceptance can publish Playing before When. The ticker must wait on this command,
@@ -1030,7 +1078,12 @@ internal class SyncPlayHost(
                 // message/emission identity. Resume its mode without bypassing the
                 // autonomous correction cooldown with another positional seek.
                 val alreadyPositioned = alreadyAppliedUnpause(command)
-                val position = if (alreadyPositioned) {
+                val prepared = preparedUnpause?.let {
+                    it.clockGeneration == anchorGeneration &&
+                        sameBoundUnpause(it.binding, command) &&
+                        renderer?.let { output -> sourcePreparedForUnpause(command, true, output) } == true
+                } == true
+                val position = if (alreadyPositioned || prepared) {
                     null
                 } else {
                     syncScheduledPosition(
@@ -1058,6 +1111,7 @@ internal class SyncPlayHost(
                 // acknowledgement belongs to the pre-seek position, even if both samples are READY.
                 readiness = readiness.afterPositionApplied(positionChanged)
                 timelineApplied = !intendedPlaying || playing
+                if (timelineApplied) preparedUnpause = null
                 if (!alreadyPositioned &&
                     command.command == "Unpause" &&
                     playing &&
@@ -1083,6 +1137,7 @@ internal class SyncPlayHost(
 
     private fun resetClock(reason: String) {
         appliedUnpause = null
+        preparedUnpause = null
         trace("clock-reset", "reason=$reason nextAnchorGeneration=${anchorGeneration + 1} " + stateFields())
         pendingSource = null
         awaitingSource = null
