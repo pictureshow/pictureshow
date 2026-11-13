@@ -65,6 +65,20 @@ class CorpusVectorsTest {
                     "offline-resume"
                 ),
             "remote-vectors" to setOf("remote-queue", "remote-receive", "remote-reconnect", "remote-targets", "remote-wire"),
+            // Core policies run in SyncProtocol/Timing/SourceVectorsTest. Native adapter contracts
+            // run in app's SyncPlayHost, RemoteTargetHost, PlaybackSpeed, Controls and SeekFeedback tests.
+            "sync-vectors" to
+                setOf(
+                    "sync-application",
+                    "sync-clock",
+                    "sync-drift",
+                    "sync-membership-registration",
+                    "sync-queue",
+                    "sync-rate-presentation",
+                    "sync-socket-readiness",
+                    "sync-source",
+                    "sync-state"
+                ),
             "grid-vectors" to setOf("grid-navigation")
         )
         fun directory(name: String) = File(requireNotNull(javaClass.classLoader.getResource(name)) { "Missing packaged $name" }.toURI())
