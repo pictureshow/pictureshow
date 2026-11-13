@@ -12,8 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOn
@@ -112,8 +110,8 @@ class SyncPlayTouchDesignTest {
         val previous = compose.onNodeWithTag("sync:previous").getUnclippedBoundsInRoot()
         val play = compose.onNodeWithTag("sync:play").getUnclippedBoundsInRoot()
         val next = compose.onNodeWithTag("sync:next").getUnclippedBoundsInRoot()
-        assertEquals(previous.center.y, play.center.y)
-        assertEquals(play.center.y, next.center.y)
+        assertEquals((previous.top + previous.bottom) / 2, (play.top + play.bottom) / 2)
+        assertEquals((play.top + play.bottom) / 2, (next.top + next.bottom) / 2)
         compose.onNodeWithTag("sync:repeat:RepeatOne").performScrollTo().assertIsSelected()
         compose.onNodeWithTag("sync:repeat:RepeatAll").performClick()
         compose.onNodeWithTag("sync:repeat:RepeatOne").assertIsSelected()
@@ -121,7 +119,7 @@ class SyncPlayTouchDesignTest {
             SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState) and hasAnyAncestor(hasTestTag("sync:ignore-wait"))
         )
             .performScrollTo().assertIsOn().performClick()
-        assertEquals(listOf("repeat" to "RepeatAll", "ignore-wait" to "true"), actions)
+        assertEquals(listOf<Pair<String, String?>>("repeat" to "RepeatAll", "ignore-wait" to "true"), actions)
         compose.onNodeWithTag("sync:leave").assertIsDisplayed()
     }
 
@@ -155,7 +153,7 @@ class SyncPlayTouchDesignTest {
         compose.onNodeWithText("Reconnecting").assertDoesNotExist()
         compose.onNodeWithText("Lost sync with the group. Rejoin to catch up.").assertIsDisplayed()
         compose.onNodeWithTag("sync:recovery").performClick()
-        assertEquals(listOf("join" to "g"), actions)
+        assertEquals(listOf<Pair<String, String?>>("join" to "g"), actions)
         compose.onNodeWithTag("sync:leave").assertIsDisplayed()
     }
 }
