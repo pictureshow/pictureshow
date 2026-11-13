@@ -5,8 +5,10 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -77,11 +79,13 @@ class LiveRound3ClosureTest {
         }
         compose.setContent {
             TouchTheme {
-                Column(Modifier.width(width.value).height(360.dp)) {
-                    LiveGuide(
-                        fake.channelRows, shows, account, false, 0, 0,
-                        rememberScrollState(), rememberLazyListState(), null, false, {}, onOpen = {}
-                    )
+                Box(Modifier.fillMaxSize()) {
+                    Column(Modifier.width(width.value).height(360.dp)) {
+                        LiveGuide(
+                            fake.channelRows, shows, account, false, 0, 0,
+                            rememberScrollState(), rememberLazyListState(), null, false, {}, onOpen = {}
+                        )
+                    }
                 }
             }
         }
@@ -110,7 +114,9 @@ class LiveRound3ClosureTest {
             TouchTheme {
                 val density = LocalDensity.current
                 toolbarInset = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
-                Column(Modifier.width(712.dp).height(384.dp)) { LiveTvScreen(vm, account, false, {}, {}, {}) }
+                Box(Modifier.fillMaxSize()) {
+                    Column(Modifier.width(712.dp).height(384.dp)) { LiveTvScreen(vm, account, false, {}, {}, {}) }
+                }
             }
         }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
@@ -120,7 +126,10 @@ class LiveRound3ClosureTest {
         assertEquals(48.dp, controls.bottom - controls.top)
         val ruler = compose.onNodeWithTag("live:guide-ruler", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertEquals(24.dp, ruler.bottom - ruler.top)
-        assertTrue(ruler.bottom <= 152.dp, "Guide chrome leaves three rows on a short screen: ruler bottom ${ruler.bottom}")
+        assertTrue(
+            ruler.bottom - toolbarInset <= 120.dp,
+            "Guide chrome is120dp plus actual system inset: ${ruler.bottom}, inset $toolbarInset"
+        )
         val third = compose.onNodeWithTag("live:guide-row:c2", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(third.bottom <= 384.dp, "Third channel row must be fully visible: $third")
         val visible = compose.onNodeWithTag("live:guide-row:c2", useUnmergedTree = true).assertIsDisplayed().getBoundsInRoot()
