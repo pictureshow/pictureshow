@@ -357,9 +357,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
 
     #if os(iOS)
     @MainActor private func actualDetailScroll() throws -> XCUIElement {
-        try XCTUnwrap(app.scrollViews.allElementsBoundByIndex.first {
+        let scroll = app.scrollViews.allElementsBoundByIndex.first {
             $0.staticTexts["detailTitle"].exists && $0.descendants(matching: .any).matching(identifier: "detailPeopleShelf").firstMatch.exists
-        }, "Require the actual detail scroll container, not a frame override")
+        }
+        if scroll == nil { record("Round3 missing actual detail scroll container after native input") }
+        return try XCTUnwrap(scroll, "Require the actual detail scroll container, not a frame override")
     }
     @MainActor private func peopleUsableViewport() throws -> CGRect {
         let window = app.windows.firstMatch.frame
@@ -397,15 +399,16 @@ final class RoundThreeCaptureUITests: XCTestCase {
             let translation: CGVector
             if target.maxY > viewport.maxY { translation = CGVector(dx: 0, dy: -min(target.maxY - viewport.maxY + 8, viewport.height * 0.4)) }
             else if target.minY < viewport.minY { translation = CGVector(dx: 0, dy: min(viewport.minY - target.minY + 8, viewport.height * 0.4)) }
-            else if target.minX < viewport.minX { translation = CGVector(dx: min(viewport.minX - target.minX + 8, viewport.width * 0.4), dy: 0) }
-            else if target.maxX > viewport.maxX { translation = CGVector(dx: -min(target.maxX - viewport.maxX + 8, viewport.width * 0.4), dy: 0) }
+            else if target.minX < viewport.minX { translation = CGVector(dx: min(max(32, viewport.minX - target.minX + 8), viewport.width * 0.4), dy: 0) }
+            else if target.maxX > viewport.maxX { translation = CGVector(dx: -min(max(32, target.maxX - viewport.maxX + 8), viewport.width * 0.4), dy: 0) }
             else { break }
             let window = app.windows.firstMatch
             let origin = window.coordinate(withNormalizedOffset: .zero)
             let startY = translation.dx == 0 ? viewport.midY : min(max(target.midY, viewport.minY + 16), viewport.maxY - 16)
             let start = origin.withOffset(CGVector(dx: viewport.midX - window.frame.minX, dy: startY - window.frame.minY))
             let end = start.withOffset(translation)
-            start.press(forDuration: 0.05, thenDragTo: end)
+            if translation.dx == 0 { start.press(forDuration: 0.05, thenDragTo: end) }
+            else { start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3) }
         }
         let viewport = try peopleUsableViewport()
         print("ROUND3_PEOPLE_VISIBLE name=\(name) role=\(role) card=\(card.frame) nameFrame=\(nameText.frame) roleFrame=\(roleText.frame) nativeViewport=\(viewport)")
@@ -492,12 +495,43 @@ final class RoundThreeCaptureUITests: XCTestCase {
         if candidate == nil { record("Round3 missing native tab actual state " + name) }
         return try XCTUnwrap(candidate, "No visible native tab: " + name)
     }
+    #if os(tvOS)
+    private func retainedNativeLibraryRouteIsVisible() -> Bool {
+        guard let artworkID = config["artworkItemID"], !artworkID.isEmpty,
+              !app.staticTexts["detailTitle"].exists else { return false }
+        let heading = node("libraryHeading"), count = node("libraryCount"), viewport = node("catalogViewport")
+        let window = app.windows.firstMatch.frame
+        return heading.exists && count.exists && viewport.exists
+            && !viewport.frame.isEmpty && window.intersects(viewport.frame)
+            && app.buttons["item-" + artworkID].firstMatch.exists
+    }
+    #endif
     @MainActor private func revealNativeTabBar() {
         #if os(tvOS)
         for _ in 0..<8 {
             if nativeTabCandidate("Home") != nil { return }
             XCUIRemote.shared.press(.up)
         }
+        // A native tab bar remains collapsed inside a retained detail stack.
+        // Back only from an observed detail/Back route; never dismiss an
+        // unknown modal or leave a root merely because its bar is hidden.
+        for index in 0..<4 {
+            if nativeTabCandidate("Home") != nil { return }
+            let window = app.windows.firstMatch.frame
+            let backs = app.navigationBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "BackButton", "Back"))
+                .allElementsBoundByIndex.filter { $0.exists && !$0.frame.isEmpty && window.contains($0.frame) }
+            let title = app.staticTexts["detailTitle"], play = app.buttons["play"]
+            let retainedDetail = title.exists && play.exists && !play.frame.isEmpty && window.intersects(play.frame)
+            let retainedLibrary = retainedNativeLibraryRouteIsVisible()
+            guard retainedDetail || retainedLibrary || !backs.isEmpty else {
+                record("Round3 hidden native tab bar lacks a proven Back route")
+                return
+            }
+            print("ROUND3_NATIVE_TAB_BACK index=\(index) detail=\(retainedDetail) library=\(retainedLibrary) nativeBackCount=\(backs.count)")
+            XCUIRemote.shared.press(.menu)
+            record("Round3 native tab restoration after guarded Menu \(index + 1)")
+        }
+        if nativeTabCandidate("Home") == nil { record("Round3 native tab bar still hidden after bounded Back") }
         #endif
     }
     @MainActor private func returnToLibrariesRootForEmptyState() throws {
@@ -509,6 +543,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         focusOnly(tab)
         let returned = wait(10) {
             self.nativeDestinationIsVisible("Libraries")
+                || self.retainedNativeLibraryRouteIsVisible()
                 || (self.app.staticTexts["detailTitle"].exists && self.app.buttons["play"].exists)
                 || self.app.navigationBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "BackButton", "Back")).firstMatch.exists
         }
@@ -523,8 +558,9 @@ final class RoundThreeCaptureUITests: XCTestCase {
         func rootHeadingVisible() -> Bool {
             app.navigationBars.allElementsBoundByIndex.contains { bar in
                 let title = bar.staticTexts["Libraries"].firstMatch
-                return bar.exists && !bar.frame.isEmpty && title.exists && !title.frame.isEmpty
-                    && app.windows.firstMatch.frame.contains(title.frame)
+                guard bar.exists && !bar.frame.isEmpty && app.windows.firstMatch.frame.contains(bar.frame) else { return false }
+                return bar.identifier == "Libraries"
+                    || (title.exists && !title.frame.isEmpty && app.windows.firstMatch.frame.contains(title.frame))
             }
         }
         func rootVisible() -> Bool {
@@ -538,9 +574,10 @@ final class RoundThreeCaptureUITests: XCTestCase {
                 .allElementsBoundByIndex.filter { $0.exists && !$0.frame.isEmpty && self.app.windows.firstMatch.frame.contains($0.frame) }
             #if os(tvOS)
             let retainedDetail = app.staticTexts["detailTitle"].exists && app.buttons["play"].exists
-            if backs.isEmpty && !retainedDetail { record("Round3 Libraries retained stack missing actual Back state") }
-            XCTAssertTrue(!backs.isEmpty || retainedDetail, "A real retained detail or native Back control must precede Menu")
-            guard !backs.isEmpty || retainedDetail else { return }
+            let retainedLibrary = retainedNativeLibraryRouteIsVisible()
+            if backs.isEmpty && !retainedDetail && !retainedLibrary { record("Round3 Libraries retained stack missing actual Back state") }
+            XCTAssertTrue(!backs.isEmpty || retainedDetail || retainedLibrary, "A real retained detail, configured library grid or native Back control must precede Menu")
+            guard !backs.isEmpty || retainedDetail || retainedLibrary else { return }
             XCUIRemote.shared.press(.menu)
             #else
             let visibleBacks = backs.filter(\.isHittable)
