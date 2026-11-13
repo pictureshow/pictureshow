@@ -80,7 +80,7 @@ class LivePresentationVectorsTest {
                     envelope.getValue("expected").jsonPrimitive.boolean,
                     liveEditorShouldRevealHeader(
                         c.getValue("tv").jsonPrimitive.boolean,
-                        c.getValue("firstActionFocused").jsonPrimitive.boolean
+                        c.getValue("firstActionRowFocused").jsonPrimitive.boolean
                     ),
                     id
                 )

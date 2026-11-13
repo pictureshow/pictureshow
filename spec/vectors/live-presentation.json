@@ -4073,7 +4073,7 @@
       "operation": "review-header-reveal",
       "input": {
         "tv": false,
-        "firstActionFocused": false
+        "firstActionRowFocused": false
       },
       "expected": false
     },
@@ -4082,7 +4082,7 @@
       "operation": "review-header-reveal",
       "input": {
         "tv": false,
-        "firstActionFocused": true
+        "firstActionRowFocused": true
       },
       "expected": false
     },
@@ -4091,7 +4091,7 @@
       "operation": "review-header-reveal",
       "input": {
         "tv": true,
-        "firstActionFocused": false
+        "firstActionRowFocused": false
       },
       "expected": false
     },
@@ -4100,7 +4100,7 @@
       "operation": "review-header-reveal",
       "input": {
         "tv": true,
-        "firstActionFocused": true
+        "firstActionRowFocused": true
       },
       "expected": true
     }

@@ -115,6 +115,12 @@ class LiveTvReviewNavigationTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithText("Edit options").assertIsFocused()
+        val actionViewport = compose.onNodeWithTag("review:viewport").getBoundsInRoot()
+        val editHeading = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(
+            editHeading.top >= actionViewport.top,
+            "Up naturally returns to Edit options; the complete heading must already be visible without an extra Left: $editHeading / $actionViewport"
+        )
         compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed().assertIsFocused()
