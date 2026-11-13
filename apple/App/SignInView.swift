@@ -111,6 +111,9 @@ private struct SignInForm: View {
             #endif
         }
         .onDisappear { work?.cancel(); password = "" }
+        .onChange(of: error ?? flow.error) { _, message in
+            if let message { UIAccessibility.post(notification: .announcement, argument: message) }
+        }
         #if os(tvOS)
         .onExitCommand { if flow.showingQuick { flow.hide() } else if server != nil { leaveServer() } else if !model.snapshot.accounts.isEmpty { model.showSignIn = false } }
         #endif
@@ -151,8 +154,7 @@ private struct SignInForm: View {
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: error ?? flow.error) { _, message in
-                guard let message else { return }
-                UIAccessibility.post(notification: .announcement, argument: message)
+                guard message != nil else { return }
                 Task { @MainActor in
                     await Task.yield()
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("signInError", anchor: .center) }
