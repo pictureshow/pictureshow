@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) Legitimate LLC.
  */
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,14 +40,19 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +60,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -89,11 +98,13 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaPerson
+import app.pictureshow.core.constraintKeys
 import app.pictureshow.core.detailReadBandText
 import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
+import app.pictureshow.core.sortDirectionLabel
 import kotlin.math.ceil
 
 /** TOUCH-06 and CAT-04: the same three sorts as TV, with touch's word for the first. */
@@ -108,13 +119,14 @@ internal fun TouchCatalogHome(
     onResume: () -> Unit = {},
     librariesOnly: Boolean = false,
     onLiveTv: () -> Unit = {},
+    onCustomize: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     if (librariesOnly) {
-        TouchLibrariesGrid(state, rows.flatMap(HomeRow::items), account, onOpen, onRetry)
+        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry)
         return
     }
     LazyColumn(
@@ -125,7 +137,32 @@ internal fun TouchCatalogHome(
     ) {
         item(key = "heading") {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TouchCatalogHeading("Pictureshow")
+                var homeMenu by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TouchCatalogHeading("Pictureshow", Modifier.weight(1f))
+                    if (onCustomize != null) {
+                        Box {
+                            IconButton(
+                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                                onClick = { if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) homeMenu = true },
+                                modifier = Modifier.testTag("touch:home-menu")
+                            ) {
+                                Icon(touchActionIcon("more"), contentDescription = "Home options")
+                            }
+                            DropdownMenu(homeMenu, { homeMenu = false }) {
+                                DropdownMenuItem(
+                                    enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                                    text = { Text("Customize home") },
+                                    onClick = {
+                                        homeMenu = false
+                                        if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) onCustomize()
+                                    },
+                                    modifier = Modifier.testTag("touch:customize")
+                                )
+                            }
+                        }
+                    }
+                }
                 TextButton(onClick = onLiveTv, modifier = Modifier.heightIn(min = 48.dp).testTag("home:live-tv")) { Text("Live TV") }
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
@@ -181,6 +218,7 @@ private fun TouchLibrariesGrid(
     }
 }
 
+/** Preserve the existing catalog call surface for screens and regression harnesses. */
 @Composable
 internal fun TouchCatalogGrid(
     state: CatalogGridState,
@@ -191,6 +229,25 @@ internal fun TouchCatalogGrid(
     onBack: () -> Unit
 ) {
     TouchMediaGrid(state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort)
+}
+
+@Composable
+internal fun TouchCatalogGrid(
+    state: CatalogGridState,
+    onOpen: (MediaItem) -> Unit,
+    onNearEnd: (Int) -> Unit,
+    onSort: (String, Boolean) -> Unit,
+    onRetry: () -> Unit,
+    onFilters: () -> Unit,
+    onDisplayList: (Boolean) -> Unit,
+    onClearFilters: (() -> Unit)? = null,
+    onRemoveFilter: ((String) -> Unit)? = null,
+    onBack: () -> Unit
+) {
+    TouchMediaGrid(
+        state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort, onFilters = onFilters, onDisplayList = onDisplayList,
+        onClearFilters = onClearFilters, onRemoveFilter = onRemoveFilter
+    )
 }
 
 @Composable
@@ -212,7 +269,11 @@ private fun TouchMediaGrid(
     onRetry: () -> Unit,
     onBack: () -> Unit,
     onSort: ((String, Boolean) -> Unit)? = null,
-    person: MediaItem? = null
+    person: MediaItem? = null,
+    onFilters: (() -> Unit)? = null,
+    onDisplayList: ((Boolean) -> Unit)? = null,
+    onClearFilters: (() -> Unit)? = null,
+    onRemoveFilter: ((String) -> Unit)? = null
 ) {
     val shortWindow = isShortTouchWindow()
     val grid = rememberLazyGridState()
@@ -221,50 +282,110 @@ private fun TouchMediaGrid(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // One artwork height per grid: columns round to different pixels, and an aspect ratio would inherit that wobble.
         val artHeight = touchGridArtHeight(maxWidth, cellMinimum, if (shortWindow) 9f / 16f else 3f / 2f)
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(cellMinimum),
-            state = grid,
-            modifier = Modifier.fillMaxSize().testTag("touch:grid"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
-            verticalArrangement = Arrangement.spacedBy(if (shortWindow) 12.dp else 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
-                    if (shortWindow) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TouchBack(onBack)
-                            TouchCatalogHeading(state.parent.name, Modifier.weight(1f), section = true)
+        Column(Modifier.fillMaxSize()) {
+            TopAppBar(modifier = Modifier.testTag("touch:library-appbar"), title = {
+                TouchCatalogHeading(state.parent.name, section = true)
+            }, navigationIcon = {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("touch:back")) { Icon(touchActionIcon("back"), "Back") }
+            })
+            LazyVerticalGrid(
+                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(cellMinimum),
+                state = grid,
+                modifier = Modifier.weight(1f).testTag("touch:grid"),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
+                verticalArrangement = Arrangement.spacedBy(if (shortWindow) 12.dp else 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
+                        if (person != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                TouchCatalogArtwork(
+                                    person,
+                                    state.account,
+                                    false,
+                                    Modifier.width(if (shortWindow) 48.dp else 112.dp).aspectRatio(if (shortWindow) 1f else 2f / 3f)
+                                )
+                                Text(
+                                    person.overview?.takeIf(String::isNotBlank) ?: "Titles featuring ${person.name}",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
-                    } else {
-                        TouchBack(onBack)
-                        TouchCatalogHeading(state.parent.name)
-                    }
-                    if (person != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TouchCatalogArtwork(
-                                person,
-                                state.account,
-                                false,
-                                Modifier.width(if (shortWindow) 48.dp else 112.dp).aspectRatio(if (shortWindow) 1f else 2f / 3f)
-                            )
-                            Text(
-                                person.overview?.takeIf(String::isNotBlank) ?: "Titles featuring ${person.name}",
-                                modifier = Modifier.weight(1f)
-                            )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (onSort != null) TouchCatalogSort(state, onSort)
+                            if (onFilters != null) {
+                                FilterChip(
+                                    selected = state.filters.active,
+                                    onClick = onFilters,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:filters"),
+                                    label = { Text(filterChipLabel(state.filters)) }
+                                )
+                            }
+                            if (onDisplayList != null) {
+                                IconToggleButton(
+                                    checked = state.list,
+                                    onCheckedChange = onDisplayList,
+                                    modifier = Modifier.testTag("touch:display")
+                                ) {
+                                    Icon(
+                                        touchActionIcon(if (state.list) "list" else "grid"),
+                                        contentDescription = if (state.list) "List view. Switch to grid" else "Grid view. Switch to list"
+                                    )
+                                }
+                            }
+                        }
+                        if (onRemoveFilter != null && state.filters.active) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                state.filters.constraintKeys().forEach { key ->
+                                    InputChip(
+                                        selected = true,
+                                        onClick = { onRemoveFilter(key) },
+                                        label = { Text(filterConstraintLabel(state.filters, key)) },
+                                        trailingIcon = {
+                                            Icon(
+                                                touchActionIcon("close"),
+                                                "Remove ${filterConstraintLabel(state.filters, key)}",
+                                                Modifier.size(16.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        state.preferenceStatus?.let { Text(it) }
+                        TouchCatalogError(state.error ?: state.refreshError, onRetry)
+                        if (state.loading && state.items.isEmpty()) TouchCatalogLoading("Loading titles…")
+                        if (!state.loading && state.items.isEmpty() && state.error == null) {
+                            Text(emptyGridLabel(state.parent, state.filters))
+                            if (state.filters.active && onClearFilters != null) {
+                                Button(
+                                    onClick = onClearFilters,
+                                    modifier = Modifier.testTag("touch:clear-filters")
+                                ) { Text("Clear filters") }
+                            }
                         }
                     }
-                    if (onSort != null) TouchCatalogSort(state, onSort)
-                    TouchCatalogError(state.error ?: state.refreshError, onRetry)
-                    if (state.loading && state.items.isEmpty()) TouchCatalogLoading("Loading titles…")
-                    if (!state.loading && state.items.isEmpty() && state.error == null) Text("No titles are available.")
                 }
-            }
-            itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
-                TouchCatalogCard(item, state.account, shortWindow, { onOpen(item) }, Modifier.fillMaxWidth(), artHeight = artHeight)
-            }
-            if (state.loading && state.items.isNotEmpty()) {
-                item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }
+                itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
+                    if (state.list) {
+                        TouchCatalogListRow(item, state.account, { onOpen(item) })
+                    } else {
+                        TouchCatalogCard(item, state.account, shortWindow, {
+                            onOpen(item)
+                        }, Modifier.fillMaxWidth(), artHeight = artHeight)
+                    }
+                }
+                if (state.loading && state.items.isNotEmpty()) {
+                    item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }
+                }
             }
         }
     }
@@ -291,17 +412,18 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
     // Sort and its direction are equal in rank, so they match; the menu shows its current choice to everyone.
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
-            OutlinedButton(
+            AssistChip(
                 onClick = { expanded = true },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("touch:sort")
-                    .touchMenuButton(expanded, "Show sort options") { expanded = true },
-                border = touchOutlineBorder(),
-                contentPadding = PaddingValues(start = 16.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp)
-            ) {
-                Text("Sort: $label")
-                Spacer(Modifier.width(8.dp))
-                Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+                    .touchMenuButton(expanded, "Show sort options", sortDirectionLabel(state.descending)) { expanded = true },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(label)
+                        Icon(touchActionIcon(if (state.descending) "arrow-down" else "arrow-up"), null, Modifier.size(18.dp))
+                    }
+                },
+                trailingIcon = { Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp)) }
+            )
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 options.forEach { (key, title) ->
                     val current = state.sortBy == key
@@ -319,14 +441,17 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
                         modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = if (current) "Selected" else "" }
                     )
                 }
+                listOf(false to "Ascending", true to "Descending").forEach { (descending, title) ->
+                    DropdownMenuItem(
+                        text = { Text(title) },
+                        onClick = {
+                            expanded = false
+                            onSort(state.sortBy, descending)
+                        },
+                        trailingIcon = { if (descending == state.descending) Icon(touchActionIcon("check"), null) }
+                    )
+                }
             }
-        }
-        OutlinedButton(
-            onClick = { onSort(state.sortBy, !state.descending) },
-            modifier = Modifier.heightIn(min = 48.dp),
-            border = touchOutlineBorder()
-        ) {
-            Text(if (state.descending) "Descending" else "Ascending")
         }
     }
 }
@@ -744,8 +869,8 @@ private val TOUCH_CHEVRON_END = 16.dp
 private val TOUCH_CHEVRON_ROOM = 22.dp
 
 /** A button that opens a menu says so: a reader hears whether it is open and what a double tap will do. */
-private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open: () -> Unit) = semantics {
-    stateDescription = if (expanded) "Expanded" else "Collapsed"
+private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, statePrefix: String? = null, open: () -> Unit) = semantics {
+    stateDescription = listOfNotNull(statePrefix, if (expanded) "Expanded" else "Collapsed").joinToString(", ")
     onClick(label = openLabel) {
         open()
         true
@@ -847,6 +972,32 @@ internal fun TouchCatalogShelf(
                     if (wide) 244.dp else 136.dp
                 }
                 TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(width), reserveLines = reserveLines)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TouchCatalogListRow(item: MediaItem, account: Account, open: () -> Unit) {
+    Card(
+        onClick = open,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp).testTag("touch:card:${item.id}")
+            .semantics(mergeDescendants = true) { contentDescription = catalogAnnouncement(item) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            TouchCatalogArtwork(item, account, false, Modifier.width(56.dp).height(84.dp))
+            Column(Modifier.weight(1f).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(item.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(
+                        item.productionYear?.toString(),
+                        runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank),
+                        item.officialRating
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

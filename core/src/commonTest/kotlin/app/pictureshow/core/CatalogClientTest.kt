@@ -61,7 +61,7 @@ class CatalogClientTest {
     }
 
     @Test
-    fun parsesViewsResumeNextUpAndPlainArrayLatestShapes() = runTest {
+    fun parsesViewsResumeNextUpAndAuthorizedBrowseLatestShapes() = runTest {
         val views = page("""{"Id":"view-a","Name":"Invented Cinema","Type":"CollectionFolder","CollectionType":"movies"}""")
         assertEquals("movies", assertIs<ClientResult.Success<ItemPage>>(client(views).views(account)).value.items.single().collectionType)
         val resume = assertIs<ClientResult.Success<ItemPage>>(client(page(movie)).resume(account)).value.items.single()
@@ -69,9 +69,9 @@ class CatalogClientTest {
         assertTrue(resume.userData.isFavorite)
         val next = assertIs<ClientResult.Success<ItemPage>>(client(page(episode)).nextUp(account)).value.items.single()
         assertEquals("Orchard Station", next.seriesName)
-        val movies = assertIs<ClientResult.Success<List<MediaItem>>>(client("[$movie]").latest(account, "view-a")).value
+        val movies = assertIs<ClientResult.Success<List<MediaItem>>>(client(page(movie)).latest(account, "view-a")).value
         assertEquals("Movie", movies.single().type)
-        val tv = assertIs<ClientResult.Success<List<MediaItem>>>(client("[$series,$season,$episode]").latest(account, "view-b")).value
+        val tv = assertIs<ClientResult.Success<List<MediaItem>>>(client(page(series, season, episode)).latest(account, "view-b")).value
         assertEquals(listOf("Series", "Season", "Episode"), tv.map { it.type })
     }
 
@@ -166,7 +166,7 @@ class CatalogClientTest {
                 "UserViews",
                 "UserItems/Resume",
                 "Shows/NextUp",
-                "Items/Latest",
+                "Items",
                 "Items/film-a",
                 "Shows/series-a/Seasons",
                 "Shows/series-a/Episodes"

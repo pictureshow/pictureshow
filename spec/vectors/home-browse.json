@@ -1,0 +1,2372 @@
+{
+  "schemaVersion": 1,
+  "suite": "home-browse",
+  "cases": [
+    {
+      "id": "home-order-hide-stable",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "a",
+            "title": "a",
+            "items": [
+              {
+                "id": "a"
+              }
+            ]
+          },
+          {
+            "key": "b",
+            "title": "b",
+            "items": [
+              {
+                "id": "b"
+              }
+            ]
+          },
+          {
+            "key": "c",
+            "title": "c",
+            "items": [
+              {
+                "id": "c"
+              }
+            ]
+          },
+          {
+            "key": "d",
+            "title": "d",
+            "items": [
+              {
+                "id": "d"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "order": [
+            "missing",
+            "c",
+            "c",
+            "a"
+          ],
+          "hidden": [
+            "b"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "c",
+          "ids": [
+            "c"
+          ]
+        },
+        {
+          "key": "a",
+          "ids": [
+            "a"
+          ]
+        },
+        {
+          "key": "d",
+          "ids": [
+            "d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-merge-resume-wins",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a",
+                "seriesId": "s"
+              },
+              {
+                "id": "film"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next",
+            "items": [
+              {
+                "id": "b",
+                "seriesId": "s"
+              },
+              {
+                "id": "c",
+                "seriesId": "t"
+              },
+              {
+                "id": "hidden",
+                "seriesId": "h"
+              },
+              {
+                "id": "film"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "h"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "watching",
+          "ids": [
+            "a",
+            "film",
+            "c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-remove-nextup-no-history-write",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a",
+                "seriesId": "s"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next",
+            "items": [
+              {
+                "id": "b",
+                "seriesId": "s"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "hiddenSeries": [
+            "s"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "resume",
+          "ids": [
+            "a"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-merge-hide-combined",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "mergeWatching": true,
+          "hidden": [
+            "watching"
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "home-empty-never-pin-cache",
+      "operation": "home-rows",
+      "input": {
+        "rows": [],
+        "preferences": {
+          "pins": [
+            {
+              "kind": "COLLECTION",
+              "value": "denied"
+            }
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "filter-clear-omits-all",
+      "operation": "library-filter-parameters",
+      "input": {},
+      "expected": {}
+    },
+    {
+      "id": "filter-all-facets-intersect",
+      "operation": "library-filter-parameters",
+      "input": {
+        "genre": "Animation & stories",
+        "year": 2025,
+        "officialRating": "PG-13",
+        "unwatched": true,
+        "favorite": true,
+        "resolution": "FULL_HD",
+        "personId": "p",
+        "studio": "Workshop"
+      },
+      "expected": {
+        "genres": "Animation & stories",
+        "years": "2025",
+        "officialRatings": "PG-13",
+        "isPlayed": "false",
+        "isFavorite": "true",
+        "minWidth": "1920",
+        "maxWidth": "3839",
+        "personIds": "p",
+        "studios": "Workshop"
+      }
+    },
+    {
+      "id": "filter-width-sd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "SD"
+      },
+      "expected": {
+        "maxWidth": "719"
+      }
+    },
+    {
+      "id": "filter-width-hd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "HD"
+      },
+      "expected": {
+        "minWidth": "720",
+        "maxWidth": "1919"
+      }
+    },
+    {
+      "id": "filter-width-full_hd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "FULL_HD"
+      },
+      "expected": {
+        "minWidth": "1920",
+        "maxWidth": "3839"
+      }
+    },
+    {
+      "id": "filter-width-uhd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "UHD"
+      },
+      "expected": {
+        "minWidth": "3840"
+      }
+    },
+    {
+      "id": "home-pin-collection",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "COLLECTION",
+        "value": "box"
+      },
+      "expected": {
+        "parentId": "box",
+        "recursive": false,
+        "filters": {}
+      }
+    },
+    {
+      "id": "home-pin-playlist",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "PLAYLIST",
+        "value": "list"
+      },
+      "expected": {
+        "parentId": "list",
+        "recursive": false,
+        "filters": {}
+      }
+    },
+    {
+      "id": "home-pin-favorites",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "FAVORITES",
+        "value": ""
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "isFavorite": "true"
+        }
+      }
+    },
+    {
+      "id": "home-pin-genre",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "GENRE",
+        "value": "Adventure"
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "genres": "Adventure"
+        }
+      }
+    },
+    {
+      "id": "home-pin-studio",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "STUDIO",
+        "value": "Workshop"
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "studios": "Workshop"
+        }
+      }
+    },
+    {
+      "id": "home-preferences-preserve-and-roundtrip",
+      "operation": "home-preferences-document",
+      "input": {
+        "document": {
+          "Future": {
+            "v": 3
+          },
+          "CustomPrefs": {
+            "other": "keep"
+          },
+          "SortOrder": "Descending"
+        },
+        "preferences": {
+          "landing": "library:one",
+          "order": [
+            "libraries",
+            "resume"
+          ],
+          "hidden": [
+            "nextup"
+          ],
+          "pins": [
+            {
+              "kind": "FAVORITES",
+              "value": ""
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "libraries": {
+            "one": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        }
+      },
+      "expected": {
+        "preserved": true,
+        "roundtrip": true
+      }
+    },
+    {
+      "id": "access-facets-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "facets",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-facets-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "facets",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Items/Filters"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-genres-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Genres",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-genres-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Genres",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Genres"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-studios-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Studios",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-studios-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Studios",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Studios"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-persons-denied",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Persons",
+        "allowed": false
+      },
+      "expected": {
+        "paths": [
+          "/Items/library"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "access-persons-allowed",
+      "operation": "catalog-parent-guard",
+      "input": {
+        "kind": "Persons",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/Items/library",
+          "/Persons"
+        ],
+        "failed": false
+      }
+    },
+    {
+      "id": "access-latest-uses-authorized-browse",
+      "operation": "catalog-latest-authority",
+      "input": {
+        "kind": "latest"
+      },
+      "expected": {
+        "paths": [
+          "/Items"
+        ],
+        "failed": true
+      }
+    },
+    {
+      "id": "home-config-independent-exclusions",
+      "operation": "home-user-configuration",
+      "input": {
+        "libraries": [
+          {
+            "Id": "b",
+            "Name": "Second",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "a",
+            "Name": "First",
+            "CollectionType": "tvshows"
+          }
+        ],
+        "latest": {
+          "b": [
+            {
+              "Id": "played",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed"
+            }
+          ],
+          "a": [
+            {
+              "Id": "series"
+            }
+          ]
+        },
+        "configuration": {
+          "MyMediaExcludes": [
+            "b"
+          ],
+          "LatestItemsExcludes": [
+            "a"
+          ],
+          "HidePlayedInLatest": true
+        }
+      },
+      "expected": [
+        {
+          "key": "libraries",
+          "ids": [
+            "a"
+          ]
+        },
+        {
+          "key": "latest:b",
+          "ids": [
+            "unplayed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-config-default-keeps-server-order-and-played",
+      "operation": "home-user-configuration",
+      "input": {
+        "libraries": [
+          {
+            "Id": "b",
+            "Name": "Second",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "a",
+            "Name": "First",
+            "CollectionType": "tvshows"
+          }
+        ],
+        "latest": {
+          "b": [
+            {
+              "Id": "played",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed"
+            }
+          ],
+          "a": [
+            {
+              "Id": "series"
+            }
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "libraries",
+          "ids": [
+            "b",
+            "a"
+          ]
+        },
+        {
+          "key": "latest:b",
+          "ids": [
+            "played",
+            "unplayed"
+          ]
+        },
+        {
+          "key": "latest:a",
+          "ids": [
+            "series"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-views-retain-display-hidden-libraries",
+      "operation": "catalog-views-display-hidden",
+      "input": {
+        "kind": "views",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/UserViews"
+        ],
+        "failed": false,
+        "includeHidden": "true"
+      }
+    },
+    {
+      "id": "home-server-layout-survives-device-cache-failure",
+      "operation": "home-preferences-local-failure",
+      "input": {
+        "afterPost": false
+      },
+      "expected": {
+        "merged": true,
+        "landing": "home",
+        "warned": true,
+        "serverSaved": false,
+        "pending": false
+      }
+    },
+    {
+      "id": "home-acknowledged-save-survives-local-sync-marker-failure",
+      "operation": "home-preferences-local-failure",
+      "input": {
+        "afterPost": true
+      },
+      "expected": {
+        "merged": true,
+        "landing": "libraries",
+        "warned": true,
+        "serverSaved": true,
+        "pending": true
+      }
+    },
+    {
+      "id": "home-landing-waits-for-preferences",
+      "operation": "home-landing",
+      "input": {
+        "ready": false,
+        "applied": false,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "home-landing-applies-only-once",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": true,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "home-landing-explicit-home",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "home",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "home"
+    },
+    {
+      "id": "home-landing-libraries-route",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "libraries"
+    },
+    {
+      "id": "home-landing-permitted-library",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "library:one",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "library:one"
+    },
+    {
+      "id": "home-landing-denied-library-fallback",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "library:one",
+        "libraryIds": [
+          "other"
+        ]
+      },
+      "expected": "home"
+    },
+    {
+      "id": "home-landing-unknown-choice-fallback",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "future-route",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "home"
+    },
+    {
+      "id": "home-editor-pin-label-fresh",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": [
+          {
+            "key": "pin:STUDIO:Unavailable studio",
+            "title": "Current permitted studio",
+            "items": [
+              {
+                "id": "visible"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": "Current permitted studio"
+    },
+    {
+      "id": "home-editor-pin-label-empty",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": [
+          {
+            "key": "pin:STUDIO:Unavailable studio",
+            "title": "Unavailable studio",
+            "items": []
+          }
+        ]
+      },
+      "expected": "Pinned studio"
+    },
+    {
+      "id": "home-editor-pin-label-unavailable",
+      "operation": "home-editor-pin-label",
+      "input": {
+        "pin": {
+          "kind": "STUDIO",
+          "value": "Unavailable studio"
+        },
+        "rows": []
+      },
+      "expected": "Pinned studio"
+    },
+    {
+      "id": "editor-combined-only",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama"
+        ],
+        "preferences": {
+          "mergeWatching": true
+        }
+      },
+      "expected": [
+        "watching",
+        "libraries",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "editor-separate-only-retains-hidden",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama"
+        ],
+        "preferences": {
+          "hidden": [
+            "resume"
+          ]
+        }
+      },
+      "expected": [
+        "resume",
+        "nextup",
+        "libraries",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "editor-sort-dedupe",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama",
+          "libraries"
+        ],
+        "preferences": {
+          "order": [
+            "libraries",
+            "nextup",
+            "nextup"
+          ]
+        }
+      },
+      "expected": [
+        "libraries",
+        "nextup",
+        "resume",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "move-retains-dormant",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "watching",
+          "nextup",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": -1
+      },
+      "expected": [
+        "resume",
+        "watching",
+        "libraries",
+        "nextup"
+      ]
+    },
+    {
+      "id": "move-up-boundary",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "resume",
+        "delta": -1
+      },
+      "expected": [
+        "resume",
+        "libraries"
+      ]
+    },
+    {
+      "id": "move-down-boundary",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": 1
+      },
+      "expected": [
+        "resume",
+        "libraries"
+      ]
+    },
+    {
+      "id": "move-unknown",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume"
+        ],
+        "visible": [
+          "resume"
+        ],
+        "key": "gone",
+        "delta": 1
+      },
+      "expected": [
+        "resume"
+      ]
+    },
+    {
+      "id": "move-new-keys",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": -1
+      },
+      "expected": [
+        "libraries",
+        "resume"
+      ]
+    },
+    {
+      "id": "move-bottom-clamped",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries"
+        ],
+        "key": "resume",
+        "delta": 99
+      },
+      "expected": [
+        "nextup",
+        "libraries",
+        "resume"
+      ]
+    },
+    {
+      "id": "filter-chip-remove-genre",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "genre"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-year",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "year"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-rating",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "rating"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-unwatched",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "unwatched"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-favorite",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "favorite"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-resolution",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "resolution"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-person",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "person"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-studio",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "studio"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-empty-tvshows",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "tvshows"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No shows match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-empty-music",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "music"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No music match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-empty-other",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "other"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No titles match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-count-ignores-blank",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": " ",
+          "personId": "",
+          "studio": " "
+        },
+        "collectionType": "movies"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No movies match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "picker-current-outside-page",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "first"
+          }
+        ],
+        "term": "",
+        "offset": 0
+      },
+      "expected": [
+        "saved",
+        "first"
+      ]
+    },
+    {
+      "id": "picker-current-deduplicated",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "first"
+          },
+          {
+            "id": "saved"
+          }
+        ],
+        "term": "",
+        "offset": 0
+      },
+      "expected": [
+        "saved",
+        "first"
+      ]
+    },
+    {
+      "id": "picker-search-does-not-inject-saved",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "match"
+          }
+        ],
+        "term": "query",
+        "offset": 0
+      },
+      "expected": [
+        "match"
+      ]
+    },
+    {
+      "id": "picker-next-page-does-not-inject-saved",
+      "operation": "named-picker-choices",
+      "input": {
+        "current": [
+          {
+            "id": "saved"
+          }
+        ],
+        "page": [
+          {
+            "id": "next"
+          }
+        ],
+        "term": "",
+        "offset": 60
+      },
+      "expected": [
+        "next"
+      ]
+    },
+    {
+      "id": "editor-hint-true-true-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": false,
+        "tv": true
+      },
+      "expected": null
+    },
+    {
+      "id": "editor-hint-true-false-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": false,
+        "tv": true
+      },
+      "expected": "Hidden"
+    },
+    {
+      "id": "editor-hint-true-true-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": true,
+        "tv": true
+      },
+      "expected": "Moving \u00b7 Up/Down \u00b7 OK to drop"
+    },
+    {
+      "id": "editor-hint-true-false-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": true,
+        "tv": true
+      },
+      "expected": "Hidden \u00b7 Moving \u00b7 Up/Down \u00b7 OK to drop"
+    },
+    {
+      "id": "editor-hint-false-true-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": false,
+        "tv": false
+      },
+      "expected": null
+    },
+    {
+      "id": "editor-hint-false-false-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": false,
+        "tv": false
+      },
+      "expected": "Hidden"
+    },
+    {
+      "id": "editor-hint-false-true-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": true,
+        "tv": false
+      },
+      "expected": "Moving \u00b7 Release to drop"
+    },
+    {
+      "id": "editor-hint-false-false-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": true,
+        "tv": false
+      },
+      "expected": "Hidden \u00b7 Moving \u00b7 Release to drop"
+    },
+    {
+      "id": "restore-all-none",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [],
+        "available": []
+      },
+      "expected": false
+    },
+    {
+      "id": "restore-all-one-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": [
+          "s"
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "restore-all-one-absent",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": []
+      },
+      "expected": true
+    },
+    {
+      "id": "restore-all-two-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "a",
+          "b"
+        ],
+        "available": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "restore-all-one-absent-among-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": [
+          "a"
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "nextup-hint-false",
+      "operation": "next-up-series-hint",
+      "input": {
+        "shown": false
+      },
+      "expected": "Removed from Next up"
+    },
+    {
+      "id": "nextup-hint-true",
+      "operation": "next-up-series-hint",
+      "input": {
+        "shown": true
+      },
+      "expected": "Shown in Next up"
+    },
+    {
+      "id": "home-pin-support-False-None",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": false,
+        "count": null
+      },
+      "expected": null
+    },
+    {
+      "id": "home-pin-support-True-None",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": true,
+        "count": null
+      },
+      "expected": "On your home"
+    },
+    {
+      "id": "home-pin-support-False-2",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": false,
+        "count": 2
+      },
+      "expected": "2 titles"
+    },
+    {
+      "id": "home-pin-support-True-2",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": true,
+        "count": 2
+      },
+      "expected": "On your home \u00b7 2 titles"
+    },
+    {
+      "id": "reset-home-false",
+      "operation": "reset-home-layout",
+      "input": {
+        "preferences": {
+          "order": [
+            "resume"
+          ],
+          "hidden": [
+            "resume"
+          ],
+          "pins": [
+            {
+              "kind": "GENRE",
+              "value": "Animation"
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "landing": "libraries",
+          "libraries": {
+            "l": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        },
+        "confirmed": false
+      },
+      "expected": {
+        "order": [
+          "resume"
+        ],
+        "hidden": [
+          "resume"
+        ],
+        "pins": [
+          {
+            "kind": "GENRE",
+            "value": "Animation"
+          }
+        ],
+        "mergeWatching": true,
+        "hiddenSeries": [
+          "s"
+        ],
+        "landing": "libraries",
+        "libraries": {
+          "l": {
+            "sortBy": "DateCreated",
+            "descending": true,
+            "list": true
+          }
+        }
+      }
+    },
+    {
+      "id": "reset-home-true",
+      "operation": "reset-home-layout",
+      "input": {
+        "preferences": {
+          "order": [
+            "resume"
+          ],
+          "hidden": [
+            "resume"
+          ],
+          "pins": [
+            {
+              "kind": "GENRE",
+              "value": "Animation"
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "landing": "libraries",
+          "libraries": {
+            "l": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        },
+        "confirmed": true
+      },
+      "expected": {
+        "libraries": {
+          "l": {
+            "sortBy": "DateCreated",
+            "descending": true,
+            "list": true
+          }
+        }
+      }
+    },
+    {
+      "id": "title-count-1",
+      "operation": "title-count-label",
+      "input": {
+        "count": 1
+      },
+      "expected": "1 title"
+    },
+    {
+      "id": "title-count-2",
+      "operation": "title-count-label",
+      "input": {
+        "count": 2
+      },
+      "expected": "2 titles"
+    },
+    {
+      "id": "resolution-summary-ANY",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "ANY"
+      },
+      "expected": "Any"
+    },
+    {
+      "id": "resolution-summary-SD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "SD"
+      },
+      "expected": "SD"
+    },
+    {
+      "id": "resolution-summary-HD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "HD"
+      },
+      "expected": "HD"
+    },
+    {
+      "id": "resolution-summary-FULL_HD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "FULL_HD"
+      },
+      "expected": "Full HD"
+    },
+    {
+      "id": "resolution-summary-UHD",
+      "operation": "resolution-summary",
+      "input": {
+        "resolution": "UHD"
+      },
+      "expected": "4K and above"
+    },
+    {
+      "id": "named-focus-False-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": false
+      },
+      "expected": "search"
+    },
+    {
+      "id": "named-focus-False-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": true
+      },
+      "expected": "search"
+    },
+    {
+      "id": "named-focus-False-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": false
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-False-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": true
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-True-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": false
+      },
+      "expected": "choice"
+    },
+    {
+      "id": "named-focus-True-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": true
+      },
+      "expected": "choice"
+    },
+    {
+      "id": "named-focus-True-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": false
+      },
+      "expected": "any"
+    },
+    {
+      "id": "named-focus-True-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": true
+      },
+      "expected": "choice"
+    },
+    {
+      "id": "named-editing-focus-False-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": false,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-False-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": false,
+        "hasAny": true,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-False-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-False-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": false,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-True-False",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": false,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "named-editing-focus-True-True-True",
+      "operation": "named-picker-focus-target",
+      "input": {
+        "hasChoices": true,
+        "hasAny": true,
+        "hasSelection": true,
+        "editing": true
+      },
+      "expected": "search-field"
+    },
+    {
+      "id": "sort-direction-ascending",
+      "operation": "sort-direction-label",
+      "input": {
+        "descending": false
+      },
+      "expected": "Ascending"
+    },
+    {
+      "id": "sort-direction-descending",
+      "operation": "sort-direction-label",
+      "input": {
+        "descending": true
+      },
+      "expected": "Descending"
+    },
+    {
+      "id": "home-editor-pending-read-blocks-default-layout",
+      "operation": "home-editor-entry",
+      "input": {
+        "preferencesReady": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-editor-ready-server-or-local-layout-opens",
+      "operation": "home-editor-entry",
+      "input": {
+        "preferencesReady": true
+      },
+      "expected": true
+    },
+    {
+      "id": "editor-repeated-down-up-drop-retains-exact-order",
+      "operation": "editor-move-sequence",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries",
+          "latest:one",
+          "latest:two"
+        ],
+        "key": "resume",
+        "deltas": [
+          1,
+          1,
+          1,
+          -1
+        ]
+      },
+      "expected": [
+        "nextup",
+        "libraries",
+        "resume",
+        "latest:one",
+        "latest:two"
+      ]
+    },
+    {
+      "id": "command-has-no-selection",
+      "operation": "control-selection",
+      "input": {
+        "selected": null
+      },
+      "expected": false
+    },
+    {
+      "id": "unselected-radio-retains-selection-state",
+      "operation": "control-selection",
+      "input": {
+        "selected": false
+      },
+      "expected": true
+    },
+    {
+      "id": "selected-radio-retains-selection-state",
+      "operation": "control-selection",
+      "input": {
+        "selected": true
+      },
+      "expected": true
+    },
+    {
+      "id": "person-chip-name",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personId": "alice",
+          "personName": "Alice Marcolino"
+        },
+        "key": "person"
+      },
+      "expected": "Alice Marcolino"
+    },
+    {
+      "id": "person-chip-missing-name",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personId": "alice"
+        },
+        "key": "person"
+      },
+      "expected": "Selected person"
+    },
+    {
+      "id": "person-name-alone-is-not-a-filter",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "personName": "Alice Marcolino"
+        },
+        "key": "person"
+      },
+      "expected": "Selected person"
+    },
+    {
+      "id": "resolution-chip-compact",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "resolution": "FULL_HD"
+        },
+        "key": "resolution"
+      },
+      "expected": "Full HD"
+    },
+    {
+      "id": "rating-chip-value",
+      "operation": "filter-constraint-label",
+      "input": {
+        "filters": {
+          "officialRating": "G"
+        },
+        "key": "rating"
+      },
+      "expected": "Rated G"
+    },
+    {
+      "id": "person-display-name-never-enters-query",
+      "operation": "library-filter-parameters",
+      "input": {
+        "personId": "alice",
+        "personName": "Alice Marcolino"
+      },
+      "expected": {
+        "personIds": "alice"
+      }
+    },
+    {
+      "id": "remove-person-clears-id-and-display-name",
+      "operation": "library-filter-remove",
+      "input": {
+        "filters": {
+          "personId": "alice",
+          "personName": "Alice Marcolino",
+          "genre": "Animation"
+        },
+        "key": "person"
+      },
+      "expected": {
+        "genre": "Animation"
+      }
+    },
+    {
+      "id": "display-name-alone-does-not-count",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "personName": "Alice Marcolino"
+        },
+        "collectionType": "movies"
+      },
+      "expected": {
+        "keys": [],
+        "active": false,
+        "empty": "No movies match these filters"
+      }
+    },
+    {
+      "id": "home-save-tv-idle",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-tv-saving",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": true,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "progress"
+    },
+    {
+      "id": "home-save-tv-failed",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "failure"
+    },
+    {
+      "id": "home-save-touch-idle",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": false,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-touch-saving-is-not-a-notice",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": true,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-touch-failed-is-actionable",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "failure"
+    },
+    {
+      "id": "home-save-touch-retry-hides-stale-failure",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": true,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-failure-needs-a-message",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-0-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": false,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-0-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": false,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-1-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": true,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-1-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": true,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-0-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": false,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-0-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": false,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-1-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": true,
+        "saving": false
+      },
+      "expected": true
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-1-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": true,
+        "saving": true
+      },
+      "expected": false
+    }
+  ]
+}

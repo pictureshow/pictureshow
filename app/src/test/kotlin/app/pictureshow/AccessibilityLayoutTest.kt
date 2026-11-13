@@ -101,11 +101,19 @@ class AccessibilityLayoutTest {
 
     @Test
     fun largeLibrarySortControlsStayInsideTheViewport() {
-        large { CatalogGrid(CatalogGridState(account, MediaItem("library", "Films")), {}, {}, { _, _ -> }, {}) }
-        listOf("SortName", "DateCreated", "PremiereDate").map { "grid:sort:$it" }.plus("grid:sort-order").forEach { tag ->
-            val node = compose.onNodeWithTag(tag)
-            val bounds = node.getUnclippedBoundsInRoot()
-            assertTrue(bounds.right.value <= 920f, "$tag extends outside viewport: $bounds")
+        val state = mutableStateOf(CatalogGridState(account, MediaItem("library", "Films")))
+        large { CatalogGrid(state.value, {}, {}, { _, _ -> }, {}) }
+        listOf("SortName", "DateCreated", "PremiereDate").forEach { key ->
+            listOf(false, true).forEach { descending ->
+                compose.runOnIdle { state.value = state.value.copy(sortBy = key, descending = descending) }
+                val node = compose.onNodeWithTag("grid:sort:$key")
+                val bounds = node.getUnclippedBoundsInRoot()
+                assertTrue(bounds.left.value >= 0f && bounds.right.value <= 920f, "$key extends outside viewport: $bounds")
+                node.assertIsDisplayed()
+                node.assert(
+                    SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, if (descending) "Descending" else "Ascending")
+                )
+            }
         }
     }
 

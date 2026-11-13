@@ -143,6 +143,7 @@ import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
+import app.pictureshow.core.sortDirectionLabel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -152,7 +153,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-private val CatalogBackground = Color(0xFF10131C)
+internal val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
 
@@ -169,6 +170,7 @@ fun CatalogHome(
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
+    onCustomize: (() -> Unit)? = null,
     onDownloads: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null,
     serverLabel: String = account.server.name,
@@ -192,7 +194,7 @@ fun CatalogHome(
             android.util.Log.d(
                 "CatalogFocus",
                 "home-entry saved=${selectedRow.isNotEmpty()} " +
-                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "live-tv", "profile") } ?: "card"} " +
+                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "live-tv", "customize", "profile") } ?: "card"} " +
                     "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
             )
         }
@@ -207,7 +209,7 @@ fun CatalogHome(
     }
     val restoreAction = when {
         state.busy && selectedRow in listOf("settings", "profile") -> "search"
-        selectedRow in listOf("search", "settings", "live-tv", "profile") -> selectedRow
+        selectedRow in listOf("search", "settings", "live-tv", "customize", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
@@ -215,6 +217,7 @@ fun CatalogHome(
         "search" -> "Search"
         "settings" -> "Settings"
         "live-tv" -> "Live TV"
+        "customize" -> "Customize home"
         "profile" -> "Switch user"
         "retry" -> if (onWatchDownloads != null) "Watch downloads" else "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
@@ -245,6 +248,7 @@ fun CatalogHome(
     val profile = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
+    val customizeFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -336,7 +340,9 @@ fun CatalogHome(
         }
     // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
     val belowTop =
-        rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", "live-tv", rows.first().key)
+        rows.isNotEmpty() &&
+            selectedRow.isNotEmpty() &&
+            selectedRow !in listOf("search", "settings", "live-tv", "customize", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -421,10 +427,25 @@ fun CatalogHome(
                                 onLiveTv()
                             },
                             modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
-                                .staysInRow(first = false, last = onDownloads == null)
+                                .staysInRow(first = false, last = onCustomize == null && onDownloads == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Live TV") }
+                        if (onCustomize != null) {
+                            Button(
+                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                                onClick = {
+                                    if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) {
+                                        selectedRow = "customize"
+                                        onCustomize()
+                                    }
+                                },
+                                modifier = target(Modifier, restoreAction == "customize").focusRequester(customizeFocus)
+                                    .testTag("home:customize").staysInRow(first = false, last = onDownloads == null)
+                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "customize" }
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text("Customize home") }
+                        }
                         // Reachable with the server down: the home error above never hides the way to saved media.
                         if (onDownloads != null) {
                             Button(
@@ -594,13 +615,14 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction == "search" || restoreAction == "settings" || restoreAction == "live-tv" -> {
+                restoreAction in listOf("search", "settings", "customize", "live-tv") -> {
                     focusAction(
                         "header",
                         0,
                         when (restoreAction) {
                             "settings" -> settingsFocus
                             "live-tv" -> liveFocus
+                            "customize" -> customizeFocus
                             else -> search
                         }
                     )
@@ -632,7 +654,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("profile", "search", "settings", "live-tv") &&
+            savedRow !in listOf("profile", "search", "settings", "live-tv", "customize") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -647,7 +669,7 @@ fun CatalogHome(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 fun CatalogGrid(
     state: CatalogGridState,
@@ -661,12 +683,17 @@ fun CatalogGrid(
     head: (@Composable () -> Unit)? = null,
     headFocus: FocusRequester? = null,
     revealKey: Any? = null,
-    grid: LazyGridState = rememberLazyGridState()
+    grid: LazyGridState = rememberLazyGridState(),
+    onFilters: (() -> Unit)? = null,
+    onDisplayList: ((Boolean) -> Unit)? = null,
+    onClearFilters: (() -> Unit)? = null
 ) {
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
     var retryFocusRequest by remember { mutableIntStateOf(0) }
     val firstSort = remember { FocusRequester() }
+    val clearFiltersFocus = remember { FocusRequester() }
+    var sorting by remember { mutableStateOf(false) }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
@@ -840,7 +867,7 @@ fun CatalogGrid(
     Box(modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("grid").accessibilityGroup()) {
         CompositionLocalProvider(LocalBringIntoViewSpec provides gridBringIntoView) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(144.dp),
+                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(144.dp),
                 state = grid,
                 modifier = reveal.fillMaxSize().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
                 // The grid reaches the screen's edges, so only the screen clips a focused card's 1.1x scale.
@@ -899,30 +926,37 @@ fun CatalogGrid(
                             ) {
                                 fun sortControl(index: Int) = Modifier.onFocusChanged { if (it.isFocused) focusedSort = index }
                                     .onGloballyPositioned { sortBottoms[index] = it.positionInParent().y + it.size.height }
-                                GridSorts.forEachIndexed { index, (sort, title) ->
-                                    val requester = remember(sort) { if (index == 0) firstSort else FocusRequester() }
-                                    DisposableEffect(sort) {
-                                        sortRequests[sort] = requester
-                                        onDispose { sortRequests.remove(sort) }
-                                    }
-                                    Button(
-                                        onClick = { onSort(sort, state.descending) },
-                                        modifier = Modifier.focusRequester(requester).then(sortControl(index))
-                                            .testTag("grid:sort:$sort").semantics { selected = state.sortBy == sort }
-                                    ) { SortChipContent(title, "check".takeIf { state.sortBy == sort }) }
+                                DisposableEffect(state.sortBy) {
+                                    sortRequests[state.sortBy] = firstSort
+                                    onDispose { sortRequests.remove(state.sortBy) }
                                 }
-                                Button(
-                                    onClick = { onSort(state.sortBy, !state.descending) },
-                                    modifier = sortControl(GridSorts.size).testTag("grid:sort-order").semantics {
-                                        stateDescription = if (state.descending) "Descending" else "Ascending"
+                                androidx.tv.material3.AssistChip(
+                                    onClick = { sorting = true },
+                                    modifier = Modifier.focusRequester(
+                                        firstSort
+                                    ).then(sortControl(0)).testTag("grid:sort:${state.sortBy}").semantics {
+                                        stateDescription = sortDirectionLabel(state.descending)
                                     }
                                 ) {
-                                    Box(Modifier.clearAndSetSemantics {}) {
-                                        if (state.descending) {
-                                            SortChipContent("Descending", "arrow-down")
-                                        } else {
-                                            SortChipContent("Ascending", "arrow-up")
-                                        }
+                                    SortChipContent(
+                                        "${GridSorts.firstOrNull {
+                                            it.first == state.sortBy
+                                        }?.second ?: "Name"}",
+                                        if (state.descending) "arrow-down" else "arrow-up"
+                                    )
+                                }
+                                if (onFilters != null) {
+                                    androidx.tv.material3.FilterChip(
+                                        selected = state.filters.active,
+                                        onClick = onFilters,
+                                        modifier = sortControl(1).testTag("grid:filters")
+                                    ) { Text(filterChipLabel(state.filters)) }
+                                }
+                                if (onDisplayList != null) {
+                                    androidx.tv.material3.AssistChip(onClick = {
+                                        onDisplayList(!state.list)
+                                    }, modifier = sortControl(2).testTag("grid:display")) {
+                                        Text(if (state.list) "View: List" else "View: Grid")
                                     }
                                 }
                             }
@@ -933,7 +967,17 @@ fun CatalogGrid(
                             onRetry()
                         }, Modifier.focusRequester(retry).testTag("grid:retry"))
                         if (state.loading && state.items.isEmpty()) Text("Loading…")
-                        if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
+                        if (!state.loading && state.items.isEmpty() && state.error == null) {
+                            Text(emptyGridLabel(state.parent, state.filters))
+                            if (state.filters.active && onClearFilters != null) {
+                                Button(
+                                    onClick = onClearFilters,
+                                    modifier = Modifier.focusRequester(clearFiltersFocus).testTag("grid:clear-filters")
+                                ) {
+                                    Text("Clear filters")
+                                }
+                            }
+                        }
                     }
                 }
                 gridItemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
@@ -945,8 +989,9 @@ fun CatalogGrid(
                     CatalogCard(
                         item = item,
                         account = state.account,
-                        wide = item.type == "Episode",
+                        wide = state.list || item.type == "Episode",
                         width = null,
+                        compact = state.list,
                         onClick = { onOpen(item) },
                         modifier = Modifier.focusRequester(requester).testTag("grid:${item.id}").onFocusChanged {
                             if (it.isFocused) {
@@ -1011,8 +1056,9 @@ fun CatalogGrid(
             ContextStrip(stripTitle, gridStripDetail(state.sortBy, state.descending).takeIf { showSort }, Modifier.testTag("grid:strip"))
         }
     }
+    if (sorting) CatalogSortPicker(state, onSort) { sorting = false }
     // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
-    LaunchedEffect(state.sortBy, state.descending) {
+    LaunchedEffect(state.sortBy, state.descending, state.filters, state.list) {
         dropWaitingMoves()
         retryingFrom = -1
     }
@@ -1033,6 +1079,14 @@ fun CatalogGrid(
             releaseHold()
         }
     }
+    LaunchedEffect(state.filters, state.items.isEmpty(), state.loading, state.error) {
+        if (!state.loading && state.items.isEmpty() && state.error == null && state.filters.active && onClearFilters != null) {
+            grid.requestScrollToItem(0)
+            withFrameNanos { }
+            clearFiltersFocus.requestFocus()
+            restored = true
+        }
+    }
     LaunchedEffect(state.items.map(MediaItem::id), state.loading, retryFocusRequest) {
         if (!state.loading && !restored) {
             withFrameNanos { }
@@ -1044,6 +1098,8 @@ fun CatalogGrid(
                 requestAttached(requests, state.items[index].id)
             } else if (state.error != null) {
                 retry.requestFocus()
+            } else if (state.filters.active && onClearFilters != null) {
+                clearFiltersFocus.requestFocus()
             } else {
                 if (showSort) firstSort.requestFocus() else true
             }
@@ -3426,7 +3482,8 @@ internal fun CatalogCard(
     caption: (@Composable () -> Unit)? = null,
     artworkProgress: Float? = null,
     showProgress: Boolean = true,
-    artworkOverlay: (@Composable BoxScope.() -> Unit)? = null
+    artworkOverlay: (@Composable BoxScope.() -> Unit)? = null,
+    compact: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
@@ -3465,68 +3522,103 @@ internal fun CatalogCard(
             }
         )
     ) {
-        // The inset keyline keeps poster pixels away from the outline's inside edge. The card owns
-        // the outline and scale, so there is still one focus border at the original geometry.
-        Column(
-            Modifier.clearAndSetSemantics {}.then(
-                if (focused ||
-                    selected == true
-                ) {
-                    Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
-                } else {
-                    Modifier
-                }
-            )
-        ) {
-            Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
-                CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
-                val badge = when {
-                    item.isEmptyContainer -> null
-                    item.isWatched -> "✓ Watched"
-                    item.userData.unplayedItemCount != null -> "${item.userData.unplayedItemCount} unplayed"
-                    else -> null
-                }
-                if (badge != null) {
-                    Text(
-                        badge,
-                        modifier = Modifier.align(Alignment.TopEnd).background(Color(0xDD202635)).padding(5.dp),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                if (item.userData.isFavorite) {
-                    Text(
-                        "♥",
-                        modifier = Modifier.align(if (artworkOverlay == null) Alignment.TopStart else Alignment.BottomEnd)
-                            .then(if (artworkOverlay == null) Modifier else Modifier.padding(bottom = 8.dp))
-                            .background(Color(0xDD202635)).padding(5.dp)
-                    )
-                }
-                artworkOverlay?.invoke(this)
-                val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
-                if (showProgress && fraction > 0f && (artworkProgress != null || !item.isWatched) && !item.isEmptyContainer) {
-                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
-                        Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
-                    }
-                }
-            }
-            if (caption != null) {
-                caption()
-            } else {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        item.name,
-                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    if (item.type == "Episode") {
+        if (compact) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 108.dp).padding(12.dp).clearAndSetSemantics {
+                },
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CatalogArtwork(item, account, false, Modifier.width(56.dp).height(84.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(item.name, style = MaterialTheme.typography.titleSmall)
+                    if (item.type ==
+                        "Episode"
+                    ) {
                         Text(
                             listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
-                            maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = CatalogMuted,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Text(
+                        listOfNotNull(
+                            item.productionYear?.toString(),
+                            runtimeLabel(item.runTimeTicks),
+                            item.officialRating
+                        ).filter(String::isNotBlank).joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    val status = listOfNotNull(
+                        if (item.isWatched) "Watched" else null,
+                        if (item.userData.isFavorite) "Favorite" else null
+                    ).joinToString(" · ")
+                    if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        } else {
+            // The inset keyline keeps poster pixels away from the outline's inside edge. The card owns
+            // the outline and scale, so there is still one focus border at the original geometry.
+            Column(
+                Modifier.clearAndSetSemantics {}.then(
+                    if (focused ||
+                        selected == true
+                    ) {
+                        Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
+                    } else {
+                        Modifier
+                    }
+                )
+            ) {
+                Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
+                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
+                    val badge = when {
+                        item.isEmptyContainer -> null
+                        item.isWatched -> "✓ Watched"
+                        item.userData.unplayedItemCount != null -> "${item.userData.unplayedItemCount} unplayed"
+                        else -> null
+                    }
+                    if (badge != null) {
+                        Text(
+                            badge,
+                            modifier = Modifier.align(Alignment.TopEnd).background(Color(0xDD202635)).padding(5.dp),
                             style = MaterialTheme.typography.labelSmall
                         )
+                    }
+                    if (item.userData.isFavorite) {
+                        Text(
+                            "♥",
+                            modifier = Modifier.align(if (artworkOverlay == null) Alignment.TopStart else Alignment.BottomEnd)
+                                .then(if (artworkOverlay == null) Modifier else Modifier.padding(bottom = 8.dp))
+                                .background(Color(0xDD202635)).padding(5.dp)
+                        )
+                    }
+                    artworkOverlay?.invoke(this)
+                    val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
+                    if (showProgress && fraction > 0f && (artworkProgress != null || !item.isWatched) && !item.isEmptyContainer) {
+                        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
+                            Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
+                        }
+                    }
+                }
+                if (caption != null) {
+                    caption()
+                } else {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            item.name,
+                            maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        if (item.type == "Episode") {
+                            Text(
+                                listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
+                                maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = CatalogMuted,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }

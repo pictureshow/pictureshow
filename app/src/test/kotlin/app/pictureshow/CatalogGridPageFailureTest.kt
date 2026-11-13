@@ -217,7 +217,10 @@ class CatalogGridPageFailureTest {
 
     @Test fun aRetryThatLandsAfterTheViewerMovedToACardLeavesFocusThere() = retryLandsAfterFocusMovedTo("grid:film-20")
 
-    @Test fun aRetryThatLandsAfterTheViewerMovedToTheHeaderLeavesFocusThere() = retryLandsAfterFocusMovedTo("grid:sort-order", scrollTo = 0)
+    @Test fun aRetryThatLandsAfterTheViewerMovedToTheHeaderLeavesFocusThere() = retryLandsAfterFocusMovedTo(
+        "grid:sort:SortName",
+        scrollTo = 0
+    )
 
     @Test fun anEmptyPageOnRetryReturnsToTheCard() {
         show()

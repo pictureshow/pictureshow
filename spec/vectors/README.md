@@ -27,6 +27,10 @@ uses Jellyfin PascalCase and enums; normalized fixture inputs use the documented
 numbers fit the exact JavaScript integer range. Compute ticks with integer arithmetic: one millisecond = 10,000 ticks,
 one tick = 100 ns. Division truncates toward zero; do not round saved positions to seconds.
 
+`home-browse.json` is packaged as `grid-vectors/home-browse.json` and executed by `HomeBrowseVectorsTest`.
+`CorpusVectorsTest` inventories this suite alongside `grid-navigation`; desktop's `vectorTest` reuses the compiled
+core suites and resources, so the same Home/browse cases run on Android's JVM gate and every desktop OS.
+
 ## Coverage and source boundaries
 
 | File | Production behavior / reference tests |
@@ -36,6 +40,7 @@ one tick = 100 ns. Division truncates toward zero; do not round saved positions 
 | `compatibility.json` | HDR/Dolby Vision base layers, bit depth/profile/level, size/rate, hardware/software evidence, E-AC-3 7.1/TS, containers and subtitle delivery, evaluated against built profiles. |
 | `negotiation.json` | Complete prepare request → supplied server response → direct/direct-stream/transcode decision, including account identity, bitrate, track selections and safe stream URL. |
 | `playback.json` | Source/method selection, refusal/recovery errors, source order, authenticated headers, URL safety, start/progress/stop payloads, exact tick conversion. |
+| `home-browse.json` | Per-viewer home rows, ordering, pins, landing and display choices; filter constraints and access guards; explicit reopening retries a pending failed save once while preserving local edits. |
 | `catalog.json` | Home rows' endpoints, browse sort/filter/pagination/bounds, IDs freshness query, detail's batch user-data projection, watched/favorite mutations, five search categories, person items, encoding cleanup and report endpoints. |
 | `recovery.json` | Reduced-rate server-seek eligibility/clamping/URL rewrite, copied versus encoded audio, forced video-copy recovery and burn-in subtitle refusal; [RECOVERY.md](RECOVERY.md). |
 | `application.json` | Local settings decoding/validation/effective values, server configuration preservation, server-priority track selection, caption accessibility overrides and aliases, resume/final positions, segment safety/boundaries and next-episode adjacency/timing. |

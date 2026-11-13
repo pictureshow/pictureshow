@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -31,6 +33,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -156,6 +159,72 @@ class TvSettingsComponentsTest {
         compose.onNodeWithTag("next").assertIsFocused()
         key("next", Key.DirectionCenter)
         compose.runOnIdle { assertEquals(1, actions) }
+    }
+
+    @Test fun commandAndValueRowsDoNotExposeASelectionState() {
+        compose.setContent {
+            MaterialTheme {
+                val first = remember { FocusRequester() }
+                Column {
+                    TvSettingsActionRow("Unpin", Modifier.focusRequester(first).testTag("command")) {}
+                    TvSettingsValueRow("Genre", "Any", Modifier.testTag("value")) {}
+                }
+                LaunchedEffect(Unit) { first.requestFocus() }
+            }
+        }
+        for (tag in listOf("command", "value")) {
+            compose.onNodeWithTag(tag).assert(
+                SemanticsMatcher("Commands have no selected or toggle state") {
+                    !it.config.contains(SemanticsProperties.Selected) && !it.config.contains(SemanticsProperties.ToggleableState)
+                }
+            ).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        }
+        compose.onNodeWithTag("command").assertIsFocused()
+        key("command", Key.DirectionDown)
+        compose.onNodeWithTag("value").assertIsFocused()
+    }
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun commandSupportingTextUsesTheDrawnForegroundWhileFocusedAndResting() {
+        compose.setContent {
+            PictureshowTheme {
+                val first = remember { FocusRequester() }
+                Column(Modifier.background(CatalogBackground)) {
+                    TvSettingsActionRow(
+                        "Find by name",
+                        Modifier.focusRequester(first).testTag("search"),
+                        supportingText = "An exact query"
+                    ) {
+                    }
+                    TvSettingsActionRow("Another command", Modifier.testTag("next")) {}
+                }
+                LaunchedEffect(Unit) { first.requestFocus() }
+            }
+        }
+        fun supportContrast(focused: Boolean) {
+            val pixels = compose.onNodeWithTag("search").captureToImage().asAndroidBitmap()
+            val supportColors = mutableMapOf<Int, Int>()
+            for (y in pixels.height / 2 until pixels.height - 12) {
+                for (x in 24 until pixels.width / 2) {
+                    val color = pixels.getPixel(x, y)
+                    supportColors[color] = (supportColors[color] ?: 0) + 1
+                }
+            }
+            val background = pixels.getPixel(pixels.width / 2, pixels.height / 2)
+            assertTrue(
+                supportColors.any { (color, count) ->
+                    count > 8 &&
+                        androidx.core.graphics.ColorUtils.calculateContrast(color, background) >= 4.5
+                },
+                "Supporting text must be painted with readable contrast on the actual native surface; focused=$focused"
+            )
+        }
+        compose.onNodeWithTag("search").assertIsFocused()
+        supportContrast(true)
+        key("search", Key.DirectionDown)
+        compose.onNodeWithTag("next").assertIsFocused()
+        supportContrast(false)
     }
 
     @Test fun longPickerArrivesAtCurrentOffscreenValueWithReadableSupportingText() {

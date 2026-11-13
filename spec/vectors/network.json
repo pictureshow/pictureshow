@@ -372,6 +372,379 @@
         "sheet": 2
       },
       "expected": "https://media.example.test/jellyfin/Videos/film/Trickplay/320/2.jpg?mediaSourceId=version"
+    },
+    {
+      "id": "image-no-aggregate-collage-collectionfolder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "CollectionFolder",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-userview",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "UserView",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-folder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Folder",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-boxset",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "BoxSet",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-playlist",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Playlist",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-genre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Genre",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-musicgenre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "MusicGenre",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-collage-studio",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Studio",
+          "ImageTags": {
+            "Primary": "collage",
+            "Thumb": "collage-thumb"
+          },
+          "BackdropImageTags": [
+            "collage-back"
+          ],
+          "ParentBackdropItemId": "denied-child",
+          "ParentBackdropImageTags": [
+            "parent-back"
+          ],
+          "ParentThumbItemId": "denied-child",
+          "ParentThumbImageTag": "parent-thumb"
+        },
+        "width": 400,
+        "wide": true
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-unknown-library-collage",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "virtual-library",
+          "CollectionType": "playlists",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 400
+      },
+      "expected": null
+    },
+    {
+      "id": "image-authorized-movie-unchanged",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted",
+          "Type": "Movie",
+          "ImageTags": {
+            "Primary": "poster"
+          }
+        },
+        "width": 400
+      },
+      "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
+    },
+    {
+      "id": "image-authorized-series-unchanged",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted",
+          "Type": "Series",
+          "ImageTags": {
+            "Primary": "poster"
+          }
+        },
+        "width": 400
+      },
+      "expected": "https://media.example.test/jellyfin/Items/permitted/Images/Primary?tag=poster&maxWidth=400&quality=85"
+    },
+    {
+      "id": "image-no-aggregate-portrait-collectionfolder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "CollectionFolder",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-userview",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "UserView",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-folder",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Folder",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-boxset",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "BoxSet",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-playlist",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Playlist",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-genre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Genre",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-musicgenre",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "MusicGenre",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
+    },
+    {
+      "id": "image-no-aggregate-portrait-studio",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "permitted-container",
+          "Type": "Studio",
+          "ImageTags": {
+            "Primary": "collage"
+          }
+        },
+        "width": 320
+      },
+      "expected": null
     }
   ]
 }

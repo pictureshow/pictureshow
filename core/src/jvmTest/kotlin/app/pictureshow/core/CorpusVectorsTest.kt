@@ -67,7 +67,7 @@ class CorpusVectorsTest {
                     "offline-resume"
                 ),
             "remote-vectors" to setOf("remote-queue", "remote-receive", "remote-reconnect", "remote-targets", "remote-wire"),
-            "grid-vectors" to setOf("grid-navigation"),
+            "grid-vectors" to setOf("grid-navigation", "home-browse"),
             "live-vectors" to setOf("live-guide", "live-dvr", "live-source"),
             "android-native-vectors" to setOf("live-presentation", "player-overlay-layout")
         )

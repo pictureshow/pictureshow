@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -144,6 +145,7 @@ internal fun <T> TvSettingsChoiceRow(
     supportingText: String? = null,
     enabled: Boolean = true,
     optionSupportingText: ((T) -> String?)? = null,
+    pickerTitle: String = title,
     onSelect: (T) -> Unit
 ) {
     require(values.isNotEmpty())
@@ -186,7 +188,7 @@ internal fun <T> TvSettingsChoiceRow(
         }
     )
     if (picker) {
-        TvSettingsChoicePicker(title, value, values, label, onSelect, onClose = {
+        TvSettingsChoicePicker(pickerTitle, value, values, label, onSelect, onClose = {
             picker = false
             restoreOpener = true
         }, supportingText = optionSupportingText)
@@ -198,6 +200,40 @@ internal fun <T> TvSettingsChoiceRow(
             restoreOpener = false
         }
     }
+}
+
+/** A value/chevron row also supports specialized pickers without duplicating its visual role. */
+@Composable
+internal fun TvSettingsValueRow(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    supportingText: String? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    TvSettingsRow(title, supportingText, modifier, enabled = enabled, valueLabel = value, onClick = onClick, trailing = {
+        Row(
+            Modifier.widthIn(max = 160.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(value, Modifier.weight(1f, fill = false), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
+            TvSettingsChevron()
+        }
+    })
+}
+
+/** The indicator follows its row's contrasting foreground in both focused and resting states. */
+@Composable
+internal fun TvSettingsRadioIndicator(checked: Boolean) {
+    val color = LocalContentColor.current
+    RadioButton(
+        checked,
+        onClick = null,
+        modifier = Modifier.clearAndSetSemantics {},
+        colors = androidx.tv.material3.RadioButtonDefaults.colors(selectedColor = color, unselectedColor = color)
+    )
 }
 
 @Composable
@@ -242,7 +278,7 @@ internal fun <T> TvSettingsChoicePicker(
 }
 
 @Composable
-private fun TvSettingsRow(
+internal fun TvSettingsRow(
     title: String,
     supportingText: String?,
     modifier: Modifier = Modifier,
@@ -251,10 +287,12 @@ private fun TvSettingsRow(
     checked: Boolean? = null,
     valueLabel: String? = null,
     onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)? = null
+    trailing: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val isFocused by interaction.collectIsFocusedAsState()
+    var isFocused by remember { mutableStateOf(false) }
+    val nativeFocus = Modifier.onFocusChanged { isFocused = it.isFocused }
     val rowFocus = remember { FocusRequester() }
     val supportingColor = if (isFocused) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onSurfaceVariant
     // ListItem's selectable Surface always adds Selected, including when false.
@@ -291,14 +329,18 @@ private fun TvSettingsRow(
         Box(modifier.then(accessibilityModifier).fillMaxWidth()) {
             TvSettingsNativeRow(
                 title, supportingText,
-                Modifier.focusRequester(
-                    rowFocus
-                ),
-                enabled, false, supportingColor, interaction, onClick, trailing
+                Modifier.focusRequester(rowFocus).then(nativeFocus),
+                enabled, false, supportingColor, interaction, onClick, trailing, leading
             )
         }
     } else {
-        TvSettingsNativeRow(title, supportingText, modifier, enabled, selected, supportingColor, interaction, onClick, trailing)
+        TvSettingsNativeRow(
+            title, supportingText,
+            modifier.then(
+                nativeFocus
+            ),
+            enabled, selected, supportingColor, interaction, onClick, trailing, leading
+        )
     }
 }
 
@@ -312,7 +354,8 @@ private fun TvSettingsNativeRow(
     supportingColor: Color,
     interaction: MutableInteractionSource,
     onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)?
+    trailing: (@Composable () -> Unit)?,
+    leading: (@Composable () -> Unit)?
 ) {
     ListItem(
         selected, onClick,
@@ -327,6 +370,7 @@ private fun TvSettingsNativeRow(
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
+        leadingContent = leading?.let { content -> { content() } },
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },
@@ -367,6 +411,9 @@ internal fun TvSettingsPanel(
     firstFocus: FocusRequester,
     modifier: Modifier = Modifier,
     preview: (@Composable () -> Unit)? = null,
+    scrollContent: Boolean = true,
+    footer: (@Composable () -> Unit)? = null,
+    lazyState: LazyListState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler(onBack = onClose)
@@ -388,7 +435,29 @@ internal fun TvSettingsPanel(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
-                TvSettingsList(Modifier.weight(1f), content)
+                if (scrollContent) {
+                    TvSettingsList(Modifier.weight(1f), content)
+                } else {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        Column(Modifier.fillMaxSize(), content = content)
+                        val surface = MaterialTheme.colorScheme.surface
+                        if (lazyState?.canScrollBackward == true) {
+                            Box(
+                                Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter)
+                                    .testTag("tv-settings:fade-top")
+                                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                            )
+                        }
+                        if (lazyState?.canScrollForward == true) {
+                            Box(
+                                Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter)
+                                    .testTag("tv-settings:fade-bottom")
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                            )
+                        }
+                    }
+                }
+                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp)) { it() } }
             }
         }
         LaunchedEffect(firstFocus) {

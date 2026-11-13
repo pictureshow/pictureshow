@@ -11,6 +11,8 @@ import app.pictureshow.core.User
 import app.pictureshow.core.UserConfiguration
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,6 +41,73 @@ class IdentityServiceTest {
             assertEquals(
                 ErrorKind.LOCAL_STORAGE,
                 assertIs<ClientResult.Failure>(service.saveConfiguration(account, UserConfiguration(JsonObject(emptyMap())))).error.kind
+            )
+        }
+    }
+
+    @Test
+    fun actualAppServiceForwardsHomeStorageAndFilterChoicesWithViewerDeviceIdentity() = runTest {
+        val paths = mutableListOf<String>()
+        val engine = MockEngine(
+            io.ktor.client.engine.mock.MockEngineConfig().apply {
+                dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+                addHandler { request ->
+                    paths += request.url.encodedPath
+                    assertEquals("u", request.url.parameters["userId"])
+                    kotlin.test.assertTrue(request.headers[io.ktor.http.HttpHeaders.Authorization].orEmpty().contains("viewer-device"))
+                    when (request.url.encodedPath) {
+                        "/DisplayPreferences/usersettings" -> {
+                            assertEquals("pictureshow", request.url.parameters["client"])
+                            if (request.method == io.ktor.http.HttpMethod.Post) {
+                                assertEquals("{\"CustomPrefs\":{}}", request.body.toByteArray().decodeToString())
+                                respond("", io.ktor.http.HttpStatusCode.NoContent)
+                            } else {
+                                respond("{\"CustomPrefs\":{}}")
+                            }
+                        }
+                        "/Items/lib" -> respond("{\"Id\":\"lib\"}")
+                        "/Items/Filters" -> respond("{\"Genres\":[\"Animation\"]}")
+                        "/Persons" -> respond("{\"Items\":[{\"Id\":\"person\",\"Name\":\"Permitted person\"}]}")
+                        else -> error("Unexpected route")
+                    }
+                }
+            }
+        )
+        HttpClient(engine).use { http ->
+            val service = PersistentIdentityService(http, DeviceIdentityStore(brokenPreferences), "Test TV")
+            val account =
+                Account(Server("s", "Test", "https://media.example.test", "12.0.0"), User("u", "Sam"), "fake", deviceId = "viewer-device")
+            assertIs<ClientResult.Success<JsonObject>>(service.displayPreferences(account))
+            assertIs<ClientResult.Success<Unit>>(
+                service.saveDisplayPreferences(
+                    account,
+                    JsonObject(
+                        mapOf(
+                            "CustomPrefs" to JsonObject(emptyMap())
+                        )
+                    )
+                )
+            )
+            assertEquals(
+                listOf("Animation"),
+                assertIs<ClientResult.Success<app.pictureshow.core.LibraryFacets>>(service.facets(account, "lib")).value.genres
+            )
+            assertEquals(
+                "person",
+                assertIs<ClientResult.Success<app.pictureshow.core.ItemPage>>(
+                    service.namedItems(account, "Persons", "lib", "", 0)
+                ).value.items.single().id
+            )
+            assertEquals(
+                listOf(
+                    "/DisplayPreferences/usersettings",
+                    "/DisplayPreferences/usersettings",
+                    "/Items/lib",
+                    "/Items/Filters",
+                    "/Items/lib",
+                    "/Persons"
+                ),
+                paths
             )
         }
     }
