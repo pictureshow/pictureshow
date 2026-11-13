@@ -413,7 +413,10 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(fixture.snapshot.stoppedCount, 0, "Opening and closing sheets must not close the viewing")
         try verifyNextEpisodeCard(fixture)
         #if os(tvOS)
-        activate(nativeAction(id: "closePlayer", prefix: "Back to details"))
+        // The verified native HUD is hidden and the remaining contextual Skip
+        // owns focus. Use the standard native Back input for this exit; the
+        // next viewing below separately exercises the Back to details action.
+        XCUIRemote.shared.press(.menu)
         #else
         if app.buttons["rotatePlayer"].exists {
             activate(app.buttons["rotatePlayer"])
@@ -423,6 +426,10 @@ final class PlayerPresentationUITests: XCTestCase {
         activate(app.buttons["closePlayer"])
         #endif
         XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 15))
+        #if os(tvOS)
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 1, "One native Back must close and report the cancelled-context viewing exactly once")
+        record("132 native Back from cancelled contextual card retains detail")
+        #endif
         XCTAssertEqual(fixture.snapshot.startCount, 1, "Speed and info must preserve the original viewing")
         XCTAssertEqual(fixture.snapshot.playbackInfoCount, initialNegotiations, "Changing speed and opening information must not renegotiate")
         #if os(tvOS)
