@@ -1,0 +1,64 @@
+name: Windows display mode probe
+on:
+  push:
+    branches: ["ci/137-display-probe*"]
+permissions:
+  contents: read
+concurrency:
+  group: windows-display-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mode-probe:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Compile actual native display helper
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop/build | Out-Null
+          cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Display helper compile failed' }
+      - name: Save mode, provision exact full frame, and restore with native diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop-evidence/display | Out-Null
+          try {
+            $saveOutput = @(& desktop/build/windows-smoke-screen.exe --save desktop/build/smoke-display-mode.bin 2> desktop-evidence/display/save-stages.jsonl)
+            $saveCode = $LASTEXITCODE
+            Set-Content -Path desktop-evidence/display/smoke-screen.json -Value ($saveOutput -join [Environment]::NewLine)
+            [ordered]@{nativeExitCode=$saveCode; stdoutLines=$saveOutput.Count} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/save-exit.json
+            Write-Host "Hosted display save native exit=$saveCode"
+            if ($saveCode -ne 0) { throw "Hosted display setup failed (native exit $saveCode)" }
+          } finally {
+            if (Test-Path desktop/build/smoke-display-mode.bin) {
+              $modeBytes = (Get-Item desktop/build/smoke-display-mode.bin).Length
+              [ordered]@{stage='starting'; savedModeBytes=$modeBytes; helperExists=(Test-Path desktop/build/windows-smoke-screen.exe)} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/restore-invocation.json
+              $restoreOutput = @()
+              $restoreCode = $null
+              $restoreCompleted = $false
+              try {
+                $restoreOutput = @(& desktop/build/windows-smoke-screen.exe --restore desktop/build/smoke-display-mode.bin 2> desktop-evidence/display/restore-stages.jsonl)
+                $restoreCode = $LASTEXITCODE
+                $restoreCompleted = $true
+              } finally {
+                if ($null -eq $restoreCode) { $restoreCode = $LASTEXITCODE }
+                # Explicit Value creates the receipt even when a native process
+                # emits nothing; a pipeline with no input did not create it.
+                Set-Content -Path desktop-evidence/display/restore.json -Value ($restoreOutput -join [Environment]::NewLine)
+                [ordered]@{nativeExitCode=$restoreCode; invocationCompleted=$restoreCompleted; stdoutLines=$restoreOutput.Count; savedModeBytes=$modeBytes} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/restore-exit.json
+                Write-Host "Hosted display restore native exit=$restoreCode completed=$restoreCompleted stdoutLines=$($restoreOutput.Count)"
+              }
+              if ($restoreCode -ne 0) { throw "Hosted display mode restoration failed (native exit $restoreCode)" }
+            } else {
+              Set-Content -Path desktop-evidence/display/restore-invocation.json -Value '{"stage":"saved-mode-missing"}'
+              throw 'Saved display mode is missing'
+            }
+          }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-display-probe
+          retention-days: 3
+          path: desktop-evidence/display/**
