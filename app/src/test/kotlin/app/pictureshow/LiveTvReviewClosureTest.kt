@@ -83,7 +83,7 @@ class LiveTvReviewClosureTest {
             row.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             row.assertIsFocused()
             val surface = row.getBoundsInRoot()
-            assertTrue(surface.height.value >= expected.getValue("minimumRowHeightDp").jsonPrimitive.int)
+            assertTrue((surface.bottom - surface.top).value >= expected.getValue("minimumRowHeightDp").jsonPrimitive.int)
             val center = (surface.top + surface.bottom) / 2
             labels.forEach { label ->
                 val text = compose.onNodeWithText(label, useUnmergedTree = true).getBoundsInRoot()
@@ -111,7 +111,7 @@ class LiveTvReviewClosureTest {
         compose.onNodeWithTag("days").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         val label = compose.onNodeWithText("Days", useUnmergedTree = true).getBoundsInRoot()
         val value = compose.onNodeWithText(supplied, useUnmergedTree = true).getBoundsInRoot()
-        assertTrue(value.height > label.height * 2, "The supplied value must actually occupy multiple lines")
+        assertTrue((value.bottom - value.top) > (label.bottom - label.top) * 2, "The supplied value must actually occupy multiple lines")
         assertEquals(
             value.top.value,
             label.top.value,
