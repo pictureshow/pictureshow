@@ -39,6 +39,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.imageUrl
+import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import coil3.compose.AsyncImage
 
