@@ -98,7 +98,7 @@ class LiveRound3StatesTest {
         }
         compose.onNodeWithText("Favorites").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Favorites").assertIsSelected()
-        compose.onNodeWithText("No favourite channels yet").assertIsDisplayed()
+        compose.onNodeWithText("No favorite channels yet").assertIsDisplayed()
         compose.onNodeWithText("Star a channel to pin it here.").assertIsDisplayed()
         compose.onNodeWithTag("live:empty-action").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("live:c:c").assertIsDisplayed()

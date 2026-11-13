@@ -38,14 +38,14 @@ class LiveRound3PresentationTest {
         val empty = liveEmptyPresentation(emptyGuide, "Guide", 1, false, "")!!
         assertEquals("No guide data", empty.title)
         assertEquals(LiveEmptyAction.Channels, empty.action)
-        assertTrue(empty.body.contains("XMLTV"))
+        assertEquals("Try another time, or ask your server administrator to set up a TV guide.", empty.body)
         assertNull(liveEmptyPresentation(emptyGuide, "Channels", 1, false, ""))
     }
 
     @Test fun favoritesAndSearchCanBeClearedWithoutInventingAMissingTuner() {
         val state = ready.copy(channels = listOf(channel))
-        assertEquals(LiveEmptyAction.Channels, liveEmptyPresentation(state, "Channels", 0, true, "")!!.action)
-        assertEquals("No favourite channels yet", liveEmptyPresentation(state, "Guide", 0, true, "")!!.title)
+        assertEquals(LiveEmptyAction.AllChannels, liveEmptyPresentation(state, "Channels", 0, true, "")!!.action)
+        assertEquals("No favorite channels yet", liveEmptyPresentation(state, "Guide", 0, true, "")!!.title)
         assertEquals(LiveEmptyAction.ClearFilters, liveEmptyPresentation(state, "Channels", 0, true, "abc")!!.action)
         assertNull(liveEmptyPresentation(state.copy(loading = true), "Guide", 0, true, ""))
         assertEquals("No tuner configured", liveEmptyPresentation(ready.copy(tunerEnabled = false), "Channels", 0, false, "")!!.title)

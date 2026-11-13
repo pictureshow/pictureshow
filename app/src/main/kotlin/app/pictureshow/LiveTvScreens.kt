@@ -7,8 +7,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -345,17 +348,23 @@ internal fun LiveTvScreen(
         } else if (!tv) {
             androidx.compose.material3.TopAppBar(
                 modifier = Modifier.testTag("live:touch-app-bar"),
+                expandedHeight = if (compactHeight &&
+                    !detail
+                ) {
+                    48.dp
+                } else {
+                    androidx.compose.material3.TopAppBarDefaults.TopAppBarExpandedHeight
+                },
                 title = {
                     if (compactHeight && !detail) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            androidx.compose.material3.Text(title, maxLines = 1)
-                            liveGuideFreshness(state.fetchedAt, state.offline, time)?.let {
-                                androidx.compose.material3.Text(
-                                    it,
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                    maxLines = 1
-                                )
-                            }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Text(
+                                title,
+                                Modifier.padding(end = 12.dp),
+                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                maxLines = 1
+                            )
+                            LiveTouchNavigation(tab, compact = true, onTab = ::selectTab)
                         }
                     } else {
                         Column {
@@ -417,30 +426,7 @@ internal fun LiveTvScreen(
                         }
                     }
                 } else {
-                    val touchTabs: @Composable () -> Unit = {
-                        tabs.forEach { next ->
-                            androidx.compose.material3.Tab(
-                                selected = tab == next,
-                                unselectedContentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                onClick = { selectTab(next) },
-                                modifier = Modifier.height(48.dp).testTag("live:tab:$next")
-                            ) {
-                                androidx.compose.material3.Text(
-                                    next,
-                                    Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                    }
-                    if (LocalDensity.current.fontScale > 1.1f) {
-                        androidx.compose.material3.PrimaryScrollableTabRow(tabs.indexOf(tab), edgePadding = 16.dp) { touchTabs() }
-                    } else {
-                        androidx.compose.material3.PrimaryTabRow(tabs.indexOf(tab)) { touchTabs() }
-                    }
+                    LiveTouchNavigation(tab, onTab = ::selectTab)
                 }
             }
             if (!accessDenied && showSearch && tab in listOf("Channels", "Guide")) {
@@ -463,7 +449,16 @@ internal fun LiveTvScreen(
                     Row(
                         Modifier.testTag(
                             "live:filters"
-                        ).then(if (tv) Modifier else Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)),
+                        ).then(
+                            if (tv ||
+                                compactHeight &&
+                                tab == "Guide"
+                            ) {
+                                Modifier
+                            } else {
+                                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)
+                            }
+                        ),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -497,8 +492,34 @@ internal fun LiveTvScreen(
                     filters()
                 }
             } else {
-                navigation()
-                if (compactHeight && tab == "Channels") scrollingFilters = filters else filters()
+                if (!compactHeight) navigation()
+                if (compactHeight && tab == "Guide" && !accessDenied) {
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        val dateWidth = (maxWidth - 280.dp).coerceIn(240.dp, 400.dp)
+                        Row(
+                            Modifier.height(48.dp).horizontalScroll(rememberScrollState()).testTag("live:compact-guide-controls"),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            filters()
+                            Box(Modifier.width(dateWidth)) {
+                                LiveGuideDateBar(
+                                    state.windowStart,
+                                    now,
+                                    false,
+                                    !state.loading,
+                                    viewportAtNow = state.windowStart == liveGuideWindowStart(now) && guideAtStart,
+                                    onNow = ::resetGuideNow,
+                                    onChange = ::refreshGuide
+                                )
+                            }
+                        }
+                    }
+                } else if (compactHeight && tab == "Channels") {
+                    scrollingFilters = filters
+                } else {
+                    filters()
+                }
             }
         }
         if (refreshPresentation.headerLoading) {
@@ -530,8 +551,12 @@ internal fun LiveTvScreen(
         val body: @Composable () -> Unit = {
             if (empty != null) {
                 Column(Modifier.fillMaxSize()) {
-                    if (empty.showGuideNavigation) {
-                        Box(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
+                    if (empty.showGuideNavigation && (!compactHeight || tv)) {
+                        Box(
+                            Modifier.padding(horizontal = if (tv) 0.dp else 16.dp).then(
+                                if (tv) Modifier.width(liveGuideChannelWidth(true, density.fontScale, 0).dp) else Modifier
+                            )
+                        ) {
                             LiveGuideDateBar(
                                 state.windowStart,
                                 now,
@@ -557,7 +582,7 @@ internal fun LiveTvScreen(
                                     search = ""
                                 }
                                 LiveEmptyAction.Guide -> selectTab("Guide")
-                                LiveEmptyAction.ClearFilters -> {
+                                LiveEmptyAction.AllChannels, LiveEmptyAction.ClearFilters -> {
                                     favorites = false
                                     search = ""
                                 }
@@ -567,7 +592,7 @@ internal fun LiveTvScreen(
                 }
             } else if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
-                    if (!tv) {
+                    if (!tv && !compactHeight) {
                         LiveGuideDateBar(
                             state.windowStart,
                             now,
@@ -603,7 +628,8 @@ internal fun LiveTvScreen(
             } else {
                 Column {
                     if (!detail &&
-                        tab == "Guide"
+                        tab == "Guide" &&
+                        (!compactHeight || tv)
                     ) {
                         LiveGuideDateBar(
                             state.windowStart,
@@ -891,7 +917,8 @@ internal fun LiveTvScreen(
                     deleteRecording = item
                 }
             ),
-            destructiveLabels = setOf("Delete recorded file…")
+            destructiveLabels = setOf("Delete recorded file…"),
+            uniformRows = true
         )
     }
 }

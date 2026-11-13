@@ -200,7 +200,11 @@ class LivePresentationVectorsTest {
                         } else {
                             expected.jsonArray.map { it.jsonPrimitive.content }
                         },
-                        result?.let { listOf(it.title, it.action.label) },
+                        result?.let {
+                            listOf(it.title, it.action.label) +
+                                (if (c["includeAction"]?.jsonPrimitive?.boolean == true) listOf(it.action.name) else emptyList()) +
+                                (if (c["includeBody"]?.jsonPrimitive?.boolean == true) listOf(it.body) else emptyList())
+                        },
                         id
                     )
                 }
@@ -233,7 +237,8 @@ class LivePresentationVectorsTest {
                         app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
                         c.getValue("series").jsonPrimitive.boolean,
                         c.getValue("existing").jsonPrimitive.boolean,
-                        LiveTime(true, Locale.US, ZoneId.of("UTC"), Instant.parse("2026-11-13T12:00:00Z").toEpochMilli())
+                        LiveTime(true, Locale.US, ZoneId.of("UTC"), Instant.parse("2026-11-13T12:00:00Z").toEpochMilli()),
+                        touch = c["touch"]?.jsonPrimitive?.boolean ?: false
                     ),
                     id
                 )
@@ -570,7 +575,11 @@ class LivePresentationVectorsTest {
 
                 "ruler-height" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
-                    liveGuideRulerHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
+                    liveGuideRulerHeight(
+                        c.getValue("tv").jsonPrimitive.boolean,
+                        c.getValue("fontScale").jsonPrimitive.float,
+                        c["compact"]?.jsonPrimitive?.boolean ?: false
+                    ),
                     0.001f,
                     id
                 )

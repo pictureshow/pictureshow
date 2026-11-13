@@ -159,7 +159,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "3:14 \u2013 3:42 PM"
+      "expected": "3:14 – 3:42 PM"
     },
     {
       "id": "live-presentation.period-crossing-range",
@@ -172,7 +172,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "11:55 AM \u2013 12:10 PM"
+      "expected": "11:55 AM – 12:10 PM"
     },
     {
       "id": "live-presentation.tomorrow-range",
@@ -185,7 +185,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
+      "expected": "Tomorrow · 15:00 – 16:00"
     },
     {
       "id": "live-presentation.no-timer-dot",
@@ -536,7 +536,7 @@
       },
       "expected": {
         "title": "Painted windows",
-        "metadata": "S1:E7 \u00b7 Ends 6:30 PM \u00b7 2m",
+        "metadata": "S1:E7 · Ends 6:30 PM · 2m",
         "progress": 0.0
       }
     },
@@ -656,7 +656,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today \u00b7 6:00 PM",
+        "metadata": "Today · 6:00 PM",
         "progress": null
       }
     },
@@ -720,7 +720,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today \u00b7 6:00 PM",
+        "metadata": "Today · 6:00 PM",
         "progress": null
       }
     },
@@ -1069,7 +1069,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused \u00b7 At live edge",
+        "status": "Paused · At live edge",
         "clock": ""
       }
     },
@@ -1089,7 +1089,7 @@
       },
       "expected": {
         "status": "",
-        "clock": "\u22120:03"
+        "clock": "−0:03"
       }
     },
     {
@@ -1108,7 +1108,7 @@
       },
       "expected": {
         "status": "Paused",
-        "clock": "\u22120:03"
+        "clock": "−0:03"
       }
     },
     {
@@ -1160,7 +1160,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused \u00b7 Buffer expired",
+        "status": "Paused · Buffer expired",
         "clock": ""
       }
     },
@@ -1261,10 +1261,10 @@
         ]
       },
       "expected": [
-        "Paused \u00b7 17 sec behind live",
-        "Paused \u00b7 37 sec behind live",
+        "Paused · 17 sec behind live",
+        "Paused · 37 sec behind live",
         "Live position unavailable",
-        "Live \u00b7 Time shift unavailable"
+        "Live · Time shift unavailable"
       ]
     },
     {
@@ -1710,7 +1710,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline \u00b7 last loaded 3:14 PM"
+      "expected": "Offline · last loaded 3:14 PM"
     },
     {
       "id": "live-presentation.guide-freshness-offline-fold",
@@ -1723,7 +1723,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline \u00b7 last loaded 1:30 AM -05:00"
+      "expected": "Offline · last loaded 1:30 AM -05:00"
     },
     {
       "id": "live-presentation.device-japanese-twelve-hour",
@@ -1735,7 +1735,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "\u5348\u5f8c3:14"
+      "expected": "午後3:14"
     },
     {
       "id": "live-presentation.guide-scroll-visible",
@@ -2406,17 +2406,17 @@
       "operation": "live-buffer-status",
       "input": {
         "status": "Paused",
-        "clock": "\u22120:12",
+        "clock": "−0:12",
         "behind": 12000
       },
-      "expected": "Paused \u00b7 12 sec behind live"
+      "expected": "Paused · 12 sec behind live"
     },
     {
       "id": "live-buffer-status-playing",
       "operation": "live-buffer-status",
       "input": {
         "status": "",
-        "clock": "\u22122:13",
+        "clock": "−2:13",
         "behind": 133000
       },
       "expected": "2 min 13 sec behind live"
@@ -2825,7 +2825,7 @@
         "expired": false
       },
       "expected": [
-        "Available buffer \u00b7 start",
+        "Available buffer · start",
         "Live edge"
       ]
     },
@@ -3772,14 +3772,14 @@
       "operation": "program-metadata-lines",
       "input": {
         "channel": "Ch 4 Open Sky",
-        "range": "4:19 \u2013 4:46 AM",
+        "range": "4:19 – 4:46 AM",
         "episode": "S1 E15",
         "title": "Generated episode 15",
         "tv": false
       },
       "expected": [
-        "Ch 4 Open Sky \u00b7 4:19 \u2013 4:46 AM",
-        "S1 E15 \u00b7 Generated episode 15"
+        "Ch 4 Open Sky · 4:19 – 4:46 AM",
+        "S1 E15 · Generated episode 15"
       ]
     },
     {
@@ -3787,13 +3787,13 @@
       "operation": "program-metadata-lines",
       "input": {
         "channel": "Ch 4 Open Sky",
-        "range": "4:19 \u2013 4:46 AM",
+        "range": "4:19 – 4:46 AM",
         "episode": "S1 E15",
         "title": "Generated episode 15",
         "tv": true
       },
       "expected": [
-        "Ch 4 Open Sky \u00b7 4:19 \u2013 4:46 AM \u00b7 S1 E15 \u00b7 Generated episode 15"
+        "Ch 4 Open Sky · 4:19 – 4:46 AM · S1 E15 · Generated episode 15"
       ]
     },
     {
@@ -4283,7 +4283,7 @@
       },
       "expected": [
         "No guide data",
-        "Show all channels"
+        "Go to channels"
       ]
     },
     {
@@ -4303,7 +4303,7 @@
         "favorites": true
       },
       "expected": [
-        "No favourite channels yet",
+        "No favorite channels yet",
         "Show all channels"
       ]
     },
@@ -4331,7 +4331,7 @@
         "tab": "Guide"
       },
       "expected": [
-        "No favourite channels yet",
+        "No favorite channels yet",
         "Show all channels"
       ]
     },
@@ -4410,7 +4410,7 @@
       },
       "expected": [
         "Recording schedules aren't available",
-        "Show all channels"
+        "Go to channels"
       ]
     },
     {
@@ -4474,9 +4474,9 @@
         "start": null,
         "end": "2026-11-13T12:00:00Z",
         "now": "2026-11-13T12:00:00Z",
-        "range": "7:39 \u2013 8:07 AM"
+        "range": "7:39 – 8:07 AM"
       },
-      "expected": "Ended \u00b7 7:39 \u2013 8:07 AM"
+      "expected": "Ended · 7:39 – 8:07 AM"
     },
     {
       "id": "round3-time-starts",
@@ -4485,9 +4485,9 @@
         "start": "2026-11-13T12:12:00Z",
         "end": null,
         "now": "2026-11-13T12:00:00Z",
-        "range": "7:39 \u2013 8:07 AM"
+        "range": "7:39 – 8:07 AM"
       },
-      "expected": "Starts in 12 min \u00b7 7:39 \u2013 8:07 AM"
+      "expected": "Starts in 12 min · 7:39 – 8:07 AM"
     },
     {
       "id": "round3-time-unknown",
@@ -4496,9 +4496,9 @@
         "start": null,
         "end": null,
         "now": "2026-11-13T12:00:00Z",
-        "range": "7:39 \u2013 8:07 AM"
+        "range": "7:39 – 8:07 AM"
       },
-      "expected": "7:39 \u2013 8:07 AM"
+      "expected": "7:39 – 8:07 AM"
     },
     {
       "id": "round3-touch-live-parent",
@@ -4537,7 +4537,7 @@
         "series": false,
         "existing": false
       },
-      "expected": "Records Blue Hour on Aurora Sessions, 12:00 \u2013 12:30."
+      "expected": "Records Blue Hour on Aurora Sessions, 12:00 – 12:30."
     },
     {
       "id": "round3-review-new-channel",
@@ -4608,7 +4608,7 @@
       },
       "expected": [
         "Recording schedules aren't available",
-        "Show all channels"
+        "Go to channels"
       ]
     },
     {
@@ -4766,6 +4766,80 @@
       "expected": [
         "destination:live-tv",
         "ordinary"
+      ]
+    },
+    {
+      "id": "live-presentation.short-ruler-height",
+      "operation": "ruler-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1,
+        "compact": true
+      },
+      "expected": 24
+    },
+    {
+      "id": "live-presentation.touch-once-review",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "Name": "Blue Hour",
+          "ChannelName": "Aurora",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:28:00Z"
+        },
+        "series": false,
+        "existing": false,
+        "touch": true
+      },
+      "expected": "Records this airing once."
+    },
+    {
+      "id": "live-presentation.guide-empty-favorites-recovers-in-place",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Guide",
+        "channels": 8,
+        "filtered": 0,
+        "favorites": true,
+        "programs": 2,
+        "includeAction": true
+      },
+      "expected": [
+        "No favorite channels yet",
+        "Show all channels",
+        "AllChannels"
+      ]
+    },
+    {
+      "id": "live-presentation.guide-empty-navigates-to-channels",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Guide",
+        "channels": 8,
+        "programs": 0,
+        "includeAction": true,
+        "includeBody": true
+      },
+      "expected": [
+        "No guide data",
+        "Go to channels",
+        "Channels",
+        "Try another time, or ask your server administrator to set up a TV guide."
+      ]
+    },
+    {
+      "id": "live-presentation.management-denied-navigates-to-channels",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false,
+        "includeAction": true
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Go to channels",
+        "Channels"
       ]
     }
   ]
