@@ -11,6 +11,7 @@ import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncCorrectionPosition
+import app.pictureshow.core.sync.syncPcmRateSupported
 import app.pictureshow.core.sync.syncDrift
 import app.pictureshow.core.sync.syncSameUnpauseTimeline
 import app.pictureshow.core.sync.syncScheduledPlaying
@@ -45,6 +46,19 @@ class SyncTimingVectorsTest {
         cases("sync-clock").forEach { row ->
             val expected = row.getValue("expected")
             when (row.getValue("op").jsonPrimitive.content) {
+                "pcm-rate-capability" -> {
+                    val i = row.getValue("input").jsonObject
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        syncPcmRateSupported(
+                            i.getValue("knownPcm").takeUnless { it is JsonNull }?.jsonPrimitive?.boolean,
+                            i.bool("softwareRate"),
+                            i.bool("commandAvailable")
+                        ),
+                        row.toString()
+                    )
+                }
+
                 "sample" -> {
                     val t = row.getValue("input").jsonArray.map { it.jsonPrimitive.long }
                     val value = SyncClockSample(t[0], t[1], t[2], t[3]).measurement()

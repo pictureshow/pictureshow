@@ -819,6 +819,56 @@
         }
       },
       "expected": false
+    },
+    {
+      "id": "pcm-rate-known-software-pcm",
+      "op": "pcm-rate-capability",
+      "input": {
+        "knownPcm": true,
+        "softwareRate": true,
+        "commandAvailable": true
+      },
+      "expected": true
+    },
+    {
+      "id": "pcm-rate-encoded",
+      "op": "pcm-rate-capability",
+      "input": {
+        "knownPcm": false,
+        "softwareRate": true,
+        "commandAvailable": true
+      },
+      "expected": false
+    },
+    {
+      "id": "pcm-rate-unknown",
+      "op": "pcm-rate-capability",
+      "input": {
+        "knownPcm": null,
+        "softwareRate": true,
+        "commandAvailable": true
+      },
+      "expected": false
+    },
+    {
+      "id": "pcm-rate-unknown-renderer",
+      "op": "pcm-rate-capability",
+      "input": {
+        "knownPcm": true,
+        "softwareRate": false,
+        "commandAvailable": true
+      },
+      "expected": false
+    },
+    {
+      "id": "pcm-rate-command-unavailable",
+      "op": "pcm-rate-capability",
+      "input": {
+        "knownPcm": true,
+        "softwareRate": true,
+        "commandAvailable": false
+      },
+      "expected": false
     }
   ]
 }

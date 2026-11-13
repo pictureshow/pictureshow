@@ -65,6 +65,11 @@ data class SyncClockAnchor(
 
 fun millisecondsToSyncTicks(milliseconds: Long): Long? = multiply(milliseconds, TICKS_PER_MILLISECOND)
 
+/** A generic speed command alone says nothing about an encoded sink's exact-rate support. */
+fun syncPcmRateSupported(knownPcm: Boolean?, softwareRate: Boolean, commandAvailable: Boolean): Boolean =
+    knownPcm == true && softwareRate && commandAvailable
+
+
 data class SyncTarget(val positionTicks: Long, val delayMillis: Long)
 
 /**

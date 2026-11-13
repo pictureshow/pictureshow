@@ -64,6 +64,16 @@ internal class Media3PlaybackOutput(
         return intercepted
     }
 
+    private var syncPcmOutput: Boolean? = null
+    internal fun observeSyncAudioOutput(generation: Long, encoded: Boolean) {
+        if (generation == nativeGeneration && activePlayer != null) syncPcmOutput = !encoded
+    }
+    internal fun supportsSyncRate(player: Player?): Boolean = app.pictureshow.core.sync.syncPcmRateSupported(
+        syncPcmOutput,
+        renderersFactory == null,
+        player?.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH) == true
+    )
+
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
     fun setSpeed(value: Float) {
@@ -112,7 +122,8 @@ internal class Media3PlaybackOutput(
             "trace-native-$event elapsedMs=${SystemClock.elapsedRealtime()} generation=$nativeGeneration " +
                 "state=${p?.playbackState ?: 0} pwr=${p?.playWhenReady} suppression=${p?.suppressionReason ?: -1} " +
                 "loading=${p?.isLoading} positionMs=${p?.positionMs ?: -1} bufferedPositionMs=${p?.bufferedPositionMs ?: -1} " +
-                "bufferedDurationMs=${p?.bufferedDurationMs ?: -1} foreground=${mutableForeground.value} $fields"
+                "bufferedDurationMs=${p?.bufferedDurationMs ?: -1} foreground=${mutableForeground.value} " +
+                "pcm=${syncPcmOutput} rate=${mutablePlayer.value?.playbackParameters?.speed ?: 1f} $fields"
         )
     }
     private var loadDiagnostics: PlaybackLoadDiagnostics? = null
@@ -303,7 +314,10 @@ internal class Media3PlaybackOutput(
             renderersFactory
                 ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions, disabledPassthrough) { encoded ->
                     loadHandler.post {
-                        if (current === decision) viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+                        if (current === decision && nativeGeneration == sourceGeneration && activePlayer === next) {
+                            observeSyncAudioOutput(sourceGeneration, encoded)
+                            viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+                        }
                     }
                 }
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
@@ -694,6 +708,7 @@ internal class Media3PlaybackOutput(
     override fun release() = releasePlayer(closeSession = true)
 
     private fun releasePlayer(closeSession: Boolean) {
+        syncPcmOutput = null
         traceNative("release", "closeSession=$closeSession")
         loadHandler.removeCallbacks(loadSummary)
         loadDiagnostics?.summary(final = true)

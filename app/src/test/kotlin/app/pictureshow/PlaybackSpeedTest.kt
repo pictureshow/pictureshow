@@ -66,4 +66,42 @@ class PlaybackSpeedTest {
         assertEquals(1f, speed.state.value.speed)
         assertNotNull(speed.state.value.message)
     }
+
+    @Test fun syncRateRequiresObservedPcmAndIsFencedToTheLiveDecoder() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Fixture", "https://example.test", "12"))
+        val decision = PlayDecision(
+            "film", MediaSourceInfo(runTimeTicks = 9_000_000_000), PlayMethod.DirectPlay,
+            "https://example.test/Videos/film/stream.ts", emptyMap(), "session"
+        )
+        try {
+            output.open(decision, 0, -1, -1, true)
+            val host = PlaybackHostState(app.pictureshow.core.MediaItem("film", "Film"), 0, output, {}, {})
+            host.playerSource = androidx.compose.runtime.mutableStateOf(output.player.value)
+            val first = requireNotNull(output.syncNativeSnapshot()).generation
+            assertEquals(false, host.syncRendererSnapshot().rateSupported, "Unknown sink cannot advertise exact rates")
+            output.observeSyncAudioOutput(first, false)
+            assertEquals(true, host.syncRendererSnapshot().rateSupported, "Confirmed PCM on our software sink supports temporary rates")
+            host.applySyncTimeline(null, null, 0.97)
+            assertEquals(0.97f, output.player.value!!.playbackParameters.speed)
+            assertEquals(1f, output.player.value!!.playbackParameters.pitch)
+            host.applySyncTimeline(null, null, 1.03)
+            assertEquals(1.03f, output.player.value!!.playbackParameters.speed)
+            output.observeSyncAudioOutput(first, true)
+            assertEquals(false, host.syncRendererSnapshot().rateSupported, "Encoded output must return to seek fallback")
+            output.open(decision, 0, -1, -1, true)
+            host.playerSource = androidx.compose.runtime.mutableStateOf(output.player.value)
+            val second = requireNotNull(output.syncNativeSnapshot()).generation
+            assertEquals(false, host.syncRendererSnapshot().rateSupported)
+            output.observeSyncAudioOutput(first, false)
+            assertEquals(false, host.syncRendererSnapshot().rateSupported, "A replaced decoder cannot qualify the new sink")
+            output.observeSyncAudioOutput(second, false)
+            assertEquals(true, host.syncRendererSnapshot().rateSupported)
+            output.release()
+            output.observeSyncAudioOutput(second, false)
+            assertEquals(false, output.supportsSyncRate(host.player), "Released output evidence stays unavailable")
+        } finally {
+            output.release()
+        }
+    }
+
 }

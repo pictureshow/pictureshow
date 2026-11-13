@@ -152,9 +152,8 @@ internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
             d?.mediaSource?.isInfiniteStream == true,
             offline = localCopy
         ),
-        // Media3's generic speed command does not advertise these exact rates for encoded output.
-        // Until separately qualified, use the required bounded seek fallback.
-        rateSupported = false,
+        // Our known PCM sink uses Sonic in software; encoded, unknown and injected outputs retain seek fallback.
+        rateSupported = output.supportsSyncRate(p),
         native = output.syncNativeSnapshot(),
         playWhenReady = p?.playWhenReady == true
     )
