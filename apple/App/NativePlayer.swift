@@ -666,10 +666,15 @@ struct NativePlayer: UIViewControllerRepresentable {
                     }
                 }
                 func cancel(_ identifier: String, image: UIImage? = nil) -> UIAction {
-                    UIAction(title: "Cancel", image: image, identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                    UIAction(title: "Cancel", image: image, identifier: .init(identifier)) { [weak self] _ in
+                        #if DEBUG
+                        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Continuation cancel activated surface=\(identifier, privacy: .public)")
+                        #endif
+                        self?.session.cancelContinuation()
+                    }
                 }
                 // AVKit's transport renders image controls; its contextual
-                // surface renders the full episode title and Cancel as text.
+                // surface renders the episode-named action and Cancel as text.
                 continuationTransportActions = [play("playNextTransport", image: UIImage(systemName: "forward.end.fill")),
                                                 cancel("cancelNextTransport", image: UIImage(systemName: "xmark.circle"))]
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
@@ -677,9 +682,10 @@ struct NativePlayer: UIViewControllerRepresentable {
             }
             // Both native surfaces name the episode, even when pausing hides the
             // countdown. Retain action identity across every clock update.
-            let title = "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? "")
-            continuationContextActions.first?.title = title
-            continuationTransportActions.first?.title = title
+            // Native contextual pills clip long names at their trailing edge.
+            // Keep the changing number ahead of the complete episode name.
+            continuationContextActions.first?.title = "Next" + (countdown.map { " (\($0))" } ?? "") + ": \(next.name)"
+            continuationTransportActions.first?.title = "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? "")
         }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool {
             #if DEBUG
@@ -1038,6 +1044,12 @@ private struct NativeViewingInformation: View {
                 #endif
         }
         .background(Theme.background)
+        #if os(tvOS)
+        // AVKit sizes every Info tab to the tallest hosted view. Bound this
+        // scrolling viewport as well as its controller's preferred size, so its
+        // complete content cannot push the native tab strip above the screen.
+        .frame(height: 250)
+        #endif
     }
 }
 

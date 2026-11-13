@@ -177,8 +177,30 @@ final class NativeTrackHTTPFixture {
         let authenticatedSettings = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch
         guard authenticatedSettings.waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated navigation") }
         #else
-        guard app.buttons.matching(identifier: "Settings").firstMatch.waitForExistence(timeout: 15)
-            || app.tabBars.buttons["Settings"].waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated adaptive shell") }
+        let expectedItem = remoteTarget ? Self.remoteItemID : Self.itemID
+        func authenticatedDetailVisible() -> Bool {
+            let window = app.windows.firstMatch.frame
+            let settings = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND (identifier == %@ OR identifier == %@ OR identifier == %@)", "Settings", "Settings", "gearshape", "openSettings")).allElementsBoundByIndex.contains {
+                ($0.elementType == .button || $0.elementType == .cell) && !$0.frame.isEmpty && $0.frame.intersects(window) && $0.isHittable
+            }
+            let title = app.staticTexts["detailTitle"]
+            let itemWasLoaded = snapshot.requests.contains { $0.method == "GET" && $0.path == "/Items/" + expectedItem }
+            return settings && itemWasLoaded && title.exists && title.label == "Synthetic native track menu film" &&
+                title.frame.intersects(window) && app.buttons["play"].exists && app.buttons["play"].isHittable
+        }
+        let deadline = Date().addingTimeInterval(15)
+        while !authenticatedDetailVisible() && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        guard authenticatedDetailVisible() else {
+            XCTContext.runActivity(named: "132 native fixture authenticated shell failure") { activity in
+                let ax = XCTAttachment(string: app.debugDescription)
+                ax.name = "132 native fixture authenticated shell failure accessibility"; ax.lifetime = .keepAlways; activity.add(ax)
+                let pixels = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                pixels.name = "132 native fixture authenticated shell failure"; pixels.lifetime = .keepAlways; activity.add(pixels)
+            }
+            throw SetupError.controlMissing("authenticated adaptive shell and configured fixture detail")
+        }
         #endif
         app.terminate(); app.launch()
         guard app.buttons["play"].waitForExistence(timeout: 20) else { throw SetupError.controlMissing("play after persisted-account launch") }

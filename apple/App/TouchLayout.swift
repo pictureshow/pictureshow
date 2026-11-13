@@ -26,7 +26,11 @@ extension View {
 /// light lavender accent. Setting this inside the style affects button labels only.
 struct ProminentActionStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        #if os(tvOS)
+        TelevisionProminentAction(configuration: configuration)
+        #else
         Button(configuration).buttonStyle(.borderedProminent).tint(Theme.accent).foregroundStyle(Theme.background)
+        #endif
     }
 }
 
@@ -80,6 +84,33 @@ struct TelevisionActionInk<Content: View>: View {
     @Environment(\.isFocused) private var focused
     @ViewBuilder var content: () -> Content
     var body: some View { content().foregroundStyle(focused ? Theme.background : Color.white) }
+}
+
+private struct TelevisionPrimaryFocus: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = nextValue() || value }
+}
+
+private struct TelevisionPrimaryLabel<Content: View>: View {
+    @Environment(\.isFocused) private var focused
+    @ViewBuilder var content: () -> Content
+    var body: some View { content().preference(key: TelevisionPrimaryFocus.self, value: focused) }
+}
+
+private struct TelevisionProminentAction: View {
+    let configuration: PrimitiveButtonStyleConfiguration
+    @Environment(\.isEnabled) private var enabled
+    @State private var focused = false
+    var body: some View {
+        Button(role: configuration.role) { configuration.trigger() } label: {
+            TelevisionPrimaryLabel { configuration.label }
+        }
+        .buttonStyle(.bordered).tint(.white).foregroundStyle(Theme.background)
+        // Read native focus from the label without adding a competing FocusState.
+        // Remove the resting accent completely under native focus or disability.
+        .onPreferenceChange(TelevisionPrimaryFocus.self) { focused = $0 }
+        .background(enabled && !focused ? Theme.accent : Color.clear, in: Capsule())
+    }
 }
 
 private struct TelevisionSecondaryActionStyle: PrimitiveButtonStyle {

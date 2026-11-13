@@ -2,6 +2,7 @@
 // Copyright (c) Legitimate LLC.
 import XCTest
 import AVFoundation
+import UIKit
 import PictureshowCore
 #if os(tvOS)
 @testable import Pictureshow_tvOS
@@ -226,6 +227,14 @@ private final class PresentationInertPlayer: AVPlayer {
         let controller = PictureshowPlayerViewController()
         controller.installInformation(session: session)
         XCTAssertEqual(controller.customInfoViewControllers.map(\.title), ["Playback"])
+        let information = try XCTUnwrap(controller.customInfoViewControllers.first)
+        information.loadViewIfNeeded()
+        let fitting = information.view.systemLayoutSizeFitting(
+            CGSize(width: 1200, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
+        XCTAssertGreaterThan(fitting.height, 0)
+        XCTAssertLessThanOrEqual(fitting.height, information.preferredContentSize.height + 1,
+            "The scrollable Playback viewport must not enlarge every native tab to its full content height")
     }
     func testTVContinuationRetainsActionsWhenPausedNumberDisappears() async throws {
         let session = try await session()
@@ -234,10 +243,10 @@ private final class PresentationInertPlayer: AVPlayer {
         coordinator.updateContinuation(next, countdown: 4, visible: true)
         let play = try XCTUnwrap(coordinator.continuationContextActions.first)
         let cancel = try XCTUnwrap(coordinator.continuationContextActions.last)
-        XCTAssertEqual(play.title, "Play next: Following episode (4)")
+        XCTAssertEqual(play.title, "Next (4): Following episode")
         let transportPlay = try XCTUnwrap(coordinator.continuationTransportActions.first)
         let transportCancel = try XCTUnwrap(coordinator.continuationTransportActions.last)
-        XCTAssertEqual(transportPlay.title, play.title)
+        XCTAssertEqual(transportPlay.title, "Play next: Following episode (4)")
         XCTAssertEqual(transportPlay.identifier.rawValue, "playNextTransport")
         XCTAssertEqual(transportCancel.identifier.rawValue, "cancelNextTransport")
         XCTAssertEqual(transportCancel.title, "Cancel")
@@ -245,15 +254,15 @@ private final class PresentationInertPlayer: AVPlayer {
         XCTAssertNotNil(transportCancel.image, "AVKit's transport receives a native Cancel image")
         XCTAssertEqual(play.identifier.rawValue, "playNext")
         XCTAssertEqual(cancel.identifier.rawValue, "cancelNext")
-        XCTAssertNil(play.image, "The contextual pill shows the full episode title as text")
+        XCTAssertNil(play.image, "The contextual action supplies its complete episode-named title as text")
         XCTAssertNil(cancel.image, "The paused contextual Cancel action remains text")
         coordinator.updateContinuation(next, countdown: nil, visible: true)
         XCTAssertTrue(coordinator.continuationContextActions.first === play)
         XCTAssertTrue(coordinator.continuationContextActions.last === cancel)
         XCTAssertTrue(coordinator.continuationTransportActions.first === transportPlay)
         XCTAssertTrue(coordinator.continuationTransportActions.last === transportCancel)
-        XCTAssertEqual(play.title, "Play next: Following episode")
-        XCTAssertEqual(coordinator.continuationTransportActions.first?.title, play.title)
+        XCTAssertEqual(play.title, "Next: Following episode")
+        XCTAssertEqual(coordinator.continuationTransportActions.first?.title, "Play next: Following episode")
         XCTAssertEqual(cancel.title, "Cancel")
         XCTAssertFalse(coordinator.continuationTransportActions.first!.title.contains("("))
         coordinator.updateContinuation(next, countdown: nil, visible: false)

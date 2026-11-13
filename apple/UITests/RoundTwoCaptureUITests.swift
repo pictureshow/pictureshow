@@ -125,19 +125,50 @@ final class RoundTwoCaptureUITests: XCTestCase {
         XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad, "Select this case only for an iPad")
         try signIn()
         let maximum = try XCTUnwrap(Double(try required("nativeWindowMaximumWidth")))
-        XCTAssertLessThanOrEqual(app.windows.firstMatch.frame.width, CGFloat(maximum), "Resize the actual OS window before selecting this case")
-        try captureConfiguredCatalogAndDetail(prefix: "Round2 iPad actual compact OS window")
+        let window = app.windows.firstMatch
+        let before = window.frame
+        record("Round2 iPad native OS window before compact gesture")
+        if before.width > CGFloat(maximum) {
+            // The actual iPadOS corner handle is visible in the full-screen
+            // capture. This is an OS touch drag, never an app width override.
+            let handle = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -5, dy: -5))
+            let destination = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: CGFloat(maximum) - 20, dy: before.height * 0.8))
+            handle.press(forDuration: 0.5, thenDragTo: destination)
+            let resized = wait(10) { window.frame.width <= CGFloat(maximum) }
+            record("Round2 iPad native OS compact gesture result")
+            XCTAssertTrue(resized, "One native corner drag must produce an actual compact OS window")
+        }
+        print("ROUND2_NATIVE_WINDOW before=\(before) after=\(window.frame) maximum=\(maximum) source=actualOS")
+        XCTAssertLessThanOrEqual(window.frame.width, CGFloat(maximum), "Measure the actual OS window, including after its native corner drag")
+        try captureConfiguredCatalogAndDetail(prefix: "Round2 iPad actual compact OS window", pointer: true)
     }
 
-    @MainActor private func captureConfiguredCatalogAndDetail(prefix: String) throws {
+    @MainActor private func captureConfiguredCatalogAndDetail(prefix: String, pointer: Bool = false) throws {
         try libraries()
         record(prefix + " Libraries")
         activate(app.buttons["item-" + (try required("libraryID"))].firstMatch)
         XCTAssertTrue(sortAnchor.waitForExistence(timeout: 20))
         record(prefix + " catalog")
-        activate(app.buttons["item-" + (try required("artworkItemID"))].firstMatch)
+        let artwork = app.buttons["item-" + (try required("artworkItemID"))].firstMatch
+        if pointer { captureNativePointerHover(artwork, name: prefix + " catalog") }
+        activate(artwork)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 20))
         record(prefix + " detail")
+        if pointer { captureNativePointerHover(app.buttons["play"], name: prefix + " detail") }
+    }
+    @MainActor private func captureNativePointerHover(_ target: XCUIElement, name: String) {
+        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
+        XCTAssertTrue(target.exists && target.isHittable)
+        let window = app.windows.firstMatch
+        let windowFrame = window.frame
+        let wasDetail = app.staticTexts["detailTitle"].exists
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.1)).hover()
+        record(name + " native pointer away")
+        target.hover()
+        record(name + " native pointer over")
+        print("ROUND2_POINTER api=XCUIElement.hover target=\(target.identifier) frame=\(target.frame) window=\(window.frame) noTap=true")
+        XCTAssertEqual(app.staticTexts["detailTitle"].exists, wasDetail, "Hover must retain the current route without activating the target")
+        XCTAssertEqual(window.frame, windowFrame, "Pointer movement cannot substitute a resized app view")
     }
     #endif
 
@@ -184,7 +215,7 @@ final class RoundTwoCaptureUITests: XCTestCase {
     #if os(tvOS)
     @MainActor private func captureTelevisionSettingsChoices() throws {
         let bitrate = node("maxBitrate")
-        let subtitle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        let subtitle = app.buttons["subtitleSize"]
         func shows(_ picker: XCUIElement, _ value: String) -> Bool {
             picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
         }
@@ -201,6 +232,11 @@ final class RoundTwoCaptureUITests: XCTestCase {
             record(name + " saved selection " + value)
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
+        XCTAssertTrue(bitrate.label.contains("Max streaming bitrate"))
+        XCTAssertTrue(app.staticTexts["Max streaming bitrate"].exists)
+        XCTAssertTrue(app.staticTexts["Subtitle size"].exists)
+        XCTAssertTrue(app.staticTexts["Subtitle background"].exists)
+        XCTAssertTrue(subtitle.label.contains("Subtitle size"))
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
         choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates, name: "Round2 Settings bitrate native picker")
@@ -275,20 +311,57 @@ final class RoundTwoCaptureUITests: XCTestCase {
         if !signedIn { record("Round2 sign-in failure native state") }
         XCTAssertTrue(signedIn, "Actual password submission must reach the authenticated native app")
     }
+    #if os(iOS)
+    private func visibleTouchTab(_ name: String) -> XCUIElement? {
+        // sidebarAdaptable uses real Buttons for tabs and real Cells for an
+        // expanded sidebar; hidden duplicates cannot establish the route.
+        let visible = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).allElementsBoundByIndex.filter {
+            ($0.elementType == .button || $0.elementType == .cell) && $0.isHittable &&
+                !$0.frame.isEmpty && $0.frame.intersects(app.windows.firstMatch.frame)
+        }
+        return visible.first(where: \.isSelected) ?? visible.first
+    }
+    private var nativeHomeIdentityLoaded: Bool {
+        guard let resumeID = config["resumeID"], let home = visibleTouchTab("Home") else { return false }
+        return home.isSelected && app.staticTexts["Continue watching"].exists && app.buttons["item-" + resumeID].firstMatch.exists
+    }
+    private var nativeHomeContentVisible: Bool {
+        nativeHomeIdentityLoaded && app.staticTexts["Continue watching"].frame.intersects(app.windows.firstMatch.frame)
+    }
+    @MainActor private func activateVisibleTouchTab(_ name: String) {
+        let target = visibleTouchTab(name)
+        if target == nil { record("Round2 missing visible native tab " + name) }
+        guard let target else { XCTFail("The actual native tab must be visible and hittable: " + name); return }
+        activate(target)
+    }
+    #endif
     @MainActor private func home() {
         #if os(iOS)
-        if app.buttons["Home"].exists { activate(app.buttons["Home"]) }
-        #endif
+        if nativeHomeContentVisible { return }
+        activateVisibleTouchTab("Home")
+        // Home data arrives asynchronously after native tab selection. Wait for
+        // its own heading and configured identity, without backing out of Home.
+        let loaded = wait(20) { self.nativeHomeIdentityLoaded }
+        if !loaded { record("Round2 Home content identity did not load") }
+        XCTAssertTrue(loaded, "Selected native Home must load Continue watching and the configured resume identity")
+        guard loaded else { return }
+        for _ in 0..<10 {
+            if nativeHomeContentVisible { return }
+            app.swipeDown()
+        }
+        XCTAssertTrue(nativeHomeContentVisible, "The actual Home heading must be visible; a resume card may remain offscreen in its native row")
+        #else
         for _ in 0..<10 {
             if homeControlsVisible { return }
             back()
         }
         XCTAssertTrue(homeControlsVisible)
+        #endif
     }
     @MainActor private func libraries() throws {
         home()
         #if os(iOS)
-        activate(app.buttons["Libraries"].firstMatch)
+        activateVisibleTouchTab("Libraries")
         for _ in 0..<8 {
             if app.buttons["item-" + (try required("libraryID"))].firstMatch.exists { break }
             back()
@@ -301,8 +374,13 @@ final class RoundTwoCaptureUITests: XCTestCase {
         XCTAssertTrue(app.buttons["item-" + (try required("libraryID"))].firstMatch.waitForExistence(timeout: 15))
     }
     @MainActor private func openSection(_ name: String, identifier: String) {
+        #if os(iOS)
+        if app.buttons[identifier].exists && app.buttons[identifier].isHittable { activate(app.buttons[identifier]) }
+        else { activateVisibleTouchTab(name) }
+        #else
         if app.buttons[identifier].exists { activate(app.buttons[identifier]) }
         else { activate(app.buttons[name]) }
+        #endif
     }
     @MainActor private func dismissKeyboard() {
         #if os(iOS)

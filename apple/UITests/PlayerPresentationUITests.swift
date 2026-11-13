@@ -2,6 +2,9 @@
 // Copyright (c) Legitimate LLC.
 import XCTest
 import UIKit
+#if os(tvOS)
+import Vision
+#endif
 
 /// Run on an owned fresh simulator or cleared app sandbox. The local HTTP source
 /// carries synthetic metadata, never a demo/household credential or server write.
@@ -125,26 +128,48 @@ final class PlayerPresentationUITests: XCTestCase {
         // focus environments. Cross them with Down before horizontal routing;
         // the general transport helper intentionally routes a surface Up.
         activate(nativeAction(id: "playerSpeed", prefix: "Speed:"), select: false)
-        let tabRow = playbackTab.frame
-        XCTAssertFalse(tabRow.isEmpty)
+        XCTAssertFalse(playbackTab.frame.isEmpty)
         var reachedTabRow = false
         for step in 1...2 {
             XCUIRemote.shared.press(.down)
-            let focused = try focusedSnapshot(timeout: 1)
-            print("LEG132_NATIVE_TAB_DOWN step=\(step) focus=\(focused.frame) label=\(focused.label)")
+            // Expanding Info moves its tab strip. Re-read the live tab/row and
+            // focus during the existing one-second readiness bound, rather than
+            // comparing with the collapsed strip's old y968 position.
+            let readinessDeadline = ProcessInfo.processInfo.systemUptime + 1
+            var focused: XCUIElementSnapshot?
+            var tabFrame = CGRect.zero
+            var rowFrame = CGRect.zero
+            repeat {
+                let remaining = readinessDeadline - ProcessInfo.processInfo.systemUptime
+                guard remaining > 0,
+                      let currentFocus = try? focusedSnapshot(timeout: remaining) else { break }
+                focused = currentFocus
+                tabFrame = playbackTab.frame
+                let viewport = app.frame
+                let tabCenter = CGPoint(x: tabFrame.midX, y: tabFrame.midY)
+                // The actual AVKit tab collection must own both the current
+                // Playback tab and the focused control, entirely on screen.
+                let visibleRow = app.collectionViews.matching(identifier: "AVInfoMenuCollection").allElementsBoundByIndex.first {
+                    !$0.frame.isEmpty && viewport.contains($0.frame) && $0.frame.contains(tabCenter)
+                        && $0.frame.insetBy(dx: -12, dy: -12).contains(currentFocus.frame)
+                }
+                rowFrame = visibleRow?.frame ?? .zero
+                if !tabFrame.isEmpty, viewport.contains(tabFrame), visibleRow != nil {
+                    reachedTabRow = true
+                    break
+                }
+            } while ProcessInfo.processInfo.systemUptime < readinessDeadline
+            print("LEG132_NATIVE_TAB_DOWN step=\(step) focus=\(String(describing: focused?.frame)) label=\(focused?.label ?? "none") liveTab=\(tabFrame) liveRow=\(rowFrame)")
             record("132 TV native Playback route Down \(step)")
-            if focused.frame.height < tabRow.height * 3,
-               abs(focused.frame.midY - tabRow.midY) < tabRow.height {
-                reachedTabRow = true
-                break
-            }
+            if reachedTabRow { break }
         }
         XCTAssertTrue(reachedTabRow, "Two native Down inputs must reach the actual Info/Playback tab row through the scrubber")
         guard reachedTabRow else { return }
         activate(playbackTab)
         let reason = app.descendants(matching: .any).matching(identifier: "conversionReason-0").firstMatch
         XCTAssertTrue(reason.waitForExistence(timeout: 10))
-        XCTAssertTrue(reason.isHittable, "The native Playback tab must visibly present its conversion explanation")
+        reveal(reason)
+        XCTAssertTrue(reason.isHittable, "The native Playback tab must visibly present its conversion explanation through its real overflow")
         XCTAssertTrue(reason.label.contains("cannot decode this video format"))
         XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Native Playback must not silently route through the separate modal")
         record("132 TV native Playback tab conversion reasons")
@@ -585,11 +610,6 @@ final class PlayerPresentationUITests: XCTestCase {
             try assertNextCardGeometry(landmark: "paused landscape")
         }
         #endif
-        #if os(tvOS)
-        // AVKit may retain hidden transport AX nodes. Save the actual compact
-        // transport geometry before idle so they cannot satisfy contextual proof.
-        let continuationTransportFrames = [playNext.frame, cancelNextTransport.frame]
-        #endif
         record("132 next episode paused manual card")
         #if os(iOS)
         if UIDevice.current.userInterfaceIdiom == .pad {
@@ -619,17 +639,15 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertLessThanOrEqual(value, 10, "The credits budget remains ten wall seconds")
         #if os(tvOS)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        record("132 TV running contextual state before assertions")
+        let runningScreenshot = record("132 TV running contextual state before assertions")
         XCTAssertEqual(nativePlayer.value as? String, "Controls hidden", "Running contextual proof requires the actual hidden HUD after the existing idle bound")
-        var contextualPlay = try nativeContextualAction(in: nativePlayer, id: "playNext", title: "Play next: Following synthetic episode", transportFrames: continuationTransportFrames)
-        var contextualCancel = try nativeContextualAction(in: nativePlayer, id: "cancelNext", title: "Cancel", transportFrames: continuationTransportFrames)
-        XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
-        XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
-        XCTAssertTrue(contextualPlay.label.hasPrefix("Play next: Following synthetic episode"))
-        XCTAssertNotNil(trailingNumber(contextualPlay.label), "The visible contextual Play next text must carry the running number")
-        XCTAssertEqual(contextualCancel.label, "Cancel")
-        let runningContextCancelFrame = contextualCancel.frame
-        XCTAssertFalse(runningContextCancelFrame.isEmpty)
+        // tvOS27 paints these native controls but omits them from the complete
+        // AX tree. Prove their actual pixels, never retained transport AX cells.
+        let runningContext = try contextualPixels(runningScreenshot, running: true)
+        let visibleCount = try XCTUnwrap(runningContext.countdown)
+        XCTAssertGreaterThan(visibleCount, 0)
+        XCTAssertLessThanOrEqual(visibleCount, 10)
+        let runningCancelGlyphFrame = runningContext.cancelGlyphFrame
         let caption = app.staticTexts["playerSubtitle"]
         XCTAssertTrue(caption.exists)
         XCTAssertGreaterThan(caption.frame.height, 60, "The final TV acceptance cue contains two real subtitle lines")
@@ -646,24 +664,20 @@ final class PlayerPresentationUITests: XCTestCase {
         let pausedContextSettled = waitForRemoteUI(timeout: 5) {
             self.trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
         }
-        record("132 TV paused contextual state before assertions")
+        let pausedScreenshot = record("132 TV paused contextual state before assertions")
         XCTAssertTrue(pausedContextSettled, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
         XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
-        contextualPlay = try nativeContextualAction(in: nativePlayer, id: "playNext", title: "Play next: Following synthetic episode", transportFrames: continuationTransportFrames)
-        contextualCancel = try nativeContextualAction(in: nativePlayer, id: "cancelNext", title: "Cancel", transportFrames: continuationTransportFrames)
-        XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
-        XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
-        XCTAssertEqual(contextualPlay.label, "Play next: Following synthetic episode")
-        XCTAssertEqual(contextualCancel.label, "Cancel", "The paused contextual pill must render the Cancel word")
-        XCTAssertNil(trailingNumber(contextualPlay.label))
-        XCTAssertEqual(contextualCancel.frame.minX, runningContextCancelFrame.minX, accuracy: 1, "Pausing cannot move contextual Cancel")
-        XCTAssertEqual(contextualCancel.frame.minY, runningContextCancelFrame.minY, accuracy: 1, "Pausing cannot move contextual Cancel")
-        XCTAssertEqual(contextualCancel.frame.width, runningContextCancelFrame.width, accuracy: 1, "Pausing cannot resize contextual Cancel")
-        XCTAssertEqual(contextualCancel.frame.height, runningContextCancelFrame.height, accuracy: 1, "Pausing cannot resize contextual Cancel")
+        let pausedContext = try contextualPixels(pausedScreenshot, running: false)
+        XCTAssertNil(pausedContext.countdown)
+        // These are OCR glyph bounds, not an invented AX/control frame. They
+        // independently establish the visible Cancel word's stable placement.
+        XCTAssertEqual(pausedContext.cancelGlyphFrame.minX, runningCancelGlyphFrame.minX, accuracy: 2, "Pausing cannot move the visible Cancel word horizontally")
+        XCTAssertEqual(pausedContext.cancelGlyphFrame.minY, runningCancelGlyphFrame.minY, accuracy: 2, "Pausing cannot move the visible Cancel word vertically")
+        XCTAssertEqual(pausedContext.cancelGlyphFrame.width, runningCancelGlyphFrame.width, accuracy: 2, "Pausing cannot resize the visible Cancel word")
+        XCTAssertEqual(pausedContext.cancelGlyphFrame.height, runningCancelGlyphFrame.height, accuracy: 2, "Pausing cannot resize the visible Cancel word")
         XCTAssertEqual(fixture.snapshot.startCount, 1)
         record("132 TV HUD hidden paused contextual episode identity and Cancel text")
-        let cancel = nativeAction(id: "cancelNextTransport", prefix: "Cancel")
-        activate(cancel)
+        try selectVisibleContextualCancel(in: nativePlayer)
         #else
         activate(app.buttons["playerPlayPause"])
         XCTAssertTrue(app.staticTexts["nextCountdown"].waitForNonExistence(timeout: 5), "Touch pause removes the number immediately")
@@ -682,7 +696,8 @@ final class PlayerPresentationUITests: XCTestCase {
         return Int(label[label.index(after: start)..<label.index(before: label.endIndex)])
     }
 
-    @MainActor private func record(_ name: String) {
+    @discardableResult
+    @MainActor private func record(_ name: String) -> XCUIScreenshot {
         #if os(tvOS)
         // A requested UIKit launch category is not proof that tvOS enlarged it.
         // Qualify the gallery only after comparing actual font diagnostics.
@@ -692,7 +707,9 @@ final class PlayerPresentationUITests: XCTestCase {
         #endif
         let name = ProcessInfo.processInfo.environment["PICTURESHOW_PLAYER_LARGE_FONT"] == "1" ? name.replacingOccurrences(of: "132 ", with: largePrefix) : name
         let text = XCTAttachment(string: app.debugDescription); text.name = name + " accessibility"; text.lifetime = .keepAlways; add(text)
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
+        let pixels = XCUIScreen.main.screenshot()
+        let screenshot = XCTAttachment(screenshot: pixels); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
+        return pixels
     }
     #if os(iOS)
     @MainActor private func portraitTransportFrames() throws -> [String: CGRect] {
@@ -917,28 +934,104 @@ final class PlayerPresentationUITests: XCTestCase {
         } while ProcessInfo.processInfo.systemUptime < deadline
         throw NSError(domain: "PictureshowFocus", code: 1, userInfo: [NSLocalizedDescriptionKey: "No focused accessibility node was observed"])
     }
-    @MainActor private func nativeContextualAction(in player: XCUIElement, id: String, title: String, transportFrames: [CGRect]) throws -> XCUIElement {
-        XCTAssertEqual(player.value as? String, "Controls hidden", "Contextual proof requires the native transport to remain hidden")
-        XCTAssertTrue(transportFrames.allSatisfy { !$0.isEmpty }, "Record both real transport controls before idle")
-        // UIAction identifiers do not consistently propagate to native AX. Match
-        // the exact semantic title (with only its running count suffix allowed),
-        // then distinguish the actual wide contextual control from retained bar
-        // cells. A generic text descendant or the first label match cannot pass.
-        let query = player.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ OR label == %@ OR label BEGINSWITH %@", id, title, title + " ("))
-        let widestTransport = transportFrames.map(\.width).max() ?? 0
-        let matches = query.allElementsBoundByIndex.filter { element in
-            guard [.button, .cell, .other].contains(element.elementType),
-                  element.identifier != "playNextTransport", element.identifier != "cancelNextTransport",
-                  element.isEnabled, element.isHittable else { return false }
-            let frame = element.frame
-            guard !frame.isEmpty, player.frame.contains(frame), frame.width > widestTransport + 1 else { return false }
-            return !transportFrames.contains { transport in
-                abs(frame.minX - transport.minX) <= 1 && abs(frame.minY - transport.minY) <= 1
-                    && abs(frame.width - transport.width) <= 1 && abs(frame.height - transport.height) <= 1
-            }
+    private struct ContextualPixelProof {
+        let countdown: Int?
+        let cancelGlyphFrame: CGRect
+    }
+    @MainActor private func contextualPixels(_ screenshot: XCUIScreenshot, running: Bool) throws -> ContextualPixelProof {
+        let image = try XCTUnwrap(screenshot.image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        // Native pills occupy the bottom-trailing lane. This excludes the stale
+        // 66pt transport cells at y800 and the external caption above y886.
+        request.regionOfInterest = CGRect(x: 0.4, y: 0, width: 0.6, height: 0.18)
+        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        let observations = request.results ?? []
+        let diagnostics = observations.map { observation in
+            "box=\(observation.boundingBox) candidates=" + observation.topCandidates(3).map { "\($0.confidence):\($0.string)" }.joined(separator: " | ")
+        }.joined(separator: "\n")
+        let attachment = XCTAttachment(string: diagnostics)
+        attachment.name = running ? "132 running native contextual OCR all candidates" : "132 paused native contextual OCR all candidates"
+        attachment.lifetime = .keepAlways; add(attachment)
+        // Only the highest-confidence transcription determines acceptance. Keep
+        // all observations/candidates above, including failures, for diagnosis.
+        let recognized = observations.compactMap { $0.topCandidates(1).first }
+        let text = recognized.map(\.string).joined(separator: " ")
+        let pattern = running ? #"\bNext\s*\(([1-9]|10)\)\s*:\s*Following\b"# : #"\bNext\s*:\s*Following\b"#
+        let expression = try NSRegularExpression(pattern: pattern)
+        let matches = expression.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        XCTAssertEqual(matches.count, 1, "Actual bottom-lane pixels must show the episode-named Next prefix, with a visible number only while running; OCR=\(text)")
+        let match = try XCTUnwrap(matches.count == 1 ? matches.first : nil)
+        let count: Int?
+        if running {
+            let range = try XCTUnwrap(Range(match.range(at: 1), in: text))
+            count = try XCTUnwrap(Int(text[range]))
+        } else {
+            XCTAssertNil(text.range(of: #"\bNext\s*\("#, options: .regularExpression), "Paused native pixels must not retain a countdown prefix")
+            count = nil
         }
-        XCTAssertEqual(matches.count, 1, "Expected exactly one enabled, hittable native contextual \(id) outside the retained transport geometry; capture precedes this query")
-        return try XCTUnwrap(matches.count == 1 ? matches.first : nil)
+        let cancelGlyphs = try recognized.compactMap { candidate -> CGRect? in
+            guard let range = candidate.string.range(of: #"\bCancel\b"#, options: .regularExpression),
+                  let glyph = try candidate.boundingBox(for: range) else { return nil }
+            let bounds = glyph.boundingBox
+            return CGRect(x: app.frame.minX + bounds.minX * app.frame.width,
+                          y: app.frame.minY + (1 - bounds.maxY) * app.frame.height,
+                          width: bounds.width * app.frame.width, height: bounds.height * app.frame.height)
+        }
+        XCTAssertEqual(cancelGlyphs.count, 1, "The actual contextual Cancel word must be visible exactly once in the bottom lane; OCR=\(text)")
+        let cancel = try XCTUnwrap(cancelGlyphs.count == 1 ? cancelGlyphs.first : nil)
+        XCTAssertFalse(cancel.isEmpty)
+        XCTAssertGreaterThan(cancel.minY, app.frame.minY + app.frame.height * 0.82)
+        return ContextualPixelProof(countdown: count, cancelGlyphFrame: cancel)
+    }
+    @MainActor private func focusedPlatterLuminance(_ screenshot: XCUIScreenshot, glyphFrame: CGRect) throws -> Double {
+        let source = try XCTUnwrap(screenshot.image.cgImage)
+        let scaleX = CGFloat(source.width) / app.frame.width
+        let scaleY = CGFloat(source.height) / app.frame.height
+        // Include surrounding platter, not only glyph ink or its focus border.
+        let frame = glyphFrame.insetBy(dx: -12, dy: -12)
+        let pixels = CGRect(x: (frame.minX - app.frame.minX) * scaleX, y: (frame.minY - app.frame.minY) * scaleY,
+                            width: frame.width * scaleX, height: frame.height * scaleY).integral
+        let crop = try XCTUnwrap(source.cropping(to: pixels))
+        let width = crop.width, height = crop.height
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height)); return true
+        }
+        XCTAssertTrue(rendered)
+        func linear(_ byte: UInt8) -> Double {
+            let value = Double(byte) / 255
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminances = stride(from: 0, to: rgba.count, by: 4).map {
+            0.2126 * linear(rgba[$0]) + 0.7152 * linear(rgba[$0 + 1]) + 0.0722 * linear(rgba[$0 + 2])
+        }
+        let bins = Dictionary(grouping: luminances, by: { Int($0 * 128) })
+        let background = try XCTUnwrap(bins.max(by: { $0.value.count < $1.value.count })?.value.sorted())
+        return background[background.count / 2]
+    }
+    @MainActor private func selectVisibleContextualCancel(in player: XCUIElement) throws {
+        // Three native pills are displayed; at most three Right inputs can reach
+        // the final Cancel. Never route through the stale transport AX cells.
+        for step in 0...3 {
+            let screenshot = record("132 paused native contextual Cancel focus step \(step)")
+            XCTAssertEqual(player.value as? String, "Controls hidden", "Focus proof must keep the actual native HUD hidden")
+            let proof = try contextualPixels(screenshot, running: false)
+            let luminance = try focusedPlatterLuminance(screenshot, glyphFrame: proof.cancelGlyphFrame)
+            print("LEG132_CONTEXT_CANCEL_FOCUS step=\(step) dominantLuminance=\(luminance) glyphFrame=\(proof.cancelGlyphFrame)")
+            if luminance >= 0.75 {
+                XCUIRemote.shared.press(.select)
+                return
+            }
+            if step < 3 { XCUIRemote.shared.press(.right) }
+        }
+        XCTFail("Real remote input did not focus the visible contextual Cancel near-white platter")
+        throw NSError(domain: "PictureshowContextualFocus", code: 1)
     }
     @MainActor private func nativeAction(id: String, prefix: String) -> XCUIElement {
         let result = app.cells.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", id, prefix)).firstMatch

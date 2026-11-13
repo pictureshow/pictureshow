@@ -10,6 +10,9 @@ import Vision
 /// Run this finite native flow on an owned fresh clone. All catalog data is
 /// synthetic and served over ordinary Jellyfin HTTP requests on loopback.
 final class CatalogPresentationUITests: XCTestCase {
+    #if os(tvOS)
+    private var focusedFillSamples: [String: [Double]] = [:]
+    #endif
     /// Uses the real OS service, not an accessibility environment projection.
     /// Native setup/activation is performed with VoiceOver disabled; this test
     /// claims only the speech and forward/back traversal the service observes.
@@ -317,10 +320,10 @@ final class CatalogPresentationUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         #endif
         #if os(iOS)
-        // A tall iPad fits the six-card TV fixture without scrolling. Supply
-        // enough real rows to exercise the pinned context rather than claiming
-        // a silent strip while the ordinary heading is still visible.
-        let pageSize = UIDevice.current.userInterfaceIdiom == .pad ? 12 : 6
+        // Native iPad top tabs leave the full width for more poster columns.
+        // Supply enough real HTTP rows that Retry requires actual scrolling,
+        // so pinned context cannot pass while its ordinary heading is visible.
+        let pageSize = UIDevice.current.userInterfaceIdiom == .pad ? 24 : 6
         #else
         let pageSize = 6
         #endif
@@ -562,6 +565,11 @@ final class CatalogPresentationUITests: XCTestCase {
         focus(app.buttons["watched"], app: app)
         assertNativeButtonPixels(app.buttons["watched"], app: app, style: "focused secondary", focused: true)
         capture("132 round2 TV secondary focused Play resting accent", app: app)
+        let primaryFill = try XCTUnwrap(focusedFillSamples["focused primary"])
+        let secondaryFill = try XCTUnwrap(focusedFillSamples["focused secondary"])
+        for (primaryChannel, secondaryChannel) in zip(primaryFill, secondaryFill) {
+            XCTAssertEqual(primaryChannel, secondaryChannel, accuracy: 0.04, "Primary and secondary use one native neutral focus fill")
+        }
         #endif
         capture("132 series seasons and episodes", app: app)
         fixture.holdSeasonTwo(true)
@@ -656,7 +664,7 @@ final class CatalogPresentationUITests: XCTestCase {
     /// Opening an empty native picker fails before any selection or save claim.
     private func assertSettingsPickerChanges(_ app: XCUIApplication) {
         let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
-        let subtitle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        let subtitle = app.buttons["subtitleSize"]
         func shows(_ picker: XCUIElement, _ value: String) -> Bool {
             picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
         }
@@ -672,6 +680,11 @@ final class CatalogPresentationUITests: XCTestCase {
             XCTAssertTrue(waitUntil { shows(picker, value) }, "Selecting a choice must save it and return to Settings")
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
+        XCTAssertTrue(bitrate.label.contains("Max streaming bitrate"))
+        XCTAssertTrue(app.staticTexts["Max streaming bitrate"].exists)
+        XCTAssertTrue(app.staticTexts["Subtitle size"].exists)
+        XCTAssertTrue(app.staticTexts["Subtitle background"].exists)
+        XCTAssertTrue(subtitle.label.contains("Subtitle size"))
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
         choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates)
@@ -692,6 +705,14 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertTrue(element.exists, file: file, line: line)
         XCTAssertEqual(ownsNativeFocus(element, app: app), focused, "Sample the required actual focus state: \(style)", file: file, line: line)
         let image = XCUIScreen.main.screenshot().image
+        let pixelAttachment = XCTAttachment(image: image)
+        pixelAttachment.name = "132 TV actual pixel sample " + style
+        pixelAttachment.lifetime = .keepAlways
+        add(pixelAttachment)
+        let treeAttachment = XCTAttachment(string: app.debugDescription)
+        treeAttachment.name = "132 TV actual pixel sample " + style + " accessibility"
+        treeAttachment.lifetime = .keepAlways
+        add(treeAttachment)
         guard let source = image.cgImage else { XCTFail("Missing screenshot pixels", file: file, line: line); return }
         let scaleX = CGFloat(source.width) / app.frame.width
         let scaleY = CGFloat(source.height) / app.frame.height
@@ -760,10 +781,22 @@ final class CatalogPresentationUITests: XCTestCase {
         let backgroundBin = bins.max(by: { $0.value.count < $1.value.count })!.value.sorted()
         let background = backgroundBin[backgroundBin.count / 2]
         if focused {
-            // Every role gets the same near-white native focused platter. The old
-            // focused-secondary lavender has luminance about0.57 and fails here.
-            print("LEG132_FOCUS_PLATTER style=\(style) backgroundLuminance=\(background)")
-            XCTAssertGreaterThanOrEqual(background, 0.75, "Focus must use the native near-white treatment for every role", file: file, line: line)
+            // Native TV focus can be neutral pale gray (observed L≈0.598).
+            // Reject the old lavender by colour, then compare both roles above;
+            // luminance alone cannot distinguish lavender from native gray.
+            let backgroundKey = Int(background * 128)
+            let offsets = stride(from: 0, to: rgba.count, by: 4).filter {
+                let l = 0.2126 * linear(rgba[$0]) + 0.7152 * linear(rgba[$0 + 1]) + 0.0722 * linear(rgba[$0 + 2])
+                return Int(l * 128) == backgroundKey
+            }
+            let channels = (0..<3).map { channel in
+                let values = offsets.map { Double(rgba[$0 + channel]) / 255 }.sorted()
+                return values[values.count / 2]
+            }
+            focusedFillSamples[style] = channels
+            print("LEG132_FOCUS_PLATTER style=\(style) backgroundLuminance=\(background) rgb=\(channels)")
+            XCTAssertGreaterThanOrEqual(channels.min() ?? 0, 0.75, "Native focused fill must remain pale", file: file, line: line)
+            XCTAssertLessThanOrEqual((channels.max() ?? 1) - (channels.min() ?? 0), 0.04, "Every role must use neutral system focus, never lavender", file: file, line: line)
             return
         }
         // Find ink by its difference from the dominant background, including
