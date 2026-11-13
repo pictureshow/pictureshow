@@ -389,6 +389,7 @@ internal fun Pictureshow(
     }
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
+    var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -850,30 +851,66 @@ internal fun Pictureshow(
             }
         }
 
-        composable("home") {
-            state.snapshot.currentAccount?.let { account ->
-                val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
-                val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
-                val screen by vm.state.collectAsStateWithLifecycle()
-                val profileState by profile.state.collectAsStateWithLifecycle()
-                val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
-                CatalogHome(
-                    screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
-                    profileState.account.copy(server = account.server),
-                    serverLabel = state.snapshot.serverLabel(account.server),
-                    onOpen = { nav.navigate(itemRoute(it)) },
-                    onRetry = {
-                        profile.verify()
-                        vm.reload()
-                    },
-                    onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
-                    onSignOut = profile::signOut,
-                    onSearch = { nav.navigate(searchRoute()) },
-                    onResume = vm::resumed,
-                    onSettings = { nav.navigate("settings") },
-                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
-                    onWatchDownloads = watchDownloads
-                )
+        listOf("home", "libraries").forEach { destination ->
+            composable(destination) {
+                state.snapshot.currentAccount?.let { account ->
+                    val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                    val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
+                    val screen by vm.state.collectAsStateWithLifecycle()
+                    val profileState by profile.state.collectAsStateWithLifecycle()
+                    var editing by remember { mutableStateOf(false) }
+                    LaunchedEffect(screen.preferencesReady) {
+                        val landing = app.pictureshow.core.homeLanding(
+                            screen.preferencesReady,
+                            landingApplied,
+                            screen.preferences.landing,
+                            screen.libraries.map { it.id }.toSet()
+                        )
+                        if (landing != null && destination == "home") {
+                            landingApplied = true
+                            if (landing == "libraries") nav.navigate("libraries")
+                            if (landing.startsWith("library:")) {
+                                screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }
+                                    ?.let { nav.navigate(itemRoute(it)) }
+                            }
+                        }
+                    }
+                    val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
+                    if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
+                    CatalogHome(
+                        screen.copy(
+                            busy = profileState.busy,
+                            error = screen.error ?: profileState.error,
+                            rows = if (destination ==
+                                "libraries"
+                            ) {
+                                listOf(app.pictureshow.core.HomeRow("libraries", "Libraries", screen.libraries, library = true))
+                            } else {
+                                screen.rows
+                            }
+                        ),
+                        profileState.account.copy(server = account.server),
+                        serverLabel = state.snapshot.serverLabel(account.server),
+                        onOpen = { nav.navigate(itemRoute(it)) },
+                        onRetry = {
+                            profile.verify()
+                            vm.reload()
+                        },
+                        onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
+                        onSignOut = profile::signOut,
+                        onSearch = { nav.navigate(searchRoute()) },
+                        onResume = vm::resumed,
+                        onSettings = { nav.navigate("settings") },
+                        onCustomize = {
+                            if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) {
+                                vm.customizationOpened()
+                                editing = true
+                            }
+                        },
+                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                        onWatchDownloads = watchDownloads
+                    )
+                }
             }
         }
         offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
@@ -1016,7 +1053,18 @@ internal fun Pictureshow(
                 ) {
                     val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
-                    CatalogGrid(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::sort, vm::retry)
+                    var filtering by remember { mutableStateOf(false) }
+                    if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
+                    CatalogGrid(
+                        screen,
+                        { nav.navigate(itemRoute(it)) },
+                        vm::nearEnd,
+                        vm::sort,
+                        vm::retry,
+                        onFilters = { filtering = true },
+                        onDisplayList = vm::displayList,
+                        onClearFilters = { vm.filter(app.pictureshow.core.LibraryFilters()) }
+                    )
                 } else {
                     val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()

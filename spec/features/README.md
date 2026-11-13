@@ -8,7 +8,7 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 |---|---|
 | Application shell, universal navigation/accessibility, evidence limits | [Shared contract](shared.md) |
 | Server discovery, sign-in, Quick Connect, saved accounts | [Accounts](accounts.md) |
-| Home, libraries, details, search, people | [Catalog](catalog.md) |
+| Home, libraries, details, search, people | [Catalog](catalog.md), [Viewer home and library browsing](home-browse.md) |
 | Playback, tracks, captions, chapters, segments, continuation | [Player](player.md) |
 | Settings and server-side preference honor matrix | [Settings](settings.md) |
 | Device report, About, licenses, Supporter | [Information and support](information.md) |

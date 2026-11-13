@@ -33,6 +33,7 @@ import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.serverLabel
+import app.pictureshow.core.withoutConstraint
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -85,6 +86,7 @@ internal fun TouchPictureshow(
     }
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
+    var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -153,7 +155,10 @@ internal fun TouchPictureshow(
         item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
-    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
+    TouchShell(showNavigation, touchTabFor(route), {
+        if (it == "home") landingApplied = true
+        selectTouchTab(nav, it)
+    }, fullscreen = inPlayer, above = {
         if (!inPlayer && route != MUSIC_NOW_ROUTE) TouchMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
         if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
@@ -322,6 +327,24 @@ internal fun TouchPictureshow(
                         val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
+                        var editing by remember { mutableStateOf(false) }
+                        LaunchedEffect(screen.preferencesReady) {
+                            val landing = app.pictureshow.core.homeLanding(
+                                screen.preferencesReady,
+                                landingApplied,
+                                screen.preferences.landing,
+                                screen.libraries.map { it.id }.toSet()
+                            )
+                            if (landing != null && destination == "home") {
+                                landingApplied = true
+                                if (landing == "libraries") nav.navigate("libraries")
+                                if (landing.startsWith("library:")) {
+                                    screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }
+                                        ?.let { nav.navigate(itemRoute(it)) }
+                                }
+                            }
+                        }
+                        if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
                         val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
@@ -333,6 +356,12 @@ internal fun TouchPictureshow(
                             },
                             onResume = vm::resumed,
                             librariesOnly = destination == "libraries",
+                            onCustomize = {
+                                if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) {
+                                    vm.customizationOpened()
+                                    editing = true
+                                }
+                            },
                             onWatchDownloads = watchDownloads
                         )
                     }
@@ -450,7 +479,19 @@ internal fun TouchPictureshow(
                     ) {
                         val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
-                        TouchCatalogGrid(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::sort, vm::retry) { nav.popBackStack() }
+                        var filtering by remember { mutableStateOf(false) }
+                        if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
+                        TouchCatalogGrid(
+                            screen,
+                            { nav.navigate(itemRoute(it)) },
+                            vm::nearEnd,
+                            vm::sort,
+                            vm::retry,
+                            onFilters = { filtering = true },
+                            onDisplayList = vm::displayList,
+                            onClearFilters = { vm.filter(app.pictureshow.core.LibraryFilters()) },
+                            onRemoveFilter = { vm.filter(screen.filters.withoutConstraint(it)) }
+                        ) { nav.popBackStack() }
                     } else {
                         val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()

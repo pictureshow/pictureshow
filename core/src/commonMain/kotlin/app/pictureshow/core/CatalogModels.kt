@@ -99,7 +99,8 @@ data class BrowseQuery(
     val descending: Boolean = false,
     val startIndex: Int = 0,
     val limit: Int = 60,
-    val ids: List<String> = emptyList()
+    val ids: List<String> = emptyList(),
+    val filters: LibraryFilters = LibraryFilters()
 )
 
 data class HomeRow(val key: String, val title: String, val items: List<MediaItem>, val library: Boolean = false, val wide: Boolean = false)
@@ -162,4 +163,12 @@ fun progress(item: MediaItem): Float {
     val duration = item.runTimeTicks ?: return 0f
     if (duration <= 0) return 0f
     return (item.userData.playbackPositionTicks.toDouble() / duration).coerceIn(0.0, 1.0).toFloat()
+}
+
+/** Choose fresh, playable detail content. Callers withhold this while dependent reads or reports are pending. */
+fun detailPlayItem(item: MediaItem?, nextUp: List<MediaItem>, episodes: List<MediaItem>): MediaItem? = when (item?.type) {
+    "Series" -> nextUp.firstOrNull() ?: episodes.firstOrNull { !it.userData.played } ?: episodes.firstOrNull()
+    "Season" -> episodes.firstOrNull { !it.userData.played } ?: episodes.firstOrNull()
+    "Movie", "Episode", "Video" -> item
+    else -> null
 }

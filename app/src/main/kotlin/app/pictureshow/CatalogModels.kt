@@ -12,7 +12,6 @@ import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.assembleHome
 import app.pictureshow.core.isEmptyContainer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +30,8 @@ import kotlinx.coroutines.selects.select
 
 /** Shared across an account's back stack so detail changes immediately reach existing screens. */
 class CatalogSession(val service: CatalogService, private val accounts: AccountStore, private val onRefresh: () -> Unit = {}) {
+    val homePreferences = app.pictureshow.core.HomePreferencesStore(service, accounts)
+
     data class Changes(
         val revision: Long = 0,
         val users: Map<String, ItemUserData> = emptyMap(),
@@ -279,6 +280,13 @@ data class CatalogHomeState(
     val loading: Boolean = true,
     val error: String? = null,
     val busy: Boolean = false,
+    val preferences: app.pictureshow.core.HomePreferences = app.pictureshow.core.HomePreferences(),
+    val availableRows: List<HomeRow> = emptyList(),
+    val libraries: List<MediaItem> = emptyList(),
+    val preferenceStatus: String? = null,
+    val preferenceRetryable: Boolean = false,
+    val saving: Boolean = false,
+    val preferencesReady: Boolean = false,
     /** The load failed because the server couldn't be reached, as opposed to the server saying no. */
     val unreachable: Boolean = false
 )
@@ -307,11 +315,38 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
         if (readLifecycle.resumed()) reload()
     }
 
+    /** Reopening is an explicit recovery opportunity; ordinary reads keep pending local edits intact. */
+    fun customizationOpened() {
+        if (app.pictureshow.core.retryHomeSaveOnOpen(state.value.preferencesReady, state.value.preferenceRetryable, state.value.saving)) {
+            customize { it }
+        }
+    }
+
+    fun customize(transform: (app.pictureshow.core.HomePreferences) -> app.pictureshow.core.HomePreferences) {
+        if (state.value.saving) return
+        mutableState.update { it.copy(saving = true) }
+        viewModelScope.launch {
+            val saved = session.homePreferences.change(account, transform)
+            mutableState.update {
+                it.copy(
+                    preferences = saved.preferences,
+                    preferenceStatus = saved.status,
+                    preferenceRetryable = saved.retrySave,
+                    saving = false
+                )
+            }
+            reload()
+        }
+    }
+
     fun reload() {
         job?.cancel()
         job = viewModelScope.launch {
             mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false) }
             coroutineScope {
+                val preferences = session.homePreferences.read(account)
+                val configuration = (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
+                val config = (configuration as? ClientResult.Success)?.value?.fields
                 val resume = async { session.call(account) { resume(account) } }
                 val next = async { session.call(account) { nextUp(account) } }
                 val views = session.call(account) { views(account) }
@@ -321,17 +356,52 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                 }.mapValues { it.value.await() }
                 val resumed = resume.await()
                 val upcoming = next.await()
-                val failures = listOf(views, resumed, upcoming) + latest.values
+                val pinFailures = mutableListOf<ClientResult.Failure>()
+                val pins = preferences.preferences.pins.distinctBy { it.key }.mapNotNull { pin ->
+                    val container = if (pin.kind in
+                        listOf(app.pictureshow.core.HomePinKind.COLLECTION, app.pictureshow.core.HomePinKind.PLAYLIST)
+                    ) {
+                        when (val result = session.call(account) { item(account, pin.value) }) {
+                            is ClientResult.Success -> result.value
+                            is ClientResult.Failure -> {
+                                pinFailures += result
+                                return@mapNotNull null
+                            }
+                        }
+                    } else {
+                        null
+                    }
+                    when (val result = session.call(account) { items(account, pin.query()) }) {
+                        is ClientResult.Failure -> {
+                            pinFailures += result
+                            null
+                        }
+                        is ClientResult.Success -> HomeRow(
+                            pin.key,
+                            container?.name ?: if (pin.kind == app.pictureshow.core.HomePinKind.FAVORITES) "Favorites" else pin.value,
+                            result.value.items
+                        )
+                    }
+                }
+                val failures = listOf(views, resumed, upcoming) + latest.values + pinFailures
+                val rows = app.pictureshow.core.configuredHome(
+                    libraries,
+                    (resumed as? ClientResult.Success)?.value?.items.orEmpty(),
+                    (upcoming as? ClientResult.Success)?.value?.items.orEmpty(),
+                    latest.mapValues { (_, result) -> (result as? ClientResult.Success)?.value.orEmpty() },
+                    config
+                ) + pins
                 currentCoroutineContext().ensureActive()
                 mutableState.update {
                     it.copy(
                         loading = false,
-                        rows = assembleHome(
-                            libraries,
-                            (resumed as? ClientResult.Success)?.value?.items.orEmpty(),
-                            (upcoming as? ClientResult.Success)?.value?.items.orEmpty(),
-                            latest.mapValues { (_, result) -> (result as? ClientResult.Success)?.value.orEmpty() }
-                        ),
+                        rows = app.pictureshow.core.customizedHome(rows, preferences.preferences),
+                        availableRows = rows,
+                        libraries = libraries,
+                        preferences = preferences.preferences,
+                        preferencesReady = true,
+                        preferenceStatus = preferences.status,
+                        preferenceRetryable = preferences.retrySave,
                         error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
                         unreachable = catalogUnreachable(failures)
                     )
@@ -350,7 +420,10 @@ data class CatalogGridState(
     val error: String? = null,
     val sortBy: String = "SortName",
     val descending: Boolean = false,
-    val refreshError: String? = null
+    val refreshError: String? = null,
+    val filters: app.pictureshow.core.LibraryFilters = app.pictureshow.core.LibraryFilters(),
+    val list: Boolean = false,
+    val preferenceStatus: String? = null
 )
 
 class CatalogGridViewModel(val account: Account, parent: MediaItem, private val session: CatalogSession) : ViewModel() {
@@ -370,7 +443,15 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
     )
 
     init {
-        load()
+        viewModelScope.launch {
+            val preferences = session.homePreferences.read(account).preferences.libraries[parent.id]
+            if (preferences != null && generation == 0) {
+                mutableState.update {
+                    it.copy(sortBy = preferences.sortBy, descending = preferences.descending, list = preferences.list)
+                }
+            }
+            load()
+        }
         viewModelScope.launch {
             var revision = session.changes.value.revision
             session.changes.collect { changes ->
@@ -393,8 +474,31 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         if (retryPage || !refreshing) load()
     }
 
+    fun displayList(list: Boolean) {
+        mutableState.update { it.copy(list = list) }
+        saveDisplay()
+    }
+
+    private fun saveDisplay() {
+        val display = app.pictureshow.core.LibraryDisplay(state.value.sortBy, state.value.descending, state.value.list)
+        viewModelScope.launch {
+            val saved = session.homePreferences.change(account) { it.copy(libraries = it.libraries + (state.value.parent.id to display)) }
+            mutableState.update { it.copy(preferenceStatus = saved.status) }
+        }
+    }
+
+    fun filter(filters: app.pictureshow.core.LibraryFilters) {
+        if (filters == state.value.filters) return
+        restart(state.value.sortBy, state.value.descending, filters)
+    }
+
     fun sort(sortBy: String, descending: Boolean) {
         if (sortBy == state.value.sortBy && descending == state.value.descending) return
+        restart(sortBy, descending, state.value.filters)
+        saveDisplay()
+    }
+
+    private fun restart(sortBy: String, descending: Boolean, filters: app.pictureshow.core.LibraryFilters) {
         generation++
         job?.cancel()
         refresher.cancel()
@@ -406,6 +510,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                 total = 0,
                 sortBy = sortBy,
                 descending = descending,
+                filters = filters,
                 loading = false,
                 error = null,
                 refreshError = null
@@ -431,7 +536,8 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
             sortBy = before.sortBy,
             descending = before.descending,
             startIndex = offset,
-            limit = 60
+            limit = 60,
+            filters = before.filters
         )
         mutableState.update { it.copy(loading = true, error = null) }
         job = viewModelScope.launch {

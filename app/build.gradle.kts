@@ -21,8 +21,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 35
-        versionName = "0.3.0-rc33"
+        versionCode = 36
+        versionName = "0.3.0-rc34"
     }
     buildTypes {
         getByName("release") {
@@ -83,6 +83,7 @@ androidComponents.onVariants { variant ->
 }
 
 dependencies {
+    implementation(project(":ui-shared"))
     implementation(project(":core"))
     implementation(libs.play.billing)
     implementation(libs.play.services.cast.framework)

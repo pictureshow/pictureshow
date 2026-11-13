@@ -134,6 +134,7 @@ class IndependentSubtitlePlaybackTest {
             val requested = synchronized(f.requests) { f.requests.toList() }
             assertEquals(1, requested.size, "Only selected subtitle may open; requests=$requested")
             assertEquals("/sub1.srt", requested.single())
+
             assertTrue(f.texts.none { it.contains("Caption") })
             f.release.countDown()
             f.until { f.texts.any { it.contains("Caption 1") } }
