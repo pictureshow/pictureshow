@@ -77,6 +77,41 @@
       "suppressed": false,
       "expectedRendering": false,
       "expectedIsPlaying": false
+    },
+    {
+      "id": "sync-application.pause-feedback-solo-native",
+      "operation": "pause-feedback",
+      "participating": false,
+      "origin": "native",
+      "expectedReveal": true
+    },
+    {
+      "id": "sync-application.pause-feedback-group-barrier",
+      "operation": "pause-feedback",
+      "participating": true,
+      "origin": "native",
+      "expectedReveal": false
+    },
+    {
+      "id": "sync-application.pause-feedback-group-viewer",
+      "operation": "pause-feedback",
+      "participating": true,
+      "origin": "viewer",
+      "expectedReveal": true
+    },
+    {
+      "id": "sync-application.pause-feedback-group-server",
+      "operation": "pause-feedback",
+      "participating": true,
+      "origin": "server",
+      "expectedReveal": false
+    },
+    {
+      "id": "sync-application.pause-feedback-solo-viewer",
+      "operation": "pause-feedback",
+      "participating": false,
+      "origin": "viewer",
+      "expectedReveal": true
     }
   ]
 }

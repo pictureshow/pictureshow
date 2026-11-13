@@ -212,7 +212,7 @@ internal fun PlayerItemScreen(
     val playback = rememberPlayerPlayback(player, onPause = {
         controls = true
         interaction++
-    }, onResume = { interaction++ })
+    }, onResume = { interaction++ }, revealPause = host.sync?.participating != true)
     val paused = playback.paused || pauseIntent
     val showPlayButton = playback.showPlayButton
     val rootFocus = remember { FocusRequester() }
@@ -290,6 +290,10 @@ internal fun PlayerItemScreen(
             chooserRequest = null
         }
         host.onSeekShown = {
+            controls = true
+            interaction++
+        }
+        host.onViewerPauseShown = {
             controls = true
             interaction++
         }

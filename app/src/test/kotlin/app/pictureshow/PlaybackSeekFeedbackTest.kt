@@ -171,7 +171,7 @@ class PlaybackSeekFeedbackTest {
         val allCases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
         assertTrue(
             allCases.all {
-                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused")
+                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused", "pause-feedback")
             }
         )
         val cases = allCases.filter { it.jsonObject.getValue("operation").jsonPrimitive.content == "deferred-seek" }
@@ -231,7 +231,7 @@ class PlaybackSeekFeedbackTest {
         val allCases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
         assertTrue(
             allCases.all {
-                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused")
+                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused", "pause-feedback")
             }
         )
         val cases = allCases.filter { it.jsonObject.getValue("operation").jsonPrimitive.content == "readiness-unpaused" }

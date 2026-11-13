@@ -68,7 +68,9 @@ class SyncPlayHostTest {
                 value.copy(
                     positionTicks = positionTicks.takeIf { positionChanged } ?: value.positionTicks,
                     playing =
-                        playing ?: value.playing
+                        playing ?: value.playing,
+                    playWhenReady = value.playWhenReady?.let { playing ?: it },
+                    native = value.native?.let { native -> native.copy(playWhenReady = playing ?: native.playWhenReady) }
                 )
             if (bufferOnSeek && positionChanged) value = value.copy(ready = false, buffering = true)
             return positionChanged
@@ -1074,12 +1076,12 @@ class SyncPlayHostTest {
         assertEquals(JsonPrimitive("entry-a"), buffer["PlaylistItemId"])
         assertEquals(JsonPrimitive(syncUtcTimestamp(rig.wall())), buffer["When"])
         assertFalse(rig.renderer.value.playing)
+        assertFalse(rig.renderer.value.unpaused, "the host wait actually pauses native intent")
         // The client has actually paused for the barrier. Its next Ready reports that observed intent,
         // rather than borrowing the earlier play intent or a not-yet-applied server Unpause.
         rig.renderer.value = rig.renderer.value.copy(
             ready = true,
-            buffering = false,
-            native = SyncNativeRendererState(4, 3, false, 0, false, 14_410, 98_416, 84_006)
+            buffering = false
         )
         rig.host.tick()
         runCurrent()

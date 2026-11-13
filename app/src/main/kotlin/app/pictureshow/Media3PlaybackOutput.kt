@@ -44,6 +44,9 @@ internal class Media3PlaybackOutput(
 ) : PlaybackOutput {
     /** Group transport is intercepted before UI, media keys or controller commands touch the decoder. */
     var syncRequest: ((String, Long?) -> Boolean)? = null
+
+    /** Deliberate viewer pause needs feedback before a scheduled server response changes native output. */
+    var onSyncPauseRequested: () -> Unit = {}
     var syncParticipating: () -> Boolean = { false }
     private var applyingSync = false
     fun <T> applySync(action: () -> T): T {
@@ -55,8 +58,11 @@ internal class Media3PlaybackOutput(
             applyingSync = before
         }
     }
-    internal fun interceptSync(command: String, positionMs: Long?): Boolean =
-        !applyingSync && syncRequest?.invoke(command, positionMs) == true
+    internal fun interceptSync(command: String, positionMs: Long?): Boolean {
+        val intercepted = !applyingSync && syncRequest?.invoke(command, positionMs) == true
+        if (intercepted && command == "pause") onSyncPauseRequested()
+        return intercepted
+    }
 
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state

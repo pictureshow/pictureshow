@@ -233,6 +233,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
         active?.addListener(positionListener)
         host.output.traceNative("binding-install", "localCopy=${host.localCopy}")
         host.output.syncRequest = sync::transport
+        host.output.onSyncPauseRequested = { host.onViewerPauseShown() }
         host.output.syncParticipating = { sync.participating }
         val expected = sync.membership.queue?.current
         val selection = if (opening == null && sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
@@ -250,6 +251,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             host.output.traceNative("binding-dispose")
             sync.clearRenderer(token)
             host.output.syncRequest = null
+            host.output.onSyncPauseRequested = {}
             host.output.syncParticipating = { false }
         }
     }

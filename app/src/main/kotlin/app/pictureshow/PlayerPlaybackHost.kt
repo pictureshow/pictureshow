@@ -184,6 +184,9 @@ internal class PlaybackHostState(
     /** A seek reveals the controls with its new position. */
     var onSeekShown: () -> Unit = {}
 
+    /** A viewer pause reveals controls; a server barrier or alignment pause does not. */
+    var onViewerPauseShown: () -> Unit = {}
+
     /** Before the output learns the activity stopped. */
     var onStopped: () -> Unit = {}
     val state get() = stateSource.value

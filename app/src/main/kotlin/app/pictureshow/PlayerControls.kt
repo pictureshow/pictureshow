@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -53,7 +54,15 @@ internal data class PlayerPlayback(val paused: Boolean, val showPlayButton: Bool
  * [onResume] restarts the idle count so they hide again.
  */
 @Composable
-internal fun rememberPlayerPlayback(player: Player?, onPause: () -> Unit, onResume: () -> Unit): PlayerPlayback {
+internal fun rememberPlayerPlayback(
+    player: Player?,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    revealPause: Boolean = true
+): PlayerPlayback {
+    val latestPause by rememberUpdatedState(onPause)
+    val latestResume by rememberUpdatedState(onResume)
+    val latestRevealPause by rememberUpdatedState(revealPause)
     var paused by remember(player) { mutableStateOf(player?.let { !it.playWhenReady } ?: false) }
     var buffering by remember(player) {
         mutableStateOf(
@@ -69,17 +78,17 @@ internal fun rememberPlayerPlayback(player: Player?, onPause: () -> Unit, onResu
                 paused = !player.playWhenReady
                 buffering = player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_IDLE
                 showPlayButton = Util.shouldShowPlayButton(player)
-                if (paused && !wasPaused) {
-                    onPause()
+                if (paused && !wasPaused && latestRevealPause) {
+                    latestPause()
                 } else if (!paused && wasPaused) {
-                    onResume()
+                    latestResume()
                 }
             }
         }
         player.addListener(listener)
         paused = !player.playWhenReady
         showPlayButton = Util.shouldShowPlayButton(player)
-        if (paused) onPause()
+        if (paused && latestRevealPause) latestPause()
         onDispose { player.removeListener(listener) }
     }
     return PlayerPlayback(paused, showPlayButton, buffering)

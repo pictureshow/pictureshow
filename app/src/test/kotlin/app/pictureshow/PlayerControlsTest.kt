@@ -19,6 +19,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import com.google.common.util.concurrent.Futures
 import kotlin.test.assertEquals
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -169,6 +174,57 @@ class PlayerControlsTest {
         compose.runOnIdle {
             assertEquals(Player.STATE_ENDED, player.playbackState)
             assertEquals(true, playback?.showPlayButton)
+        }
+    }
+
+    @Test
+    fun groupPauseFeedbackFollowsOriginAndCurrentMembershipOnTheSameDecoder() {
+        val file = java.io.File("../spec/vectors/sync-application.json")
+        val rows = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.filter { it.getValue("operation").jsonPrimitive.content == "pause-feedback" }
+        assertEquals(5, rows.size)
+        val native = StatePlayer()
+        val output = Media3PlaybackOutput(compose.activity, app.pictureshow.core.Server("s", "Server", "https://media.example.test", "12"))
+        var grouped by mutableStateOf(false)
+        val events = mutableListOf<String>()
+        var playback: PlayerPlayback? = null
+        output.syncRequest = { _, _ -> grouped }
+        output.onSyncPauseRequested = { events += "pause" }
+        val wrapped = SyncTransportPlayer(native, output::interceptSync)
+        compose.setContent {
+            playback = rememberPlayerPlayback(wrapped, { events += "pause" }, {}, revealPause = !grouped)
+        }
+        try {
+            for (row in rows) {
+                val id = row.getValue("id").jsonPrimitive.content
+                compose.runOnIdle {
+                    native.play()
+                    grouped = row.getValue("participating").jsonPrimitive.boolean
+                }
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                compose.runOnIdle {
+                    events.clear()
+                    when (row.getValue("origin").jsonPrimitive.content) {
+                        "native" -> native.pause()
+                        "server" -> output.applySync { wrapped.pause() }
+                        "viewer" -> wrapped.pause()
+                        else -> error(id)
+                    }
+                }
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                compose.runOnIdle {
+                    assertEquals(if (row.getValue("expectedReveal").jsonPrimitive.boolean) listOf("pause") else emptyList(), events, id)
+                    val awaitingServer = grouped && row.getValue("origin").jsonPrimitive.content == "viewer"
+                    assertEquals(!awaitingServer, playback?.paused, "native facts still update: $id")
+                }
+            }
+        } finally {
+            compose.runOnIdle {
+                native.release()
+                output.release()
+            }
         }
     }
 

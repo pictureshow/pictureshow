@@ -222,7 +222,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         // Leaving pauses the player too: the controls stay down while the stop report finishes, or Back looks refused.
         if (!host.exitRequested) ui.visible = true
         ui.interact()
-    }, onResume = ui::interact)
+    }, onResume = ui::interact, revealPause = host.sync?.participating != true)
     val pauseIntent by host.output.pauseIntent.collectAsState()
     val foreground by host.output.foreground.collectAsState()
     val speed by host.output.speed.collectAsState()
@@ -239,6 +239,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         host.onAdvancing = { entry?.cast?.localAdvancing(castOutput) }
         host.onSeekShown = {
             ui.visible = true
+            ui.interact()
+        }
+        host.onViewerPauseShown = {
+            if (!host.exitRequested) ui.visible = true
             ui.interact()
         }
     }
