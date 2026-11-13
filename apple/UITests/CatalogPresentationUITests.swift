@@ -48,7 +48,6 @@ final class CatalogPresentationUITests: XCTestCase {
         defer { app.terminate() }
         var transcript: [String] = []
         var hasAcceptedReaderUtterance = false
-        var initialForwardServiceResetUsed = false
         var didRecoverTimedOutIntroduction = false
         func attachSpeech(_ name: String) {
             let text = XCTAttachment(string: transcript.joined(separator: "\n") + "\nService: " + service.debugDescription)
@@ -236,51 +235,56 @@ final class CatalogPresentationUITests: XCTestCase {
             // actual reader events to arrive without another input operation.
             XCTAssertTrue(anchor.exists && anchor.isHittable)
             #endif
-            #if os(iOS)
-            // Enabling the reader does not guarantee initial focus or speech.
-            // If it has no current speech, request focus with one documented
-            // next-element operation; the existing live-run-loop bound requires
-            // an actual nonempty utterance before any traversal assertion.
-            func initialOutput() throws -> XCUIVoiceOverService.Output? {
-                var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
-                if output == nil {
-                    output = try readSpeech("reader initial focus forward", { try service.moveForward() })
+            // An enabled service can have no initial utterance after a screen
+            // change. The observed automation moveForward send failure is not
+            // speech readiness. Establish focus with one native input sequence;
+            // every output and return assertion below still uses the real reader.
+            let output = try readSpeech("reader enabled current", { try service.currentSpeech() })
+            let initial: String
+            if let output {
+                initial = try settledSpeech("reader enabled", first: output)
+            } else {
+                attachSpeech("132 VoiceOver no current speech before native focus input")
+                #if os(iOS)
+                let expectedLabel = anchor.label
+                let expectedValue = anchor.value as? String
+                XCTAssertTrue(anchor.exists && anchor.isHittable)
+                XCTAssertFalse(expectedLabel.isEmpty)
+                // A single coordinate touch explores with VoiceOver enabled;
+                // unlike an AX activation it must neither navigate nor toggle.
+                anchor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                initial = try settledSpeech("reader native touch exploration", accepts: {
+                    words(expectedLabel).isSubset(of: words($0))
+                })
+                XCTAssertTrue(anchor.exists && anchor.isHittable, "Reader exploration must retain the visible target rather than activate navigation")
+                XCTAssertEqual(anchor.label, expectedLabel)
+                XCTAssertEqual(anchor.value as? String, expectedValue, "Reader exploration must not toggle or activate the control")
+                transcript.append("native focus bootstrap: one iOS exploration touch; target label/value and visible route retained")
+                #else
+                XCTAssertTrue(ownsNativeFocus(anchor, app: app))
+                XCUIRemote.shared.press(.down)
+                XCTAssertFalse(ownsNativeFocus(anchor, app: app), "Native reader bootstrap must actually leave the anchor")
+                func focusedSnapshot(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? {
+                    node.children.compactMap(focusedSnapshot).first ?? (node.hasFocus ? node : nil)
                 }
-                return output
+                let awayTarget = try XCTUnwrap(focusedSnapshot(app.snapshot()))
+                let awayWords = words(awayTarget.label)
+                let anchorWords = words(anchor.label)
+                XCTAssertFalse(awayWords.isEmpty)
+                XCTAssertFalse(anchorWords.isEmpty)
+                XCTAssertNotEqual(awayWords, anchorWords, "The native away target must have an independent readable identity")
+                let away = try settledSpeech("reader native remote bootstrap away", accepts: {
+                    awayWords.isSubset(of: words($0)) && !anchorWords.isSubset(of: words($0))
+                })
+                XCUIRemote.shared.press(.up)
+                initial = try settledSpeech("reader native remote bootstrap return", after: away, accepts: {
+                    anchorWords.isSubset(of: words($0))
+                })
+                XCTAssertTrue(ownsNativeFocus(anchor, app: app), "One inverse native move must return to the original reader anchor")
+                transcript.append("native focus bootstrap: one tvOS Down/Up pair; changed speech and original native focus required")
+                #endif
+                attachSpeech("132 VoiceOver native focus input actual speech and retained target")
             }
-            let output: XCUIVoiceOverService.Output?
-            do { output = try initialOutput() }
-            catch {
-                let value = error as NSError
-                // This is a different domain from the documented noSpeech case.
-                // One recorded OS-service reset is allowed only before any real
-                // utterance/traversal, for the exact observed bootstrap send error.
-                // All later service errors still throw; the test itself never restarts.
-                guard !hasAcceptedReaderUtterance, !initialForwardServiceResetUsed,
-                      value.domain == "AXVoiceOverAutomationErrorDomain", value.code == 3,
-                      value.localizedDescription == "Failed to send moveForward command",
-                      service.isEnabled else { throw error }
-                initialForwardServiceResetUsed = true
-                transcript.append("initial forward service reset: one disable then enable before first accepted utterance")
-                attachSpeech("132 VoiceOver exact initial-forward send failure before one service reset")
-                try service.disable()
-                XCTAssertFalse(service.isEnabled)
-                attachSpeech("132 VoiceOver initial service reset actual disabled state")
-                try service.enable()
-                XCTAssertTrue(service.isEnabled)
-                attachSpeech("132 VoiceOver initial service reset actual enabled state")
-                output = try initialOutput()
-            }
-            let initial = try settledSpeech("reader enabled", first: output)
-            #else
-            var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
-            if output == nil {
-                // One real next-element operation establishes initial reader
-                // focus. Subsequent readiness uses the existing bounded poll.
-                output = try readSpeech("reader initial focus forward", { try service.moveForward() })
-            }
-            let initial = try settledSpeech("reader enabled", first: output)
-            #endif
             attachSpeech("132 VoiceOver enabled actual first speech")
             #if os(tvOS)
             // A fresh tvOS27 sandbox presents this native introduction. The
