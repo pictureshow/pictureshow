@@ -34,7 +34,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -65,6 +67,9 @@ internal fun LiveTvScreen(
     onBack: () -> Unit
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val compactHeight = !tv && liveCompactHeight(LocalConfiguration.current.screenHeightDp, tv)
+    val appBarScroll = androidx.compose.material3.TopAppBarDefaults.enterAlwaysScrollBehavior()
+    var scrollingFilters: (@Composable () -> Unit)? = null
     val time = liveTime()
     var tab by rememberSaveable { mutableStateOf("Channels") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -133,8 +138,8 @@ internal fun LiveTvScreen(
     val schedule = selectedSchedule
     val program = selectedProgram
     val recording = deleteRecording
-    val detail = draft != null || schedule != null || program != null || recording != null
-    BackHandler(enabled = detail) { closeDetail() }
+    val detail = draft != null || schedule != null || program != null
+    BackHandler(enabled = detail || recording != null) { closeDetail() }
     val title = when {
         draft != null -> if (state.draftSeries) "Record series" else "Record once"
         schedule != null -> if (cancelling) "Cancel ${if (selectedSeries) "series" else "recording"}?" else "Recording schedule"
@@ -159,7 +164,9 @@ internal fun LiveTvScreen(
             (search.isBlank() || it.name.contains(search, true) || it.number.orEmpty().contains(search, true))
     }
     Column(
-        Modifier.fillMaxSize().background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
+        Modifier.fillMaxSize().then(
+            if (compactHeight) Modifier.nestedScroll(appBarScroll.nestedScrollConnection) else Modifier
+        ).background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
             .testTag(if (tv) "live:tv" else "live:touch")
     ) {
         if (tv) {
@@ -219,21 +226,39 @@ internal fun LiveTvScreen(
                     liveGuideFreshness(state.fetchedAt, state.offline, time)?.let { LiveText(it, true, small = true) }
                     if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", true) { showSearch = !showSearch }
                 }
-                LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
+                if (!detail ||
+                    state.guideReferenceNotice(now) != null
+                ) {
+                    LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
+                }
             }
         } else if (!tv) {
             androidx.compose.material3.TopAppBar(
+                modifier = Modifier.testTag("live:touch-app-bar"),
                 title = {
-                    Column {
-                        androidx.compose.material3.Text(title, maxLines = 1)
-                        if (!detail) {
+                    if (compactHeight && !detail) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            androidx.compose.material3.Text(title, maxLines = 1)
                             liveGuideFreshness(state.fetchedAt, state.offline, time)?.let {
                                 androidx.compose.material3.Text(
                                     it,
                                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1
                                 )
+                            }
+                        }
+                    } else {
+                        Column {
+                            androidx.compose.material3.Text(title, maxLines = 1)
+                            if (!detail) {
+                                liveGuideFreshness(state.fetchedAt, state.offline, time)?.let {
+                                    androidx.compose.material3.Text(
+                                        it,
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
@@ -243,8 +268,13 @@ internal fun LiveTvScreen(
                     if (!detail) {
                         if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", false) { showSearch = !showSearch }
                     }
-                    LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
-                }
+                    if (!detail &&
+                        state.guideReferenceNotice(now) == null
+                    ) {
+                        LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
+                    }
+                },
+                scrollBehavior = if (compactHeight) appBarScroll else null
             )
         }
         if (!detail) {
@@ -325,7 +355,9 @@ internal fun LiveTvScreen(
             val filters: @Composable () -> Unit = {
                 if (tab in listOf("Channels", "Guide")) {
                     Row(
-                        Modifier.then(if (tv) Modifier else Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)),
+                        Modifier.testTag(
+                            "live:filters"
+                        ).then(if (tv) Modifier else Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -360,7 +392,7 @@ internal fun LiveTvScreen(
                 }
             } else {
                 navigation()
-                filters()
+                if (compactHeight && tab == "Channels") scrollingFilters = filters else filters()
             }
         }
         if (refreshPresentation.headerLoading) {
@@ -371,13 +403,7 @@ internal fun LiveTvScreen(
         }
         state.notice?.let { LiveText(it, tv, Modifier.padding(8.dp), small = true) }
         state.guideReferenceNotice(now)?.let { notice ->
-            LiveText(
-                notice,
-                tv,
-                Modifier.padding(8.dp),
-                warning = true,
-                small = true
-            )
+            LiveGuideWarning(notice, tv, !state.loading && !state.writing, vm::refresh)
         }
         val body: @Composable () -> Unit = {
             if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
@@ -424,7 +450,8 @@ internal fun LiveTvScreen(
                                 }
                             )
                     ) {
-                        if (tv && (recording != null || cancelling)) {
+                        scrollingFilters?.let { renderer -> item(key = "live:channel-filters") { renderer() } }
+                        if (tv && cancelling) {
                             item {
                                 LiveAction(
                                     if (recording != null ||
@@ -507,14 +534,6 @@ internal fun LiveTvScreen(
                                         timer
                                     selectedSeries = series
                                 }
-                            }
-
-                            recording != null -> item {
-                                LiveText(
-                                    "Permanently delete the recorded file “${recording.name}”. Its recording schedule is a separate action.",
-                                    tv
-                                )
-                                LiveAction("Delete recorded file", tv, enabled = !state.writing) { vm.delete(recording) }
                             }
 
                             state.policy?.access == false -> Unit
@@ -694,6 +713,9 @@ internal fun LiveTvScreen(
                 body()
             }
         }
+    }
+    recording?.let { item ->
+        LiveRecordingDeleteDialog(item.name, tv, state.writing, state.error, ::closeDetail) { vm.delete(item) }
     }
     recordingMenu?.let { item ->
         LiveMenu(

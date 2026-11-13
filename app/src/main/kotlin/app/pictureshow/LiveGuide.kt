@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -167,22 +168,37 @@ internal fun LiveGuideContent(
                                 ) {
                                     onFocus(key)
                                 }.semantics { contentDescription = label }
+                            // Surface owns the focus scale, while the outer layer owns its edge translation.
+                            // Intersect the painted content bounds, then convert that interval back to local dp.
+                            val textWindow by remember(scroll, x, width, tv, isFocused, viewportWidth, density.density) {
+                                derivedStateOf {
+                                    val viewportStart = scroll.value / density.density
+                                    val contentWidth = (width - 2).coerceAtLeast(0f)
+                                    val scale = if (tv && isFocused) 1.1f else 1f
+                                    val shift = if (tv && isFocused) {
+                                        liveGuideFocusShift(x, contentWidth, viewportStart, viewportWidth)
+                                    } else {
+                                        0f
+                                    }
+                                    val paintedStart = x + 1 - contentWidth * (scale - 1) / 2 + shift
+                                    val visible = liveGuideTextWindow(paintedStart, contentWidth * scale, viewportStart, viewportWidth)
+                                    LiveGuideTextWindow(visible.inset / scale, visible.width / scale)
+                                }
+                            }
                             val content: @Composable () -> Unit = {
                                 Box(Modifier.fillMaxSize()) {
-                                    Column(
-                                        Modifier.fillMaxHeight().padding(
-                                            start = if (liveGuideShowsText(width)) 8.dp else 0.dp,
-                                            end = if (liveGuideShowsText(width)) {
-                                                if (show.hasRecordingTimer()) 14.dp else 8.dp
-                                            } else {
-                                                0.dp
-                                            },
-                                            top = if (tv) 4.dp else 8.dp,
-                                            bottom = if (tv) 4.dp else 8.dp
-                                        ),
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        if (liveGuideShowsText(width)) {
+                                    if (liveGuideShowsText(textWindow.width)) {
+                                        Column(
+                                            Modifier.offset(x = textWindow.inset.dp).width(textWindow.width.dp).fillMaxHeight()
+                                                .testTag("live:cell-text:${show.id}")
+                                                .padding(
+                                                    start = 8.dp,
+                                                    end = if (show.hasRecordingTimer()) 14.dp else 8.dp,
+                                                    top = if (tv) 4.dp else 8.dp,
+                                                    bottom = if (tv) 4.dp else 8.dp
+                                                ),
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
                                             if (tv) {
                                                 androidx.tv.material3.Text(
                                                     show.name,

@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -320,7 +321,7 @@ private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boole
         role = Role.Button
     }
     val icon: @Composable () -> Unit = {
-        val target = Modifier.size(20.dp).graphicsLayer { rotationZ = if (expanded) 90f else 0f }
+        val target = Modifier.size(20.dp).graphicsLayer { rotationZ = liveDisclosureRotation(expanded) }
         if (tv) {
             androidx.tv.material3.Icon(touchActionIcon("chevron-right"), null, target)
         } else {
@@ -339,6 +340,17 @@ private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boole
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
-        TouchValueRow("More options", if (expanded) "Expanded" else "Collapsed", modifier, enabled, icon, onClick)
+        Row(
+            modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Text(
+                "More options",
+                Modifier.weight(1f),
+                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge
+            )
+            icon()
+        }
     }
 }

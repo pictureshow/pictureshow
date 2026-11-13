@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(142, cases.size)
+        assertEquals(160, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -48,6 +48,36 @@ class LivePresentationVectorsTest {
                 )
             }
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "guide-text-window" -> {
+                    val actual = liveGuideTextWindow(
+                        c.getValue("cellX").jsonPrimitive.float,
+                        c.getValue("cellWidth").jsonPrimitive.float,
+                        c.getValue("viewportStart").jsonPrimitive.float,
+                        c.getValue("viewportWidth").jsonPrimitive.float
+                    )
+                    val expected = envelope.getValue("expected").jsonObject
+                    assertEquals(expected.getValue("inset").jsonPrimitive.float, actual.inset, 0.001f, id)
+                    assertEquals(expected.getValue("width").jsonPrimitive.float, actual.width, 0.001f, id)
+                }
+                "recording-action-order" -> assertEquals(
+                    envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.content },
+                    recordingDetailActionOrder(
+                        c.getValue("hasFromStart").jsonPrimitive.boolean,
+                        c.getValue("hasDownload").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+                "compact-height" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveCompactHeight(c.getValue("heightDp").jsonPrimitive.int, c.getValue("tv").jsonPrimitive.boolean),
+                    id
+                )
+                "disclosure-rotation" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveDisclosureRotation(c.getValue("expanded").jsonPrimitive.boolean),
+                    0.001f,
+                    id
+                )
                 "guide-scroll" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideScrollDistance(value("offset").toFloat(), value("size").toFloat(), value("container").toFloat()),

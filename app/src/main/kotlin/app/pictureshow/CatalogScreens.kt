@@ -2982,7 +2982,15 @@ private fun DetailActions(
                     if (stableLayout || compact) {
                         Modifier.bringIntoViewRequester(childBringIntoView).onGloballyPositioned { coordinates ->
                             if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
-                        }.width(detailActionWidth(target, compact)).heightIn(min = if (compact) 48.dp else DETAIL_STABLE_HEIGHT)
+                        }.then(
+                            if (compact) {
+                                Modifier.heightIn(
+                                    min = 48.dp
+                                )
+                            } else {
+                                Modifier.width(detailStableWidth(target)).heightIn(min = DETAIL_STABLE_HEIGHT)
+                            }
+                        )
                     } else {
                         Modifier
                     }
@@ -3049,145 +3057,227 @@ private fun DetailActions(
                     }
                 }
         }
-        // TV Material raises the focused surface. Stable parents keep native traversal order
-        // and node identities unchanged as pending labels become authoritative actions.
-        key("primary") {
-            Box {
-                val click: () -> Unit = pending?.onPlay ?: {
-                    playItem?.let { onPlay(it, position > 0) }
-                    Unit
-                }
-                Button(
-                    onClick = { if (!blocked) click() },
-                    enabled = !blocked && (pending != null || playItem != null),
-                    modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
-                        .then(actionModifier("primary", "play", click))
-                        .then(
-                            if (pending == null && playItem == null && item.type in listOf("Series", "Season")) {
-                                Modifier.clearAndSetSemantics { hideFromAccessibility() }
-                            } else {
-                                Modifier
+        if (compact) {
+            recordingDetailActionOrder(stableLayout || position > 0, onDownload != null && pending == null).forEach { target ->
+                key(target) {
+                    when (target) {
+                        "primary" -> {
+                            val click: () -> Unit = pending?.onPlay ?: {
+                                playItem?.let { onPlay(it, position > 0) }
+                                Unit
                             }
-                        )
-                ) {
-                    DetailActionLabel(
-                        labels.getValue("primary"),
-                        if (stableLayout || compact) "primary" else null,
-                        Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
-                        compact = compact
-                    )
+                            Button(
+                                onClick = { if (!blocked) click() },
+                                enabled = !blocked && (pending != null || playItem != null),
+                                modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
+                                    .then(actionModifier("primary", "play", click)).align(Alignment.Top),
+                                colors = androidx.tv.material3.ButtonDefaults.colors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                DetailActionLabel(
+                                    labels.getValue("primary"),
+                                    "primary",
+                                    Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
+                                    compact = true
+                                )
+                            }
+                        }
+                        "from-start" -> {
+                            val click: () -> Unit = pending?.onFromStart ?: {
+                                playItem?.let { onPlay(it, false) }
+                                Unit
+                            }
+                            Button(
+                                onClick = { if (!blocked) click() },
+                                enabled = !blocked && (pending != null || playItem != null),
+                                modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                    .then(actionModifier("from-start", "from-start", click)).align(Alignment.Top)
+                            ) {
+                                DetailActionLabel(
+                                    labels.getValue("from-start"),
+                                    "from-start",
+                                    Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                                    compact = true
+                                )
+                            }
+                        }
+                        "download" -> Button(
+                            onClick = { if (!blocked) onDownload?.invoke() },
+                            enabled = !blocked,
+                            modifier = Modifier.testTag("detail:download").heightIn(min = 48.dp).align(Alignment.Top)
+                        ) { DetailActionLabel("Download", "download", Modifier, compact = true) }
+                        "played", "favorite" -> {
+                            val played = target == "played"
+                            val click = if (played) pending?.onPlayed ?: onPlayed else pending?.onFavorite ?: onFavorite
+                            val available = if (played) !item.isEmptyContainer && (stableLayout || !busy) else stableLayout || !busy
+                            val fallbackInitial =
+                                pending == null && playItem == null && (if (played) !item.isEmptyContainer else item.isEmptyContainer)
+                            val requester = if (played) playedFocus else favoriteFocus
+                            RecordingDetailMutationButton(
+                                target,
+                                labels.getValue(target),
+                                if (played) item.isWatched else item.userData.isFavorite,
+                                focusedTarget == target,
+                                !blocked && (pending != null || available),
+                                (if (fallbackInitial) Modifier.focusRequester(initial) else Modifier)
+                                    .then(requester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                    .then(actionModifier(target, target, click)).semantics {
+                                        if (!blocked && pending?.available != false && activeRequestCue != target) {
+                                            toggleableState = ToggleableState(if (played) item.isWatched else item.userData.isFavorite)
+                                        }
+                                    },
+                                containerModifier = Modifier.align(Alignment.Top),
+                                onClick = { if (!blocked) click() }
+                            )
+                        }
+                    }
                 }
             }
-        }
-        if (!stableLayout && position > 0) {
-            key("from-start") {
+        } else {
+            // TV Material raises the focused surface. Stable parents keep native traversal order
+            // and node identities unchanged as pending labels become authoritative actions.
+            key("primary") {
                 Box {
-                    Button(
-                        onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
-                        enabled = !blocked,
-                        modifier = Modifier.detailFocusDiagnostic("from-start")
-                            .then(if (compact) Modifier.width(detailActionWidth("from-start", true)).heightIn(min = 48.dp) else Modifier)
-                    ) { Text("Play from start") }
-                }
-            }
-        }
-        key("played") {
-            Box {
-                val click = pending?.onPlayed ?: onPlayed
-                Button(
-                    onClick = { if (!blocked) click() },
-                    enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
-                    modifier = (
-                        if (pending == null &&
-                            playItem == null &&
-                            !item.isEmptyContainer
-                        ) {
-                            Modifier.focusRequester(initial)
-                        } else {
-                            Modifier
-                        }
-                        )
-                        .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                        .then(actionModifier("played", "played", click)).semantics {
-                            if (!blocked && pending?.available != false && activeRequestCue != "played") {
-                                toggleableState = ToggleableState(item.isWatched)
-                            }
-                        }
-                ) {
-                    DetailActionLabel(
-                        labels.getValue("played"),
-                        if (stableLayout || compact) "played" else null,
-                        Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
-                        compact = compact
-                    )
-                }
-            }
-        }
-        key("favorite") {
-            Box {
-                val click = pending?.onFavorite ?: onFavorite
-                Button(
-                    onClick = { if (!blocked) click() },
-                    enabled = !blocked && (pending != null || stableLayout || !busy),
-                    modifier = (
-                        if (pending == null &&
-                            playItem == null &&
-                            item.isEmptyContainer
-                        ) {
-                            Modifier.focusRequester(initial)
-                        } else {
-                            Modifier
-                        }
-                        )
-                        .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                        .then(actionModifier("favorite", "favorite", click)).semantics {
-                            if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
-                                toggleableState = ToggleableState(item.userData.isFavorite)
-                            }
-                        }
-                ) {
-                    DetailActionLabel(
-                        labels.getValue("favorite"),
-                        if (stableLayout || compact) "favorite" else null,
-                        Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite")),
-                        compact = compact
-                    )
-                }
-            }
-        }
-        if (onDownload != null && pending == null) {
-            key("download") {
-                Button(
-                    onClick = {
-                        if (!blocked) onDownload()
-                    },
-                    enabled = !blocked,
-                    modifier = Modifier.testTag("detail:download")
-                        .then(if (compact) Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp) else Modifier)
-                ) {
-                    if (compact) DetailActionLabel("Download", "download", Modifier, compact = true) else Text("Download")
-                }
-            }
-        }
-        if (stableLayout) {
-            key("from-start") {
-                Box {
-                    val click = pending?.onFromStart ?: {
-                        playItem?.let { onPlay(it, false) }
+                    val click: () -> Unit = pending?.onPlay ?: {
+                        playItem?.let { onPlay(it, position > 0) }
                         Unit
                     }
                     Button(
                         onClick = { if (!blocked) click() },
                         enabled = !blocked && (pending != null || playItem != null),
-                        modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                            .then(actionModifier("from-start", "from-start", click))
+                        modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
+                            .then(actionModifier("primary", "play", click))
+                            .then(
+                                if (pending == null && playItem == null && item.type in listOf("Series", "Season")) {
+                                    Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                                } else {
+                                    Modifier
+                                }
+                            )
                     ) {
                         DetailActionLabel(
-                            labels.getValue("from-start"),
-                            if (stableLayout || compact) "from-start" else null,
-                            Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                            labels.getValue("primary"),
+                            if (stableLayout || compact) "primary" else null,
+                            Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
                             compact = compact
                         )
+                    }
+                }
+            }
+            if (!stableLayout && position > 0) {
+                key("from-start") {
+                    Box {
+                        Button(
+                            onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
+                            enabled = !blocked,
+                            modifier = Modifier.detailFocusDiagnostic("from-start")
+                                .then(
+                                    if (compact) Modifier.width(detailActionWidth("from-start", true)).heightIn(min = 48.dp) else Modifier
+                                )
+                        ) { Text("Play from start") }
+                    }
+                }
+            }
+            key("played") {
+                Box {
+                    val click = pending?.onPlayed ?: onPlayed
+                    Button(
+                        onClick = { if (!blocked) click() },
+                        enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
+                        modifier = (
+                            if (pending == null &&
+                                playItem == null &&
+                                !item.isEmptyContainer
+                            ) {
+                                Modifier.focusRequester(initial)
+                            } else {
+                                Modifier
+                            }
+                            )
+                            .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                            .then(actionModifier("played", "played", click)).semantics {
+                                if (!blocked && pending?.available != false && activeRequestCue != "played") {
+                                    toggleableState = ToggleableState(item.isWatched)
+                                }
+                            }
+                    ) {
+                        DetailActionLabel(
+                            labels.getValue("played"),
+                            if (stableLayout || compact) "played" else null,
+                            Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played")),
+                            compact = compact
+                        )
+                    }
+                }
+            }
+            key("favorite") {
+                Box {
+                    val click = pending?.onFavorite ?: onFavorite
+                    Button(
+                        onClick = { if (!blocked) click() },
+                        enabled = !blocked && (pending != null || stableLayout || !busy),
+                        modifier = (
+                            if (pending == null &&
+                                playItem == null &&
+                                item.isEmptyContainer
+                            ) {
+                                Modifier.focusRequester(initial)
+                            } else {
+                                Modifier
+                            }
+                            )
+                            .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                            .then(actionModifier("favorite", "favorite", click)).semantics {
+                                if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
+                                    toggleableState = ToggleableState(item.userData.isFavorite)
+                                }
+                            }
+                    ) {
+                        DetailActionLabel(
+                            labels.getValue("favorite"),
+                            if (stableLayout || compact) "favorite" else null,
+                            Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite")),
+                            compact = compact
+                        )
+                    }
+                }
+            }
+            if (onDownload != null && pending == null) {
+                key("download") {
+                    Button(
+                        onClick = {
+                            if (!blocked) onDownload()
+                        },
+                        enabled = !blocked,
+                        modifier = Modifier.testTag("detail:download")
+                            .then(if (compact) Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp) else Modifier)
+                    ) {
+                        if (compact) DetailActionLabel("Download", "download", Modifier, compact = true) else Text("Download")
+                    }
+                }
+            }
+            if (stableLayout) {
+                key("from-start") {
+                    Box {
+                        val click = pending?.onFromStart ?: {
+                            playItem?.let { onPlay(it, false) }
+                            Unit
+                        }
+                        Button(
+                            onClick = { if (!blocked) click() },
+                            enabled = !blocked && (pending != null || playItem != null),
+                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                .then(actionModifier("from-start", "from-start", click))
+                        ) {
+                            DetailActionLabel(
+                                labels.getValue("from-start"),
+                                if (stableLayout || compact) "from-start" else null,
+                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                                compact = compact
+                            )
+                        }
                     }
                 }
             }
@@ -3215,7 +3305,9 @@ private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) 
  */
 @Composable
 private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false) {
-    if (stableTarget == null) {
+    if (compact) {
+        Text(label, modifier = modifier, maxLines = 1, softWrap = false)
+    } else if (stableTarget == null) {
         Text(label, modifier = modifier)
     } else {
         Box(

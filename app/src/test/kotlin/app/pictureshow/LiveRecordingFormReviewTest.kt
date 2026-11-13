@@ -68,7 +68,9 @@ class LiveRecordingFormReviewTest {
         more.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
+        compose.onNodeWithText("Collapsed", useUnmergedTree = true).assertDoesNotExist()
         more.performClick().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
+        compose.onNodeWithText("Expanded", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("High").performScrollTo().assertIsDisplayed()
     }
 

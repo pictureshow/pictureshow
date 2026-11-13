@@ -13,7 +13,10 @@
     "app/src/main/kotlin/app/pictureshow/LivePlayerPresentation.kt",
     "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt",
     "app/src/main/kotlin/app/pictureshow/LiveGuideFreshness.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveGuideScroll.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveGuideScroll.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideTextWindow.kt",
+    "app/src/main/kotlin/app/pictureshow/RecordingDetailActions.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveConfirmations.kt"
   ],
   "cases": [
     {
@@ -1808,6 +1811,226 @@
         "container": 500
       },
       "expected": 0
+    },
+    {
+      "id": "live-presentation.visible-title-visible",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 0,
+        "viewportWidth": 500
+      },
+      "expected": {
+        "inset": 0,
+        "width": 200
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-left",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 80,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 70,
+        "width": 100
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-right",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 90
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-sliver",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 180,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 170,
+        "width": 30
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-before",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 210,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 200,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-after",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 200,
+        "cellWidth": 100,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-zero",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 0,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-negative-width",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": -20,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.recording-action-order-0",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": false,
+        "hasDownload": false
+      },
+      "expected": [
+        "primary",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-1",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": true,
+        "hasDownload": false
+      },
+      "expected": [
+        "primary",
+        "from-start",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-2",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": false,
+        "hasDownload": true
+      },
+      "expected": [
+        "primary",
+        "download",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-3",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": true,
+        "hasDownload": true
+      },
+      "expected": [
+        "primary",
+        "from-start",
+        "download",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.compact-height-479-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 479,
+        "tv": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.compact-height-480-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 480,
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.compact-height-360-true",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 360,
+        "tv": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.compact-height-800-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 800,
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.disclosure-false",
+      "operation": "disclosure-rotation",
+      "input": {
+        "expanded": false
+      },
+      "expected": 90
+    },
+    {
+      "id": "live-presentation.disclosure-true",
+      "operation": "disclosure-rotation",
+      "input": {
+        "expanded": true
+      },
+      "expected": -90
     }
   ]
 }
