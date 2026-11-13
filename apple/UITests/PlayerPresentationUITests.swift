@@ -735,7 +735,7 @@ final class PlayerPresentationUITests: XCTestCase {
         let visibleCount = try XCTUnwrap(runningContext.countdown)
         XCTAssertGreaterThan(visibleCount, 0)
         XCTAssertLessThanOrEqual(visibleCount, 10)
-        let runningCancelGlyphFrame = runningContext.cancelGlyphFrame
+        let runningCancelPlatterFrame = try contextualCancelPlatterFrame(runningScreenshot, glyphFrame: runningContext.cancelGlyphFrame, phase: "running")
         let caption = app.staticTexts["playerSubtitle"]
         XCTAssertTrue(caption.exists)
         XCTAssertGreaterThan(caption.frame.height, 60, "The final TV acceptance cue contains two real subtitle lines")
@@ -773,10 +773,11 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(nativePlayer.value as? String, "Controls hidden", "Paused contextual proof requires the actual hidden native HUD")
         let pausedContext = try contextualPixels(pausedScreenshot, running: false)
         XCTAssertNil(pausedContext.countdown)
-        // These are OCR glyph bounds, not an invented AX/control frame. They
-        // independently establish the visible Cancel word's stable placement.
-        XCTAssertEqual(pausedContext.cancelGlyphFrame.minX, runningCancelGlyphFrame.minX, accuracy: 2, "Pausing cannot move the visible Cancel word horizontally")
-        XCTAssertEqual(pausedContext.cancelGlyphFrame.minY, runningCancelGlyphFrame.minY, accuracy: 2, "Pausing cannot move the visible Cancel word vertically")
+        // Vision word boxes can vary while the native platter stays fixed.
+        // Measure the actual pale platter raster, retaining the two-point bound.
+        let pausedCancelPlatterFrame = try contextualCancelPlatterFrame(pausedScreenshot, glyphFrame: pausedContext.cancelGlyphFrame, phase: "paused")
+        XCTAssertEqual(pausedCancelPlatterFrame.minX, runningCancelPlatterFrame.minX, accuracy: 2, "Pausing cannot move the actual native Cancel platter horizontally")
+        XCTAssertEqual(pausedCancelPlatterFrame.minY, runningCancelPlatterFrame.minY, accuracy: 2, "Pausing cannot move the actual native Cancel platter vertically")
         XCTAssertEqual(fixture.snapshot.startCount, 1)
         record("132 TV HUD hidden paused contextual episode identity and Cancel text")
         try selectVisibleContextualCancel(in: nativePlayer)
@@ -1159,6 +1160,81 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(wholeRegion.minY, 885.6, accuracy: 0.001)
         XCTAssertEqual(wholeRegion.width, 1152, accuracy: 0.001)
         XCTAssertEqual(wholeRegion.height, 194.4, accuracy: 0.001)
+    }
+    @MainActor private func contextualCancelPlatterFrame(_ screenshot: XCUIScreenshot, glyphFrame: CGRect, phase: String) throws -> CGRect {
+        let source = try XCTUnwrap(screenshot.image.cgImage)
+        let viewport = app.frame
+        let scaleX = CGFloat(source.width) / viewport.width
+        let scaleY = CGFloat(source.height) / viewport.height
+        let search = glyphFrame.insetBy(dx: -100, dy: -60)
+        let requestedCrop = CGRect(x: (search.minX - viewport.minX) * scaleX,
+                                   y: (search.minY - viewport.minY) * scaleY,
+                                   width: search.width * scaleX, height: search.height * scaleY).integral
+        let imageBounds = CGRect(x: 0, y: 0, width: source.width, height: source.height)
+        XCTAssertTrue(imageBounds.contains(requestedCrop), "The whole Cancel geometry search must fit the actual screenshot")
+        let crop = try XCTUnwrap(source.cropping(to: requestedCrop))
+        let cropAttachment = XCTAttachment(image: UIImage(cgImage: crop))
+        cropAttachment.name = "132 native Cancel platter geometry crop " + phase
+        cropAttachment.lifetime = .keepAlways; add(cropAttachment)
+        let width = crop.width, height = crop.height
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        XCTAssertTrue(rendered)
+        // This fixed pale-raster mask locates geometry only. It never filters
+        // glyph ink or changes the separate actual label contrast proof.
+        var visited = [Bool](repeating: false, count: width * height)
+        var components: [(bounds: CGRect, pixels: Int)] = []
+        func isPale(_ index: Int) -> Bool {
+            let offset = index * 4
+            return rgba[offset] >= 230 && rgba[offset + 1] >= 230 && rgba[offset + 2] >= 230
+        }
+        for seed in 0..<(width * height) where !visited[seed] {
+            visited[seed] = true
+            guard isPale(seed) else { continue }
+            var queue = [seed], cursor = 0
+            var minX = seed % width, maxX = minX, minY = seed / width, maxY = minY
+            while cursor < queue.count {
+                let index = queue[cursor]; cursor += 1
+                let x = index % width, y = index / width
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+                func visit(_ neighbor: Int) {
+                    guard !visited[neighbor] else { return }
+                    visited[neighbor] = true
+                    if isPale(neighbor) { queue.append(neighbor) }
+                }
+                if x > 0 { visit(index - 1) }
+                if x + 1 < width { visit(index + 1) }
+                if y > 0 { visit(index - width) }
+                if y + 1 < height { visit(index + width) }
+            }
+            components.append((CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1), queue.count))
+        }
+        let word = CGRect(x: (glyphFrame.minX - viewport.minX) * scaleX - requestedCrop.minX,
+                          y: (glyphFrame.minY - viewport.minY) * scaleY - requestedCrop.minY,
+                          width: glyphFrame.width * scaleX, height: glyphFrame.height * scaleY)
+        let cropBounds = CGRect(x: 0, y: 0, width: width, height: height)
+        let candidates = components.filter {
+            $0.bounds.contains(CGPoint(x: word.midX, y: word.midY)) && $0.bounds.contains(word) &&
+                $0.bounds.minX > cropBounds.minX && $0.bounds.minY > cropBounds.minY &&
+                $0.bounds.maxX < cropBounds.maxX && $0.bounds.maxY < cropBounds.maxY
+        }.sorted { $0.pixels > $1.pixels }
+        let diagnostics = "phase=\(phase) image=\(imageBounds) crop=\(requestedCrop) word=\(word) candidates=\(candidates) allComponents=\(components)"
+        let boundsAttachment = XCTAttachment(string: diagnostics)
+        boundsAttachment.name = "132 native Cancel platter geometry bounds " + phase
+        boundsAttachment.lifetime = .keepAlways; add(boundsAttachment)
+        print("LEG132_CONTEXT_CANCEL_PLATTER " + diagnostics)
+        XCTAssertEqual(candidates.count, 1, "Require one uncut pale component enclosing the actual Cancel word; blank or ambiguous pixels cannot prove geometry")
+        let platter = try XCTUnwrap(candidates.count == 1 ? candidates.first?.bounds : nil)
+        return CGRect(x: viewport.minX + (requestedCrop.minX + platter.minX) / scaleX,
+                      y: viewport.minY + (requestedCrop.minY + platter.minY) / scaleY,
+                      width: platter.width / scaleX, height: platter.height / scaleY)
     }
     @MainActor private func focusedPlatterLuminance(_ screenshot: XCUIScreenshot, glyphFrame: CGRect) throws -> Double {
         let source = try XCTUnwrap(screenshot.image.cgImage)
