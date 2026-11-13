@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-chip-name",
+  "measurementContract": "The native text measurer supplies fittingCandidates; these cases exercise name-selection policy, not font geometry. graphemeEnds are UTF-16 end offsets from a proven native extended-grapheme segmenter; empty means no safe prefix segmentation.",
+  "cases": [
+    {
+      "id": "whole-short-name-allowed",
+      "name": "Films",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fittingCandidates": [
+        "Films"
+      ],
+      "expected": "Films"
+    },
+    {
+      "id": "whole-long-name-preferred",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [
+        "Friday movies",
+        "Friday…"
+      ],
+      "expected": "Friday movies"
+    },
+    {
+      "id": "longest-proven-original-prefix",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [
+        "Friday…",
+        "Friday …"
+      ],
+      "expected": "Friday …"
+    },
+    {
+      "id": "six-complete-graphemes-accepted",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [
+        "Friday…"
+      ],
+      "expected": "Friday…"
+    },
+    {
+      "id": "three-letter-stub-rejected",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [
+        "Fri…"
+      ],
+      "expected": null
+    },
+    {
+      "id": "five-letter-stub-rejected",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [
+        "Frida…"
+      ],
+      "expected": null
+    },
+    {
+      "id": "count-only-if-no-prefix-fits",
+      "name": "Friday movies",
+      "graphemeEnds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "fittingCandidates": [],
+      "expected": null
+    },
+    {
+      "id": "api23-unproven-segmentation-count-only",
+      "name": "🎞️ Friday movies",
+      "graphemeEnds": [],
+      "fittingCandidates": [
+        "🎞️ Fri…"
+      ],
+      "expected": null
+    },
+    {
+      "id": "unproven-segmentation-whole-name-still-safe",
+      "name": "🎞️",
+      "graphemeEnds": [],
+      "fittingCandidates": [
+        "🎞️"
+      ],
+      "expected": "🎞️"
+    },
+    {
+      "id": "complete-extended-grapheme-prefix",
+      "name": "👨‍👩‍👧‍👦á🎞️Z中🇬🇷X",
+      "graphemeEnds": [
+        11,
+        13,
+        16,
+        17,
+        18,
+        22,
+        23
+      ],
+      "fittingCandidates": [
+        "👨‍👩‍👧‍👦á🎞️Z中🇬🇷…"
+      ],
+      "expected": "👨‍👩‍👧‍👦á🎞️Z中🇬🇷…"
+    }
+  ]
+}

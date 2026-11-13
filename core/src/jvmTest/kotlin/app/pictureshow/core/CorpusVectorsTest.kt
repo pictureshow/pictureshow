@@ -72,6 +72,12 @@ class CorpusVectorsTest {
                     "sync-application",
                     "sync-clock",
                     "sync-presentation",
+                    // Actual SyncDeparture/LocalDisplay/ChipNameVectorsTest executors.
+                    "sync-departure",
+                    "sync-local-display",
+                    "sync-chip-name",
+                    // Actual Android SyncPlayHostTest scope/identity traces.
+                    "sync-route-consent",
                     "sync-drift",
                     "sync-membership-registration",
                     "sync-queue",

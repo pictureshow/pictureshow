@@ -6,8 +6,13 @@ package app.pictureshow
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +33,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
@@ -60,21 +67,25 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -85,6 +96,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -101,8 +118,12 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -110,12 +131,15 @@ import androidx.tv.material3.MaterialTheme as TvMaterialTheme
 import app.pictureshow.core.sync.SyncAccessNotice
 import app.pictureshow.core.sync.SyncPhase
 import app.pictureshow.core.sync.SyncQuality
+import app.pictureshow.core.sync.syncChipName
 import app.pictureshow.core.sync.syncChipShowsQuality
 import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
+import app.pictureshow.core.sync.syncShowsLocalPlayback
 import app.pictureshow.core.sync.syncTransportAvailable
 import java.text.NumberFormat
+import kotlinx.coroutines.flow.first
 
 /** Preserve the production three-argument API, including its trailing dismiss lambda. */
 @Composable
@@ -126,7 +150,10 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
 /** Native role components on each surface; every action remains a server request. */
 @OptIn(ExperimentalMaterial3Api::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit, fixtureLabel: String?) {
+internal fun SyncPlayPanel(
+    state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit,
+    fixtureLabel: String?, onDeparturePresented: ((Long) -> Unit)? = null
+) {
     val tv = usesTvInterface(LocalContext.current)
     val pane = stringResource(R.string.sync_title)
     var touchName by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
@@ -135,15 +162,42 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
     var tvKeyboardRequested by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     val createFocus = remember { FocusRequester() }
+    val nameFocus = remember { FocusRequester() }
+    val refreshFocus = remember { FocusRequester() }
+    val joinFocus = remember { FocusRequester() }
     val waitFocus = remember { FocusRequester() }
-    val queueFocus = remember(state.server, state.viewer, state.groupId) { mutableMapOf<String, FocusRequester>() }
+    val queueFocus = remember(state.server, state.viewer, state.groupId) { mutableMapOf<String, SyncQueueTarget>() }
     val joined = state.groupId != null
     val uncertain = !joined && state.phase == "Reconnecting"
+    val bodyScroll = key(state.server, state.viewer, state.groupId, uncertain) { rememberScrollState() }
     val canCreate = !joined && !uncertain && state.accessAllowed && state.policy == "CreateAndJoinGroups"
     val usable = joined && !state.busy && state.phase !in setOf("Joining", "Reconnecting", "Leaving", "Error")
     val transport = syncTransportAvailable(usable, state.queue.size)
     val notice = effectiveSyncNotice(state)
     val recovery = notice?.action?.takeUnless { it == SyncNoticeAction.LEAVE }
+    val departureChooser = !joined && !uncertain && (state.departure != null || notice?.kind == SyncNoticeKind.LEFT)
+    var nameContract by remember(state.server, state.viewer, joined, uncertain) { mutableStateOf(false) }
+    SideEffect { if (departureChooser) nameContract = true }
+    val initialChooserTarget = remember(state.server, state.viewer, joined, uncertain) {
+        when {
+            departureChooser && canCreate -> "name"
+            state.busy || !state.accessAllowed -> "refresh"
+            state.groups.isNotEmpty() -> "join"
+            canCreate -> "name"
+            else -> "refresh"
+        }
+    }
+    val chooserFocus = when {
+        joined || uncertain || recovery != null -> first
+        (departureChooser || nameContract) && canCreate -> nameFocus
+        initialChooserTarget == "name" && canCreate -> nameFocus
+        initialChooserTarget == "join" && state.accessAllowed && state.groups.isNotEmpty() -> joinFocus
+        else -> refreshFocus
+    }
+    val departureModifier = if (notice?.kind == SyncNoticeKind.DEPARTURE && onDeparturePresented != null) {
+        state.departure?.let { Modifier.syncDeparturePresentation(it.id, onDeparturePresented) } ?: Modifier
+    } else Modifier
+
     // Async chooser data does not invalidate an attached Refresh/name focus target.
     // Membership, usable transport and newly offered recovery do change the useful primary.
     val focusKey = listOf(state.groupId, uncertain, usable, transport, notice?.action)
@@ -152,15 +206,20 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
         if (op == "remove-entry" && value != null) removedEntry = value to state.queue.indexOfFirst { it.id == value }
         onAction(op, value)
     }
-    LaunchedEffect(state.queue.map { it.id }) {
+    val queueRevision = state.queue.map { it.id }
+    LaunchedEffect(state.server, state.viewer, state.groupId, queueRevision) {
         val removed = removedEntry
         if (tv && removed != null && state.queue.none { it.id == removed.first }) {
-            withFrameNanos { }
             val neighbour = state.queue.getOrNull(removed.second) ?: state.queue.lastOrNull()
             if (neighbour !=
                 null
             ) {
-                queueFocus[neighbour.id]?.requestFocus()
+                val target = queueFocus[neighbour.id]
+                if (target != null) {
+                    snapshotFlow { target.placedQueue == queueRevision }.first { it }
+                    target.focus.requestFocus()
+                    target.reveal.bringIntoView()
+                }
             } else if (usable) {
                 waitFocus.requestFocus()
             } else {
@@ -265,13 +324,15 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             }
         }
         if (!tv && !compactIme) SyncText(scope, false, small = true)
-        if (!compactIme) notice?.let { SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null) }
+        if (!compactIme && !(tv && !joined && !uncertain)) notice?.let {
+            SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null, modifier = departureModifier)
+        }
         if (joined) {
-            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight)
+            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight, bodyScroll)
         } else if (uncertain) {
             if (notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED) SyncText(stringResource(R.string.sync_leave_unconfirmed), tv)
         } else {
-            SyncGroups(state, action, tv, first, name, { touchName = it.take(200) }, compactHeight, compactIme, create)
+            SyncGroups(state, action, tv, first, name, { touchName = it.take(200) }, compactHeight, compactIme, create, refreshFocus, joinFocus)
         }
     }
     if (tv) {
@@ -279,7 +340,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             TvSettingsPanel(
                 stringResource(R.string.sync_title),
                 { if (tvKeyboardRequested) tvKeyboardRequested = false else onDismiss() },
-                first, modifier = Modifier.testTag("sync:panel"),
+                chooserFocus, modifier = Modifier.testTag("sync:panel"),
                 preview = {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         fixtureLabel?.let {
@@ -297,13 +358,16 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
                         )
                     }
                 },
+                pinnedNotice = if (!joined && !uncertain && notice != null) ({
+                    SyncNoticeBanner(state, notice, action, true, if (recovery != null) first else null, pinned = true, modifier = departureModifier)
+                }) else null,
                 pinnedEditor = if (canCreate) {
                     (
                         {
                             SyncTvNameField(
                                 state,
                                 tvName,
-                                first,
+                                nameFocus,
                                 createFocus,
                                 tvKeyboardRequested,
                                 { tvKeyboardRequested = it },
@@ -317,7 +381,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
                 footer = if (joined || uncertain || (canCreate && !tvKeyboardRequested)) ({ footer(false) }) else null,
                 contentFocusKey = focusKey, panelWidth = 560.dp, footerHorizontalPadding = 12.dp,
                 footerBottomPadding = 28.dp, edgeToEdge = true,
-                minimalFocusScroll = true, repairLostContentFocus = true, content = { body(false, false) }
+                minimalFocusScroll = true, repairLostContentFocus = true, bodyScrollState = bodyScroll, footerDivider = true, content = { body(false, false) }
             )
         }
     } else {
@@ -388,33 +452,49 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
     }
 }
 
-/** A fading edge makes the body’s scroll range visible, including at large fonts and above the IME. */
+/** Drawing and focus reveal share the live viewport's actual fade boundaries. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Composable ColumnScope.() -> Unit) {
+internal fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Composable ColumnScope.() -> Unit) {
     val scroll = rememberScrollState()
     val surface = MaterialTheme.colorScheme.surface
-    val paddingPx = with(LocalDensity.current) { 20.dp.toPx() }
-    val showBottomFade by remember(scroll, paddingPx) {
-        derivedStateOf { scroll.maxValue - scroll.value > paddingPx }
+    val density = LocalDensity.current
+    val bottomFade = 20.dp
+    val topFade = 16.dp
+    val endPadding = bottomFade + 8.dp
+    val paddingPx = with(density) { endPadding.toPx() }
+    val topClearance = with(density) { (topFade + 8.dp).toPx() }
+    val bottomClearance = with(density) { endPadding.toPx() }
+    val showBottomFade by remember(scroll, paddingPx) { derivedStateOf { scroll.maxValue - scroll.value > paddingPx } }
+    val reveal = remember(scroll, topClearance, bottomClearance, paddingPx) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                val top = if (scroll.canScrollBackward) topClearance else 0f
+                val bottom = containerSize - if (scroll.maxValue - scroll.value > paddingPx) bottomClearance else 0f
+                return when {
+                    size > bottom - top -> 0f
+                    offset < top -> offset - top
+                    offset + size > bottom -> offset + size - bottom
+                    else -> 0f
+                }
+            }
+        }
     }
     Box(modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(scroll).padding(vertical = if (compactHeight) 4.dp else 12.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 12.dp),
-            content = body
+        CompositionLocalProvider(LocalBringIntoViewSpec provides reveal) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(scroll).padding(top = if (compactHeight) 4.dp else 12.dp, bottom = endPadding),
+                verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 12.dp), content = body
+            )
+        }
+        if (scroll.canScrollBackward) Box(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().height(topFade)
+                .background(Brush.verticalGradient(listOf(surface, Color.Transparent))).testTag("sync:fade-top")
         )
-        if (scroll.canScrollBackward) {
-            Box(
-                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(16.dp)
-                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent))).testTag("sync:fade-top")
-            )
-        }
-        if (showBottomFade) {
-            Box(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
-            )
-        }
+        if (showBottomFade) Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomFade)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
+        )
     }
 }
 
@@ -435,7 +515,6 @@ private fun SyncTvNameField(
     val editorFocus = remember { FocusRequester() }
     val inputMethod = remember(view) { view.context.getSystemService(InputMethodManager::class.java) }
     val select = remember { RemoteFieldNavigation(setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) }
-    val namePrimary = state.groups.isEmpty() && !state.busy
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var imeWasVisible by remember { mutableStateOf(false) }
     LaunchedEffect(imeVisible) {
@@ -467,8 +546,8 @@ private fun SyncTvNameField(
     }
     OutlinedTextField(
         state = name,
-        label = { Text(stringResource(R.string.sync_group_name)) },
-        enabled = !state.busy,
+        label = { Text(stringResource(R.string.sync_group_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        enabled = !state.busy || state.departure != null || state.notice?.kind == SyncNoticeKind.LEFT,
         lineLimits = TextFieldLineLimits.SingleLine,
         inputTransformation = { if (length > 200) replace(200, length, "") },
         keyboardOptions = KeyboardOptions(
@@ -482,7 +561,7 @@ private fun SyncTvNameField(
             requestKeyboard(false)
         },
         modifier = Modifier.fillMaxWidth().testTag("sync:name").focusRequester(editorFocus)
-            .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+            .focusRequester(first)
             .onFocusChanged {
                 if (!it.isFocused) {
                     select.clear()
@@ -517,35 +596,59 @@ private fun SyncGroups(
     onName: (String) -> Unit,
     compactHeight: Boolean,
     compactEditing: Boolean,
-    create: @Composable (Modifier) -> Unit
+    create: @Composable (Modifier) -> Unit,
+    refreshFocus: FocusRequester,
+    joinFocus: FocusRequester
 ) {
     val canCreate = state.accessAllowed && state.policy == "CreateAndJoinGroups"
     val primaryGroup = state.groups.firstOrNull()?.id.takeIf { state.accessAllowed && !state.busy }
     val namePrimary = primaryGroup == null && state.accessAllowed && !state.busy && canCreate
+    val fieldReveal = remember { BringIntoViewRequester() }
+    var fieldFocused by remember { mutableStateOf(false) }
+    val imeHeight = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(fieldFocused, imeHeight) {
+        if (fieldFocused) {
+            withFrameNanos { }
+            fieldReveal.bringIntoView()
+        }
+    }
+    val mountedForm = remember { movableContentOf<@Composable () -> Unit> { it() } }
     val form: @Composable () -> Unit = {
         SyncHeading(stringResource(R.string.sync_create), false)
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                name,
-                onName,
-                label = { Text(stringResource(R.string.sync_group_name)) },
-                singleLine = true,
-                enabled = !state.busy,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
-                modifier = Modifier.weight(1f).testTag("sync:name").then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
-            )
-            if (compactHeight) create(Modifier)
+        Layout(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            content = {
+                OutlinedTextField(
+                    name, onName,
+                    label = { Text(stringResource(R.string.sync_group_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    singleLine = true, enabled = !state.busy,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
+                    modifier = Modifier.testTag("sync:name").bringIntoViewRequester(fieldReveal)
+                        .onFocusChanged { fieldFocused = it.isFocused }
+                        .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+                )
+                if (compactHeight) create(Modifier)
+            }
+        ) { children, constraints ->
+            val width = constraints.maxWidth
+            val gap = 8.dp.roundToPx()
+            val actionWidth = children.getOrNull(1)?.maxIntrinsicWidth(Constraints.Infinity)?.coerceAtMost(width) ?: 0
+            val inline = children.size > 1 && width - actionWidth - gap >= 200.dp.roundToPx()
+            val editorWidth = if (inline) width - actionWidth - gap else width
+            val editor = children[0].measure(Constraints.fixedWidth(editorWidth))
+            val button = children.getOrNull(1)?.measure(Constraints.fixedWidth(if (inline) actionWidth else width))
+            val height = if (button == null) editor.height else if (inline) maxOf(editor.height, button.height) else editor.height + gap + button.height
+            layout(width, constraints.constrainHeight(height)) {
+                editor.placeRelative(0, if (inline) (height - editor.height) / 2 else 0)
+                button?.placeRelative(if (inline) editorWidth + gap else 0, if (inline) (height - button.height) / 2 else editor.height + gap)
+            }
         }
     }
     // A compact chooser always has its action beside the editor, even before IME insets arrive.
     // Empty choosers lead with creation at every touch height. Never reparent on keyboard changes.
     val formFirst = !tv && canCreate && state.groups.isEmpty()
-    if (formFirst) form()
+    if (formFirst) mountedForm(form)
     if (!compactEditing) {
         if (state.accessAllowed) SyncText(stringResource(R.string.sync_privacy), tv, small = true)
         val accessNotice = when (state.access.notice) {
@@ -572,76 +675,71 @@ private fun SyncGroups(
         }
         if (state.accessAllowed && state.policy == "JoinGroups") SyncText(stringResource(R.string.sync_join_only), tv, small = true)
         if (state.accessAllowed) SyncHeading(stringResource(R.string.sync_groups), tv)
-        if (tv || !state.busy) {
-            SyncSecondaryAction(
-                stringResource(R.string.sync_refresh),
-                { action("refresh", null) },
-                tv,
-                Modifier.testTag("sync:refresh").then(
-                    if (primaryGroup == null &&
-                        !namePrimary
-                    ) {
-                        Modifier.focusRequester(first)
-                    } else {
-                        Modifier
-                    }
-                ),
-                enabled = state.canRefresh,
-                refreshIcon = true
-            )
-        }
-        if (!state.busy && state.accessAllowed && state.groups.isEmpty()) {
-            SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"))
-        }
-        if (state.accessAllowed) {
-            Column {
-                state.groups.forEach { group ->
-                    val count = pluralStringResource(R.plurals.sync_people_watching, group.members, syncNumber(group.members))
-                    val modifier = Modifier.testTag("sync:join:${group.id}").then(
-                        if (primaryGroup == group.id) Modifier.focusRequester(first) else Modifier
-                    )
-                    if (tv) {
-                        TvSettingsRow(
-                            group.name,
-                            count,
-                            modifier,
-                            enabled = !state.busy,
-                            onClick = { action("join", group.id) },
-                            trailing = {
-                                androidx.tv.material3.Text(
-                                    stringResource(R.string.sync_join),
-                                    style = TvMaterialTheme.typography.labelLarge
-                                )
-                            }
+        val groupRows: @Composable () -> Unit = {
+            if (tv || !state.busy) {
+                SyncSecondaryAction(
+                    stringResource(R.string.sync_refresh),
+                    { action("refresh", null) },
+                    tv,
+                    Modifier.testTag("sync:refresh").then(
+                        if (tv) {
+                            Modifier.focusRequester(refreshFocus)
+                        } else if (primaryGroup == null && !namePrimary) {
+                            Modifier.focusRequester(first)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                    enabled = state.canRefresh,
+                    refreshIcon = true
+                )
+            }
+            if (!state.busy && state.accessAllowed && state.groups.isEmpty()) {
+                SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"))
+            }
+            if (state.accessAllowed) {
+                Column {
+                    state.groups.forEach { group ->
+                        val count = pluralStringResource(R.plurals.sync_people_watching, group.members, syncNumber(group.members))
+                        val modifier = Modifier.testTag("sync:join:${group.id}").then(
+                            if (primaryGroup == group.id) Modifier.focusRequester(if (tv) joinFocus else first) else Modifier
                         )
-                    } else {
-                        ListItem(
-                            headlineContent = { Text(group.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                            supportingContent = { Text(count) },
-                            modifier = modifier,
-                            trailingContent = {
-                                FilledTonalButton(onClick = { action("join", group.id) }, enabled = !state.busy) {
-                                    Text(stringResource(R.string.sync_join))
+                        if (tv) {
+                            TvSettingsRow(
+                                group.name,
+                                count,
+                                modifier,
+                                enabled = !state.busy,
+                                onClick = { action("join", group.id) },
+                                trailing = {
+                                    androidx.tv.material3.Text(
+                                        stringResource(R.string.sync_join),
+                                        style = TvMaterialTheme.typography.labelLarge
+                                    )
                                 }
-                            }
-                        )
+                            )
+                        } else {
+                            ListItem(
+                                headlineContent = { Text(group.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                                supportingContent = { Text(count) },
+                                modifier = modifier,
+                                trailingContent = {
+                                    FilledTonalButton(onClick = { action("join", group.id) }, enabled = !state.busy) {
+                                        Text(stringResource(R.string.sync_join))
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
-        }
-    }
-    if (!tv && canCreate && !formFirst) form()
-    if (tv && state.busy && !state.accessAllowed) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            repeat(2) {
-                Spacer(
-                    Modifier.fillMaxWidth().height(
-                        56.dp
-                    ).background(TvMaterialTheme.colorScheme.surfaceVariant, TvMaterialTheme.shapes.medium)
-                )
+            if (tv && state.busy && !state.accessAllowed) {
+                repeat(2) { TvSettingsRowPlaceholder(Modifier.testTag("sync:group-placeholder")) }
             }
         }
+        if (tv) Column { groupRows() } else groupRows()
     }
+    if (!tv && canCreate && !formFirst) mountedForm(form)
 }
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
@@ -652,12 +750,13 @@ private fun SyncJoined(
     tv: Boolean,
     first: FocusRequester,
     waitFocus: FocusRequester,
-    queueFocus: MutableMap<String, FocusRequester>,
+    queueFocus: MutableMap<String, SyncQueueTarget>,
     usable: Boolean,
     transport: Boolean,
     hasRecovery: Boolean,
     notice: SyncNotice?,
-    compactHeight: Boolean
+    compactHeight: Boolean,
+    bodyScroll: ScrollState
 ) {
     val groupName = state.groupName ?: stringResource(R.string.sync_your_group)
     if (tv) {
@@ -694,15 +793,14 @@ private fun SyncJoined(
     } else {
         syncQueueTitle(current)
     }
+    val titlePlaceholder = state.queue.isEmpty() || current == null || current.titleUnavailable
     val titleModifier = Modifier.padding(horizontal = 16.dp).testTag("sync:now-playing")
     if (tv) {
         androidx.tv.material3.Text(
             currentTitle,
             titleModifier,
-            style = TvMaterialTheme.typography.titleMedium,
-            color = if (current?.titleUnavailable ==
-                true
-            ) {
+            style = if (titlePlaceholder) TvMaterialTheme.typography.bodyLarge else TvMaterialTheme.typography.titleMedium,
+            color = if (titlePlaceholder) {
                 TvMaterialTheme.colorScheme.onSurfaceVariant
             } else {
                 TvMaterialTheme.colorScheme.onSurface
@@ -714,10 +812,8 @@ private fun SyncJoined(
         Text(
             currentTitle,
             titleModifier,
-            style = if (compactHeight) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
-            color = if (current?.titleUnavailable ==
-                true
-            ) {
+            style = if (compactHeight) MaterialTheme.typography.bodyMedium else if (titlePlaceholder) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+            color = if (titlePlaceholder) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
                 MaterialTheme.colorScheme.onSurface
@@ -740,19 +836,24 @@ private fun SyncJoined(
             SyncLocalPlayback.READY -> R.string.sync_local_ready
         }
     )
-    SyncText(
+    if (syncShowsLocalPlayback(state.queue.size)) SyncText(
         stringResource(R.string.sync_local_fact, stringResource(R.string.sync_this_device), local),
-        tv,
-        Modifier.testTag("sync:local"),
-        small = compactHeight
+        tv, Modifier.testTag("sync:local"), small = compactHeight
     )
     if (!compactHeight &&
         state.quality != SyncQuality.UNKNOWN
     ) {
         SyncText(stringResource(R.string.sync_estimate_explanation), tv, small = true)
     }
+    var topControlFocused by remember(state.groupId, transport) { mutableStateOf(false) }
+    LaunchedEffect(tv, topControlFocused, state.groupId) {
+        if (tv && topControlFocused) {
+            withFrameNanos { }
+            bodyScroll.scrollTo(0)
+        }
+    }
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().then(if (tv) Modifier.padding(vertical = 8.dp) else Modifier),
         horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -765,7 +866,7 @@ private fun SyncJoined(
             stringResource(if (play) R.string.sync_play else R.string.sync_pause),
             { action(if (play) "play" else "pause", null) },
             tv,
-            Modifier.testTag(if (play) "sync:play" else "sync:pause").then(
+            Modifier.testTag(if (play) "sync:play" else "sync:pause").onFocusChanged { if (transport) topControlFocused = it.isFocused }.then(
                 if (transport &&
                     !hasRecovery
                 ) {
@@ -791,7 +892,7 @@ private fun SyncJoined(
             !state.ignoreWait,
             { action("ignore-wait", (!state.ignoreWait).toString()) },
             tv,
-            Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).then(
+            Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).onFocusChanged { if (!transport && usable) topControlFocused = it.hasFocus }.then(
                 if (usable &&
                     !transport &&
                     !hasRecovery
@@ -813,13 +914,16 @@ private fun SyncJoined(
             "RepeatAll" to R.string.sync_repeat_all
         )
         if (tv) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val repeatFocus = remember { List(3) { FocusRequester() } }
+            Row(Modifier.fillMaxWidth().focusProperties {
+                onEnter = { if (usable) repeatFocus[repeats.indexOfFirst { it.first == state.repeat }.coerceAtLeast(0)].requestFocus() }
+            }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeats.forEach { (value, label) ->
                     androidx.tv.material3.FilterChip(
                         selected = state.repeat == value,
                         onClick = { action("repeat", value) },
                         enabled = usable,
-                        modifier = Modifier.testTag("sync:repeat:$value"),
+                        modifier = Modifier.testTag("sync:repeat:$value").focusRequester(repeatFocus[repeats.indexOfFirst { it.first == value }]),
                         leadingIcon = if (state.repeat ==
                             value
                         ) {
@@ -871,13 +975,15 @@ private fun SyncJoined(
                     val current = if (entry.current) stringResource(R.string.sync_now_playing) else null
                     val remove = stringResource(R.string.sync_remove_title, title)
                     if (tv) {
-                        val entryFocus = remember { FocusRequester() }
-                        SideEffect { queueFocus[entry.id] = entryFocus }
+                        val entryTarget = remember { SyncQueueTarget() }
+                        val placedQueue = state.queue.map { it.id }
+                        SideEffect { queueFocus[entry.id] = entryTarget }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             TvSettingsRow(
                                 title,
                                 current,
-                                Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(entryFocus),
+                                Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(entryTarget.focus)
+                                    .bringIntoViewRequester(entryTarget.reveal).onPlaced { entryTarget.placedQueue = placedQueue },
                                 enabled = usable,
                                 selected = entry.current,
                                 titleMaxLines = 2,
@@ -1120,26 +1226,17 @@ internal fun syncQualityText(quality: SyncQuality): String = stringResource(
 
 private fun syncNumber(number: Int): String = NumberFormat.getIntegerInstance().format(number)
 
-private fun effectiveSyncNotice(state: SyncPlayPresentation): SyncNotice? = state.notice ?: when {
-    state.phase == "Reconnecting" -> SyncNotice(
-        SyncNoticeKind.REJOIN,
-        SyncNoticeTone.ERROR,
-        if (state.groupId == null) SyncNoticeAction.LEAVE else SyncNoticeAction.REJOIN
-    )
-    state.phase == "Error" -> SyncNotice(SyncNoticeKind.PLAYBACK_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
-    state.quality == SyncQuality.OUT_OF_SYNC -> SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.WARNING, SyncNoticeAction.REJOIN)
-    else -> null
-}
-
 @Composable
 private fun SyncNoticeBanner(
     state: SyncPlayPresentation,
     notice: SyncNotice,
     action: (String, String?) -> Unit,
     tv: Boolean,
-    first: FocusRequester?
+    first: FocusRequester?,
+    modifier: Modifier = Modifier,
+    pinned: Boolean = false
 ) {
-    val message = stringResource(
+    val message = if (notice.kind == SyncNoticeKind.DEPARTURE) syncDepartureText(state) else stringResource(
         when (notice.kind) {
             SyncNoticeKind.ACCESS_FAILED -> R.string.sync_access_failed
             SyncNoticeKind.GROUPS_FAILED -> R.string.sync_groups_failed
@@ -1152,7 +1249,7 @@ private fun SyncNoticeBanner(
             SyncNoticeKind.ACCESS_DENIED -> R.string.sync_access_denied
             SyncNoticeKind.REQUEST_FAILED -> R.string.sync_request_failed
             SyncNoticeKind.SNAPSHOT -> R.string.sync_snapshot
-            SyncNoticeKind.LEFT -> R.string.sync_left
+            SyncNoticeKind.LEFT, SyncNoticeKind.DEPARTURE -> R.string.sync_left
             SyncNoticeKind.LEAVE_UNCONFIRMED -> R.string.sync_leave_unconfirmed
             SyncNoticeKind.SPEED -> R.string.sync_speed
             SyncNoticeKind.CLOCK -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
@@ -1177,7 +1274,8 @@ private fun SyncNoticeBanner(
         MaterialTheme.colorScheme.onSurface
     }
     Row(
-        Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = if (tv) 8.dp else 0.dp).fillMaxWidth()
+        modifier.padding(horizontal = if (tv) 0.dp else 16.dp)
+            .padding(top = 0.dp, bottom = if (tv && !pinned) 8.dp else 0.dp).fillMaxWidth()
             .clip(
                 if (tv) TvMaterialTheme.shapes.medium else MaterialTheme.shapes.medium
             ).background(background).padding(horizontal = 16.dp, vertical = 12.dp)
@@ -1187,6 +1285,13 @@ private fun SyncNoticeBanner(
         if (notice.tone != SyncNoticeTone.INFO) Icon(syncIcon("warning"), null, tint = foreground, modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (tv) androidx.tv.material3.Text(message, color = foreground) else Text(message, color = foreground)
+            if (notice.kind == SyncNoticeKind.DEPARTURE && state.departure?.cause == app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE) {
+                state.departure.groupName?.let { name ->
+                    val context = stringResource(R.string.sync_departure_context, name)
+                    if (tv) androidx.tv.material3.Text(context, color = foreground, style = TvMaterialTheme.typography.bodyMedium)
+                    else Text(context, color = foreground, style = MaterialTheme.typography.bodySmall)
+                }
+            }
             notice.action?.takeUnless { it == SyncNoticeAction.LEAVE }?.let { recovery ->
                 val label = stringResource(if (recovery == SyncNoticeAction.REJOIN) R.string.sync_rejoin else R.string.sync_refresh)
                 val invoke = {
@@ -1250,14 +1355,7 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
         syncPhaseText(state)
     }
     val quality = syncQualityText(state.quality)
-    // Nonbreaking glue keeps a separator with its words if a large-font status needs two lines.
-    val status = if (state.phase in setOf("Playing", "Paused") &&
-        syncChipShowsQuality(state.quality)
-    ) {
-        "$phase\u00a0·\u00a0$quality"
-    } else {
-        phase
-    }
+    val displayedQuality = quality.takeIf { state.phase in setOf("Playing", "Paused") && syncChipShowsQuality(state.quality) }
     val content: @Composable () -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (tv) {
@@ -1266,54 +1364,8 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
                 Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
             }
             Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (tv) {
-                    androidx.tv.material3.Text(
-                        status,
-                        style = TvMaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("sync:chip-status")
-                    )
-                } else {
-                    Text(
-                        status,
-                        style = MaterialTheme.typography.labelLarge.copy(lineBreak = LineBreak.Heading),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("sync:chip-status")
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (tv) {
-                        androidx.tv.material3.Text(
-                            name,
-                            Modifier.weight(1f, fill = false).testTag("sync:chip-name"),
-                            style = TvMaterialTheme.typography.bodySmall,
-                            color = contextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        androidx.tv.material3.Text("·", Modifier.clearAndSetSemantics {}, color = contextColor)
-                        androidx.tv.material3.Text(
-                            count,
-                            Modifier.testTag("sync:chip-count"),
-                            style = TvMaterialTheme.typography.bodySmall,
-                            color = contextColor
-                        )
-                    } else {
-                        Text(
-                            name,
-                            Modifier.weight(1f, fill = false).testTag("sync:chip-name"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text("·", Modifier.clearAndSetSemantics {}, color = contextColor)
-                        Text(count, Modifier.testTag("sync:chip-count"), style = MaterialTheme.typography.bodySmall, color = contextColor)
-                    }
-                }
+                SyncChipStatus(phase, displayedQuality, tv)
+                SyncChipContext(name, count, tv, contextColor)
             }
         }
     }
@@ -1330,4 +1382,105 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
             TextButton(onClick = onOpen, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) { content() }
         }
     }
+}
+
+/** Acknowledges actual clipped placement, never composition or disposal. */
+internal fun Modifier.syncDeparturePresentation(id: Long, onPresented: (Long) -> Unit): Modifier = onGloballyPositioned { coordinates ->
+    if (coordinates.isAttached) {
+        val visible = coordinates.boundsInWindow()
+        val window = coordinates.findRootCoordinates().boundsInWindow()
+        if (!visible.isEmpty && !window.isEmpty && visible.overlaps(window)) onPresented(id)
+    }
+}
+
+@Composable
+private fun syncDepartureText(state: SyncPlayPresentation): String {
+    val departure = state.departure ?: return stringResource(R.string.sync_left)
+    val group = departure.groupName ?: stringResource(R.string.sync_departure_group)
+    return when (departure.cause) {
+        app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE -> stringResource(R.string.sync_left)
+        app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED -> stringResource(R.string.sync_departure_stopped, group)
+        app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED -> stringResource(R.string.sync_departure_ended, group)
+        app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_CLOSED -> stringResource(R.string.sync_departure_closed, group)
+        app.pictureshow.core.sync.SyncDepartureCause.EXTERNAL_ROUTE -> stringResource(R.string.sync_departure_cast, group)
+        app.pictureshow.core.sync.SyncDepartureCause.MEMBERSHIP_LOST -> stringResource(R.string.sync_departure_lost, group)
+    }
+}
+
+/** One real native text layout preserves introspection while wrapping only between known phrases. */
+@Composable
+private fun SyncChipStatus(phase: String, quality: String?, tv: Boolean) {
+    val style = if (tv) TvMaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelLarge
+    val color = if (tv) androidx.tv.material3.LocalContentColor.current else MaterialTheme.colorScheme.onSurface
+    val measurer = rememberTextMeasurer()
+    SubcomposeLayout { constraints ->
+        val inline = if (quality == null) phase else "$phase · $quality"
+        val fits = quality == null || measurer.measure(inline, style = style, maxLines = 1, softWrap = false).size.width <= constraints.maxWidth
+        val text = if (fits) inline else "$phase\n$quality"
+        val status = subcompose("status") {
+            SyncChipText(text, tv, style, color, Modifier.testTag("sync:chip-status"), maxLines = 2, softWrap = quality == null)
+        }.single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        layout(constraints.constrainWidth(status.width), constraints.constrainHeight(status.height)) {
+            status.placeRelative(0, 0)
+        }
+    }
+}
+
+@Composable
+private fun SyncChipText(
+    text: String, tv: Boolean, style: androidx.compose.ui.text.TextStyle, color: Color, modifier: Modifier = Modifier,
+    maxLines: Int = 1, softWrap: Boolean = false
+) {
+    if (tv) androidx.tv.material3.Text(text, modifier, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = TextOverflow.Ellipsis)
+    else Text(text, modifier, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = TextOverflow.Ellipsis)
+}
+
+/** Reserve the count, then measure a useful name instead of exposing a weighted ellipsis box. */
+@Composable
+private fun SyncChipContext(name: String, count: String, tv: Boolean, color: Color) {
+    val style = if (tv) TvMaterialTheme.typography.bodySmall else MaterialTheme.typography.bodySmall
+    val measurer = rememberTextMeasurer()
+    val boundaries = remember(name) { syncNameGraphemeEnds(name) }
+    SubcomposeLayout { constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val countRun = subcompose("count") { SyncChipText(count, tv, style, color, Modifier.testTag("sync:chip-count")) }.single().measure(loose)
+        val separator = subcompose("separator") { SyncChipText("·", tv, style, color, Modifier.clearAndSetSemantics {}) }.single().measure(loose)
+        val gap = 8.dp.roundToPx()
+        val budget = (constraints.maxWidth - countRun.width - separator.width - gap * 2).coerceAtLeast(0)
+        fun fits(text: String): Boolean = measurer.measure(text, style = style, maxLines = 1, softWrap = false).size.width <= budget
+        val shown = syncChipName(name, boundaries, ::fits)
+        val nameRun = shown?.let { visible ->
+            subcompose("name") { SyncChipText(visible, tv, style, color, Modifier.testTag("sync:chip-name")) }.single().measure(Constraints(maxWidth = budget))
+        }
+        val width = countRun.width + if (nameRun == null) 0 else nameRun.width + separator.width + gap * 2
+        val height = maxOf(countRun.height, nameRun?.height ?: 0, if (nameRun == null) 0 else separator.height)
+        layout(constraints.constrainWidth(width), constraints.constrainHeight(height)) {
+            if (nameRun != null) {
+                nameRun.placeRelative(0, (height - nameRun.height) / 2)
+                separator.placeRelative(nameRun.width + gap, (height - separator.height) / 2)
+            }
+            countRun.placeRelative(if (nameRun == null) 0 else nameRun.width + separator.width + gap * 2, (height - countRun.height) / 2)
+        }
+    }
+}
+
+/** ICU supplies extended character boundaries; API23 safely omits unproven non-ASCII prefixes. */
+private fun syncNameGraphemeEnds(name: String): List<Int> {
+    if (android.os.Build.VERSION.SDK_INT < 24) return if (name.all { it.code in 32..126 }) (1..name.length).toList() else emptyList()
+    val iterator = android.icu.text.BreakIterator.getCharacterInstance(java.util.Locale.getDefault())
+    iterator.setText(name)
+    val ends = mutableListOf<Int>()
+    var end = iterator.next()
+    while (end != android.icu.text.BreakIterator.DONE) {
+        ends += end
+        end = iterator.next()
+    }
+    return ends
+}
+
+/** A keyed native row survives recomposition; placement belongs to an authoritative queue revision. */
+private class SyncQueueTarget {
+    val focus = FocusRequester()
+    val reveal = BringIntoViewRequester()
+    var placedQueue by mutableStateOf<List<String>?>(null)
 }

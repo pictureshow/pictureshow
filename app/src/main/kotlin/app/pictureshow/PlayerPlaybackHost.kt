@@ -205,7 +205,14 @@ internal class PlaybackHostState(
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         if (next != null && sync?.transport("next") == true) return
-        if (next == null && sync?.participating == true) sync?.leave()
+        if (next == null && sync?.participating == true) {
+            val cause = when (reason) {
+                "stop-button", "remote-stop", "system-stop" -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED
+                "natural-end" -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED
+                else -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_CLOSED
+            }
+            sync?.leave(cause)
+        }
         onFinishing()
         if (!exitRequested && !switching) {
             PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))

@@ -114,7 +114,7 @@ internal fun syncPlayFixture(preset: String): SyncPlayPresentation? {
             groups = listOf(SyncPlayGroupRow("fixture-group", "Friday films", 3), SyncPlayGroupRow("fixture-two", "Weekend music", 1))
         )
         "joined3", "cast-consent" -> joined
-        "joined-empty" -> joined.copy(phase = "Idle", queue = emptyList())
+        "joined-empty" -> joined.copy(phase = "Idle", queue = emptyList(), localPlayback = SyncLocalPlayback.UNAVAILABLE)
         "local-unavailable" -> joined.copy(localPlayback = SyncLocalPlayback.UNAVAILABLE)
         "local-preparing" -> joined.copy(localPlayback = SyncLocalPlayback.PREPARING)
         "local-buffering" -> joined.copy(phase = "Waiting", waitReason = "Buffer", localPlayback = SyncLocalPlayback.BUFFERING)

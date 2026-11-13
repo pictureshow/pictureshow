@@ -12,6 +12,9 @@ import app.pictureshow.core.sync.SyncClockAnchor
 import app.pictureshow.core.sync.SyncClockCalibration
 import app.pictureshow.core.sync.SyncClockSample
 import app.pictureshow.core.sync.SyncCommand
+import app.pictureshow.core.sync.SyncDepartureCause
+import app.pictureshow.core.sync.SyncDepartureEvent
+import app.pictureshow.core.sync.SyncDepartureState
 import app.pictureshow.core.sync.SyncDriftAction
 import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.SyncEvent
@@ -25,6 +28,7 @@ import app.pictureshow.core.sync.leaveSync
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.parseSyncMessage
 import app.pictureshow.core.sync.recoverSync
+import app.pictureshow.core.sync.reduceSyncDeparture
 import app.pictureshow.core.sync.reduceSyncEvent
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncCreate
@@ -114,6 +118,9 @@ internal data class SyncLocalSelection(val itemId: String, val startTicks: Long)
 
 internal data class SyncOpen(val generation: Long, val entryId: String, val itemId: String, val ticks: Long)
 
+/** Identity captured by the rendered consent, independent of membership/request generations. */
+internal data class SyncExternalRouteConsent(val scope: Long, val id: Long)
+
 /** One signed-in viewing scope. All methods and socket callbacks run on the main dispatcher. */
 internal class SyncPlayHost(
     private val scope: CoroutineScope,
@@ -143,20 +150,40 @@ internal class SyncPlayHost(
     // Local Joining intent alone cannot have changed server membership. Preserve this through recovery/rejoin.
     private var serverMembershipPossible = false
     val participating: Boolean get() = membership.active || membership.groupId != null || leavePending
-    var pendingExternalRoute by mutableStateOf<(() -> Unit)?>(null)
-        private set
+    private data class PendingExternalRoute(val consent: SyncExternalRouteConsent, val route: () -> Unit)
+    private var pendingRoute by mutableStateOf<PendingExternalRoute?>(null)
+    private var externalRouteId = 0L
+    val pendingExternalRoute: (() -> Unit)? get() = pendingRoute?.route
+    val externalRouteConsent: SyncExternalRouteConsent? get() = pendingRoute?.consent
+
     fun confirmExternalRoute(then: () -> Unit): Boolean {
         if (!participating) return false
-        pendingExternalRoute = then
+        val consent = SyncExternalRouteConsent(departureState.scope, ++externalRouteId)
+        pendingRoute = PendingExternalRoute(consent, then)
         return true
     }
     fun cancelExternalRoute() {
-        pendingExternalRoute = null
+        val consent = externalRouteConsent ?: return
+        cancelExternalRoute(consent.scope, consent.id)
+    }
+    fun cancelExternalRoute(scope: Long, id: Long) {
+        val pending = pendingRoute ?: return
+        if (scope != departureState.scope || pending.consent != SyncExternalRouteConsent(scope, id)) return
+        pendingRoute = null
     }
     fun leaveForExternalRoute() {
-        val then = pendingExternalRoute ?: return
-        pendingExternalRoute = null
-        leaveConfirmed(then)
+        val consent = externalRouteConsent ?: return
+        leaveForExternalRoute(consent.scope, consent.id)
+    }
+    fun leaveForExternalRoute(scope: Long, id: Long) {
+        val pending = pendingRoute ?: return
+        if (scope != departureState.scope || pending.consent != SyncExternalRouteConsent(scope, id)) return
+        // Consume before Leave so repeated confirmation cannot send or route twice.
+        pendingRoute = null
+        leaveConfirmed({
+            // HTTP confirmation may outlive its account or be superseded by another consent.
+            if (departureState.scope == scope && externalRouteId == id) pending.route()
+        }, SyncDepartureCause.EXTERNAL_ROUTE)
     }
     private var connected = false
     private var renderer: SyncRenderer? = null
@@ -215,9 +242,11 @@ internal class SyncPlayHost(
     fun bind(next: Account?) {
         val usable = next?.takeUnless { it.expired }
         if (usable?.key == account?.key && usable?.accessToken == account?.accessToken) return
+        pendingRoute = null
         val before = account
         if (participating && before != null) leave()
         account = usable
+        departure(SyncDepartureEvent.ScopeChanged(departureState.scope + 1))
         sequence++
         operation?.cancel()
         membership = SyncMembership(generation = membership.generation + 1)
@@ -228,7 +257,35 @@ internal class SyncPlayHost(
         mutable.value = SyncPlayPresentation(server = usable?.server?.name.orEmpty(), viewer = usable?.user?.name.orEmpty())
     }
 
+    internal var departureState = SyncDepartureState()
+        private set
+    internal var chooserSession = 0L
+        private set
+
+    private fun departure(event: SyncDepartureEvent) {
+        departureState = reduceSyncDeparture(departureState, event)
+        mutable.value = mutable.value.copy(departure = departureState.pending)
+    }
+
+    fun leave(cause: SyncDepartureCause) = leaveConfirmed(null, cause)
+
+    /** Layout acknowledgement is accepted only for the currently selected, visible chooser banner. */
+    fun departurePresented(scope: Long, id: Long, chooserSession: Long) {
+        if (!panelOpen || chooserSession != this.chooserSession || effectiveSyncNotice(mutable.value)?.kind != SyncNoticeKind.DEPARTURE) return
+        departure(SyncDepartureEvent.Presented(scope, id, chooserSession))
+    }
+
+    /** Configuration disposal is not a dismissal; callers capture this chooser's identity. */
+    fun dismissChooser(scope: Long, id: Long?, chooserSession: Long) {
+        if (scope != departureState.scope || chooserSession != this.chooserSession || id != departureState.pending?.id) return
+        if (panelOpen && id != null && effectiveSyncNotice(mutable.value)?.kind == SyncNoticeKind.DEPARTURE) {
+            departure(SyncDepartureEvent.Dismissed(scope, id, chooserSession))
+        }
+        panelOpen = false
+    }
+
     fun show() {
+        if (!panelOpen) chooserSession++
         panelOpen = true
         refresh()
     }
@@ -323,6 +380,8 @@ internal class SyncPlayHost(
         )
         if (after === before || after == before) return
         membership = after
+        if (event is SyncEvent.Joined) departure(SyncDepartureEvent.MembershipStarted(departureState.scope))
+        if (event is SyncEvent.Left) departure(SyncDepartureEvent.Recorded(departureState.scope, before.group?.name, SyncDepartureCause.MEMBERSHIP_LOST))
         if (event is SyncEvent.Joined || after.generation != before.generation || !after.active) waitReason = null
         if (event is SyncEvent.State) waitReason = event.reason
         if (after.phase !in setOf("Error", "Reconnecting") && event is SyncEvent.State) {
@@ -552,8 +611,11 @@ internal class SyncPlayHost(
     }
 
     /** Leave invalidates events immediately, retains local paused resume and sends no group Stop. */
-    fun leave() = leaveConfirmed(null)
-    private fun leaveConfirmed(after: (() -> Unit)?) {
+    fun leave() = leave(SyncDepartureCause.MANUAL_LEAVE)
+    private fun leaveConfirmed(after: (() -> Unit)?, cause: SyncDepartureCause) {
+        if (membership.active || membership.groupId != null) {
+            departure(SyncDepartureEvent.Recorded(departureState.scope, membership.group?.name, cause))
+        }
         val target = account
         val hadMembership = serverMembershipPossible || leavePending
         serverMembershipPossible = false
@@ -571,7 +633,14 @@ internal class SyncPlayHost(
         createQueue = false
         ignoreWait = false
         publish()
-        note("Left Watch together. This device is paused; the group can keep playing.", SyncNoticeKind.LEFT)
+        note(
+            if (departureState.pending?.cause == SyncDepartureCause.MANUAL_LEAVE) {
+                "Left Watch together. This device is paused; the group can keep playing."
+            } else {
+                "Watch-together membership ended: ${departureState.pending?.cause ?: cause}."
+            },
+            SyncNoticeKind.LEFT
+        )
         val version = sequence
         if (target != null && hadMembership) {
             scope.launch {
@@ -597,7 +666,7 @@ internal class SyncPlayHost(
 
     fun background() {
         trace("lifecycle", "source=background participating=$participating")
-        if (participating) leave()
+        if (participating) leave(SyncDepartureCause.MEMBERSHIP_LOST)
     }
     fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null, opening: SyncOpen? = null): Boolean {
         val current = membership.queue?.current

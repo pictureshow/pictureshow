@@ -20,6 +20,7 @@ internal enum class SyncNoticeKind {
     REQUEST_FAILED,
     SNAPSHOT,
     LEFT,
+    DEPARTURE,
     LEAVE_UNCONFIRMED,
     SPEED,
     CLOCK,
@@ -46,7 +47,7 @@ internal data class SyncPlayPresentation(
     val server: String = "",
     val viewer: String = "",
     val phase: String = "idle",
-    /** Retained diagnostic compatibility; viewer copy is exclusively [notice]. */
+    /** Retained diagnostic compatibility; viewer copy uses [notice] and the typed [departure]. */
     val status: String = "",
     val notice: SyncNotice? = null,
     val quality: app.pictureshow.core.sync.SyncQuality = app.pictureshow.core.sync.SyncQuality.UNKNOWN,
@@ -63,7 +64,8 @@ internal data class SyncPlayPresentation(
     val ignoreWait: Boolean = false,
     val repeat: String = "RepeatNone",
     val shuffle: String = "Sorted",
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    val departure: app.pictureshow.core.sync.SyncDeparture? = null
 ) {
     val access get() = syncAccessPresentation(policy, policyKnown, busy, policyFailed)
     val accessAllowed: Boolean get() = access.canJoin
@@ -78,4 +80,16 @@ internal data class SyncPlayPresentation(
             "This viewer is not allowed to join watch-together groups. Ask the server administrator to enable SyncPlay access."
         SyncAccessNotice.ALLOWED -> null
     }
+}
+
+/** One banner owns recovery; a retained departure is shown only in a non-recovery chooser. */
+internal fun effectiveSyncNotice(state: SyncPlayPresentation): SyncNotice? = when {
+    state.notice?.tone != null && (state.notice.tone != SyncNoticeTone.INFO || state.notice.action != null) -> state.notice
+    state.phase == "Reconnecting" -> SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.ERROR,
+        if (state.groupId == null) SyncNoticeAction.LEAVE else SyncNoticeAction.REJOIN)
+    state.phase == "Error" -> SyncNotice(SyncNoticeKind.PLAYBACK_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
+    state.groupId != null && state.quality == app.pictureshow.core.sync.SyncQuality.OUT_OF_SYNC ->
+        SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.WARNING, SyncNoticeAction.REJOIN)
+    state.groupId == null && state.departure != null -> SyncNotice(SyncNoticeKind.DEPARTURE, SyncNoticeTone.INFO)
+    else -> state.notice
 }

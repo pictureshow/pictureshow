@@ -1,0 +1,881 @@
+{
+  "schemaVersion": 1,
+  "schema": 1,
+  "suite": "sync-departure",
+  "cases": [
+    {
+      "id": "hidden-stop-dismissal-without-presentation-retains",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "PLAYBACK_STOPPED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "visible-matching-dismiss-consumes-exactly-once",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 8
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "wrong-scope-id-session-cannot-consume",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 10,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 99,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 6
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 10,
+            "id": 1,
+            "chooserSession": 9
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 99,
+            "chooserSession": 9
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "newer-presentation-rejects-old-session-acks",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 8
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 8
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 8
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 8
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 8
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "new-record-survives-old-layout-and-close",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Late screening",
+            "cause": "MEMBERSHIP_LOST"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "Late screening",
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "Late screening",
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "Late screening",
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 2,
+            "chooserSession": 8
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "Late screening",
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "scope-change-drops-private-name-keeps-id-monotonic",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "ScopeChanged",
+            "scope": 12
+          },
+          "expected": {
+            "scope": 12,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Old private group",
+            "cause": "MANUAL_LEAVE"
+          },
+          "expected": {
+            "scope": 12,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Presented",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 12,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 12,
+            "name": "New group",
+            "cause": "PLAYBACK_ENDED"
+          },
+          "expected": {
+            "scope": 12,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "New group",
+              "cause": "PLAYBACK_ENDED"
+            },
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Dismissed",
+            "scope": 11,
+            "id": 1,
+            "chooserSession": 7
+          },
+          "expected": {
+            "scope": 12,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "New group",
+              "cause": "PLAYBACK_ENDED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "same-scope-rebind-is-not-a-reset",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "ScopeChanged",
+            "scope": 11
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "accepted-membership-clears-only-matching-scope",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "MembershipStarted",
+            "scope": 10
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        },
+        {
+          "event": {
+            "kind": "MembershipStarted",
+            "scope": 11
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": null,
+            "presentedIn": null
+          }
+        },
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening again",
+            "cause": "PLAYBACK_CLOSED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 2,
+            "pending": {
+              "id": 2,
+              "groupName": "Evening again",
+              "cause": "PLAYBACK_CLOSED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "wrong-scope-record-cannot-replace-fact",
+      "initial": {
+        "scope": 11,
+        "revision": 1,
+        "pending": {
+          "id": 1,
+          "groupName": "Evening",
+          "cause": "PLAYBACK_STOPPED"
+        },
+        "presentedIn": 7
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 10,
+            "name": "Wrong account",
+            "cause": "MEMBERSHIP_LOST"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "blank-known-name-becomes-null-never-group-id",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": " \t ",
+            "cause": "MEMBERSHIP_LOST"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": null,
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "unknown-name-stays-null",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": null,
+            "cause": "PLAYBACK_STOPPED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": null,
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "known-name-retained-verbatim",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "  Evening — 日本語 🎞️  ",
+            "cause": "PLAYBACK_ENDED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "  Evening — 日本語 🎞️  ",
+              "cause": "PLAYBACK_ENDED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-manual_leave",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "MANUAL_LEAVE"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "MANUAL_LEAVE"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-playback_stopped",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "PLAYBACK_STOPPED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_STOPPED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-playback_ended",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "PLAYBACK_ENDED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_ENDED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-playback_closed",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "PLAYBACK_CLOSED"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "PLAYBACK_CLOSED"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-external_route",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "EXTERNAL_ROUTE"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "EXTERNAL_ROUTE"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "truthful-cause-membership_lost",
+      "initial": {
+        "scope": 11,
+        "revision": 0,
+        "pending": null,
+        "presentedIn": null
+      },
+      "steps": [
+        {
+          "event": {
+            "kind": "Recorded",
+            "scope": 11,
+            "name": "Evening",
+            "cause": "MEMBERSHIP_LOST"
+          },
+          "expected": {
+            "scope": 11,
+            "revision": 1,
+            "pending": {
+              "id": 1,
+              "groupName": "Evening",
+              "cause": "MEMBERSHIP_LOST"
+            },
+            "presentedIn": null
+          }
+        }
+      ]
+    }
+  ]
+}

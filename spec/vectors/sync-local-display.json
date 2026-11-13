@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-local-display",
+  "rule": "Authoritative empty queue has no local engine fact to display; nonempty queue displays actual local state without synthesizing readiness.",
+  "cases": [
+    {
+      "id": "joined-empty-cannot-claim-preparing",
+      "queueEntries": 0,
+      "localState": "PREPARING",
+      "expectedVisible": false
+    },
+    {
+      "id": "joined-empty-cannot-claim-ready",
+      "queueEntries": 0,
+      "localState": "READY",
+      "expectedVisible": false
+    },
+    {
+      "id": "selected-unavailable-remains-visible",
+      "queueEntries": 1,
+      "localState": "UNAVAILABLE",
+      "expectedVisible": true
+    },
+    {
+      "id": "selected-buffering-remains-visible",
+      "queueEntries": 2,
+      "localState": "BUFFERING",
+      "expectedVisible": true
+    }
+  ]
+}

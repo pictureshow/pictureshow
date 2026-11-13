@@ -254,8 +254,9 @@ The saved, single-line,200-character editor stays mounted under the fixed title
 and server/viewer context rather than moving when the keyboard opens. Only the
 scrolling content below it consumes IME space; a floating keyboard must not pan
 the context away. The chooser hides its pinned Create during explicit editing.
-Busy placeholders are neutral, noninteractive56dp surfaces matching the body
-width. Join-only permission copy precedes its group list.
+Busy placeholders are neutral, noninteractive surfaces matching the actual native
+two-line group row:64dp minimum,12dp vertical padding and measured headline/support
+styles. They grow with large fonts and share zero row spacing with loaded rows. Join-only permission copy precedes its group list.
 
 SyncPlay opts into shared TV panel inset, pinned-editor and focus-scroll options;
 other settings callers retain their defaults. The effective focus viewport excludes
@@ -279,3 +280,119 @@ These source contracts require fresh native keyboard, fade, safe-area, wide/comp
 large-font and whole-screen director evidence. They do not diagnose the unrelated
 fixture ANR, alter a clock or establish peer output timing. Web, Apple and desktop
 native UI and app-case parity remain pending even when Kotlin vectors pass.
+
+
+### Retained departure acknowledgement
+
+A local departure retains a typed cause and the actual known former group name,
+separately from transient informational notices. Stop ends this local viewing and
+intentionally leaves; ended playback and closed viewing have their own causes.
+Actual manual Leave retains “You left the group. This device is paused.” and can
+show the former name as separate context. Confirmed Cast has its own cause; opening
+or cancelling Cast consent has no departure effect. Unexpected accepted server
+membership loss states only “You’re no longer in {group}.” No explanation invents
+a kick, group dissolution, everyone leaving, a raw group ID, or a paused Stop.
+
+The pure departure reducer scopes records to the account/token epoch, distinct
+from changing membership generations and request sequences. Accepted new membership
+or a changed account/token clears the old fact; a failed join intent does not.
+Refreshing access/groups, time spent with the panel closed, and four-second INFO
+notice expiry do not clear the record. The next chooser must actually lay out the
+selected departure banner in a nonempty visible viewport before it can acknowledge
+presentation. Higher-priority actionable/error banners retain the hidden record.
+Only deliberate dismissal of that same chooser session, with matching scope and
+record identity, consumes it. Composition disposal/configuration changes are not
+dismissal. Old layout/dismiss callbacks cannot consume a newer record or account.
+These acknowledgement callbacks send no connection mutation. Leave still invalidates
+old events immediately, sends at most its existing required request, and waits for
+confirmation before an external Cast route; cancellation and failure remain safe.
+
+The separate sync-departure vector traces exercise the actual core reducer. Native
+binding/Host tests additionally exercise refresh, hidden time, selected severity,
+actual placement, Close/Back and disposal. Kotlin coverage does not implement the
+Web, Apple or desktop reducer/acknowledgement: those app cases remain owed.
+
+### Native viewport, chooser and chip layout
+
+All measurements here are logical dp unless explicitly labelled native pixels.
+For example1280×720native at density2 is640×360dp;640×360native at that density is
+320×180dp stress evidence. A156dpi TV has.975native px/dp. Capture receipts record
+native dimensions, density, actual window dp and Configuration.fontScale/system
+font scale. A600dp image alone cannot prove the full-bleed/centred600dp body rule
+in a wider window. Large-font and real letter-IME evidence are separate requirements.
+
+Touch creation keeps one mounted single-line editor/draft across width and IME
+changes. At compact height, field and Create share a row only if the native action
+leaves at least200dp for the field after normal side insets/gap; otherwise they
+stack with a full-width field and action. Name label stays one line. Normal portrait
+keeps its pinned Create. Empty choosers lead with creation. True640×360dp/font1.3
+still owes visible initial content and actionable readable field/Create with IME.
+The actual Dialog insets control its usable viewport. Focus reveal excludes the
+painted16dp top/20dp bottom fades plus8dp breathing room (24/28dp), using the same
+live fade predicates as drawing, and reruns when the IME resizes the focused field.
+Visible targets do not move, oversized targets stay stable, and terminal padding
+allows the focused outline to clear the fade. No empty pinned footer is drawn.
+
+TV opts into opaque8dp bands at BOTH viewport clip edges inside the existing32/40dp
+fades; other shared settings callers retain their defaults. A1dp native divider
+separates the scrolled header only while backward scroll is possible, and separates
+an existing joined OR chooser footer without changing safe inset geometry. Effective
+reveal remains40/48dp. Transport has8dp vertical internal padding beside the4dp
+body spacing, yielding12dp actual gaps above/below; horizontal gaps remain12dp.
+Returning focus to the first useful body control restores scroll0 and the complete
+group/title/status context. Other targets move minimally. Queue removal retains the
+same next-at-index/previous-last neighbour (sole removal uses Wait); programmatic
+focus/reveal waits for the authoritative next layout, not merely a frame timer.
+Every focused row must clear the same effective fade boundaries after settle.
+
+TV Repeat is entered on the current checked enabled chip from both Up and Down;
+Left/Right within it remains free and focus alone sends no shared-setting action.
+A LEFT/departure chooser with create permission initially focuses NAME even when
+cached groups are already populated, without automatic IME. A valid NAME/Refresh
+or deliberately moved focus survives asynchronous results. Fresh normal loaded
+chooser still starts on first Join. Newly offered recovery/removed targets trigger
+useful repair; unrelated flags do not. The single acknowledgement banner is pinned
+above the stable editor outside scroll fades, with12dp context/banner/editor gaps.
+Native Select→IME→typed→Go, Back-keeps-draft and Down→enabled Create remain required.
+
+Both native surfaces use the authoritative queue count for local-fact visibility:
+empty queues have no “This device” playback fact. The empty debug fixture reports
+UNAVAILABLE independently of this visibility rule. Nonempty unavailable/preparing/
+buffering/ready facts remain honest and do not infer other participants’ readiness.
+Nothing-playing/title-unavailable placeholders are muted; actual titles remain
+primary, and no raw IDs substitute for missing titles.
+
+Chip phase and known quality are WHOLE phrases: share one baseline only when both
+fit, otherwise put phase first and quality second with no orphan/leading dot. A
+translated phrase that alone exceeds the measure may ellipsize on its own line;
+it must not consume the other fact’s line. Phase-only Waiting/Reconnecting may use
+two lines. UNKNOWN remains omitted, and no chip estimate is remote-output proof.
+The natural chip width, native role, count/plural and original participant count
+remain intact. Context reserves the full localized count first. Show a fitting
+whole short group name; otherwise display an ORIGINAL prefix of at least SIX
+COMPLETE Unicode graphemes plus ellipsis, or omit name AND separator. No invented
+abbreviation or1–3letter stub. Measure the actual rendered prefix so equal8dp gaps
+follow its visible box. On API23, unproven non-ASCII segmentation falls back to
+count-only unless the whole name fits; no unsafe UTF-16/code-point slicing. API24+
+uses extended grapheme boundaries. Native font1.3/280dp and long-locale evidence
+must prove these rules; declarative vectors cannot prove actual text fit.
+
+These selective shared UI changes do not alter offline, source/renderer eligibility,
+clock, speed, readiness, transport protocol or connection policy. The same semantic
+presentation and departure rules apply to all platforms; Web/Apple/desktop still owe
+their native measurement/focus/IME/acknowledgement implementations and app evidence.
+
+
+Cast consent is bound to BOTH the account/token epoch and a monotonically distinct
+consent identity. A changed account, token or logout clears pending consent; an
+identical account/token rebind preserves it. The rendered dialog captures that
+identity for Confirm and Cancel. An old dialog callback cannot confirm or cancel
+a newer consent, even within the same account. Accepted confirmation consumes the
+pending identity before the existing Leave path, so repeat presses do nothing.
+The eventual route callback checks the same account epoch and latest consent ID
+again, in addition to the existing request/account/HTTP-success/nonparticipation
+fences. A stale or cancelled consent sends no extra Leave, records no departure
+and launches no route. These guards do not change valid Cast confirmation,
+failed-Leave recovery, cancellation, offline behavior or group transport policy.
+Native implementations and their portable consent traces must preserve this scope
+and individual-identity contract; a prior consent never authorizes a later viewer.

@@ -51,3 +51,17 @@ fun syncPanelQuality(quality: SyncQuality, recoveryOffered: Boolean): SyncQualit
 
 /** A glanceable chip omits an unknown estimate rather than reporting a non-fact. */
 fun syncChipShowsQuality(quality: SyncQuality): Boolean = quality != SyncQuality.UNKNOWN
+
+/** An empty authoritative queue has no local playback fact to display. */
+fun syncShowsLocalPlayback(queueEntries: Int): Boolean = queueEntries > 0
+
+/** Native segmentation and measurement supply complete graphemes and actual available width. */
+fun syncChipName(name: String, graphemeEnds: List<Int>, fits: (String) -> Boolean): String? {
+    if (fits(name)) return name
+    if (graphemeEnds.size < 6) return null
+    return graphemeEnds.indices.reversed().firstNotNullOfOrNull { index ->
+        if (index < 5 || graphemeEnds[index] == name.length) null else {
+            (name.substring(0, graphemeEnds[index]) + "…").takeIf(fits)
+        }
+    }
+}

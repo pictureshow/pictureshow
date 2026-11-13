@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-route-consent",
+  "cases": [
+    {
+      "id": "consent-account",
+      "rebind": "account",
+      "expectedPending": false,
+      "expectedRoutes": 0
+    },
+    {
+      "id": "consent-token",
+      "rebind": "token",
+      "expectedPending": false,
+      "expectedRoutes": 0
+    },
+    {
+      "id": "consent-logout",
+      "rebind": "logout",
+      "expectedPending": false,
+      "expectedRoutes": 0
+    },
+    {
+      "id": "consent-same",
+      "rebind": "same",
+      "expectedPending": true,
+      "expectedRoutes": 1
+    }
+  ],
+  "identityCases": [
+    {
+      "id": "stale-confirm",
+      "expectedPendingAfterObsolete": true,
+      "expectedRoutesAfterObsolete": 0,
+      "expectedFinalRoutes": 1,
+      "expectedLeaveRequests": 1
+    },
+    {
+      "id": "stale-cancel",
+      "expectedPendingAfterObsolete": true,
+      "expectedRoutesAfterObsolete": 0,
+      "expectedFinalRoutes": 1,
+      "expectedLeaveRequests": 1
+    },
+    {
+      "id": "wrong-scope-confirm",
+      "expectedPendingAfterObsolete": true,
+      "expectedRoutesAfterObsolete": 0,
+      "expectedFinalRoutes": 1,
+      "expectedLeaveRequests": 1
+    },
+    {
+      "id": "wrong-scope-cancel",
+      "expectedPendingAfterObsolete": true,
+      "expectedRoutesAfterObsolete": 0,
+      "expectedFinalRoutes": 1,
+      "expectedLeaveRequests": 1
+    },
+    {
+      "id": "duplicate",
+      "expectedPendingAfterObsolete": false,
+      "expectedRoutesAfterObsolete": 1,
+      "expectedFinalRoutes": 1,
+      "expectedLeaveRequests": 1
+    },
+    {
+      "id": "scope-change-during-leave",
+      "expectedPendingAfterObsolete": false,
+      "expectedRoutesAfterObsolete": 0,
+      "expectedFinalRoutes": 0,
+      "expectedLeaveRequests": 1
+    }
+  ]
+}

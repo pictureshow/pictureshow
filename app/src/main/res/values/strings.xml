@@ -113,4 +113,11 @@
         <item quantity="other">+%1$s more people</item>
     </plurals>
     <string name="sync_group_unavailable">This group is no longer available. Leave it, then choose another group.</string>
+    <string name="sync_departure_group">the group</string>
+    <string name="sync_departure_context">Former group: %1$s</string>
+    <string name="sync_departure_stopped">You left %1$s when you stopped playback.</string>
+    <string name="sync_departure_ended">You left %1$s when playback ended.</string>
+    <string name="sync_departure_closed">You left %1$s when you closed playback.</string>
+    <string name="sync_departure_cast">You left %1$s to cast.</string>
+    <string name="sync_departure_lost">You’re no longer in %1$s.</string>
 </resources>

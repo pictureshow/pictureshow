@@ -8,6 +8,7 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -452,6 +453,9 @@ internal fun TvSettingsPanel(
     pinnedEditor: (@Composable () -> Unit)? = null,
     footerBottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
     edgeToEdge: Boolean = false,
+    pinnedNotice: (@Composable () -> Unit)? = null,
+    bodyScrollState: ScrollState? = null,
+    footerDivider: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var contentHasFocus by remember { mutableStateOf(false) }
@@ -514,7 +518,10 @@ internal fun TvSettingsPanel(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
-                pinnedEditor?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) { it() } }
+                pinnedNotice?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) { it() } }
+                pinnedEditor?.let {
+                    Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (pinnedNotice == null) 8.dp else 0.dp, bottom = 8.dp)) { it() }
+                }
                 Column(
                     Modifier.weight(1f).then(
                         if (edgeToEdge) {
@@ -525,7 +532,7 @@ internal fun TvSettingsPanel(
                     )
                 ) {
                     if (scrollContent) {
-                        TvSettingsList(Modifier.weight(1f), minimalFocusScroll = minimalFocusScroll, content = content)
+                        TvSettingsList(Modifier.weight(1f), minimalFocusScroll = minimalFocusScroll, scrollState = bodyScrollState, content = content)
                     } else {
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             Column(Modifier.fillMaxSize(), content = content)
@@ -547,14 +554,13 @@ internal fun TvSettingsPanel(
                         }
                     }
                     footer?.let {
-                        Box(
-                            Modifier.fillMaxWidth().padding(
-                                start = footerHorizontalPadding,
-                                end = footerHorizontalPadding,
-                                top = 12.dp,
-                                bottom = footerBottomPadding
-                            )
-                        ) { it() }
+                        Box(Modifier.fillMaxWidth().testTag("tv-settings:footer")) {
+                            Box(Modifier.fillMaxWidth().padding(
+                                start = footerHorizontalPadding, end = footerHorizontalPadding,
+                                top = 12.dp, bottom = footerBottomPadding
+                            )) { it() }
+                            if (footerDivider) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant))
+                        }
                     }
                 }
             }
@@ -580,9 +586,11 @@ internal fun TvSettingsPanel(
 internal fun TvSettingsList(
     modifier: Modifier = Modifier,
     minimalFocusScroll: Boolean = false,
+    scrollState: ScrollState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val scroll = rememberScrollState()
+    val rememberedScroll = rememberScrollState()
+    val scroll = scrollState ?: rememberedScroll
     val surface = MaterialTheme.colorScheme.surface
     val density = LocalDensity.current
     val topClearance = with(density) { 40.dp.toPx() }
@@ -604,7 +612,7 @@ internal fun TvSettingsList(
             }
         }
     }
-    Box(modifier.fillMaxWidth()) {
+    Box(modifier.fillMaxWidth().testTag("tv-settings:viewport")) {
         CompositionLocalProvider(LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll) {
             Column(
                 Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().verticalScroll(scroll)
@@ -616,13 +624,16 @@ internal fun TvSettingsList(
         if (scroll.canScrollBackward) {
             Box(
                 Modifier.fillMaxWidth().height(32.dp).align(Alignment.TopCenter).testTag("tv-settings:fade-top")
-                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to surface, .25f to surface, 1f to Color.Transparent)
+                        else Brush.verticalGradient(listOf(surface, Color.Transparent)))
             )
+            if (minimalFocusScroll) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant))
         }
         if (scroll.canScrollForward) {
             Box(
                 Modifier.fillMaxWidth().height(40.dp).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to Color.Transparent, .8f to surface, 1f to surface)
+                        else Brush.verticalGradient(listOf(Color.Transparent, surface)))
             )
         }
         if (scroll.canScrollBackward || scroll.canScrollForward) {
@@ -643,5 +654,19 @@ internal fun TvSettingsList(
                 }
             }
         }
+    }
+}
+
+/** Neutral loading footprint: same two text styles, padding and minimum as a native two-line row. */
+@Composable
+internal fun TvSettingsRowPlaceholder(modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().heightIn(min = 64.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.medium)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Loading", Modifier.clearAndSetSemantics {}, color = Color.Transparent, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+        Text("Loading", Modifier.clearAndSetSemantics {}, color = Color.Transparent, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
     }
 }

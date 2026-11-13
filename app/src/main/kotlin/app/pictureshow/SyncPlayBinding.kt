@@ -108,10 +108,12 @@ internal fun SyncPlayCoordinator(
             if (sync.resolved(request, entry != null) && entry != null) latestOpen(entry.copy(syncOpen = request))
         }
     }
-    val presentation by sync.state.collectAsState()
-    if (sync.panelOpen) SyncPlayPanel(presentation, sync::action) { sync.panelOpen = false }
-    if (sync.pendingExternalRoute != null) {
-        SyncLeaveForCastConsent(onDismiss = sync::cancelExternalRoute, onConfirm = sync::leaveForExternalRoute)
+    SyncPlayChooser(sync)
+    sync.externalRouteConsent?.let { consent ->
+        SyncLeaveForCastConsent(
+            onDismiss = { sync.cancelExternalRoute(consent.scope, consent.id) },
+            onConfirm = { sync.leaveForExternalRoute(consent.scope, consent.id) }
+        )
     }
 }
 
@@ -278,4 +280,21 @@ internal fun PlaybackHostState.segmentModesForViewing(): Map<SegmentType, Segmen
     }
 } else {
     localPreferences.segmentModes
+}
+
+/** The actual chooser binding captures identities so an old layout/close cannot acknowledge a later record. */
+@Composable
+internal fun SyncPlayChooser(sync: SyncPlayHost) {
+    val presentation by sync.state.collectAsState()
+    if (sync.panelOpen) {
+        val accountScope = sync.departureState.scope
+        val session = sync.chooserSession
+        val departureId = presentation.departure?.id
+        SyncPlayPanel(
+            presentation, sync::action,
+            { sync.dismissChooser(accountScope, departureId, session) },
+            fixtureLabel = null,
+            onDeparturePresented = { id -> sync.departurePresented(accountScope, id, session) }
+        )
+    }
 }
