@@ -98,6 +98,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         let code = app.staticTexts["quickCode"]
         XCTAssertTrue(code.waitForExistence(timeout: 15))
         XCTAssertEqual(fixture.quickInitiations, 1)
+        XCTAssertFalse(app.staticTexts["signInError"].exists, "Pending Quick Connect must clear the previous password sign-in error")
         record("Round3 Quick Connect code and instruction")
         #if os(tvOS)
         let heading = app.staticTexts["Quick Connect"].firstMatch
@@ -114,6 +115,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         activate(app.buttons["cancelQuick"])
         XCTAssertTrue(code.waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.buttons["signIn"].exists)
+        XCTAssertFalse(app.staticTexts["signInError"].exists, "Returning to password sign-in must not restore the previous rejected attempt's error")
         record("Round3 Quick Connect cancelled password route retained")
         assertViewerCopy()
     }

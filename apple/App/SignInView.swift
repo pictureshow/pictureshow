@@ -215,7 +215,7 @@ private struct SignInForm: View {
         }.id("credentialsSubmission")
         VStack(alignment: .leading, spacing: 12) {
             if quickEnabled == true {
-                Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity) }
+                Button { error = nil; flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity) }
                     .secondaryActionStyle().touchSecondaryInk().modifier(SignInActionTarget())
                     .disabled(busy).accessibilityIdentifier("quickConnect")
             } else if quickEnabled == false {
