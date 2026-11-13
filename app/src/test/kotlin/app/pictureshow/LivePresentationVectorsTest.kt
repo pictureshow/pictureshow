@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(261, cases.size)
+        assertEquals(262, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -59,6 +59,11 @@ class LivePresentationVectorsTest {
                     assertEquals(expected.getValue("inset").jsonPrimitive.float, actual.inset, 0.001f, id)
                     assertEquals(expected.getValue("width").jsonPrimitive.float, actual.width, 0.001f, id)
                 }
+                "recording-mutation-slot" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.int,
+                    RECORDING_DETAIL_MUTATION_SIZE_DP,
+                    id
+                )
                 "recording-action-order" -> assertEquals(
                     envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.content },
                     recordingDetailActionOrder(

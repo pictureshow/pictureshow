@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +27,9 @@ internal fun recordingDetailActionOrder(hasFromStart: Boolean, hasDownload: Bool
     add("favorite")
 }
 
-/** Reserve the caption so moving focus never moves another action's target. */
+internal const val RECORDING_DETAIL_MUTATION_SIZE_DP = 48
+
+/** Reserve caption height, while its label never changes the action row's pitch. */
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun RecordingDetailMutationButton(
@@ -40,18 +43,18 @@ internal fun RecordingDetailMutationButton(
     onClick: () -> Unit
 ) {
     Column(
-        containerModifier.width(if (target == "played") 140.dp else 110.dp),
+        containerModifier.width(RECORDING_DETAIL_MUTATION_SIZE_DP.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         androidx.tv.material3.IconButton(
             onClick,
-            modifier.size(48.dp),
+            modifier.size(RECORDING_DETAIL_MUTATION_SIZE_DP.dp),
             enabled = enabled,
             colors = androidx.tv.material3.IconButtonDefaults.colors(
                 containerColor = if (selected) {
                     androidx.tv.material3.MaterialTheme.colorScheme.secondaryContainer
                 } else {
-                    androidx.compose.ui.graphics.Color.Transparent
+                    androidx.tv.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = .1f)
                 },
                 contentColor = if (selected) {
                     androidx.tv.material3.MaterialTheme.colorScheme.onSecondaryContainer
@@ -71,6 +74,7 @@ internal fun RecordingDetailMutationButton(
                     }
                 ),
                 label,
+                modifier = Modifier.wrapContentWidth(unbounded = true),
                 Modifier.size(24.dp)
             )
         }

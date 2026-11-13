@@ -3646,6 +3646,12 @@
         "atNow": false
       },
       "expected": false
+    },
+    {
+      "id": "recording-mutation-caption-does-not-set-width",
+      "operation": "recording-mutation-slot",
+      "input": {},
+      "expected": 48
     }
   ]
 }
