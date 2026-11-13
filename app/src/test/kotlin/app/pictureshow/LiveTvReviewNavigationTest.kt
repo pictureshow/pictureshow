@@ -83,26 +83,32 @@ class LiveTvReviewNavigationTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("live:editor:confirm").assertIsFocused()
-        var priorityWasFocused = false
-        repeat(14) {
+        val reviewRows = listOf(
+            "Start early", "End late", "Record", "Channel", "Time", "Episodes in library", "Keep", "Delete", "Days", "Priority"
+        )
+        reviewRows.forEach { title ->
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             compose.mainClock.advanceTimeBy(300)
-            if (compose.onNodeWithTag("live:summary:Priority").fetchSemanticsNode()
-                    .config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Focused) { false }
-            ) {
-                priorityWasFocused = true
-            }
+            compose.onNodeWithTag("live:summary:$title").assertIsDisplayed().assertIsFocused()
         }
-        compose.runOnIdle { assertEquals(true, priorityWasFocused, "Remote traversal focuses Priority before the footer") }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithTag("live:review:footer").assertIsDisplayed().assertIsFocused()
         compose.onNodeWithTag("live:summary:Priority").assertIsDisplayed()
         compose.onNodeWithTag("live:review:footer").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { assertEquals(0, writes, "Reading and activating a read-only stop never submits") }
-        repeat(14) {
+        reviewRows.asReversed().forEach { title ->
             compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
             compose.mainClock.advanceTimeBy(300)
+            compose.onNodeWithTag("live:summary:$title").assertIsDisplayed().assertIsFocused()
         }
+        // Native spatial navigation chooses the nearer action; Left returns to Confirm.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("Edit options").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed().assertIsFocused()
         compose.runOnIdle { assertEquals(0, writes) }
     }
