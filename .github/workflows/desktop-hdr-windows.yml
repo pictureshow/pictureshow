@@ -71,7 +71,7 @@ jobs:
           python desktop/tools/hdr/fixture.py desktop-fixtures/hdr
           $header = 'native/include/mpv/client.h'
           (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
-          cl /nologo /EHsc /LD /std:c++17 /I native/include desktop/src/native/** /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
+          cl /nologo /EHsc /LD /std:c++17 /I native/include desktop/src/native/windows_layer.cpp /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
           if ($LASTEXITCODE -ne 0) { throw 'Native app adapter compile failed' }
       - name: Capture actual PQ and SDR playback via DWM
         shell: pwsh
