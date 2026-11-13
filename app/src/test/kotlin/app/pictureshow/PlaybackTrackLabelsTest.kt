@@ -8,14 +8,14 @@ import kotlin.test.assertEquals
 
 class PlaybackTrackLabelsTest {
     @Test
-    fun chooserNumbersOnlyUnknownOrIdenticalLabelsAndHidesUninformativeDefaults() {
+    fun chooserNumbersOnlyIdenticalLabelsAndHidesUninformativeDefaults() {
         val stream = MediaStream(type = MediaStreamType.Audio, index = 12, language = "eng", codec = "aac", channels = 2)
         assertEquals(listOf("English · AAC stereo"), trackLabels(listOf(stream.copy(isDefault = true))))
         assertEquals(
             listOf("English · AAC stereo · Track 1", "English · AAC stereo · Track 2"),
             trackLabels(listOf(stream, stream.copy(index = 99)))
         )
-        assertEquals(listOf("AAC stereo · Track 1"), trackLabels(listOf(stream.copy(language = null))))
+        assertEquals(listOf("AAC stereo"), trackLabels(listOf(stream.copy(language = null))))
     }
 
     @Test

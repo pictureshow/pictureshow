@@ -50,14 +50,14 @@ class PlaybackTrackMenuTest {
     }
 
     @Test
-    fun tracksWithoutLanguageGetNumbersAndAllDefaultTracksGetNoBadge() {
+    fun uniqueTracksWithoutLanguageNeedNoNumbersAndAllDefaultTracksGetNoBadge() {
         val streams = listOf(
             MediaStream(type = MediaStreamType.Audio, index = 1, codec = "truehd", channels = 6, isDefault = true),
             MediaStream(type = MediaStreamType.Audio, index = 2, codec = "dts", channels = 6, isDefault = true),
             MediaStream(type = MediaStreamType.Audio, index = 3, codec = "vorbis", channels = 6, isDefault = true)
         )
         assertEquals(
-            listOf("TrueHD 5.1 · Track 1", "DTS 5.1 · Track 2", "VORBIS 5.1 · Track 3"),
+            listOf("TrueHD 5.1", "DTS 5.1", "VORBIS 5.1"),
             trackLabels(streams)
         )
     }
@@ -84,7 +84,7 @@ class PlaybackTrackMenuTest {
     @Test
     fun aTitleRepeatingTheFormatIsNotDuplicated() {
         assertEquals(
-            listOf("DTS 5.1 · Track 1"),
+            listOf("DTS 5.1"),
             trackLabels(listOf(MediaStream(type = MediaStreamType.Audio, index = 1, codec = "dts", channels = 6, title = "DTS 5.1")))
         )
     }

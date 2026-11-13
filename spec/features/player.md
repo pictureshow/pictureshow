@@ -73,9 +73,10 @@ format punctuation; a negated `Non-Forced` phrase does not claim a Forced flag.
 
 Add Default only when exactly one track in a chooser with multiple tracks is marked default.
 Add Forced, SDH and External when applicable unless the title already names that complete flag.
-Use `Track N` (one-based chooser order) for tracks without a language, and to distinguish otherwise
-identical labels. Resolve collisions again if a server title itself contains such a suffix.
-A known-language track with a unique descriptive label has no number. Empty choosers yield no labels.
+Use `Track N` (one-based chooser order) only to distinguish otherwise identical labels, including
+tracks without a language. Resolve collisions again if a server title itself contains such a suffix.
+A track with a unique descriptive label has no number, whether or not its language is known.
+Empty choosers yield no labels.
 
 ## Playback settings integration (leg 131)
 

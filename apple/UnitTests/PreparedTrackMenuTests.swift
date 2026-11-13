@@ -54,6 +54,21 @@ private final class MenuWorkerGate: @unchecked Sendable {
         XCTAssertFalse((menu.audio + menu.subtitles).contains { $0.title.contains("Stream ") || $0.menuTitle.contains("Stream ") })
         XCTAssertEqual(menu.audio.map(\.title), PlaybackTrackLabels.labels(streams.filter { $0.type == "Audio" }))
         XCTAssertEqual(menu.subtitles.map(\.title), PlaybackTrackLabels.labels(streams.filter { $0.type == "Subtitle" }))
+
+        let unnamedMetadata: [[String: Any]] = [
+            ["Index": 99, "Type": "Audio", "Language": "und", "Codec": "aac", "Channels": 2],
+            ["Index": 7, "Type": "Audio", "Language": " ", "Codec": "aac", "Channels": 2]
+        ]
+        let unnamed = try JSONDecoder().decode([MediaStream].self, from: JSONSerialization.data(withJSONObject: unnamedMetadata))
+        let singleton = TrackLabelCache.build(Array(unnamed.prefix(1)), generation: 10)
+        XCTAssertEqual(singleton.generation, 10)
+        XCTAssertEqual(singleton.audio, [TrackLabel(id: 99, title: "AAC stereo", menuTitle: "AAC stereo")])
+        let duplicates = TrackLabelCache.build(unnamed, generation: 11)
+        XCTAssertEqual(duplicates.generation, 11)
+        XCTAssertEqual(duplicates.audio, [
+            TrackLabel(id: 99, title: "AAC stereo · Track 1", menuTitle: "AAC stereo · Track 1"),
+            TrackLabel(id: 7, title: "AAC stereo · Track 2", menuTitle: "AAC stereo · Track 2")
+        ])
     }
     func testBothMenusStartAtMetadataArrivalOffMainAndEarlyOpenGetsOneCompleteMenu() async throws {
         let gate = MenuWorkerGate()

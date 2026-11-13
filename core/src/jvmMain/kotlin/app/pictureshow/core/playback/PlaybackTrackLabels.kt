@@ -116,13 +116,13 @@ fun trackLabel(stream: MediaStream, trackNumber: Int? = null, showDefault: Boole
 }.joinToString(" · ")
 
 /**
- * Labels for a whole chooser list. A track number identifies every track that lacks a language, and "Default" is
- * kept only for a list where exactly one track is the default, where it actually distinguishes that track.
+ * Labels for a whole chooser list. Track numbers only disambiguate colliding labels, and "Default" is kept only
+ * for a list where exactly one track is the default, where it actually distinguishes that track.
  */
 fun trackLabels(streams: List<MediaStream>): List<String> {
     val defaults = streams.count { it.isDefault }
-    val labels = streams.mapIndexed { position, stream ->
-        trackLabel(stream, trackNumber = position + 1, showDefault = defaults == 1 && streams.size > 1)
+    val labels = streams.map { stream ->
+        trackLabel(stream, showDefault = defaults == 1 && streams.size > 1)
     }
     // Use menu order, never an invented language/role. Resolve collisions again in case a server title
     // itself contains one of these suffixes. Every appended number is unique within this chooser.

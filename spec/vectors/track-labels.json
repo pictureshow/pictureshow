@@ -823,12 +823,20 @@
             "Codec": "aac",
             "Channels": 2,
             "Title": null
+          },
+          {
+            "Type": "Audio",
+            "Index": 100,
+            "Language": "und",
+            "Codec": "aac",
+            "Channels": 2
           }
         ]
       },
       "expected": [
-        "Commentary · AAC stereo · Track 1",
-        "AAC stereo · Track 2"
+        "Commentary · AAC stereo",
+        "AAC stereo · Track 2",
+        "AAC stereo · Track 3"
       ]
     },
     {
@@ -846,7 +854,7 @@
         ]
       },
       "expected": [
-        "AAC stereo · Track 1"
+        "AAC stereo"
       ]
     },
     {

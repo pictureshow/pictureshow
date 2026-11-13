@@ -51,7 +51,7 @@ public enum PlaybackTrackLabels {
 
     public static func labels(_ streams: [MediaStream]) -> [String] {
         let informativeDefault = streams.count > 1 && streams.filter(\.isDefault).count == 1
-        var result = streams.enumerated().map { label($0.element, trackNumber: $0.offset + 1, showDefault: informativeDefault) }
+        var result = streams.map { label($0, showDefault: informativeDefault) }
         while Set(result).count != result.count {
             let counts = Dictionary(grouping: result, by: { $0 }).mapValues(\.count)
             result = result.enumerated().map { counts[$0.element, default: 0] > 1 ? "\($0.element) · Track \($0.offset + 1)" : $0.element }

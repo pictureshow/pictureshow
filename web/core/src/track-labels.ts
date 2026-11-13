@@ -99,8 +99,8 @@ export function trackLabel(
 export function trackLabels(streams: Stream[]): string[] {
     const showDefault =
         streams.length > 1 && streams.filter((s) => s.IsDefault).length === 1;
-    let result = streams.map((stream, index) =>
-        trackLabel(stream, index + 1, showDefault),
+    let result = streams.map((stream) =>
+        trackLabel(stream, undefined, showDefault),
     );
     while (new Set(result).size !== result.length) {
         const counts = new Map<string, number>();
