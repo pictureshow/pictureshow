@@ -50,6 +50,18 @@ internal const val LIVE_SEEK_DISABLED_ALPHA = .38f
 internal const val LIVE_SEEK_SCRIM_ALPHA = .4f
 
 @Composable
+internal fun touchPlayerToggleColors(live: Boolean): androidx.compose.material3.IconButtonColors = if (live) {
+    IconButtonDefaults.filledIconButtonColors(
+        containerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
+        contentColor = Color.White,
+        disabledContainerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
+        disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
+    )
+} else {
+    IconButtonDefaults.filledIconButtonColors()
+}
+
+@Composable
 internal fun PlayerIconButton(
     icon: String,
     label: String,

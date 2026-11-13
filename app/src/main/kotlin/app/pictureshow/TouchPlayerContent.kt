@@ -474,16 +474,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         ui.interact()
                     },
                     enabled = !host.isLive || host.liveCanTimeShift,
-                    colors = if (host.isLive) {
-                        androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
-                            contentColor = Color.White,
-                            disabledContainerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
-                            disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
-                        )
-                    } else {
-                        androidx.compose.material3.IconButtonDefaults.filledIconButtonColors()
-                    },
+                    colors = touchPlayerToggleColors(host.isLive),
                     modifier = Modifier.size(64.dp)
                         .testTag("touch:toggle").semantics {
                             contentDescription = if (playback.showPlayButton) "Play" else "Pause"

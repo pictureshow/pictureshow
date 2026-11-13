@@ -76,6 +76,38 @@ class RecordingDetailActionSpacingTest {
         assertTrue(brightest("disabled") in 0.25f..0.5f, "Disabled ink stays visibly distinct over video")
     }
 
+    @Test fun liveToggleUsesFortyPercentBlackOverNonblackVideoInBothEnabledStates() {
+        compose.setContent {
+            TouchTheme {
+                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)) {
+                    Row {
+                        listOf(true, false).forEach { enabled ->
+                            androidx.compose.material3.FilledIconButton(
+                                onClick = {},
+                                modifier = Modifier.size(64.dp).testTag("toggle-$enabled"),
+                                enabled = enabled,
+                                colors = touchPlayerToggleColors(true)
+                            ) { Box(Modifier.size(32.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        listOf(true, false).forEach { enabled ->
+            val box = compose.onNodeWithTag("toggle-$enabled").getUnclippedBoundsInRoot()
+            val background = pixels[(box.left.value + 8).toInt(), (box.top.value + 32).toInt()]
+            assertEquals(
+                .6f,
+                background.red,
+                .02f,
+                "40% black over white is60% grey; transparent and opaque containers both fail ($enabled)"
+            )
+            assertEquals(.6f, background.green, .02f)
+            assertEquals(.6f, background.blue, .02f)
+        }
+    }
+
     private fun verify(fontScale: Float) {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
