@@ -146,13 +146,13 @@ final class RoundThreeCaptureUITests: XCTestCase {
         try assertRenderedTextAA(size, expected: "System", state: "Settings value focused")
         record("Round4 Settings Subtitle size focused")
         activate(size)
-        let large = app.buttons["Large"].firstMatch
+        let large = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Large")).firstMatch
         XCTAssertTrue(large.waitForExistence(timeout: 5))
         activate(large)
         XCTAssertTrue(wait(5) { (size.value as? String) == "Large" })
         record("Round4 Settings native choice applied Large")
         // Restore the same core preference via the visible menu.
-        activate(size); activate(app.buttons["System"].firstMatch)
+        activate(size); activate(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "System")).firstMatch)
         XCTAssertTrue(wait(5) { (size.value as? String) == "System" })
         focusOnly(node("segment-Intro"))
         record("Round4 Settings Skip segments values")
