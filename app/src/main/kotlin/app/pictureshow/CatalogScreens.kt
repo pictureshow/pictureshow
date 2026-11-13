@@ -1425,12 +1425,7 @@ fun CatalogDetail(
     val playItem = if (playbackWaiting) {
         null
     } else {
-        when (item?.type) {
-            "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-            "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-            "Movie", "Episode", "Video" -> item
-            else -> null
-        }
+        app.pictureshow.core.detailPlayItem(item, state.nextUp, state.episodes)
     }
     // A new returning model deliberately clears stale data. The route still identifies its
     // capabilities; queued actions below continue to require the authoritative fresh state.

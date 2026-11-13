@@ -118,3 +118,11 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         into("control-vectors")
     }
 }
+
+// Full corpus inventory supports a fail-closed test for additions without an executor.
+tasks.named<ProcessResources>("jvmTestProcessResources") {
+    from(rootProject.file("spec/vectors")) {
+        include("*.json")
+        into("vector-inventory")
+    }
+}
