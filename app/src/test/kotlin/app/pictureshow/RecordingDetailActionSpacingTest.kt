@@ -73,7 +73,8 @@ class RecordingDetailActionSpacingTest {
             }
         }
         assertTrue(brightest("enabled") > .9f)
-        assertTrue(brightest("disabled") in 0.25f..0.5f, "Disabled ink stays visibly distinct over video")
+        val disabledInk = brightest("disabled")
+        assertTrue(disabledInk in 0.25f..0.5f, "Disabled ink stays visibly distinct over video: $disabledInk")
     }
 
     @Test fun liveToggleUsesFortyPercentBlackOverNonblackVideoInBothEnabledStates() {

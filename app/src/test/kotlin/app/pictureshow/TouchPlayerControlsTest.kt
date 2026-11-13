@@ -2065,7 +2065,8 @@ class TouchPlayerControlsTest {
             host.liveBufferExpired = true
         }
         settled()
-        compose.onNodeWithTag("touch:scrubber").assertIsNotEnabled()
+        // An expired buffer keeps its honest static track, with no draggable thumb or seek action.
+        compose.onNodeWithTag("touch:scrubber").assertDoesNotExist()
         compose.onNodeWithTag("touch:back10").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Live playback status").assertIsDisplayed()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused · Buffer expired. Go live to resume."))

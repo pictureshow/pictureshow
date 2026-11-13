@@ -29,10 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -96,8 +98,16 @@ internal fun PlayerIconButton(
 /** A circular replay/forward mark with an actual numeral; the button owns its speech and disabled tint. */
 @Composable
 private fun LiveSeekMark(forward: Boolean) {
-    val tint = androidx.compose.material3.LocalContentColor.current
-    Box(Modifier.size(LIVE_SEEK_MARK_DP.dp).testTag("touch:live-seek-mark").clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+    val content = androidx.compose.material3.LocalContentColor.current
+    val tint = content.copy(alpha = 1f)
+    // Apply the disabled opacity once to the whole mark: overlapping arc/arrow strokes must not brighten it.
+    Box(
+        Modifier.size(LIVE_SEEK_MARK_DP.dp).testTag("touch:live-seek-mark").graphicsLayer {
+            alpha = content.alpha
+            compositingStrategy = CompositingStrategy.Offscreen
+        }.clearAndSetSemantics {},
+        contentAlignment = Alignment.Center
+    ) {
         Canvas(Modifier.size(32.dp)) {
             val unit = size.width / 32f
             scale(if (forward) -1f else 1f, 1f) {
