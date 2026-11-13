@@ -349,8 +349,9 @@ final class RoundThreeCaptureUITests: XCTestCase {
         #if os(iOS)
         try revealFullPersonMetadata(cards[0], name: names[0], role: roles[0])
         #else
-        focusOnly(cards[0])
-        XCTAssertTrue(ownsFocus(cards[0]), "Actual native person focus must scroll the metadata into view before the first capture")
+        // The AA helper restored primary Play focus. Compare the real resting
+        // row before native focus changes the first portrait's AX frame.
+        XCTAssertFalse(cards.contains(where: ownsFocus), "Row alignment must compare three actual unfocused portraits")
         #endif
         XCTAssertTrue(cards.allSatisfy(\.exists))
         for (card, role) in zip(cards, roles) {
@@ -361,6 +362,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertEqual(cards[1].frame.midY, cards[2].frame.midY, accuracy: 3)
         XCTAssertEqual(cards[1].frame.width, cards[2].frame.width, accuracy: 3, "Unfocused person lockups must have equal width")
         #if os(tvOS)
+        print("ROUND3_TV_PERSON_ROW_REST first=\(cards[0].frame) second=\(cards[1].frame) third=\(cards[2].frame)")
+        focusOnly(cards[0])
+        XCTAssertTrue(ownsFocus(cards[0]), "Actual native person focus must scroll the metadata into view before the first capture")
+        record("Round3 audit initial person focused before metadata proof")
+        print("ROUND3_TV_PERSON_ROW_FOCUS first=\(cards[0].frame) second=\(cards[1].frame) third=\(cards[2].frame)")
         try assertTVPersonMetadataPixels(cards[0], stationarySibling: cards[1], name: names[0], role: roles[0])
         #endif
         record(prefix + " cast and crew horizontal equal lockups")
