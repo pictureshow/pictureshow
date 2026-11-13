@@ -154,7 +154,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "3:14 – 3:42 PM"
+      "expected": "3:14 \u2013 3:42 PM"
     },
     {
       "id": "live-presentation.period-crossing-range",
@@ -167,7 +167,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "11:55 AM – 12:10 PM"
+      "expected": "11:55 AM \u2013 12:10 PM"
     },
     {
       "id": "live-presentation.tomorrow-range",
@@ -180,7 +180,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Tomorrow · 15:00 – 16:00"
+      "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
     },
     {
       "id": "live-presentation.no-timer-dot",
@@ -531,7 +531,7 @@
       },
       "expected": {
         "title": "Painted windows",
-        "metadata": "S1:E7 · Ends 6:30 PM · 2m",
+        "metadata": "S1:E7 \u00b7 Ends 6:30 PM \u00b7 2m",
         "progress": 0.0
       }
     },
@@ -651,7 +651,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today · 6:00 PM",
+        "metadata": "Today \u00b7 6:00 PM",
         "progress": null
       }
     },
@@ -715,7 +715,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today · 6:00 PM",
+        "metadata": "Today \u00b7 6:00 PM",
         "progress": null
       }
     },
@@ -1064,7 +1064,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused · At live edge",
+        "status": "Paused \u00b7 At live edge",
         "clock": ""
       }
     },
@@ -1084,7 +1084,7 @@
       },
       "expected": {
         "status": "",
-        "clock": "−0:03"
+        "clock": "\u22120:03"
       }
     },
     {
@@ -1103,7 +1103,7 @@
       },
       "expected": {
         "status": "Paused",
-        "clock": "−0:03"
+        "clock": "\u22120:03"
       }
     },
     {
@@ -1155,7 +1155,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused · Buffer expired",
+        "status": "Paused \u00b7 Buffer expired",
         "clock": ""
       }
     },
@@ -1256,10 +1256,10 @@
         ]
       },
       "expected": [
-        "Paused · 17 sec behind live",
-        "Paused · 37 sec behind live",
+        "Paused \u00b7 17 sec behind live",
+        "Paused \u00b7 37 sec behind live",
         "Live position unavailable",
-        "Live · Time shift unavailable"
+        "Live \u00b7 Time shift unavailable"
       ]
     },
     {
@@ -1518,7 +1518,7 @@
       "input": {
         "unavailable": false
       },
-      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
+      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
     },
     {
       "id": "live-presentation.guide-successful-empty",
@@ -1705,7 +1705,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline · last loaded 3:14 PM"
+      "expected": "Offline \u00b7 last loaded 3:14 PM"
     },
     {
       "id": "live-presentation.guide-freshness-offline-fold",
@@ -1718,7 +1718,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline · last loaded 1:30 AM -05:00"
+      "expected": "Offline \u00b7 last loaded 1:30 AM -05:00"
     },
     {
       "id": "live-presentation.device-japanese-twelve-hour",
@@ -1730,7 +1730,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "午後3:14"
+      "expected": "\u5348\u5f8c3:14"
     },
     {
       "id": "live-presentation.guide-scroll-visible",
@@ -2031,6 +2031,58 @@
         "expanded": true
       },
       "expected": -90
+    },
+    {
+      "id": "program-entry-true-true",
+      "kind": "program-record-entry-focus",
+      "input": {
+        "tv": true,
+        "primary": true
+      },
+      "expected": true
+    },
+    {
+      "id": "program-entry-true-false",
+      "kind": "program-record-entry-focus",
+      "input": {
+        "tv": true,
+        "primary": false
+      },
+      "expected": false
+    },
+    {
+      "id": "program-entry-false-true",
+      "kind": "program-record-entry-focus",
+      "input": {
+        "tv": false,
+        "primary": true
+      },
+      "expected": false
+    },
+    {
+      "id": "program-entry-false-false",
+      "kind": "program-record-entry-focus",
+      "input": {
+        "tv": false,
+        "primary": false
+      },
+      "expected": false
+    },
+    {
+      "id": "program-content-inset-true",
+      "kind": "program-content-inset",
+      "input": {
+        "tv": true
+      },
+      "expected": 16
+    },
+    {
+      "id": "program-content-inset-false",
+      "kind": "program-content-inset",
+      "input": {
+        "tv": false
+      },
+      "expected": 0
     }
   ]
 }

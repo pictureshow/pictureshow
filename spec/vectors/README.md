@@ -478,3 +478,5 @@ The native settings layout suite also checks that a consequence stays inside its
 Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
 
 `live-presentation` also defines minimum-distance guide focus scrolling on each axis: fully visible programmes retain their saved position, clipped programmes reveal their nearest edge, and a programme spanning the viewport stays put. Native Back tests retain the selected key and both time/channel offsets under a parent catalog focus pivot.
+
+Live presentation additionally covers programme entry focus for existing timers and the TV programme48dp keyline (native16dp inset inside destination32dp); touch inset remains0.

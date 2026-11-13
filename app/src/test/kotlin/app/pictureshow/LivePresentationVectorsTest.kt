@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(160, cases.size)
+        assertEquals(166, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -338,6 +338,18 @@ class LivePresentationVectorsTest {
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideRulerHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
                     0.001f,
+                    id
+                )
+
+                "program-record-entry-focus" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveProgramRecordInitialFocus(c.getValue("tv").jsonPrimitive.boolean, c.getValue("primary").jsonPrimitive.boolean),
+                    id
+                )
+
+                "program-content-inset" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.int,
+                    liveProgramContentInset(c.getValue("tv").jsonPrimitive.boolean),
                     id
                 )
 

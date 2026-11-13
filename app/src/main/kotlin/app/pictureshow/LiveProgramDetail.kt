@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
@@ -43,7 +45,11 @@ internal fun LiveProgramDetail(
     val seriesRule = state.series.firstOrNull { it.id == program.seriesTimerId && it.id.isNotBlank() }
     val item = MediaItem(program.id, program.name, imageTags = program.imageTags, backdropImageTags = program.backdropImageTags)
     val artwork: @Composable (Modifier) -> Unit = { modifier ->
-        Box(modifier.aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(LiveAccent.copy(alpha = .1f))) {
+        Box(
+            modifier.testTag(
+                "live:program-artwork"
+            ).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(LiveAccent.copy(alpha = .1f))
+        ) {
             if (tv) {
                 CatalogArtwork(item, account, true, Modifier.matchParentSize())
             } else {
@@ -87,7 +93,7 @@ internal fun LiveProgramDetail(
                             if (timer.status == "InProgress") "● Recording · options" else "Cancel recording…",
                             tv,
                             primary,
-                            modifier,
+                            modifier.liveFocus("program:record", liveProgramRecordInitialFocus(tv, primary)),
                             enabled = canAct && !state.writing
                         ) { onSchedule(timer, false) }
                     } else {
@@ -95,7 +101,7 @@ internal fun LiveProgramDetail(
                             "Record once…",
                             tv,
                             primary,
-                            modifier.liveFocus("program:record", tv && !current),
+                            modifier.liveFocus("program:record", liveProgramRecordInitialFocus(tv, primary)),
                             enabled = canAct && !state.writing && liveInstant(program.endDate) > now,
                             onClick = onOnce
                         )
@@ -115,13 +121,14 @@ internal fun LiveProgramDetail(
             if (state.policy?.manage != true) LiveText("Recording management requires server permission.", tv, small = true)
         }
     }
+    val contentModifier = Modifier.padding(horizontal = liveProgramContentInset(tv).dp)
     if (tv) {
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        Row(contentModifier, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             artwork(Modifier.width(320.dp))
             Column(Modifier.weight(1f)) { information() }
         }
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(contentModifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             artwork(Modifier.fillMaxWidth())
             information()
         }
@@ -156,3 +163,9 @@ internal fun LiveProgramRow(program: LiveProgram, tv: Boolean, modifier: Modifie
         )
     }
 }
+
+/** The primary recording action takes TV entry focus only when Watch is absent. */
+internal fun liveProgramRecordInitialFocus(tv: Boolean, primary: Boolean): Boolean = tv && primary
+
+/** The destination owns32dp; TV programme content reaches the shared48dp page keyline. */
+internal fun liveProgramContentInset(tv: Boolean): Int = if (tv) 16 else 0
