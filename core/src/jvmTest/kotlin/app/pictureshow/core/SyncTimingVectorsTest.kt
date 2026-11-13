@@ -11,8 +11,8 @@ import app.pictureshow.core.sync.SyncDriftState
 import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncCorrectionPosition
-import app.pictureshow.core.sync.syncPcmRateSupported
 import app.pictureshow.core.sync.syncDrift
+import app.pictureshow.core.sync.syncPcmRateSupported
 import app.pictureshow.core.sync.syncSameUnpauseTimeline
 import app.pictureshow.core.sync.syncScheduledPlaying
 import app.pictureshow.core.sync.syncScheduledPosition

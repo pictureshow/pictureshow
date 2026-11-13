@@ -126,7 +126,7 @@ internal class Media3PlaybackOutput(
                 "state=${p?.playbackState ?: 0} pwr=${p?.playWhenReady} suppression=${p?.suppressionReason ?: -1} " +
                 "loading=${p?.isLoading} positionMs=${p?.positionMs ?: -1} bufferedPositionMs=${p?.bufferedPositionMs ?: -1} " +
                 "bufferedDurationMs=${p?.bufferedDurationMs ?: -1} foreground=${mutableForeground.value} " +
-                "pcm=${syncPcmOutput} rate=${mutablePlayer.value?.playbackParameters?.speed ?: 1f} $fields"
+                "pcm=$syncPcmOutput rate=${mutablePlayer.value?.playbackParameters?.speed ?: 1f} $fields"
         )
     }
     private var loadDiagnostics: PlaybackLoadDiagnostics? = null

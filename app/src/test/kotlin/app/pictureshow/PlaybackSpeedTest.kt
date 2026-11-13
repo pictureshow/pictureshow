@@ -74,8 +74,12 @@ class PlaybackSpeedTest {
     @Test fun syncRateRequiresObservedPcmAndIsFencedToTheLiveDecoder() {
         val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Fixture", "https://example.test", "12"))
         val decision = PlayDecision(
-            "film", MediaSourceInfo(runTimeTicks = 9_000_000_000), PlayMethod.DirectPlay,
-            "https://example.test/Videos/film/stream.ts", emptyMap(), "session"
+            "film",
+            MediaSourceInfo(runTimeTicks = 9_000_000_000),
+            PlayMethod.DirectPlay,
+            "https://example.test/Videos/film/stream.ts",
+            emptyMap(),
+            "session"
         )
         try {
             output.open(decision, 0, -1, -1, true)
@@ -121,7 +125,6 @@ class PlaybackSpeedTest {
         }
     }
 
-
     @Test fun groupRatesDoNotChangeViewerSpeedOrInventAnOutputAdjustment() {
         val roots = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
         val vectors = roots.map { java.io.File(it, "spec/vectors/sync-rate-presentation.json") }.first { it.isFile }
@@ -157,5 +160,4 @@ class PlaybackSpeedTest {
             assertEquals(PlaybackSpeeds.ENCODED_AUDIO, speed.state.value.message)
         }
     }
-
 }
