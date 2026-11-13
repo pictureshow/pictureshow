@@ -230,7 +230,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
     @MainActor func testTVSettingsHeaderAndFooterActualPixelsMeetAA() throws {
         try launchPilot(); try signInPilot(); try selectTab("Settings")
         let bitrate = node("maxBitrate")
-        focusOnly(bitrate)
+        if !ownsFocus(bitrate) { focusOnly(bitrate) }
         record("Round3 Settings content focus before AA")
         XCTAssertTrue(ownsFocus(bitrate), "Measure undimmed Settings after native focus actually leaves the tab bar")
         let header = app.staticTexts["playbackSectionHeader"]
