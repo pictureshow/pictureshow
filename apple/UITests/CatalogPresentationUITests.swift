@@ -47,6 +47,9 @@ final class CatalogPresentationUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         var transcript: [String] = []
+        var hasAcceptedReaderUtterance = false
+        var initialForwardServiceResetUsed = false
+        var didRecoverTimedOutIntroduction = false
         func attachSpeech(_ name: String) {
             let text = XCTAttachment(string: transcript.joined(separator: "\n") + "\nService: " + service.debugDescription)
             text.name = name + " actual VoiceOver utterances"; text.lifetime = .keepAlways; add(text)
@@ -65,6 +68,7 @@ final class CatalogPresentationUITests: XCTestCase {
             if transcript.last != entry { transcript.append(entry) }
             if utterance.isEmpty { attachSpeech("132 VoiceOver missing speech before failure"); disableReader() }
             XCTAssertFalse(utterance.isEmpty, "A real VoiceOver navigation operation must produce speech")
+            if !utterance.isEmpty { hasAcceptedReaderUtterance = true }
             // This combined phrase is the visual-only pinned context, not an
             // ordinary heading, card or independently read sort control.
             let tokens = words(utterance)
@@ -125,12 +129,100 @@ final class CatalogPresentationUITests: XCTestCase {
             let output = try readSpeech(operation + " move", action)
             return try settledSpeech(operation, after: previous, first: output)
         }
+        #if os(tvOS)
+        // Setup observation only: this first-run system dialog is absent from
+        // app-only AX. It never substitutes for an actual reader utterance.
+        func visibleFocusedSystemIntroduction() throws -> Bool {
+            let shot = XCUIScreen.main.screenshot()
+            let image = shot.image
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "132 VoiceOver exact system introduction setup pixels"
+            attachment.lifetime = .keepAlways; add(attachment)
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = "132 VoiceOver exact system introduction setup pixels accessibility"
+            tree.lifetime = .keepAlways; add(tree)
+            guard let source = image.cgImage else { return false }
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = ["en-US"]
+            request.usesLanguageCorrection = false
+            try VNImageRequestHandler(cgImage: source, options: [:]).perform([request])
+            let rows: [(text: String, box: CGRect)] = (request.results ?? []).compactMap { row in
+                guard let candidate = row.topCandidates(1).first else { return nil }
+                return (candidate.string.trimmingCharacters(in: .whitespacesAndNewlines), row.boundingBox)
+            }
+            let diagnostic = XCTAttachment(string: rows.map { "\($0.text) \($0.box)" }.joined(separator: "\n"))
+            diagnostic.name = "132 VoiceOver exact system introduction setup OCR"
+            diagnostic.lifetime = .keepAlways; add(diagnostic)
+            let titleRows = rows.filter { ["VoiceOver Navigation Updates", "VoiceOver Navigation", "Updates"].contains($0.text) }
+            let titleText = titleRows.sorted { $0.box.midY > $1.box.midY }.map(\.text).joined(separator: " ")
+            let okRows = rows.filter { $0.text == "OK" }
+            guard titleText == "VoiceOver Navigation Updates", okRows.count == 1,
+                  let title = titleRows.map(\.box).reduce(nil as CGRect?, { $0?.union($1) ?? $1 }),
+                  let ok = okRows.first?.box,
+                  title.minX > 0.2, title.maxX < 0.8, ok.minX > 0.2, ok.maxX < 0.8,
+                  ok.maxY < title.minY, abs(ok.midX - title.midX) < 0.15 else { return false }
+            let width = source.width, height = source.height
+            var rgba = [UInt8](repeating: 0, count: width * height * 4)
+            let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+                guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                    bitsPerComponent: 8, bytesPerRow: width * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
+                context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height)); return true
+            }
+            guard rendered else { return false }
+            // Sample the actual pale focused-OK fill on both sides of its dark
+            // word, never the white title glyphs or the dimmed underlying app.
+            for x in [ok.minX - 2 * ok.width, ok.maxX + 2 * ok.width] {
+                let px = Int(x * CGFloat(width)), py = Int((1 - ok.midY) * CGFloat(height))
+                guard px >= 1, px < width - 1, py >= 1, py < height - 1 else { return false }
+                var samples: [UInt8] = []
+                for dy in -1...1 { for dx in -1...1 {
+                    let offset = ((py + dy) * width + px + dx) * 4
+                    samples.append(min(rgba[offset], rgba[offset + 1], rgba[offset + 2]))
+                } }
+                guard samples.sorted()[samples.count / 2] >= 192 else { return false }
+            }
+            transcript.append("enable timeout setup: exact visible VoiceOver Navigation Updates and one pale focused OK; not a speech observation")
+            return true
+        }
+        #endif
         func enableReader(at anchor: XCUIElement) throws {
             do { try service.enable() }
             catch {
                 transcript.append("enable API error: \(error)")
-                attachSpeech("132 VoiceOver enable API error before throw")
+                attachSpeech("132 VoiceOver enable API error actual state")
+                #if os(tvOS)
+                let value = error as NSError
+                // The observed first-run OS dialog can outlive a failed enable
+                // acknowledgement. Recover only its proved enabled+intro state;
+                // an enabled flag or timeout alone never authorizes input.
+                guard !didRecoverTimedOutIntroduction, !hasAcceptedReaderUtterance,
+                      value.domain == "com.apple.dt.XCTest.XCTFuture", value.code == 1000,
+                      value.localizedDescription == "Timed out while enabling VoiceOver.",
+                      service.isEnabled else { throw error }
+                let output = try readSpeech("enable timeout actual current", { try service.currentSpeech() })
+                let introductionSpeech: String?
+                if let output {
+                    guard output.utterance.hasPrefix("VoiceOver Navigation Updates") else { throw error }
+                    introductionSpeech = record("enable timeout actual introduction", output)
+                } else {
+                    // The partially started speech channel may have no utterance.
+                    // Exact OS title, unique OK and its actual pale focused fill
+                    // are setup evidence only; all speech must still be real.
+                    guard try visibleFocusedSystemIntroduction() else { throw error }
+                    introductionSpeech = nil
+                }
+                attachSpeech("132 VoiceOver timed-out enable exact OS introduction before one Select")
+                didRecoverTimedOutIntroduction = true
+                XCUIRemote.shared.press(.select)
+                _ = try settledSpeech("after timed-out introduction OK", after: introductionSpeech,
+                                      accepts: { !$0.hasPrefix("VoiceOver Navigation Updates") && !$0.lowercased().hasPrefix("ok") })
+                attachSpeech("132 VoiceOver timed-out introduction after one native Select actual changed speech")
+                #else
                 throw error
+                #endif
             }
             XCTAssertTrue(service.isEnabled)
             // Capture before querying speech: a newly enabled reader may not
@@ -149,9 +241,35 @@ final class CatalogPresentationUITests: XCTestCase {
             // If it has no current speech, request focus with one documented
             // next-element operation; the existing live-run-loop bound requires
             // an actual nonempty utterance before any traversal assertion.
-            var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
-            if output == nil {
-                output = try readSpeech("reader initial focus forward", { try service.moveForward() })
+            func initialOutput() throws -> XCUIVoiceOverService.Output? {
+                var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
+                if output == nil {
+                    output = try readSpeech("reader initial focus forward", { try service.moveForward() })
+                }
+                return output
+            }
+            let output: XCUIVoiceOverService.Output?
+            do { output = try initialOutput() }
+            catch {
+                let value = error as NSError
+                // This is a different domain from the documented noSpeech case.
+                // One recorded OS-service reset is allowed only before any real
+                // utterance/traversal, for the exact observed bootstrap send error.
+                // All later service errors still throw; the test itself never restarts.
+                guard !hasAcceptedReaderUtterance, !initialForwardServiceResetUsed,
+                      value.domain == "AXVoiceOverAutomationErrorDomain", value.code == 3,
+                      value.localizedDescription == "Failed to send moveForward command",
+                      service.isEnabled else { throw error }
+                initialForwardServiceResetUsed = true
+                transcript.append("initial forward service reset: one disable then enable before first accepted utterance")
+                attachSpeech("132 VoiceOver exact initial-forward send failure before one service reset")
+                try service.disable()
+                XCTAssertFalse(service.isEnabled)
+                attachSpeech("132 VoiceOver initial service reset actual disabled state")
+                try service.enable()
+                XCTAssertTrue(service.isEnabled)
+                attachSpeech("132 VoiceOver initial service reset actual enabled state")
+                output = try initialOutput()
             }
             let initial = try settledSpeech("reader enabled", first: output)
             #else
