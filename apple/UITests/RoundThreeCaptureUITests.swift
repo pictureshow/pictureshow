@@ -269,7 +269,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
 
     @MainActor func testIPadActualOSLargeTextLibrariesAndDetail() throws {
         XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
-        XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .extraExtraExtraLarge,
+        XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge,
                        "Runner must set/read back actual owned iPad OS XXXL; a launch projection is not this evidence")
         try launchPilot(); try signInPilot(); try selectTab("Libraries")
         record("Round3 iPad actual OS XXXL Libraries grid")
