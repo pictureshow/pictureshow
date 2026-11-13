@@ -35,6 +35,14 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "home-save-presentation" -> Json.encodeToJsonElement(
+                    homeSavePresentation(
+                        input.getValue("tv").jsonPrimitive.content == "true",
+                        input.getValue("saving").jsonPrimitive.content == "true",
+                        input.getValue("retryable").jsonPrimitive.content == "true",
+                        input.getValue("hasMessage").jsonPrimitive.content == "true"
+                    )
+                )
                 "library-filter-remove" -> Json.encodeToJsonElement(
                     Json.decodeFromJsonElement<LibraryFilters>(
                         input.getValue("filters")

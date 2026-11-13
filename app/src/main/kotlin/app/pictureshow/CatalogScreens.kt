@@ -912,8 +912,7 @@ fun CatalogGrid(
                                     sortRequests[state.sortBy] = firstSort
                                     onDispose { sortRequests.remove(state.sortBy) }
                                 }
-                                androidx.tv.material3.FilterChip(
-                                    selected = false,
+                                androidx.tv.material3.AssistChip(
                                     onClick = { sorting = true },
                                     modifier = Modifier.focusRequester(
                                         firstSort
@@ -936,7 +935,7 @@ fun CatalogGrid(
                                     ) { Text(filterChipLabel(state.filters)) }
                                 }
                                 if (onDisplayList != null) {
-                                    androidx.tv.material3.FilterChip(selected = false, onClick = {
+                                    androidx.tv.material3.AssistChip(onClick = {
                                         onDisplayList(!state.list)
                                     }, modifier = sortControl(2).testTag("grid:display")) {
                                         Text(if (state.list) "View: List" else "View: Grid")

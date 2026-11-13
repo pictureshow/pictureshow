@@ -115,3 +115,10 @@ fun LibraryFilters.constraintLabel(key: String): String = when (key) {
     "studio" -> studio ?: "Studio"
     else -> "Filter"
 }
+
+/** Touch only interrupts for an actionable failure; TV progress has a compact reserved line. */
+fun homeSavePresentation(tv: Boolean, saving: Boolean, retryable: Boolean, hasMessage: Boolean): String = when {
+    saving -> if (tv) "progress" else "none"
+    retryable && hasMessage -> "failure"
+    else -> "none"
+}

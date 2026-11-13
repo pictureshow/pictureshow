@@ -2199,6 +2199,94 @@
         "active": false,
         "empty": "No movies match these filters"
       }
+    },
+    {
+      "id": "home-save-tv-idle",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-tv-saving",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": true,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "progress"
+    },
+    {
+      "id": "home-save-tv-failed",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "failure"
+    },
+    {
+      "id": "home-save-touch-idle",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": false,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-touch-saving-is-not-a-notice",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": true,
+        "retryable": false,
+        "hasMessage": false
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-touch-failed-is-actionable",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "failure"
+    },
+    {
+      "id": "home-save-touch-retry-hides-stale-failure",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": false,
+        "saving": true,
+        "retryable": true,
+        "hasMessage": true
+      },
+      "expected": "none"
+    },
+    {
+      "id": "home-save-failure-needs-a-message",
+      "operation": "home-save-presentation",
+      "input": {
+        "tv": true,
+        "saving": false,
+        "retryable": true,
+        "hasMessage": false
+      },
+      "expected": "none"
     }
   ]
 }

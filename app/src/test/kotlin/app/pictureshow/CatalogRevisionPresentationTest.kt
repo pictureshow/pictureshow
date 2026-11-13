@@ -8,6 +8,11 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
@@ -70,7 +75,7 @@ class CatalogRevisionPresentationTest {
         compose.setContent {
             androidx.tv.material3.MaterialTheme {
                 CatalogGrid(
-                    CatalogGridState(account, library, loading = false, list = true),
+                    CatalogGridState(account, library, loading = false, list = true, filters = LibraryFilters(unwatched = true)),
                     {},
                     {},
                     { _, _ -> },
@@ -86,6 +91,14 @@ class CatalogRevisionPresentationTest {
             assertEquals(sort.bottom - sort.top, bounds.bottom - bounds.top, tag)
         }
         compose.onNodeWithText("View: List").assertExists()
+        for (tag in listOf("grid:sort:SortName", "grid:display")) {
+            compose.onNodeWithTag(tag).assert(
+                SemanticsMatcher("Actions do not expose unchecked toggle semantics") {
+                    it.config.getOrNull(SemanticsProperties.ToggleableState) == null
+                }
+            )
+        }
+        compose.onNodeWithTag("grid:filters").assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
     }
 
     @Test fun tvSectionAndNativeRowLabelShareAnInset() = sectionInset(tv = true)

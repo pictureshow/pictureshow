@@ -6,6 +6,11 @@ package app.pictureshow
 import android.app.Application
 import android.app.UiModeManager
 import android.content.res.Configuration
+import android.graphics.Insets
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.ComponentDialog
 import androidx.compose.runtime.getValue
@@ -38,7 +43,10 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import app.pictureshow.core.Account
@@ -113,6 +121,111 @@ class CatalogCustomizationTest {
 
     @Test
     @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchNamedPickerKeepsItsInsetSearchAndNavigationVisibleWithDispatchedImeInsets() {
+        service.named = {
+            ClientResult.Success(ItemPage((1..40).map { MediaItem("person-$it", "Person $it", "Person") }, 40))
+        }
+        compose.setContent {
+            TouchTheme { NamedCatalogPicker(account, service, "Persons", library.id, {}, {}, selectAny = {}) }
+        }
+        val field = compose.onNodeWithTag("catalog:query")
+        val atRest = field.getUnclippedBoundsInRoot()
+        assertEquals(16.dp, atRest.left, "The search outline shares the native 16dp content edge")
+        assertEquals(395.dp, atRest.right)
+        val dialog = requireNotNull(ShadowDialog.getLatestDialog())
+        val window = requireNotNull(dialog.window)
+        compose.runOnIdle {
+            assertEquals(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+                window.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST,
+                "The dialog itself must resize rather than inherit activity/pan defaults"
+            )
+            @Suppress("DEPRECATION")
+            assertTrue(
+                window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN != 0,
+                "The dialog lays out edge-to-edge and consumes its own system-bar insets"
+            )
+        }
+        field.performClick().performTextInput("Person")
+        compose.runOnIdle {
+            val imm = compose.activity.getSystemService(InputMethodManager::class.java)
+            imm.showSoftInput(requireNotNull(window.decorView.findFocus()), InputMethodManager.SHOW_IMPLICIT)
+            assertTrue(shadowOf(imm).isSoftInputVisible, "A software keyboard request reaches the platform input service")
+            val density = compose.activity.resources.displayMetrics.density
+            fun px(dp: Int) = (dp * density).toInt()
+            // Robolectric does not animate or render an IME window. Dispatch the real platform inset
+            // object into this real Dialog's view tree; the device pass separately proves actual IME behavior.
+            val insets = WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.statusBars(), Insets.of(0, px(24), 0, 0))
+                .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, px(24)))
+                .setInsets(WindowInsets.Type.ime(), Insets.of(0, 0, 0, px(300)))
+                .setVisible(WindowInsets.Type.ime(), true)
+                .build()
+            window.decorView.dispatchApplyWindowInsets(insets)
+        }
+        compose.waitForIdle()
+        fun fullyVisible(bounds: DpRect, label: String) {
+            assertTrue(bounds.top >= 24.dp && bounds.bottom <= 591.dp, "$label is wholly above the IME and below the status bar: $bounds")
+            assertTrue(
+                bounds.left >= 0.dp && bounds.right <= 411.dp && bounds.bottom > bounds.top,
+                "$label has full nonempty visible bounds"
+            )
+        }
+        compose.onNodeWithTag("catalog:back").assertIsDisplayed()
+        compose.onNodeWithText("Choose a person").assertIsDisplayed()
+        field.assertIsDisplayed()
+        fullyVisible(compose.onNodeWithTag("catalog:back").getUnclippedBoundsInRoot(), "Back")
+        fullyVisible(compose.onNodeWithText("Choose a person").getUnclippedBoundsInRoot(), "Title")
+        val fixed = field.getUnclippedBoundsInRoot()
+        fullyVisible(fixed, "Query")
+        val editor = compose.onNodeWithTag("catalog:editor").getUnclippedBoundsInRoot()
+        assertTrue(editor.top >= fixed.bottom, "Results begin below the fixed search field")
+        assertTrue(editor.bottom <= 591.dp, "Results consume the IME inset instead of extending behind the keyboard")
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("catalog:choice:person-40"))
+        compose.onNodeWithTag("catalog:choice:person-40").assertIsDisplayed()
+        assertEquals(fixed, field.getUnclippedBoundsInRoot(), "Only results scroll; search stays below the app bar")
+        fullyVisible(compose.onNodeWithTag("catalog:back").getUnclippedBoundsInRoot(), "Back after scrolling")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchFilterFooterSharesTheSixteenDpContentEdge() {
+        compose.setContent { TouchTheme { LibraryFilterEditor(CatalogGridState(account, library), service, {}, {}) } }
+        val apply = compose.onNodeWithTag("filters:apply").getUnclippedBoundsInRoot()
+        assertEquals(16.dp, apply.left, "Apply shares the row and heading content edge")
+        compose.onNodeWithTag("filters:clear").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun touchPersistentFailureLetsTheLastRowScrollAboveItsMeasuredSnackbar() {
+        compose.setContent {
+            TouchTheme {
+                HomeCustomization(
+                    CatalogHomeState(
+                        loading = false,
+                        preferenceStatus = "Couldn't save to your server. Saved on this device.",
+                        preferenceRetryable = true
+                    ),
+                    account,
+                    service,
+                    {},
+                    {}
+                )
+            }
+        }
+        compose.onNodeWithTag("home:reset-opener").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").performTouchInput { swipeUp() }
+        val last = compose.onNodeWithTag("home:reset-opener").getUnclippedBoundsInRoot()
+        val notice = compose.onNodeWithTag("home:save-notice").getUnclippedBoundsInRoot()
+        assertTrue(
+            last.bottom + 16.dp <= notice.top,
+            "The last action clears the actual measured persistent notice by 16dp: $last / $notice"
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun failedSaveSnackbarTextContrastsWithItsActualContainer() {
         val message = "Couldn't save to your server. Saved on this device."
@@ -162,7 +275,16 @@ class CatalogCustomizationTest {
         compose.setContent { MaterialTheme { HomeCustomization(state, account, service, {}, {}) } }
         val before = compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot()
         compose.runOnIdle { state = state.copy(saving = true) }
-        compose.onNodeWithText("Saving layout…").assertIsDisplayed()
+        val tv =
+            compose.activity.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+        if (tv) {
+            compose.onNodeWithText("Saving layout…").assertIsDisplayed()
+            val slot = compose.onNodeWithTag("home:status-slot").getUnclippedBoundsInRoot()
+            assertTrue(slot.bottom - slot.top <= 32.dp, "Progress reserves at most a single 32dp line")
+        } else {
+            compose.onNodeWithText("Saving layout…").assertDoesNotExist()
+            compose.onNodeWithTag("home:save-notice").assertDoesNotExist()
+        }
         assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())
         compose.runOnIdle {
             state =
@@ -173,6 +295,11 @@ class CatalogCustomizationTest {
                 )
         }
         compose.onNodeWithTag("home:retry-save").assertIsDisplayed()
+        if (tv) {
+            val retry = compose.onNodeWithTag("home:retry-save").getUnclippedBoundsInRoot()
+            val editor = compose.onNodeWithTag("catalog:editor").getUnclippedBoundsInRoot()
+            assertTrue(retry.top >= editor.bottom, "The failure action belongs to the pinned footer below the results viewport")
+        }
         assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())
         compose.runOnIdle { state = state.copy(preferenceStatus = null, preferenceRetryable = false) }
         assertEquals(before, compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot())

@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,7 +62,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -89,6 +94,7 @@ import app.pictureshow.core.VideoResolution
 import app.pictureshow.core.editableHomeKeys
 import app.pictureshow.core.homeEditorPinLabel
 import app.pictureshow.core.homePinPickerSupport
+import app.pictureshow.core.homeSavePresentation
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.moveHomeRow
 import app.pictureshow.core.namedPickerChoices
@@ -112,6 +118,7 @@ private fun CatalogEditor(
     list: LazyListState = rememberLazyListState(),
     footer: (@Composable () -> Unit)? = null,
     status: (@Composable () -> Unit)? = null,
+    search: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit
 ) {
     val tv = usesTvInterface(LocalContext.current)
@@ -130,30 +137,45 @@ private fun CatalogEditor(
                     )
                 }
             } else {
-                Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Dialog(
+                    onDismissRequest = close,
+                    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+                ) {
+                    val density = LocalDensity.current
+                    var noticeHeight by remember { mutableStateOf(0.dp) }
+                    Surface(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), color = MaterialTheme.colorScheme.background) {
                         Box(Modifier.fillMaxSize()) {
                             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                TopAppBar(modifier = Modifier.widthIn(max = 640.dp), title = { Text(title) }, navigationIcon = {
+                                TopAppBar(modifier = Modifier.widthIn(max = 640.dp), windowInsets = WindowInsets(0, 0, 0, 0), title = {
+                                    Text(title)
+                                }, navigationIcon = {
                                     IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
                                         Icon(touchActionIcon("back"), "Back")
                                     }
                                 })
+                                search?.let {
+                                    Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) { it() }
+                                }
                                 LazyColumn(
                                     state = list,
                                     modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
-                                    contentPadding = PaddingValues(vertical = 8.dp),
+                                    contentPadding = PaddingValues(top = 8.dp, bottom = if (status != null) noticeHeight + 16.dp else 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp),
                                     content = content
                                 )
                                 footer?.let {
-                                    Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
+                                    Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                                         it()
                                     }
                                 }
                             }
                             status?.let {
-                                Box(Modifier.align(Alignment.BottomCenter).widthIn(max = 640.dp).fillMaxWidth().padding(16.dp)) { it() }
+                                Box(
+                                    Modifier.align(Alignment.BottomCenter).widthIn(max = 640.dp).fillMaxWidth().onSizeChanged {
+                                        noticeHeight =
+                                            with(density) { it.height.toDp() }
+                                    }.padding(16.dp)
+                                ) { it() }
                             }
                         }
                     }
@@ -179,54 +201,59 @@ internal fun CatalogSection(title: String, first: Boolean = false) {
     )
 }
 
-/** A permanent slot keeps saving/error transitions outside the lazy list's geometry. */
+/** One compact progress line; failures live in the pinned footer or touch Snackbar. */
 @Composable
-private fun HomeSaveStatus(state: CatalogHomeState, retry: () -> Unit) {
-    if (!usesTvInterface(LocalContext.current)) {
-        val message = if (state.saving) "Saving layout…" else state.preferenceStatus
-        if (message != null) {
-            val failed = state.preferenceRetryable && !state.saving
-            val foreground = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface
-            Snackbar(
-                modifier = Modifier.testTag("home:save-notice"),
-                containerColor = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface,
-                contentColor = foreground,
-                action = {
-                    if (failed) {
-                        TextButton(
-                            retry,
-                            Modifier.testTag("home:retry-save"),
-                            colors = ButtonDefaults.textButtonColors(contentColor = foreground)
-                        ) { Text("Retry") }
-                    }
-                }
-            ) {
-                Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            }
-        }
-        return
-    }
-    Row(
-        Modifier.fillMaxWidth().height(64.dp).testTag("home:status-slot"),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val message = if (state.saving) "Saving layout…" else state.preferenceStatus
-        message?.let {
+private fun HomeSaveProgress(state: CatalogHomeState) {
+    Box(Modifier.fillMaxWidth().height(32.dp).testTag("home:status-slot"), contentAlignment = Alignment.CenterStart) {
+        if (homeSavePresentation(true, state.saving, state.preferenceRetryable, !state.preferenceStatus.isNullOrBlank()) ==
+            "progress"
+        ) {
             Text(
-                it,
-                Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
-                color = if (state.preferenceRetryable &&
-                    !state.saving
-                ) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                "Saving layout…",
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium
             )
         }
-        if (state.preferenceRetryable && !state.saving) {
+    }
+}
+
+@Composable
+private fun HomeSaveFailure(state: CatalogHomeState, retry: () -> Unit) {
+    val message = state.preferenceStatus ?: return
+    if (homeSavePresentation(usesTvInterface(LocalContext.current), state.saving, state.preferenceRetryable, message.isNotBlank()) !=
+        "failure"
+    ) {
+        return
+    }
+    if (!usesTvInterface(LocalContext.current)) {
+        val foreground = MaterialTheme.colorScheme.onErrorContainer
+        Snackbar(
+            modifier = Modifier.testTag("home:save-notice"),
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = foreground,
+            action = {
+                TextButton(
+                    retry,
+                    Modifier.testTag("home:retry-save"),
+                    colors = ButtonDefaults.textButtonColors(contentColor = foreground)
+                ) {
+                    Text("Retry")
+                }
+            }
+        ) { Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().testTag("home:save-notice"),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                message,
+                Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
             CatalogCommand("Retry", retry, Modifier.testTag("home:retry-save"))
         }
     }
@@ -385,7 +412,9 @@ private fun CatalogCommand(
     } else if (primary) {
         Button(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) { Text(title) }
     } else {
-        TextButton(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) { Text(title) }
+        TextButton(onClick = action, modifier = modifier.padding(horizontal = 4.dp).heightIn(min = 48.dp), enabled = enabled) {
+            Text(title)
+        }
     }
 }
 
@@ -466,6 +495,7 @@ internal fun HomeCustomization(
     var moving by remember { mutableStateOf<String?>(null) }
     var draftOrder by remember { mutableStateOf<List<String>?>(null) }
     val preferences = state.preferences
+    val savePresentation = homeSavePresentation(tv, state.saving, state.preferenceRetryable, !state.preferenceStatus.isNullOrBlank())
     val defaults =
         listOf(
             "resume" to "Continue watching",
@@ -488,14 +518,29 @@ internal fun HomeCustomization(
         moving = null
         draftOrder = null
     }
-    CatalogEditor("Customize home", {
-        if (moving != null) {
-            moving = null
-            draftOrder = null
+    CatalogEditor(
+        "Customize home",
+        {
+            if (moving != null) {
+                moving = null
+                draftOrder = null
+            } else {
+                close()
+            }
+        },
+        first,
+        list,
+        status = if (tv) {
+            ({ HomeSaveProgress(state) })
+        } else if (savePresentation ==
+            "failure"
+        ) {
+            ({ HomeSaveFailure(state) { change { it } } })
         } else {
-            close()
-        }
-    }, first, list, status = { HomeSaveStatus(state) { change { it } } }) {
+            null
+        },
+        footer = if (tv && savePresentation == "failure") ({ HomeSaveFailure(state) { change { it } } }) else null
+    ) {
         item("rows-heading") { CatalogSection("Rows", first = true) }
         items(rows, key = { it }) { key ->
             val index = rows.indexOf(key)
@@ -778,6 +823,24 @@ internal fun NamedCatalogPicker(
     } else {
         first
     }
+    val searchInput: @Composable () -> Unit = {
+        OutlinedTextField(
+            query,
+            { query = it.take(200) },
+            label = { Text("Find by name") },
+            modifier = Modifier.fillMaxWidth().padding(
+                bottom = if (tv) 8.dp else 0.dp
+            ).testTag("catalog:query").focusRequester(if (tv) searchField else first),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                requested = query.trim()
+                page = 0
+                keyboard?.hide()
+                searchEditing = false
+            })
+        )
+    }
     CatalogEditor(title, {
         if (tv && searchEditing) {
             keyboard?.hide()
@@ -785,34 +848,22 @@ internal fun NamedCatalogPicker(
         } else {
             close()
         }
-    }, initialFocus, list) {
-        item("search") {
-            if (tv && !searchEditing) {
-                TvSettingsActionRow(
-                    "Find by name",
-                    Modifier.focusRequester(first).testTag("catalog:search"),
-                    supportingText = query.ifBlank {
-                        null
+    }, initialFocus, list, search = if (tv) null else searchInput) {
+        if (tv) {
+            item("search") {
+                if (!searchEditing) {
+                    TvSettingsActionRow(
+                        "Find by name",
+                        Modifier.focusRequester(first).testTag("catalog:search"),
+                        supportingText = query.ifBlank {
+                            null
+                        }
+                    ) {
+                        searchEditing = true
                     }
-                ) {
-                    searchEditing =
-                        true
+                } else {
+                    searchInput()
                 }
-            } else {
-                OutlinedTextField(
-                    query,
-                    { query = it.take(200) },
-                    label = { Text("Find by name") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(if (tv) searchField else first),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        requested = query.trim()
-                        page = 0
-                        keyboard?.hide()
-                        searchEditing = false
-                    })
-                )
             }
         }
         if (loading) item("loading") { CatalogBody("Loading choices…") }
