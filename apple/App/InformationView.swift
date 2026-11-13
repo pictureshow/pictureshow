@@ -38,7 +38,7 @@ private struct LicenseListView: View {
 }
 private struct LicenseTextView: View {
     private var text: String {
-        guard let url = Bundle.main.url(forResource: "MPL-2.0", withExtension: "txt") else { return "The bundled license could not be loaded. Reinstall this build; the complete license is also in the Pictureshow source repository." }
+        guard let url = Bundle.main.url(forResource: "MPL-2.0", withExtension: "txt") else { return "The bundled license could not be loaded. You can read the complete license in the Pictureshow source repository." }
         return (try? String(contentsOf: url, encoding: .utf8)) ?? "The bundled license could not be read."
     }
     var body: some View { ReadingPage(title: "MPL-2.0") { Text("Mozilla Public License 2.0").font(.title).accessibilityAddTraits(.isHeader).accessibilityIdentifier("licenseTitle"); ReadingChunks(text: text) } }
@@ -48,8 +48,8 @@ private struct SupporterView: View {
         ReadingPage(title: "Support Pictureshow") {
             Text("Free and open source").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
             ReadingChunks(text: "Pictureshow is free to use. Monthly supporters help sustain development, and their feature requests receive priority consideration. Support does not guarantee a feature, a delivery date, or a particular outcome.")
-            Text("Support purchases are unavailable in this Apple build.").font(.title2).accessibilityIdentifier("billingUnavailable")
-            Text("Apple in-app purchases are not configured. There is no subscription offer, price or active entitlement to display. All catalog and playback features remain available.").foregroundStyle(Theme.muted)
+            Text("Support purchases are not available yet.").font(.title2).accessibilityIdentifier("billingUnavailable")
+            Text("You can use all catalog and playback features for free. There is no support subscription to manage here.").foregroundStyle(Theme.muted)
         }
     }
 }

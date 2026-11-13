@@ -573,7 +573,6 @@ enum NavigationMemory {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var path: [AppRoute] = []
     var body: some View {
         Group {
             if let error = model.storageError {
@@ -581,33 +580,16 @@ struct RootView: View {
                     .padding(Theme.gutter)
             } else if model.showSignIn { SignInView()
             } else if model.account != nil {
-                #if os(iOS)
-                TouchShell().id(model.account?.localKey)
-                #else
-                NavigationStack(path: $path) {
-                    HomeView(open: open)
-                        .navigationDestination(for: AppRoute.self) { route in destination(route, open: open) }
-                }
-                .id(model.account?.localKey)
-                .task { if path.isEmpty, let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) { path = saved.paths.first ?? [] }; await model.loadHomeIfNeeded() }
-                .onChange(of: path) { _, value in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: 0, paths: [value]) } }
-                .onChange(of: path) { _, value in if value.isEmpty { Task { await model.loadHomeIfNeeded() } } }
-                #endif
+                NativeShell().id(model.account?.localKey)
             } else if model.showSignIn || model.snapshot.accounts.isEmpty { SignInView() }
             else { NavigationStack { AccountsView() } }
         }
         .background(Theme.background.ignoresSafeArea())
         .onOpenURL { url in Task { await model.openPlaybackURL(url) } }
-        .onChange(of: model.externalDetailID) { _, id in if let id { path = [.detail(id)] } }
-        #if DEBUG
-        .onAppear {
-            if model.account != nil, path.isEmpty, let item = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DETAIL_ID"] { path = [.detail(item)] }
-        }
-        #endif
         .fullScreenCover(item: $model.player, onDismiss: { Task { await model.presentationDismissed() } }) { session in PlayerScreen(session: session) { await model.playerClosed(session) } }
         .alert("Playback unavailable", isPresented: Binding(get: { model.playbackError != nil }, set: { if !$0 { model.playbackError = nil } })) { Button("OK") { model.playbackError = nil } } message: { Text(model.playbackError ?? "") }
     }
-    private func open(_ item: MediaItem) { performCatalogNavigation { path.append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
+
 }
 
 @ViewBuilder func destination(_ route: AppRoute, open: @escaping (MediaItem) -> Void) -> some View {
@@ -621,8 +603,7 @@ struct RootView: View {
     }
 }
 
-#if os(iOS)
-struct TouchShell: View {
+struct NativeShell: View {
     @EnvironmentObject private var model: AppModel
     @State private var tab = 0
     @State private var paths: [[AppRoute]] = [[], [], [], []]
@@ -630,15 +611,20 @@ struct TouchShell: View {
     private let icons = ["house", "square.grid.2x2", "magnifyingglass", "gearshape"]
     var body: some View {
         Group {
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, tvOS 18.0, *) {
                 TabView(selection: $tab) {
                     Tab("Home", systemImage: "house", value: 0) { stack(0) }
                     Tab("Libraries", systemImage: "square.grid.2x2", value: 1) { stack(1) }
                     Tab("Search", systemImage: "magnifyingglass", value: 2) { stack(2) }
                     Tab("Settings", systemImage: "gearshape", value: 3) { stack(3) }
-                }.tabViewStyle(.sidebarAdaptable)
+                }
+                #if os(tvOS)
+                .tabViewStyle(.tabBarOnly)
+                #else
+                .tabViewStyle(.sidebarAdaptable)
+                #endif
             } else {
-                // iOS17 uses its native bottom tabs, including at narrow iPad widths.
+                // Earlier systems keep the native platform tab bar.
                 TabView(selection: $tab) {
                     ForEach(0..<4) { index in
                         stack(index).tabItem { Label(names[index], systemImage: icons[index]) }.tag(index)
@@ -647,7 +633,11 @@ struct TouchShell: View {
             }
         }
         .task {
-            if let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer), saved.paths.count == 4 { paths = saved.paths; tab = min(3,max(0,saved.tab)) }
+            if paths.allSatisfy({ $0.isEmpty }), let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) {
+                if saved.paths.count == 4 { paths = saved.paths; tab = min(3, max(0, saved.tab)) }
+                else if saved.paths.count == 1 { paths[0] = saved.paths[0] }
+            }
+            if let id = model.externalDetailID { tab = 0; paths[0] = [.detail(id)] }
             await model.loadHomeIfNeeded()
         }
         .onChange(of: model.externalDetailID) { _, id in if let id { tab = 0; paths[0] = [.detail(id)] } }
@@ -664,7 +654,7 @@ struct TouchShell: View {
                 case 1: LibrariesView(open: { open($0, tab: index) })
                 case 2: SearchView(open: { open($0, tab: index) })
                 case 3: SettingsView()
-                default: HomeView(open: { open($0, tab: index) }, showSearch: { tab = 2 }, showSettings: { tab = 3 })
+                default: HomeView(open: { open($0, tab: index) })
                 }
             }
             .navigationDestination(for: AppRoute.self) { route in destination(route, open: { open($0, tab: index) }) }
@@ -672,7 +662,6 @@ struct TouchShell: View {
     }
     private func open(_ item: MediaItem, tab index: Int) { performCatalogNavigation { paths[index].append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
 }
-#endif
 
 private extension View {
     /// Explicit test environment projection, never an operating-system setting.

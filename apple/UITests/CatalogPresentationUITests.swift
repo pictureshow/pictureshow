@@ -419,11 +419,7 @@ final class CatalogPresentationUITests: XCTestCase {
         attachSpeech("132 VoiceOver detail traversal after selected season")
         disableReader()
         back(app); back(app)
-        #if os(tvOS)
-        activate(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch, app: app)
-        #else
         activateSettingsChrome(app)
-        #endif
         let conversion = app.descendants(matching: .any).matching(identifier: "conversionNoticeToggle").firstMatch
         XCTAssertTrue(conversion.waitForExistence(timeout: 15))
         #if os(tvOS)
@@ -729,13 +725,14 @@ final class CatalogPresentationUITests: XCTestCase {
         #endif
         back(app)
         back(app)
-        #if os(tvOS)
-        activate(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch, app: app)
-        #else
         activateSettingsChrome(app)
-        #endif
         let toggle = app.switches["conversionNoticeToggle"]
         #if os(tvOS)
+        let playbackHeader = app.staticTexts["playbackSectionHeader"]
+        let audioFooter = app.staticTexts["audioOutputExplanation"]
+        XCTAssertTrue(playbackHeader.waitForExistence(timeout: 10) && audioFooter.exists)
+        assertNativeButtonPixels(playbackHeader, app: app, style: "Round3 Settings section header AA", text: "Playback")
+        assertNativeButtonPixels(audioFooter, app: app, style: "Round3 Settings output footer AA", text: "Apple TV chooses")
         assertSettingsPickerChanges(app)
         let conversion = app.descendants(matching: .any).matching(identifier: "conversionNoticeToggle").firstMatch
         XCTAssertTrue(conversion.waitForExistence(timeout: 15))
@@ -1018,9 +1015,7 @@ final class CatalogPresentationUITests: XCTestCase {
     private func activateSettingsChrome(_ app: XCUIApplication) {
         // Native top/bottom tabs use Buttons; an expanded sidebar uses Cells.
         // Same-frame parent/child AX wrappers represent one visible control.
-        let query = UIDevice.current.userInterfaceIdiom == .pad
-            ? app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND identifier != %@", "Settings", "openSettings"))
-            : app.tabBars.buttons.matching(identifier: "Settings")
+        let query = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Settings"))
         let exists = query.firstMatch.waitForExistence(timeout: 15)
         let window = app.windows.firstMatch.frame
         let candidates = query.allElementsBoundByIndex.filter { $0.elementType == .button || $0.elementType == .cell }
@@ -1037,12 +1032,16 @@ final class CatalogPresentationUITests: XCTestCase {
         }
         capture("132 Settings navigation chrome before resolution", app: app)
         XCTAssertTrue(exists, "The native Settings navigation control must exist")
-        XCTAssertEqual(uniqueVisible.count, 1, "Choose exactly one visible native Settings control, excluding Home toolbar and identical AX wrappers")
+        XCTAssertEqual(uniqueVisible.count, 1, "Choose exactly one visible native Settings tab/sidebar control, excluding identical AX wrappers")
         guard uniqueVisible.count == 1, let settings = uniqueVisible.first else { return }
         XCTAssertEqual(settings.label, "Settings")
         XCTAssertTrue(settings.elementType == .button || settings.elementType == .cell)
         XCTAssertTrue(settings.isHittable && !settings.frame.isEmpty && window.contains(settings.frame), "The actual Settings control must be hittable and fully inside the app window")
+        #if os(tvOS)
+        activate(settings, app: app)
+        #else
         settings.tap()
+        #endif
     }
     private func assertSingleLineTouchHeight(_ element: XCUIElement) {
         // AX geometry uses floating-point coordinates; this tolerance is far below a physical pixel.

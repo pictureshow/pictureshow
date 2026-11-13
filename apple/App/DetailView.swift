@@ -309,6 +309,8 @@ struct DetailView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @ScaledMetric(relativeTo: .body) private var personScale: CGFloat = 1
     let id: String
     var open: (MediaItem) -> Void
     @StateObject private var state = DetailState()
@@ -399,7 +401,7 @@ struct DetailView: View {
                     if ["Series", "Season"].contains(item.type) { episodeSection }
                     if !item.people.isEmpty {
                         Text("Cast and crew").font(.title2.bold()).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden)
-                        ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.secondaryButtonText) }.minimumTouchTarget() }.secondaryActionStyle().accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
+                        peopleShelf(item.people)
                     }
                     if header != item, let overview = item.overview, overview != header.overview { Text("More details").font(.title2).accessibilityAddTraits(.isHeader).accessibilityHidden(metadataHidden); Text(overview).accessibilityHidden(metadataHidden) }
                 } else if coldPending {
@@ -455,7 +457,13 @@ struct DetailView: View {
             }
         }
         #endif
-        .background(Theme.background.ignoresSafeArea())
+        .background {
+            if usesBackdropHero, let header = state.header, state.item?.type != "Person" {
+                DetailHeroBackdrop(item: header).ignoresSafeArea()
+            } else {
+                Theme.background.ignoresSafeArea()
+            }
+        }
         #if os(tvOS)
         .toolbar(.hidden, for: .navigationBar)
         #else
@@ -660,9 +668,39 @@ struct DetailView: View {
         default: return state.item?.userData.isFavorite == true ? "Remove favorite" : "Add favorite"
         }
     }
-    private func hero(_ header: MediaItem, current item: MediaItem) -> some View {
+    private var usesBackdropHero: Bool {
+        #if os(tvOS)
+        true
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+        #endif
+    }
+    @ViewBuilder private func hero(_ header: MediaItem, current item: MediaItem) -> some View {
+        if usesBackdropHero {
+            VStack(alignment: .leading, spacing: 24) {
+                heroIntroduction(header, current: item)
+                    .frame(maxWidth: .infinity, minHeight: backdropIntroductionHeight, alignment: .bottomLeading)
+                heroSummary(header, current: item).frame(maxWidth: 760, alignment: .leading)
+            }
+        } else {
+            // Keep the phone and compact-window hierarchy: artwork, title,
+            // metadata, primary playback, start-over and secondary actions.
+            VStack(alignment: .leading, spacing: 20) {
+                Artwork(item: header, wide: true).frame(maxWidth: .infinity).frame(height: heroHeight).clipShape(RoundedRectangle(cornerRadius: 18))
+                heroIntroduction(header, current: item)
+                heroSummary(header, current: item)
+            }
+        }
+    }
+    private var backdropIntroductionHeight: CGFloat {
+        #if os(tvOS)
+        620
+        #else
+        560
+        #endif
+    }
+    private func heroIntroduction(_ header: MediaItem, current item: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Artwork(item: header, wide: true).frame(maxWidth: .infinity).frame(height: heroHeight).clipShape(RoundedRectangle(cornerRadius: 18))
             Text(header.name).modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("detailTitle").accessibilityFocused($accessibilityFocused, equals: "heading").accessibilityHidden(metadataHidden)
                 #if os(tvOS)
                 .id("heading")
@@ -682,10 +720,64 @@ struct DetailView: View {
             #else
             actionRow(item, horizontal: false)
             #endif
+        }
+    }
+    private func heroSummary(_ header: MediaItem, current item: MediaItem) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
             if let target = state.target, target.id != item.id { Text("Next: \(target.accessibleTitle)").foregroundStyle(Theme.muted).accessibilityHidden(metadataHidden) }
             if let overview = header.overview, !overview.isEmpty { Text(overview).modifier(TokenFont(DesignTokens.bodySize)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true).accessibilityHidden(metadataHidden) }
             if !header.genres.isEmpty { Text(header.genres.joined(separator: " · ")).foregroundStyle(Theme.muted).accessibilityHidden(metadataHidden) }
         }
+    }
+    private func peopleShelf(_ people: [PersonCredit]) -> some View {
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: personShelfSpacing) {
+                ForEach(people) { person in
+                    VStack(spacing: 12) {
+                        Button {
+                            var target = MediaItem(id: person.id, name: person.name, type: "Person")
+                            target.overview = nil
+                            open(target)
+                        } label: {
+                            #if os(tvOS)
+                            DetailPersonPortrait(name: person.name, diameter: 132 * personScale)
+                                .frame(width: personTileWidth, height: 164 * personScale)
+                            #else
+                            VStack(spacing: 12) {
+                                DetailPersonPortrait(name: person.name, diameter: 88 * personScale)
+                                DetailPersonMetadata(person: person)
+                            }.frame(width: personTileWidth)
+                            #endif
+                        }
+                        .buttonStyle(PosterButtonStyle())
+                        .accessibilityLabel([person.name, person.detailDisplayRole].compactMap { $0 }.joined(separator: ", "))
+                        .accessibilityIdentifier("person-\(person.id)")
+                        #if os(tvOS)
+                        // Like catalog posters, metadata stays outside the
+                        // focused native card's light platter.
+                        DetailPersonMetadata(person: person).frame(width: personTileWidth).accessibilityHidden(true)
+                        #endif
+                    }.frame(width: personTileWidth)
+                }
+            }.padding(.vertical, 16)
+        }
+        .scrollIndicators(.hidden)
+        .televisionFocusSection()
+        .accessibilityIdentifier("detailPeopleShelf")
+    }
+    private var personTileWidth: CGFloat {
+        #if os(tvOS)
+        200 * personScale
+        #else
+        120 * personScale
+        #endif
+    }
+    private var personShelfSpacing: CGFloat {
+        #if os(tvOS)
+        44
+        #else
+        20
+        #endif
     }
     private func resumeIfActive() {
         guard visible, scenePhase == .active, !resumed else { return }
@@ -747,9 +839,11 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: 12) { remotePlayAction; mutationActions(item) }
             } else {
                 HStack(alignment: .top, spacing: 12) { remotePlayAction; mutationActions(item) }
-                    .labelStyle(DetailSecondaryLabelStyle())
+                    .labelStyle(DetailSecondaryLabelStyle(singleLine: !guarded && state.readError == nil && state.pending.isEmpty && state.activeCommand == nil))
             }
-        }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 420 : .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         #endif
     }
     @ViewBuilder private func playActions(_ item: MediaItem) -> some View {
@@ -777,7 +871,7 @@ struct DetailView: View {
                 TelevisionActionInk { Label("Play on TV", systemImage: "tv") }
                     .modifier(DetailActionWidth())
                 #else
-                Label("Play on TV", systemImage: "tv").modifier(DetailActionWidth())
+                Label(dynamicTypeSize < .xxxLarge ? "TV" : "Play on TV", systemImage: "tv").modifier(DetailActionWidth())
                 #endif
             }
                 #if os(tvOS)
@@ -801,15 +895,22 @@ struct DetailView: View {
         let watchedLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "played") : watchedRequest ?? (item.isWatched ? "Mark unwatched" : "Mark watched")
         let favoriteLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "favorite") : favoriteRequest ?? (item.userData.isFavorite ? "Remove favorite" : "Add favorite")
         Button { opener = "watched"; offer(watchedCommand, key: "watched") } label: {
-            Label(watchedLabel, systemImage: state.readError == nil && item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").modifier(DetailActionWidth())
+            Label(touchActionTitle("Watched", full: watchedLabel, requested: watchedRequest != nil), systemImage: state.readError == nil && item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").modifier(DetailActionWidth())
         }.catalogActionStyle().modifier(DetailActionWidth())
             .detailActionState(value: actionValue(item.isWatched ? "Watched" : "Unwatched", unavailable: state.empty), unavailable: state.empty || state.readError != nil, held: guarded, label: semanticLabel(plain: item.isWatched ? "Mark unwatched" : "Mark watched", pending: item.isWatched ? "Mark unwatched when ready" : "Mark watched when ready", actual: watchedLabel, unavailable: state.empty || state.readError != nil), requestStatus: watchedRequest, acceptsHeldRequest: true)
             .accessibilityFocused($accessibilityFocused, equals: "watched").focused($focused, equals: "watched").id("watched").accessibilityIdentifier("watched")
         Button { opener = "favorite"; offer(favoriteCommand, key: "favorite") } label: {
-            Label(favoriteLabel, systemImage: state.readError == nil && item.userData.isFavorite ? "heart.fill" : "heart").modifier(DetailActionWidth())
+            Label(touchActionTitle("Favorite", full: favoriteLabel, requested: favoriteRequest != nil), systemImage: state.readError == nil && item.userData.isFavorite ? "heart.fill" : "heart").modifier(DetailActionWidth())
         }.catalogActionStyle().modifier(DetailActionWidth())
             .detailActionState(value: actionValue(item.userData.isFavorite ? "Favorite" : "Not favorite"), unavailable: state.readError != nil, held: guarded, label: semanticLabel(plain: item.userData.isFavorite ? "Remove favorite" : "Add favorite", pending: item.userData.isFavorite ? "Remove favorite when ready" : "Add favorite when ready", actual: favoriteLabel, unavailable: state.readError != nil), requestStatus: favoriteRequest, acceptsHeldRequest: true)
             .accessibilityFocused($accessibilityFocused, equals: "favorite").focused($focused, equals: "favorite").id("favorite").accessibilityIdentifier("favorite")
+    }
+    private func touchActionTitle(_ short: String, full: String, requested: Bool) -> String {
+        #if os(tvOS)
+        full
+        #else
+        !guarded && !requested && state.readError == nil && dynamicTypeSize < .xxxLarge ? short : full
+        #endif
     }
     private var startOverButton: some View {
         let request = state.requestedLabel(.play(false))
@@ -899,6 +1000,89 @@ struct DetailView: View {
     private func metadata(_ item: MediaItem) -> String { [item.type == "Episode" ? item.seriesName : nil, item.type == "Episode" ? item.episodeLabel : nil, item.productionYear.map(String.init), item.officialRating, Catalog.runtimeLabel(item.runTimeTicks)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
 }
 
+/// A full-bleed scene behind wide detail layouts; content, not a fixed
+/// centre-cropped strip, determines the page's foreground height.
+private struct DetailHeroBackdrop: View {
+    @EnvironmentObject private var model: AppModel
+    let item: MediaItem
+    @State private var image: UIImage?
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Theme.background
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geometry.size.width, height: max(620, geometry.size.width * 9 / 16), alignment: .topTrailing)
+                        .clipped()
+                        .overlay {
+                            LinearGradient(stops: [
+                                .init(color: .clear, location: 0.55),
+                                .init(color: Theme.background, location: 1)
+                            ], startPoint: .top, endPoint: .bottom)
+                        }
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
+                LinearGradient(stops: [
+                    .init(color: Theme.background.opacity(0.98), location: 0),
+                    .init(color: Theme.background.opacity(0.94), location: 0.45),
+                    .init(color: Theme.background.opacity(0.5), location: 0.7),
+                    .init(color: Theme.background.opacity(0.15), location: 1)
+                ], startPoint: .leading, endPoint: .trailing)
+                LinearGradient(stops: [
+                    .init(color: Theme.background.opacity(0.05), location: 0),
+                    .init(color: Theme.background.opacity(0.5), location: 0.6),
+                    .init(color: Theme.background, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+        }
+        .allowsHitTesting(false).accessibilityHidden(true)
+        .task(id: item.id) {
+            image = nil
+            guard let account = model.account,
+                  let url = model.client.imageURL(account: account, item: item, maxWidth: 1920, wide: true) else { return }
+            let loaded = await ArtworkCache.shared.image(url: url, account: account, client: model.client)
+            guard !Task.isCancelled else { return }
+            image = loaded
+        }
+    }
+}
+
+private struct DetailPersonPortrait: View {
+    let name: String
+    let diameter: CGFloat
+    private var initials: String {
+        let words = name.split(whereSeparator: { $0.isWhitespace })
+        return [words.first?.first, words.count > 1 ? words.last?.first : nil]
+            .compactMap { $0 }.map(String.init).joined().uppercased()
+    }
+    var body: some View {
+        Text(initials.isEmpty ? "?" : initials)
+            .font(.system(size: diameter * 0.34, weight: .semibold))
+            .foregroundStyle(Theme.muted)
+            .frame(width: diameter, height: diameter)
+            .background(Theme.surface, in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+private extension PersonCredit {
+    var detailDisplayRole: String? {
+        [role, type].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+}
+private struct DetailPersonMetadata: View {
+    let person: PersonCredit
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(person.name).font(.body.weight(.medium)).foregroundStyle(.primary)
+                .lineLimit(2, reservesSpace: true)
+            Text(person.detailDisplayRole ?? "").font(.caption).foregroundStyle(Theme.muted)
+                .lineLimit(2, reservesSpace: true)
+        }.multilineTextAlignment(.center)
+    }
+}
+
+
 private struct DetailRecoverySurface: ViewModifier {
     func body(content: Content) -> some View {
         #if os(tvOS)
@@ -937,10 +1121,13 @@ private struct DetailActionWidth: ViewModifier {
     }
 }
 private struct DetailSecondaryLabelStyle: LabelStyle {
+    var singleLine = true
     func makeBody(configuration: Configuration) -> some View {
         VStack(spacing: 8) {
             configuration.icon.font(.title3)
-            configuration.title.multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            configuration.title.multilineTextAlignment(.center)
+                .lineLimit(singleLine ? 1 : nil).minimumScaleFactor(singleLine ? 0.8 : 1)
+                .fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, minHeight: 64, alignment: .top)
     }
 }

@@ -86,98 +86,20 @@ private struct SignInForm: View {
     @State private var availabilityError: String?
     @State private var work: Task<Void, Never>?
     @FocusState private var focused: String?
+
     var body: some View {
-        #if os(iOS)
-        GeometryReader { viewport in
-            form(compact: viewport.size.height < 480, spacing: viewport.size.height < 900 ? 16 : 24)
-        }
-        #else
-        form(compact: false, spacing: 24)
-        #endif
-    }
-    private func form(compact: Bool, spacing: CGFloat) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: compact ? 12 : spacing) {
-                Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(compact ? DesignTokens.titleSize : DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
-                if let server {
-                    Text("Sign in to \(server.name)").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Connect to your server").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                        Text("Your Jellyfin, beautifully at home.").font(.callout).foregroundStyle(Theme.muted)
-                    }
-                }
-                if model.sessionEnded { Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded") }
-                if let server {
-                    Text(server.url.host ?? "Jellyfin").foregroundStyle(Theme.muted)
-                    if flow.showingQuick {
-                        quick(server)
-                    } else {
-                        if !users.isEmpty {
-                            Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.secondaryActionStyle() } } }
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Username").foregroundStyle(Theme.muted).accessibilityHidden(true)
-                            TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityLabel("Username").accessibilityIdentifier("username")
-                                .modifier(SignInFieldStyle(isFocused: focused == "username"))
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Password").foregroundStyle(Theme.muted).accessibilityHidden(true)
-                        HStack {
-                            Group { if showPassword { TextField("Password", text: $password) } else { SecureField("Password", text: $password) } }
-                                .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityLabel("Password").accessibilityIdentifier("password")
-                                .modifier(SignInFieldStyle(isFocused: focused == "password"))
-                            Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").secondaryActionStyle()
-                        }
-                        }
-                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
-                        VStack(alignment: .leading, spacing: 12) {
-                            if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
-                            else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
-                            else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").frame(maxWidth: .infinity).minimumTouchTarget() } }
-                            else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
-                            Button { leaveServer() } label: { Text("Change server").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy)
-                        }.secondaryActionStyle().touchSecondaryInk()
-                    }
-                } else {
-                    if !model.snapshot.servers.isEmpty {
-                        Text("Remembered servers").font(.headline).accessibilityAddTraits(.isHeader)
-                        ForEach(model.snapshot.servers, id: \.url) { saved in Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name).minimumTouchTarget() }.secondaryActionStyle() }
-                    }
-                    Text("Server address").foregroundStyle(Theme.muted).accessibilityHidden(true)
-                    TextField("Server address", text: $address).textContentType(.URL).autocorrectionDisabled().focused($focused, equals: "server").submitLabel(.go).onSubmit(connect)
-                        .accessibilityLabel("Server address").accessibilityHint("Enter your Jellyfin server URL, including its port or path if needed").accessibilityIdentifier("serverAddress")
-                        .modifier(SignInFieldStyle(isFocused: focused == "server"))
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never).keyboardType(.URL)
-                        #endif
-                    Text("Automatic LAN discovery is unavailable in this unsigned build. Enter your server address on your network, VPN, or private server.").font(.callout).foregroundStyle(Theme.muted)
-                    Button(action: connect) { Text("Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
-                }
-                if !model.snapshot.accounts.isEmpty { Button { work?.cancel(); flow.clear(); model.showSignIn = false } label: { Text("Remembered accounts").minimumTouchTarget() }.disabled(busy) }
-                if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
-                if let message = error ?? flow.error { Text(message).foregroundStyle(.orange).accessibilityIdentifier("signInError") }
-            }
-            #if os(iOS)
-            .buttonBorderShape(.roundedRectangle(radius: 12))
-            .buttonStyle(ProminentActionStyle())
-            #endif
-            .frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
+        ZStack {
+            Theme.background.ignoresSafeArea()
             #if os(tvOS)
-            .padding(.bottom, 60)
+            if let server, flow.showingQuick {
+                televisionQuickConnect(server)
+            } else {
+                scrollingForm
+            }
+            #else
+            scrollingForm
             #endif
         }
-        .background(Theme.background.ignoresSafeArea())
-        #if os(iOS)
-        .scrollDismissesKeyboard(.interactively)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focused = nil }.accessibilityIdentifier("dismissSignInKeyboard")
-            }
-        }
-        #endif
         .task {
             server = model.signInServer ?? flow.attempt?.server ?? model.snapshot.servers.last; username = model.signInUsername
             if let server { await loadOptions(server); if flow.attempt != nil { flow.poll(model: model) } }
@@ -193,15 +115,242 @@ private struct SignInForm: View {
         .onExitCommand { if flow.showingQuick { flow.hide() } else if server != nil { leaveServer() } else if !model.snapshot.accounts.isEmpty { model.showSignIn = false } }
         #endif
     }
+
+    private var scrollingForm: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Label("Pictureshow", systemImage: "play.rectangle.fill")
+                        .modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
+                    if let server {
+                        Text("Sign in to \(server.name)")
+                            .modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Connect to your server")
+                                .modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                            Text("Your Jellyfin, beautifully at home.").font(.callout).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    sessionNotice
+                    if let server {
+                        Text(server.url.host ?? "Jellyfin").foregroundStyle(Theme.muted)
+                        if flow.showingQuick {
+                            quick(server)
+                        } else {
+                            passwordForm(server)
+                        }
+                    } else {
+                        serverForm
+                    }
+                    rememberedAccounts
+                    progressAndError
+                }
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(Theme.gutter)
+                .frame(maxWidth: .infinity)
+            }
+            #if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+            .buttonBorderShape(.roundedRectangle(radius: 12))
+            .onChange(of: focused) { _, _ in revealFocusedFields(using: proxy) }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { _ in
+                revealFocusedFields(using: proxy)
+            }
+            #endif
+        }
+    }
+
+    @ViewBuilder private var sessionNotice: some View {
+        if model.sessionEnded {
+            Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded")
+        }
+    }
+
+    @ViewBuilder private func passwordForm(_ server: Server) -> some View {
+        if !users.isEmpty {
+            Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
+            ScrollView(.horizontal) {
+                HStack {
+                    ForEach(users, id: \.id) { user in
+                        Button { username = user.name; focused = "password" } label: { Text(user.name) }
+                            .secondaryActionStyle().modifier(SignInActionTarget())
+                    }
+                }
+            }
+        }
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Username").foregroundStyle(Theme.muted).accessibilityHidden(true)
+                TextField("Username", text: $username)
+                    .textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username")
+                    .submitLabel(.next).onSubmit { focused = "password" }
+                    .accessibilityLabel("Username").accessibilityIdentifier("username")
+                    .modifier(SignInFieldStyle(isFocused: focused == "username"))
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Password").foregroundStyle(Theme.muted).accessibilityHidden(true)
+                    HStack {
+                        Group {
+                            if showPassword { TextField("Password", text: $password) }
+                            else { SecureField("Password", text: $password) }
+                        }
+                        .textContentType(.password).focused($focused, equals: "password")
+                        .submitLabel(.go).onSubmit { focused = nil; signIn(server) }
+                        .accessibilityLabel("Password").accessibilityIdentifier("password")
+                        .modifier(SignInFieldStyle(isFocused: focused == "password"))
+                        Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show") }
+                            .accessibilityLabel(showPassword ? "Hide password" : "Show password")
+                            .secondaryActionStyle().modifier(SignInActionTarget())
+                    }
+                }
+                Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity) }
+                    .buttonStyle(ProminentActionStyle()).modifier(SignInActionTarget())
+                    .disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
+            }.id("passwordSubmission")
+        }.id("credentialsSubmission")
+        VStack(alignment: .leading, spacing: 12) {
+            if quickEnabled == true {
+                Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity) }
+                    .secondaryActionStyle().touchSecondaryInk().modifier(SignInActionTarget())
+                    .disabled(busy).accessibilityIdentifier("quickConnect")
+            } else if quickEnabled == false {
+                Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted)
+            } else if let availabilityError {
+                Text(availabilityError).foregroundStyle(.orange)
+                Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").frame(maxWidth: .infinity) }
+                    .secondaryActionStyle().touchSecondaryInk().modifier(SignInActionTarget())
+            } else {
+                Text("Checking Quick Connect…").foregroundStyle(Theme.muted)
+            }
+            Button { leaveServer() } label: { Text("Change server") }
+                .buttonStyle(.plain).foregroundStyle(Theme.accent).modifier(SignInActionTarget())
+                .disabled(busy)
+        }
+    }
+
+    @ViewBuilder private var serverForm: some View {
+        if !model.snapshot.servers.isEmpty {
+            Text("Remembered servers").font(.headline).accessibilityAddTraits(.isHeader)
+            ForEach(model.snapshot.servers, id: \.url) { saved in
+                Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name) }
+                    .secondaryActionStyle().modifier(SignInActionTarget())
+            }
+        }
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Server address").foregroundStyle(Theme.muted).accessibilityHidden(true)
+                TextField("Server address", text: $address)
+                    .textContentType(.URL).autocorrectionDisabled().focused($focused, equals: "server")
+                    .submitLabel(.go).onSubmit { focused = nil; connect() }
+                    .accessibilityLabel("Server address")
+                    .accessibilityHint("Enter your Jellyfin server address, including its port or path if needed")
+                    .accessibilityIdentifier("serverAddress")
+                    .modifier(SignInFieldStyle(isFocused: focused == "server"))
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never).keyboardType(.URL)
+                    #endif
+            }
+            Text("Enter your Jellyfin server address, such as https://jellyfin.example.org.")
+                .font(.callout).foregroundStyle(Theme.muted)
+            Button(action: connect) { Text("Connect").frame(maxWidth: .infinity) }
+                .buttonStyle(ProminentActionStyle()).modifier(SignInActionTarget())
+                .disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
+        }.id("serverSubmission")
+    }
+
+    @ViewBuilder private var rememberedAccounts: some View {
+        if !model.snapshot.accounts.isEmpty {
+            Button { work?.cancel(); flow.clear(); model.showSignIn = false } label: { Text("Remembered accounts") }
+                .secondaryActionStyle().modifier(SignInActionTarget()).disabled(busy)
+        }
+    }
+
+    @ViewBuilder private var progressAndError: some View {
+        if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
+        if let message = error ?? flow.error { Text(message).foregroundStyle(.orange).accessibilityIdentifier("signInError") }
+    }
+
+    #if os(iOS)
+    private func revealFocusedFields(using proxy: ScrollViewProxy) {
+        // Keyboard frame changes arrive separately from focus. Wait for that layout pass,
+        // then expose the input and its submit action together without changing type or gutter.
+        Task { @MainActor in
+            await Task.yield()
+            let target: String
+            switch focused {
+            case "server": target = "serverSubmission"
+            case "username": target = "credentialsSubmission"
+            case "password": target = "passwordSubmission"
+            default: return
+            }
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(target, anchor: .bottom) }
+        }
+    }
+    #endif
+
     @ViewBuilder private func quick(_ server: Server) -> some View {
         Text("Quick Connect").font(.title2).accessibilityAddTraits(.isHeader)
         if let code = flow.attempt?.code {
-            Text(code).font(.system(size: 48, weight: .bold, design: .monospaced)).accessibilityLabel("Quick Connect code " + code.map(String.init).joined(separator: " ")).accessibilityIdentifier("quickCode")
-            Text("In an already signed-in Jellyfin app, open Quick Connect and enter this code. Waiting for approval…").foregroundStyle(Theme.muted)
+            quickCode(code)
+            quickInstructions
         }
-        if flow.attempt == nil || flow.error != nil { Button { flow.clear(); flow.begin(server: server, model: model) } label: { Text("Renew Quick Connect code").minimumTouchTarget() }.disabled(flow.busy) }
-        Button { flow.hide(); focused = "username" } label: { Text("Use password").minimumTouchTarget() }.accessibilityIdentifier("cancelQuick")
+        quickActions(server)
     }
+
+    private var quickInstructions: some View {
+        Text("In an already signed-in Jellyfin app, open Quick Connect and enter this code. Waiting for approval…")
+            .foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func quickCode(_ code: String) -> some View {
+        Text(code)
+            #if os(tvOS)
+            .font(.system(size: 112, weight: .bold, design: .monospaced)).tracking(10)
+            #else
+            .font(.system(size: 48, weight: .bold, design: .monospaced))
+            #endif
+            .lineLimit(1)
+            .accessibilityLabel("Quick Connect code " + code.map(String.init).joined(separator: " "))
+            .accessibilityIdentifier("quickCode")
+    }
+
+    @ViewBuilder private func quickActions(_ server: Server) -> some View {
+        if flow.attempt == nil || flow.error != nil {
+            Button { flow.clear(); flow.begin(server: server, model: model) } label: { Text("Renew Quick Connect code") }
+                .secondaryActionStyle().modifier(SignInActionTarget()).disabled(flow.busy)
+        }
+        Button { flow.hide(); focused = "username" } label: { Text("Use password") }
+            .secondaryActionStyle().modifier(SignInActionTarget()).accessibilityIdentifier("cancelQuick")
+    }
+
+    #if os(tvOS)
+    private func televisionQuickConnect(_ server: Server) -> some View {
+        // This screen has no scrolling container: moving focus cannot pull its header out of title-safe space.
+        VStack(spacing: 24) {
+            Label("Pictureshow", systemImage: "play.rectangle.fill")
+                .modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
+            Text("Quick Connect").font(.title2).accessibilityAddTraits(.isHeader)
+            Text("Sign in to \(server.name)").foregroundStyle(Theme.muted)
+            sessionNotice
+            if let code = flow.attempt?.code {
+                quickCode(code)
+                quickInstructions
+            }
+            quickActions(server)
+            rememberedAccounts
+            progressAndError
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 1_000)
+        .padding(Theme.gutter)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+    #endif
     private func connect() {
         guard !busy, !address.isEmpty else { return }; busy = true; error = nil
         work = Task {
@@ -234,6 +383,17 @@ private struct SignInFieldStyle: ViewModifier {
         content.textFieldStyle(.plain).padding(.horizontal, 12).frame(minHeight: 56)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay { RoundedRectangle(cornerRadius: 12).stroke(isFocused ? Theme.accent : Theme.muted.opacity(0.5), lineWidth: isFocused ? 2 : 1) }
+        #else
+        content
+        #endif
+    }
+}
+
+/// Set the target outside native button padding so labels do not become 78-point controls.
+private struct SignInActionTarget: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        content.controlSize(.large).frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
         #else
         content
         #endif

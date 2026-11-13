@@ -9,8 +9,6 @@ struct HomeView: View {
     @State private var readLifecycle = DetailReadLifecycle()
     @State private var visible = false
     var open: (MediaItem) -> Void
-    var showSearch: (() -> Void)?
-    var showSettings: (() -> Void)?
     @State private var lastShelf: String?
     private var shelfMemoryKey: String { "home-shelf:" + (model.account?.localKey ?? "") }
     private var preferredShelf: String? {
@@ -33,19 +31,10 @@ struct HomeView: View {
                         open(item)
                     }
                 }
-                HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.secondaryActionStyle().padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
         .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle("Pictureshow")
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if let showSearch { Button(action: showSearch) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch") }
-                else { NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch") }
-                if let showSettings { Button(action: showSettings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings") }
-                else { NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings") }
-            }
-        }
         .refreshable { await model.loadHome() }
         .onAppear {
             visible = true
@@ -87,7 +76,7 @@ struct CatalogShelf: View {
             Text(title).modifier(CatalogShelfHeading(pageSection: pageSectionHeading)).accessibilityAddTraits(.isHeader).accessibilityFocused($readerFocused, equals: "shelfHeading").padding(.horizontal, horizontalInset)
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 20) {
+                    LazyHStack(alignment: .top, spacing: shelfSpacing) {
                         ForEach(items) { item in
                             if boundaryVisible(for: item.id, start: true) { boundary(start: true, item: item) }
                             VStack(alignment: .leading, spacing: 9) {
@@ -129,6 +118,13 @@ struct CatalogShelf: View {
                     }
             }
         }
+    }
+    private var shelfSpacing: CGFloat {
+        #if os(tvOS)
+        48
+        #else
+        20
+        #endif
     }
     private var televisionArtworkOnly: Bool {
         #if os(tvOS)
@@ -242,7 +238,7 @@ struct PosterButtonStyle: ButtonStyle {
         @Environment(\.accessibilityReduceMotion) private var reducedMotion
         @Environment(\.accessibilityVoiceOverEnabled) private var reader
         var body: some View {
-            posterLabel.contentShape(Rectangle())
+            posterLabel.contentShape(Rectangle()).hoverEffect(.lift)
                 .background(focused ? Theme.surface : Color.clear, in: RoundedRectangle(cornerRadius: 16))
                 .overlay { RoundedRectangle(cornerRadius: 16).stroke(focused ? Theme.accent : .clear, lineWidth: 3) }
                 .scaleEffect(reader || reducedMotion ? 1 : configuration.isPressed ? 0.97 : focused ? 1.035 : 1)
@@ -363,7 +359,50 @@ struct LibrariesView: View {
     @EnvironmentObject private var model: AppModel
     var open: (MediaItem) -> Void
     var body: some View {
-        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button { Task { await model.loadHome() } } label: { Text("Refresh").minimumTouchTarget() } } }.padding(.vertical, 24) }.pictureshowNavigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
+        ScrollView {
+            if let row = model.rows.first(where: { $0.library }), !row.items.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: libraryMinimum), spacing: librarySpacing, alignment: .top)], alignment: .leading, spacing: 28) {
+                    ForEach(row.items) { item in
+                        VStack(alignment: .leading, spacing: 9) {
+                            Button { open(item) } label: {
+                                CatalogCard(item: item, wide: true, fillsAvailableWidth: true, artworkOnly: televisionArtworkOnly)
+                            }.buttonStyle(PosterButtonStyle())
+                                .accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
+                            #if os(tvOS)
+                            CatalogCard(item: item, wide: true, fillsAvailableWidth: true, metadataOnly: true).accessibilityHidden(true)
+                            #endif
+                        }
+                    }
+                }.padding(.horizontal, Theme.gutter).padding(.vertical, 28).televisionFocusSection()
+            } else if model.loading { ProgressView("Loading libraries…").padding(Theme.gutter) }
+            else {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("No libraries available.").foregroundStyle(Theme.muted)
+                    Button { Task { await model.loadHome() } } label: { Text("Refresh") }.catalogActionStyle()
+                }.padding(Theme.gutter)
+            }
+        }.pictureshowNavigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
+    }
+    private var libraryMinimum: CGFloat {
+        #if os(tvOS)
+        360
+        #else
+        160
+        #endif
+    }
+    private var librarySpacing: CGFloat {
+        #if os(tvOS)
+        48
+        #else
+        20
+        #endif
+    }
+    private var televisionArtworkOnly: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
     }
 }
 
@@ -483,7 +522,7 @@ struct LibraryView: View {
                         }
                         if page.items.isEmpty && !page.loading && page.error == nil {
                             Text("No titles are available.").foregroundStyle(Theme.muted)
-                            Button { reload() } label: { Text("Refresh").minimumTouchTarget() }
+                            Button { reload() } label: { Text("Refresh") }.catalogActionStyle()
                         }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: gridSpacing, alignment: .top), count: columns), alignment: .leading, spacing: 28) {
                             ForEach(Array(page.items.enumerated()), id: \.element.id) { index, item in
@@ -655,7 +694,7 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(name).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("libraryHeading")
             Text("\(page.total) titles").foregroundStyle(Theme.muted).accessibilityIdentifier("libraryCount")
-            if !person {
+            if !person && (!page.items.isEmpty || page.loading || page.error != nil) {
                 #if os(tvOS)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 16) { sortButtons }
@@ -746,6 +785,13 @@ struct LibraryView: View {
                 Color.clear.preference(key: CatalogCardHeights.self, value: [item.id: geometry.size.height])
             }
         }
+        #endif
+    }
+    private var shelfSpacing: CGFloat {
+        #if os(tvOS)
+        48
+        #else
+        20
         #endif
     }
     private var televisionArtworkOnly: Bool {

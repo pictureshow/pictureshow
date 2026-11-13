@@ -16,6 +16,7 @@
 		175E543AA4A8ACB0C4BB07D6 /* AppleHEVCQualification.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC50B346E9AE355D6918A23 /* AppleHEVCQualification.swift */; };
 		1947ED6B1E7FC0EEFB4C6C48 /* AppleHEVCQualificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */; };
 		1F06DF598BEDFFFFF50FA12E /* NativeTrackHTTPFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */; };
+		212B7F376B2C2617183949A7 /* RoundThreeCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22CA11BDADCE91307B00F21E /* RoundThreeCaptureUITests.swift */; };
 		22EEFD74CE9BD3CE4CAB0AE7 /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		2315B71227D493238750EE59 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		23178F52ECB499187B8771AD /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414DE71D03568307C1B5DF0A /* SearchView.swift */; };
@@ -42,6 +43,7 @@
 		7B859A1ACE0CA988EDAC7EF9 /* RoundTwoCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE930222B3DD09D3F0BB5DE3 /* RoundTwoCaptureUITests.swift */; };
 		7C48C1A2793A183582E08341 /* RemotePlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D624A123C9CE33B7AD67E606 /* RemotePlayView.swift */; };
 		882EB3B90D8B8FFBD8952D4F /* PlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDD6E0937BBEEAE9622CF83 /* PlaybackSession.swift */; };
+		885A04EE2A53BD133A537C69 /* RoundThreeCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22CA11BDADCE91307B00F21E /* RoundThreeCaptureUITests.swift */; };
 		8B3B46BDA8F258118F40C929 /* hevc-main8-1080p30.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = AA990F22DCBD5FE7258A5F28 /* hevc-main8-1080p30.mp4 */; };
 		8E716BBD0D91648D865AA626 /* PlayerPresentationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C9CFE6B0C16A25DBCE23B97 /* PlayerPresentationUITests.swift */; };
 		90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
@@ -124,6 +126,7 @@
 		1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTrackHTTPFixture.swift; sourceTree = "<group>"; };
 		11E0148B4068A19A5C78D094 /* Pictureshow-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		22CA11BDADCE91307B00F21E /* RoundThreeCaptureUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundThreeCaptureUITests.swift; sourceTree = "<group>"; };
 		2F8E5103DB47A19B32019DE1 /* PictureshowCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowCore; path = PictureshowCore; sourceTree = SOURCE_ROOT; };
 		34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-tvOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		414DE71D03568307C1B5DF0A /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -239,6 +242,7 @@
 				EFE682A4DF76AD816EAEF225 /* DetailRecoveryUITests.swift */,
 				1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */,
 				9C9CFE6B0C16A25DBCE23B97 /* PlayerPresentationUITests.swift */,
+				22CA11BDADCE91307B00F21E /* RoundThreeCaptureUITests.swift */,
 				CE930222B3DD09D3F0BB5DE3 /* RoundTwoCaptureUITests.swift */,
 			);
 			path = UITests;
@@ -535,6 +539,7 @@
 				6C903B48798CB4B7D4BA728C /* DetailRecoveryUITests.swift in Sources */,
 				1F06DF598BEDFFFFF50FA12E /* NativeTrackHTTPFixture.swift in Sources */,
 				C21CE63CBED8BBF64323D964 /* PlayerPresentationUITests.swift in Sources */,
+				885A04EE2A53BD133A537C69 /* RoundThreeCaptureUITests.swift in Sources */,
 				7B859A1ACE0CA988EDAC7EF9 /* RoundTwoCaptureUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -589,6 +594,7 @@
 				3B16A92B5B8FE296B0F4318D /* DetailRecoveryUITests.swift in Sources */,
 				7519EFC91890A682D5B8FC52 /* NativeTrackHTTPFixture.swift in Sources */,
 				8E716BBD0D91648D865AA626 /* PlayerPresentationUITests.swift in Sources */,
+				212B7F376B2C2617183949A7 /* RoundThreeCaptureUITests.swift in Sources */,
 				EEFA5E3D4679293B5E4DB4BC /* RoundTwoCaptureUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

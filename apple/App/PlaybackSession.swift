@@ -586,7 +586,7 @@ final class ViewingAVPlayer: AVPlayer {
         }
         return decision?.method == .transcode && (decision?.subtitleIndex ?? -1) >= 0
         ? "These subtitles are burned into the video by the server. Timing and appearance cannot be changed."
-        : "AVKit uses the system caption renderer. Per-viewing subtitle timing is not exposed by Apple's public player API."
+        : "These subtitles use Apple’s caption controls. Timing cannot be changed for this viewing."
     }
     private var currentTicks: Int64 {
         if let pendingSeekTicks { return pendingSeekTicks }

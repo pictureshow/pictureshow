@@ -21,3 +21,12 @@ Source branch `phone` at the pinned commit in [README](README.md). Sources: `Int
 | TOUCH-14 | Touch About/license/support screens expose same information; license text selectable, active supporter code selectable. | Native text/reading order, store unavailable/fallback and Back behavior remain usable. Platform naming does not claim TV-specific capability on a phone. |
 
 Touch detail follows CAT-08..13 in touch form: the published page and action grid stay through a playback return, status sits in an overlay with no layout footprint, a tap during the wait is captured with its desired value and runs once in order on fresh data, the 30-second bound is explained, Back abandons, Retry works while loading with a new budget per deliberate Retry, read and write failures stay separate, and a polite live region carries the pending and “Ready.” cues. Touch and TV share one playback owner, so HLS, release and report fixes reach both modes.
+
+
+## Native Apple presentation and input
+
+Home, Libraries, Search and Settings use the platform tab container: a top tab bar on television and adaptive native tabs/sidebar on touch. Home has no duplicate Search/Settings toolbar or account actions; account switching and sign-out live under Settings → Accounts. Every television tab must expose its complete label and accept remote focus. Each tab retains its own navigation history.
+
+Apple sign-in keeps one type scale and gutter while the keyboard appears. Its scroll container reveals the focused field and submit action above the keyboard; the password Return action submits. Change server is a plain text action. Television Quick Connect centres its code, instructions and action inside the safe area, with the code larger than either heading.
+
+Libraries is a vertical adaptive grid under one heading. Cast and crew is a horizontal shelf of equal person lockups, with name and role; the role uses the muted text token. Television and regular-width tablet detail use a backdrop behind the lower-leading title/actions, protected by leading and bottom scrims. Custom touch poster/tile buttons expose a pointer lift effect. Television section headers and footers on the custom background use explicit muted ink, with actual text-pixel AA contrast checked separately from focus fill.

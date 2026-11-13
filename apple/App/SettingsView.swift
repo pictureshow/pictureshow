@@ -70,8 +70,8 @@ private struct SettingsForm: View {
                     #endif
                 }.focused($focused, equals: "conversionNotice")
                     .accessibilityLabel("Conversion notice").accessibilityIdentifier("conversionNoticeToggle")
-            } header: { Text("Playback") }
-              footer: { Text(audioOutputFooter).accessibilityIdentifier("audioOutputExplanation") }
+            } header: { Text("Playback").foregroundStyle(Theme.muted).accessibilityIdentifier("playbackSectionHeader") }
+              footer: { Text(audioOutputFooter).foregroundStyle(Theme.muted).accessibilityIdentifier("audioOutputExplanation") }
             Section {
                 labeledSetting("Subtitle size", value: preferences.value.subtitleSize.rawValue) {
                     Picker("Subtitle size", selection: preference(\.subtitleSize)) { ForEach(SubtitleSize.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }.accessibilityIdentifier("subtitleSize")
@@ -79,14 +79,14 @@ private struct SettingsForm: View {
                 labeledSetting("Subtitle background", value: preferences.value.subtitleBackground.rawValue) {
                     Picker("Subtitle background", selection: preference(\.subtitleBackground)) { ForEach(SubtitleBackground.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }.accessibilityIdentifier("subtitleBackground")
                 }
-            } header: { Text("Subtitles") }
+            } header: { Text("Subtitles").foregroundStyle(Theme.muted) }
               footer: { Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted) }
-            Section("Skip segments") {
+            Section {
                 ForEach(SegmentType.allCases.filter { $0 != .unknown }, id: \.rawValue) { type in
                     segmentPicker(type)
                 }
-            }
-            Section("Jellyfin preferences") {
+            } header: { Text("Skip segments").foregroundStyle(Theme.muted) }
+            Section {
                 if let configuration {
                     serverPicker("Audio language", key: "AudioLanguagePreference", value: configuration.audioLanguage, identifier: "audioLanguage")
                     serverPicker("Subtitle language", key: "SubtitleLanguagePreference", value: configuration.subtitleLanguage, identifier: "subtitleLanguage")
@@ -97,7 +97,7 @@ private struct SettingsForm: View {
                 } else { Text(serverBusy ? "Loading server preferences…" : "Server preferences unavailable").foregroundStyle(Theme.muted) }
                 if serverBusy { ProgressView("Saving or loading…") }
                 if let error = serverError { Text(error).foregroundStyle(.orange); Button("Retry server preferences") { Task { await load() } }.disabled(serverBusy) }
-            }
+            } header: { Text("Jellyfin preferences").foregroundStyle(Theme.muted) }
             if let error = preferences.error { Section { Text(error).foregroundStyle(.orange) } }
             Section {
                 NavigationLink("Accounts", value: AppRoute.accounts).accessibilityIdentifier("openAccounts").focused($focused, equals: "accounts")

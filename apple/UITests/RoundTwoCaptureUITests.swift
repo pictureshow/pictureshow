@@ -293,21 +293,15 @@ final class RoundTwoCaptureUITests: XCTestCase {
         XCTAssertEqual(username.value as? String, config["username"], "Submit the actual prepared pilot username")
         let password = app.secureTextFields["password"]
         XCTAssertTrue(password.exists && !(password.value as? String ?? "").isEmpty, "Prepared password must remain present")
-        // Sign-in options and Quick Connect cancellation can establish focus after
-        // the form first exists. Establish and dismiss that real keyboard before
-        // submitting so a native keyboard overlay cannot receive the button tap.
-        username.tap()
-        let done = app.buttons["dismissSignInKeyboard"]
-        XCTAssertTrue(wait(5) {
-            self.app.keyboards.firstMatch.exists && done.exists && !done.frame.isEmpty &&
-                done.frame.intersects(self.app.frame) && done.isHittable
-        }, "The focused native field must expose its visible keyboard dismissal control")
-        done.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Dismiss the native keyboard before submitting")
+        // The native password Go/Return submits after clearing focus. This
+        // remains an actual keyboard action; no floating Done accessory exists.
+        password.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        password.typeText("\n")
         #else
         dismissKeyboard()
-        #endif
         activate(app.buttons["signIn"])
+        #endif
         let signedIn = wait(30) { self.authenticated }
         if !signedIn { record("Round2 sign-in failure native state") }
         XCTAssertTrue(signedIn, "Actual password submission must reach the authenticated native app")

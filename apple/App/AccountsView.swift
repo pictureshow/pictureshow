@@ -30,6 +30,10 @@ struct AccountsView: View {
                     Button(role: .destructive) { removal = Removal(server: server, count: model.snapshot.accounts.filter { $0.server.url == server.url }.count, opener: "server-\(server.url.absoluteString)") } label: { Text("Remove server").minimumTouchTarget() }.tint(.red).touchSecondaryInk(destructive: true).focused($focused, equals: "server-\(server.url.absoluteString)")
                     Divider()
                 }
+                if model.account != nil {
+                    Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }
+                        .accessibilityIdentifier("signOut")
+                }
                 Button { model.beginSignIn(); dismiss() } label: { Label("Add a server", systemImage: "plus").minimumTouchTarget() }.accessibilityIdentifier("addServer")
             }.secondaryActionStyle().padding(Theme.gutter).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
         }.pictureshowNavigationTitle("Accounts").background(Theme.background.ignoresSafeArea())
