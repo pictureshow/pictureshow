@@ -15,3 +15,7 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Pictureshow"
 include(":core", ":app", ":media3-ffmpeg")
+
+include(":desktop")
+
+include(":ui-shared")

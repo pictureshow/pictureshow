@@ -1,0 +1,39 @@
+# Windows HDR numeric verification
+
+Run the `Desktop numeric HDR Windows` workflow on an authorized test branch.
+It installs a signed virtual display driver only on the disposable hosted runner,
+tries enabling HDR, then plays generated PQ and SDR fixtures through the actual
+Compose/libmpv native video window. A separate process attempts window and monitor capture using
+Windows.Graphics.Capture RGBA16Float. The current tool-style video HWND can be
+rejected by per-window capture; monitor capture remains the required boundary. No screenshot/JPEG is used
+for the numeric verdict. One optional app swapchain readback identifies which
+boundary first changed the signal; it never substitutes for a display capture.
+
+The strict result requires the actual app monitor to report HDR output and all
+PQ+SDR bars to match at the display-capture boundary. A red result is retained
+as a useful missing-capability/failure receipt, not converted to a skipped PASS.
+There is no physical HDMI/infoframe or calibrated panel-luminance claim.
+
+For an authorized real-GPU Windows beta machine, prepare the same `native/`
+LGPL runtime, Java classpath and capture/adapter binaries using the workflow's
+build steps, then run:
+
+```powershell
+python desktop/tools/hdr/fixture.py desktop-fixtures/hdr
+& desktop/build/hdr-capture.exe --enable-hdr > desktop-evidence/display-after.jsonl
+& desktop/tools/hdr/windows_run.ps1 -HardwareGpu
+```
+
+The beta run uses hardware D3D rather than WARP. It does not install VDD. Enable
+HDR on the intended output before running. While the diagnostic is enabled, the
+native adapter chooses an enumerated, enabled HDR desktop and fits the complete
+app window within it; its normal placement remains unchanged otherwise. The test
+still fails closed if the actual app output receipt is SDR. If several HDR
+displays are active, disable the ones you do not intend to test. The host needs an unlocked interactive
+Windows desktop, capture support, the dependencies above and an HDR output.
+The script refuses existing per-media evidence directories, so a repeated local
+run cannot accidentally accept stale successful pixels. Preserve the previous
+`desktop-evidence/hdr-pq` and `hdr-sdr` directories elsewhere before a fresh run.
+The script exits the app normally, checks teardown, and stops only its own PID
+on failure. Generated patterns are CC0; results can be reviewed without asking a
+person to judge a screen.

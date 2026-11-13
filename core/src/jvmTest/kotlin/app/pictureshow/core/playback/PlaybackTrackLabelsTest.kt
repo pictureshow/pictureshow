@@ -1,4 +1,4 @@
-package app.pictureshow
+package app.pictureshow.core.playback
 
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType

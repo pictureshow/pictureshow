@@ -85,6 +85,22 @@ const pendingPortSuites = new Set([
     "cast-session",
     "grid-navigation",
 ]);
+// Desktop slice 1 added these shared application policies. Their web adapters/UI
+// are still owed; list exact case IDs rather than accepting unknown operations.
+// These remain visible todos, never execution passes.
+const pendingApplicationCases = new Map([
+    ["detail-primary-next", "detail-play-item"],
+    ["detail-primary-unplayed", "detail-play-item"],
+    ["detail-primary-all-played", "detail-play-item"],
+    ["detail-primary-empty", "detail-play-item"],
+    ["detail-primary-container", "detail-play-item"],
+    ["track-label-forced", "track-labels"],
+    ["track-label-distinct", "track-labels"],
+    ["catalog-announcement-episode", "catalog-announcement"],
+    ["catalog-announcement-season-count", "catalog-announcement"],
+    ["catalog-announcement-empty", "catalog-announcement"],
+    ["catalog-announcement-resume", "catalog-announcement"],
+]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
     .map((p) => String(p));
@@ -160,7 +176,18 @@ for (const file of files) {
         });
     const runnable = suite.cases;
     describe("shared " + file, () => {
-        for (const c of runnable)
+        for (const c of runnable) {
+            if (
+                suite.suite === "application" &&
+                pendingApplicationCases.has(c.id)
+            ) {
+                if (pendingApplicationCases.get(c.id) !== c.operation)
+                    throw new Error(
+                        "Changed owed application operation: " + c.id,
+                    );
+                it.todo(c.id + " (web application policy port owed)");
+                continue;
+            }
             it(c.id, async () => {
                 const i = c.input,
                     ctx = suite.context;
@@ -979,6 +1006,7 @@ for (const file of files) {
                 }
                 expect(value).toEqual(c.expected);
             });
+        }
     });
 }
 for (const suite of controlSuites)

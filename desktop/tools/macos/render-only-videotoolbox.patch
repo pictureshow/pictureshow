@@ -1,0 +1,13 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1176 +1176 @@
+-    GL = dependency('appleframeworks', modules: 'OpenGL', required: get_option('gl-cocoa'))
++    GL = dependency('appleframeworks', modules: 'OpenGL', required: true)
+@@ -1555 +1555 @@
+-    features['gl-cocoa'] or features['ios-gl'],
++    (darwin and GL.found()) or features['ios-gl'],
+@@ -1570 +1570,3 @@
+-    sources += files('video/out/hwdec/hwdec_mac_gl.c')
++    dependencies += GL
++    dependencies += dependency('appleframeworks', modules: ['CoreVideo', 'IOSurface'])
++    sources += files('video/out/hwdec/hwdec_mac_gl.c', 'osdep/utils-mac.c')
