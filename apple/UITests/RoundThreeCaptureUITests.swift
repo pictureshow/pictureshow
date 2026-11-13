@@ -161,7 +161,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
             record("Round3 native TV tab " + name + " focused whole label")
             try assertRenderedWords(name, in: tab)
             XCUIRemote.shared.press(.select)
-            XCTAssertTrue(wait(10) { (try? self.nativeTab(name).isSelected) == true })
+            XCTAssertTrue(wait(10) { self.nativeTabCandidate(name)?.isSelected == true })
         }
         #endif
         try selectTab("Libraries")
@@ -333,17 +333,22 @@ final class RoundThreeCaptureUITests: XCTestCase {
         if !home { record("Round3 sign-in failed actual native state") }
         XCTAssertTrue(home, "Actual pilot authentication must reach the native shell")
     }
-    private func nativeTab(_ name: String) throws -> XCUIElement {
+    private func nativeTabCandidate(_ name: String) -> XCUIElement? {
         let candidates = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).allElementsBoundByIndex.filter {
             ($0.elementType == .button || $0.elementType == .cell) && $0.isHittable && !$0.frame.isEmpty && $0.frame.intersects(app.windows.firstMatch.frame)
         }
         // Native sidebar/tab modes can expose hidden duplicates. Prefer actual selection.
-        return try XCTUnwrap(candidates.first(where: \.isSelected) ?? candidates.first, "No visible native tab: " + name)
+        return candidates.first(where: \.isSelected) ?? candidates.first
+    }
+    @MainActor private func nativeTab(_ name: String) throws -> XCUIElement {
+        let candidate = nativeTabCandidate(name)
+        if candidate == nil { record("Round3 missing native tab actual state " + name) }
+        return try XCTUnwrap(candidate, "No visible native tab: " + name)
     }
     @MainActor private func revealNativeTabBar() {
         #if os(tvOS)
         for _ in 0..<8 {
-            if (try? nativeTab("Home")) != nil { return }
+            if nativeTabCandidate("Home") != nil { return }
             XCUIRemote.shared.press(.up)
         }
         #endif
@@ -351,7 +356,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
     @MainActor private func selectTab(_ name: String) throws {
         revealNativeTabBar()
         activate(try nativeTab(name))
-        XCTAssertTrue(wait(10) { (try? self.nativeTab(name).isSelected) == true }, "Native selected state must match actual destination")
+        XCTAssertTrue(wait(10) { self.nativeTabCandidate(name)?.isSelected == true }, "Native selected state must match actual destination")
         if name == "Settings" { XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10)) }
         if name == "Home" { XCTAssertTrue(app.staticTexts["Continue watching"].waitForExistence(timeout: 20)) }
     }
