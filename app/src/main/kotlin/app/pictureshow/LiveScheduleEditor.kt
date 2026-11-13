@@ -70,7 +70,7 @@ internal fun LiveScheduleEditor(
     var editFocused by remember(original, confirmed) { mutableStateOf(false) }
     var reviewFocused by remember(original, confirmed) { mutableStateOf(false) }
     val firstActionRowFocused = if (confirmed) confirmFocused || editFocused else reviewFocused
-    LaunchedEffect(tv, confirmed, firstActionRowFocused) {
+    LaunchedEffect(tv, confirmed, confirmFocused, editFocused, reviewFocused) {
         if (liveEditorShouldRevealHeader(tv, firstActionRowFocused)) {
             withFrameNanos { }
             headerRequester.bringIntoView()
