@@ -58,6 +58,7 @@ class SyncPlayHostTest {
         val applied = mutableListOf<Applied>()
         var bufferOnSeek = false
         var skipCorrectionAtExecution = false
+        var appliedObservation: ((Applied, SyncRendererState) -> Unit)? = null
         override fun correct(positionTicks: Long, playing: Boolean, rate: Double, sampledAtMillis: Long): Boolean =
             if (skipCorrectionAtExecution) false else apply(positionTicks, playing, rate)
         override fun snapshot() = value
@@ -76,6 +77,7 @@ class SyncPlayHostTest {
                     native = value.native?.let { native -> native.copy(playWhenReady = playing ?: native.playWhenReady) }
                 )
             if (bufferOnSeek && positionChanged) value = value.copy(ready = false, buffering = true)
+            appliedObservation?.invoke(applied.last(), value)
             return positionChanged
         }
     }
@@ -723,6 +725,96 @@ class SyncPlayHostTest {
         rig.renderer.skipCorrectionAtExecution = false
         rig.host.tick()
         assertTrue(rig.renderer.applied.any { it.position != null })
+    }
+
+    @Test fun aPreparedFutureUnpauseResumesWithoutADeadlineSeekWhenItsTimerWakesLate() = runTest {
+        for (lateMillis in listOf(211L, 360L)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.joined("Paused")
+            rig.queue(ticks = 1_953_957_848L)
+            runCurrent()
+            rig.preparedEntry()
+            rig.renderer.value = rig.renderer.value.copy(
+                positionTicks = 1_953_950_000L,
+                ready = true,
+                buffering = false,
+                playing = false,
+                playWhenReady = false,
+                rateSupported = true
+            )
+            rig.renderer.bufferOnSeek = true
+            var firstResume: Pair<Applied, SyncRendererState>? = null
+            rig.renderer.appliedObservation = { application, state ->
+                if (application.playing == true && firstResume == null) firstResume = application to state
+            }
+            rig.host.receive(rig.command("Unpause", delayMs = 500, ticks = 1_953_957_848L))
+            runCurrent()
+            assertFalse(rig.renderer.value.unpaused, "Future intent cannot start before When")
+            rig.timingOffsetMs = lateMillis
+            advanceTimeBy(500)
+            runCurrent()
+            val (application, state) = assertNotNull(firstResume)
+            assertEquals(null, application.position, "Timer lateness must not replace prepared resume with a seek: $lateMillis")
+            assertTrue(state.ready && !state.buffering && state.unpaused, "The scheduled resume must keep its prepared output ready")
+        }
+    }
+
+    @Test fun lateOnReceiptAndMisalignedFutureUnpauseStillApplyTheirPositions() = runTest {
+        for (alreadyLate in listOf(true, false)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.joined("Paused")
+            rig.queue(ticks = 1_953_957_848L)
+            runCurrent()
+            rig.preparedEntry()
+            rig.renderer.value = rig.renderer.value.copy(
+                positionTicks = if (alreadyLate) 1_953_950_000L else 1_853_950_000L,
+                ready = true,
+                buffering = false,
+                playing = false,
+                playWhenReady = false
+            )
+            var firstResume: Applied? = null
+            rig.renderer.appliedObservation = { application, _ ->
+                if (application.playing == true && firstResume == null) firstResume = application
+            }
+            rig.host.receive(rig.command("Unpause", delayMs = if (alreadyLate) -211 else 500, ticks = 1_953_957_848L))
+            runCurrent()
+            if (!alreadyLate) {
+                rig.timingOffsetMs = 211
+                advanceTimeBy(500)
+                runCurrent()
+            }
+            assertNotNull(assertNotNull(firstResume).position, "Only a future already-prepared source may omit positioning")
+        }
+    }
+
+    @Test fun aReplacedNativeSourceCannotBorrowAFutureUnpausePreparation() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Paused")
+        rig.queue(ticks = 1_953_957_848L)
+        runCurrent()
+        rig.preparedEntry()
+        rig.renderer.value = rig.renderer.value.copy(
+            positionTicks = 1_953_950_000L,
+            ready = true,
+            buffering = false,
+            playing = false,
+            playWhenReady = false
+        )
+        var firstResume: Applied? = null
+        rig.renderer.appliedObservation = { application, _ ->
+            if (application.playing == true && firstResume == null) firstResume = application
+        }
+        rig.host.receive(rig.command("Unpause", delayMs = 500, ticks = 1_953_957_848L))
+        runCurrent()
+        rig.renderer.sourceIdentity = Any()
+        rig.timingOffsetMs = 211
+        advanceTimeBy(500)
+        runCurrent()
+        assertNotNull(assertNotNull(firstResume).position, "A decoder replacement discards the prepared-position claim")
     }
 
     @Test fun aFreshEmissionOfAnAppliedUnpauseResumesWithoutRepeatingItsPositionalSeek() = runTest {
