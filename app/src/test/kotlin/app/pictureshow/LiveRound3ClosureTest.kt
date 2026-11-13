@@ -118,20 +118,13 @@ class LiveRound3ClosureTest {
 
     @Test fun tvRecordingMenuUsesEqualRowsAndPlayFocusWithoutWriting() {
         var plays = 0
-        var deletes = 0
-        var closes = 0
-        compose.setContent {
-            PictureshowTheme {
-                LiveMenu(
-                    "Blue Hour",
-                    true,
-                    { closes++ },
-                    listOf("Play" to { plays++ }, "Delete recorded file…" to { deletes++ }),
-                    destructiveLabels = setOf("Delete recorded file…"),
-                    uniformRows = true
-                )
-            }
+        val fake = LiveFake().apply {
+            recordingRows = listOf(app.pictureshow.core.MediaItem("rec", "Blue Hour", "Episode", canDelete = true))
         }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { PictureshowTheme { LiveTvScreen(vm, account, true, { plays++ }, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Recordings").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:r:rec").performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         val rows = listOf("Play", "Delete recorded file…", "Close").map {
             compose.onNodeWithText(it).getUnclippedBoundsInRoot()
         }
@@ -139,7 +132,10 @@ class LiveRound3ClosureTest {
         assertEquals(1, rows.map { it.left }.distinct().size)
         compose.onNodeWithText("Play").assertIsFocused()
         compose.onNodeWithText("Close").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.runOnIdle { assertEquals(listOf(0, 0, 1), listOf(plays, deletes, closes)) }
+        compose.runOnIdle {
+            assertEquals(0, plays)
+            assertEquals(0, fake.deleted)
+        }
     }
 
     @Test
