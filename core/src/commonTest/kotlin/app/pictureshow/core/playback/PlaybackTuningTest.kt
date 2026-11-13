@@ -208,7 +208,7 @@ class PlaybackTuningTest {
             listOf("VideoCodecNotSupported", "VideoRangeTypeNotSupported")
         )
         assertEquals(
-            "Its video format won't play on this device.",
+            "This video format cannot play on this device.",
             ConversionNotice.of(videoAndRange, 2, tuning = PlaybackTuning(hdr = CapabilityOverride.Disable))?.reason
         )
     }

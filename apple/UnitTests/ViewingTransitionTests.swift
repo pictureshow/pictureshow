@@ -116,7 +116,7 @@ private final class InertViewingPlayer: AVPlayer {
             XCTAssertTrue(transportNext === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "playNextTransport" })
             XCTAssertTrue(transportCancel === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "cancelNextTransport" })
             XCTAssertGreaterThan(contextNext.title.count, next.name.count, "The contextual action must include the episode identity and action")
-            XCTAssertEqual(contextNext.title, "Play next: \(next.name) (\(countdown))", "The contextual action must expose the episode and current countdown")
+            XCTAssertEqual(contextNext.title, "Next (\(countdown)): \(next.name)", "The contextual action must expose the episode and current countdown")
             XCTAssertTrue(contextNext.title.contains(next.name))
             XCTAssertEqual(contextCancel.title, "Cancel", "Cancel must remain a short stable label across countdown ticks")
             XCTAssertEqual(transportNext.title, "Play next: \(next.name) (\(countdown))", "Transport metadata must retain the complete next-episode title")

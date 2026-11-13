@@ -1314,13 +1314,81 @@ test("rc26 relative steps retain target after negotiation until replacement READ
     page,
 }) => {
     const f = await fixture(page);
+    const began = Date.now();
+    const chronology: unknown[] = [];
+    const relevant = (url: string) =>
+        /\/(Items\/movie(?:\/PlaybackInfo)?|Videos\/ActiveEncodings)$/.test(
+            new URL(url).pathname,
+        );
+    page.on("request", (request) => {
+        if (!relevant(request.url())) return;
+        const body = request.postDataJSON();
+        chronology.push({
+            ms: Date.now() - began,
+            kind: "request",
+            path: new URL(request.url()).pathname,
+            method: request.method(),
+            audio: body?.AudioStreamIndex,
+            position: body?.StartTimeTicks,
+        });
+    });
+    page.on("response", (response) => {
+        if (relevant(response.url()))
+            chronology.push({
+                ms: Date.now() - began,
+                kind: "response",
+                path: new URL(response.url()).pathname,
+                status: response.status(),
+            });
+    });
     await openMovie(page);
     await pause(page);
+    chronology.push({
+        ms: Date.now() - began,
+        kind: "before-audio",
+        initialStartCount: f.reports.filter(
+            (r) => r.path === "/Sessions/Playing",
+        ).length,
+    });
     await page.getByRole("button", { name: "Audio", exact: true }).click();
     await page
         .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
         .click();
-    await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
+    try {
+        await expect
+            .poll(() => f.negotiations.at(-1)?.AudioStreamIndex)
+            .toBe(2);
+    } catch (error) {
+        try {
+            await test.info().attach("audio-replacement-chronology", {
+                contentType: "application/json",
+                body: JSON.stringify({
+                    chronology,
+                    negotiations: f.negotiations.map((body) => ({
+                        audio: body.AudioStreamIndex,
+                        position: body.StartTimeTicks,
+                        direct: body.EnableDirectPlay,
+                    })),
+                    state: await page.evaluate(() => {
+                        const v = document.querySelector("video");
+                        return {
+                            status: document.querySelector('[role="status"]')
+                                ?.textContent,
+                            video: v && {
+                                time: v.currentTime,
+                                ready: v.readyState,
+                                seeking: v.seeking,
+                                paused: v.paused,
+                                network: v.networkState,
+                            },
+                        };
+                    }),
+                }),
+            });
+        } finally {
+            throw error;
+        }
+    }
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
         "",
     );

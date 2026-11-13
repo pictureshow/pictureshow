@@ -145,10 +145,15 @@ final class CatalogPresentationUITests: XCTestCase {
             XCTAssertTrue(anchor.exists && anchor.isHittable)
             #endif
             #if os(iOS)
-            // The reader can report enabled before it has established initial
-            // focus. Pump its events within the existing readiness bound rather
-            // than sending a move command before current speech is available.
-            let initial = try settledSpeech("reader enabled")
+            // Enabling the reader does not guarantee initial focus or speech.
+            // If it has no current speech, request focus with one documented
+            // next-element operation; the existing live-run-loop bound requires
+            // an actual nonempty utterance before any traversal assertion.
+            var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
+            if output == nil {
+                output = try readSpeech("reader initial focus forward", { try service.moveForward() })
+            }
+            let initial = try settledSpeech("reader enabled", first: output)
             #else
             var output = try readSpeech("reader enabled current", { try service.currentSpeech() })
             if output == nil {

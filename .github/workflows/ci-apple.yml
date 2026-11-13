@@ -235,8 +235,9 @@ jobs:
           VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_ios_udid }}
         run: |
           set -o pipefail
+          xcrun simctl bootstatus "$VOICEOVER_SIMULATOR_ID" -b
           xcrun simctl terminate "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
-          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-iOS \
@@ -266,8 +267,9 @@ jobs:
           VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_tvos_udid }}
         run: |
           set -o pipefail
+          xcrun simctl bootstatus "$VOICEOVER_SIMULATOR_ID" -b
           xcrun simctl terminate "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
-          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow || true
+          xcrun simctl uninstall "$VOICEOVER_SIMULATOR_ID" app.pictureshow
           xcodebuild \
             -project apple/Pictureshow.xcodeproj \
             -scheme Pictureshow-tvOS \
@@ -300,8 +302,9 @@ jobs:
           set -o pipefail
           for platform in iOS tvOS; do
             if [[ "$platform" == iOS ]]; then device="$IOS_SIMULATOR_ID"; else device="$TVOS_SIMULATOR_ID"; fi
+            xcrun simctl bootstatus "$device" -b
             xcrun simctl terminate "$device" app.pictureshow || true
-            xcrun simctl uninstall "$device" app.pictureshow || true
+            xcrun simctl uninstall "$device" app.pictureshow
             xcodebuild \
               -project apple/Pictureshow.xcodeproj \
               -scheme "Pictureshow-$platform" \
