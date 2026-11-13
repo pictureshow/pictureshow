@@ -78,6 +78,13 @@ class CorpusVectorsTest {
                     "sync-chip-name",
                     // Actual Android SyncPlayHostTest scope/identity traces.
                     "sync-route-consent",
+                    // Android native render/input tests execute TV and phone surface profiles.
+                    "sync-tv-surfaces",
+                    "sync-phone-surfaces",
+                    "sync-phone-player-chrome",
+                    "sync-phone-quality-cue",
+                    "sync-player-intent-presentation",
+                    "sync-speed-intent-origin",
                     "sync-drift",
                     "sync-membership-registration",
                     "sync-queue",

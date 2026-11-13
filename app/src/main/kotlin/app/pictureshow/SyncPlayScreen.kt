@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -102,6 +104,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -122,6 +125,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
@@ -160,6 +164,7 @@ internal fun SyncPlayPanel(
     val tvName = key(state.server, state.viewer) { rememberTextFieldState() }
     val name = if (tv) tvName.text.toString() else touchName
     var tvKeyboardRequested by remember { mutableStateOf(false) }
+    var touchWindowSize by remember { mutableStateOf(IntSize.Zero) }
     val first = remember { FocusRequester() }
     val createFocus = remember { FocusRequester() }
     val nameFocus = remember { FocusRequester() }
@@ -236,11 +241,17 @@ internal fun SyncPlayPanel(
                 enabled = !state.busy && name.isNotBlank(),
                 modifier = modifier.focusRequester(createFocus).testTag("sync:create"),
                 scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f),
+                border = androidx.tv.material3.ButtonDefaults.border(
+                    focusedBorder = androidx.tv.material3.Border(
+                        BorderStroke(3.dp, TvMaterialTheme.colorScheme.onPrimary),
+                        inset = (-1.5f).dp
+                    )
+                ),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = TvMaterialTheme.colorScheme.primary,
                     contentColor = TvMaterialTheme.colorScheme.onPrimary,
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.onSurface,
+                    focusedContentColor = TvMaterialTheme.colorScheme.inverseOnSurface,
                     disabledContainerColor = TvMaterialTheme.colorScheme.onSurface.copy(alpha = .12f),
                     disabledContentColor = TvMaterialTheme.colorScheme.onSurface.copy(alpha = .38f)
                 )
@@ -324,11 +335,13 @@ internal fun SyncPlayPanel(
             }
         }
         if (!tv && !compactIme) SyncText(scope, false, small = true)
-        if (!compactIme && !(tv && !joined && !uncertain)) notice?.let {
+        if (!compactIme && !(tv && !joined && !uncertain)) notice?.takeUnless {
+            !tv && it.kind == SyncNoticeKind.SPEED && it.tone == SyncNoticeTone.INFO && it.action == null
+        }?.let {
             SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null, modifier = departureModifier)
         }
         if (joined) {
-            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight, bodyScroll)
+            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight, bodyScroll, touchWindowSize)
         } else if (uncertain) {
             if (notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED) SyncText(stringResource(R.string.sync_leave_unconfirmed), tv)
         } else {
@@ -339,7 +352,7 @@ internal fun SyncPlayPanel(
         app.pictureshow.ui.PictureshowTheme {
             TvSettingsPanel(
                 stringResource(R.string.sync_title),
-                { if (tvKeyboardRequested) tvKeyboardRequested = false else onDismiss() },
+                onDismiss,
                 chooserFocus, modifier = Modifier.testTag("sync:panel"),
                 preview = {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -378,7 +391,7 @@ internal fun SyncPlayPanel(
                 } else {
                     null
                 },
-                footer = if (joined || uncertain || (canCreate && !tvKeyboardRequested)) ({ footer(false) }) else null,
+                footer = if (joined || uncertain || canCreate) ({ footer(false) }) else null,
                 contentFocusKey = focusKey, panelWidth = 560.dp, footerHorizontalPadding = 12.dp,
                 footerBottomPadding = 28.dp, edgeToEdge = true,
                 minimalFocusScroll = true, repairLostContentFocus = true, bodyScrollState = bodyScroll, footerDivider = true, content = { body(false, false) }
@@ -401,7 +414,7 @@ internal fun SyncPlayPanel(
                 // Backings fill the window; only readable body/footer content is bounded to600dp.
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Scaffold(
-                        modifier = Modifier.fillMaxSize().imePadding()
+                        modifier = Modifier.fillMaxSize().imePadding().onSizeChanged { touchWindowSize = it }
                             .nestedScroll(scrollBehavior.nestedScrollConnection).testTag("sync:panel").semantics { paneTitle = pane },
                         topBar = {
                             TopAppBar(title = {
@@ -499,7 +512,7 @@ internal fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Co
 }
 
 /** A focused TV field is a navigation target until Select explicitly requests editing. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SyncTvNameField(
     state: SyncPlayPresentation,
@@ -515,7 +528,8 @@ private fun SyncTvNameField(
     val editorFocus = remember { FocusRequester() }
     val inputMethod = remember(view) { view.context.getSystemService(InputMethodManager::class.java) }
     val select = remember { RemoteFieldNavigation(setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) }
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // A floating TV keyboard can be visible with no overlap/bottom inset.
+    val imeVisible = WindowInsets.isImeVisible
     var imeWasVisible by remember { mutableStateOf(false) }
     LaunchedEffect(imeVisible) {
         if (imeVisible) {
@@ -540,7 +554,7 @@ private fun SyncTvNameField(
             keyboard?.hide()
         }
     }
-    BackHandler(enabled = keyboardRequested) {
+    BackHandler(enabled = imeVisible) {
         keyboard?.hide()
         requestKeyboard(false)
     }
@@ -660,7 +674,7 @@ private fun SyncGroups(
         }
         accessNotice?.let {
             Row(
-                Modifier.padding(horizontal = 16.dp),
+                Modifier.then(if (tv) Modifier.tvSettingsVisualBlock() else Modifier).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -695,7 +709,8 @@ private fun SyncGroups(
                 )
             }
             if (!state.busy && state.accessAllowed && state.groups.isEmpty()) {
-                SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"))
+                if (tv) Spacer(Modifier.height(12.dp))
+                SyncText(stringResource(R.string.sync_empty), tv, Modifier.testTag("sync:empty"), small = tv)
             }
             if (state.accessAllowed) {
                 Column {
@@ -756,13 +771,29 @@ private fun SyncJoined(
     hasRecovery: Boolean,
     notice: SyncNotice?,
     compactHeight: Boolean,
-    bodyScroll: ScrollState
+    bodyScroll: ScrollState,
+    touchWindowSize: IntSize
 ) {
+    val density = LocalDensity.current
+    val touchReveal = remember(state.server, state.viewer, state.groupId, touchWindowSize, density.density, density.fontScale) {
+        BringIntoViewRequester()
+    }
+    var touchTransportPlaced by remember(touchReveal) { mutableStateOf(false) }
+    var initiallyRevealed by remember(touchReveal) { mutableStateOf(false) }
+    val initialRevealAllowed = !tv && transport && !hasRecovery &&
+        (notice == null || (notice.tone == SyncNoticeTone.INFO && notice.action == null))
+    LaunchedEffect(touchReveal, touchTransportPlaced, initialRevealAllowed) {
+        if (initialRevealAllowed && touchTransportPlaced && touchWindowSize != IntSize.Zero && !initiallyRevealed) {
+            withFrameNanos { }
+            touchReveal.bringIntoView()
+            initiallyRevealed = true
+        }
+    }
     val groupName = state.groupName ?: stringResource(R.string.sync_your_group)
     if (tv) {
         androidx.tv.material3.Text(
             groupName,
-            Modifier.padding(horizontal = 16.dp).testTag("sync:group").semantics { heading() },
+            Modifier.tvSettingsVisualBlock().padding(horizontal = 16.dp).testTag("sync:group").semantics { heading() },
             style = TvMaterialTheme.typography.headlineSmall.copy(lineBreak = LineBreak.Heading),
             maxLines = if (groupName.any {
                     it.isWhitespace()
@@ -798,7 +829,7 @@ private fun SyncJoined(
     if (tv) {
         androidx.tv.material3.Text(
             currentTitle,
-            titleModifier,
+            titleModifier.tvSettingsVisualBlock(),
             style = if (titlePlaceholder) TvMaterialTheme.typography.bodyLarge else TvMaterialTheme.typography.titleMedium,
             color = if (titlePlaceholder) {
                 TvMaterialTheme.colorScheme.onSurfaceVariant
@@ -853,7 +884,10 @@ private fun SyncJoined(
         }
     }
     Row(
-        Modifier.fillMaxWidth().then(if (tv) Modifier.padding(vertical = 8.dp) else Modifier),
+        Modifier.fillMaxWidth().then(
+            if (tv) Modifier.tvSettingsVisualBlock().padding(vertical = 8.dp) else Modifier.bringIntoViewRequester(touchReveal)
+                .onPlaced { touchTransportPlaced = true }
+        ),
         horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -915,7 +949,7 @@ private fun SyncJoined(
         )
         if (tv) {
             val repeatFocus = remember { List(3) { FocusRequester() } }
-            Row(Modifier.fillMaxWidth().focusProperties {
+            Row(Modifier.tvSettingsVisualBlock().fillMaxWidth().focusProperties {
                 onEnter = { if (usable) repeatFocus[repeats.indexOfFirst { it.first == state.repeat }.coerceAtLeast(0)].requestFocus() }
             }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeats.forEach { (value, label) ->
@@ -923,6 +957,7 @@ private fun SyncJoined(
                         selected = state.repeat == value,
                         onClick = { action("repeat", value) },
                         enabled = usable,
+                        scale = androidx.tv.material3.FilterChipDefaults.scale(focusedScale = 1f),
                         modifier = Modifier.testTag("sync:repeat:$value").focusRequester(repeatFocus[repeats.indexOfFirst { it.first == value }]),
                         leadingIcon = if (state.repeat ==
                             value
@@ -978,7 +1013,7 @@ private fun SyncJoined(
                         val entryTarget = remember { SyncQueueTarget() }
                         val placedQueue = state.queue.map { it.id }
                         SideEffect { queueFocus[entry.id] = entryTarget }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.tvSettingsVisualBlock().fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             TvSettingsRow(
                                 title,
                                 current,
@@ -1185,7 +1220,7 @@ private fun SyncText(text: String, tv: Boolean, modifier: Modifier = Modifier, s
     if (tv) {
         androidx.tv.material3.Text(
             text,
-            modifier.padding(horizontal = 16.dp),
+            modifier.tvSettingsVisualBlock().padding(horizontal = 16.dp),
             style = if (small) TvMaterialTheme.typography.bodyMedium else TvMaterialTheme.typography.bodyLarge,
             color = if (small) TvMaterialTheme.colorScheme.onSurfaceVariant else TvMaterialTheme.colorScheme.onSurface
         )
@@ -1274,7 +1309,7 @@ private fun SyncNoticeBanner(
         MaterialTheme.colorScheme.onSurface
     }
     Row(
-        modifier.padding(horizontal = if (tv) 0.dp else 16.dp)
+        modifier.then(if (tv) Modifier.tvSettingsVisualBlock() else Modifier).padding(horizontal = if (tv) 0.dp else 16.dp)
             .padding(top = 0.dp, bottom = if (tv && !pinned) 8.dp else 0.dp).fillMaxWidth()
             .clip(
                 if (tv) TvMaterialTheme.shapes.medium else MaterialTheme.shapes.medium

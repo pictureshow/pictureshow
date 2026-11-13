@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-speed-intent-origin",
+  "cases": [
+    {
+      "id": "grouped-audio-output-maintenance",
+      "profile": "actual-output-origin",
+      "input": {
+        "participating": true,
+        "origin": "audio-output-maintenance",
+        "initialViewerSpeed": 1.5,
+        "encoded": false
+      },
+      "expected": {
+        "groupRequests": [],
+        "nativeRate": 1.5,
+        "viewerSpeed": 1.5,
+        "pcmObserved": true
+      }
+    },
+    {
+      "id": "grouped-viewer",
+      "profile": "actual-output-origin",
+      "input": {
+        "participating": true,
+        "origin": "viewer",
+        "initialViewerSpeed": 1.5,
+        "selectedSpeed": 2.0
+      },
+      "expected": {
+        "groupRequests": [
+          "speed"
+        ],
+        "nativeRate": 1.5,
+        "viewerSpeed": 2.0,
+        "pcmObserved": false
+      }
+    },
+    {
+      "id": "standalone-audio-output-maintenance",
+      "profile": "actual-output-origin",
+      "input": {
+        "participating": false,
+        "origin": "audio-output-maintenance",
+        "initialViewerSpeed": 1.5,
+        "encoded": false
+      },
+      "expected": {
+        "groupRequests": [],
+        "nativeRate": 1.5,
+        "viewerSpeed": 1.5,
+        "pcmObserved": true
+      }
+    },
+    {
+      "id": "standalone-viewer",
+      "profile": "actual-output-origin",
+      "input": {
+        "participating": false,
+        "origin": "viewer",
+        "initialViewerSpeed": 1.5,
+        "selectedSpeed": 2.0
+      },
+      "expected": {
+        "groupRequests": [],
+        "nativeRate": 2.0,
+        "viewerSpeed": 2.0,
+        "pcmObserved": false
+      }
+    }
+  ]
+}

@@ -253,16 +253,39 @@ Go submits once, and Back dismisses the keyboard before dismissing the panel.
 The saved, single-line,200-character editor stays mounted under the fixed title
 and server/viewer context rather than moving when the keyboard opens. Only the
 scrolling content below it consumes IME space; a floating keyboard must not pan
-the context away. The chooser hides its pinned Create during explicit editing.
+the context away. The TV chooser keeps its pinned Create action and footer divider
+mounted during editing and after the platform dismisses its keyboard. A zero-height
+floating IME can still be visible: keyboard visibility and bottom overlap are separate
+facts. Once the platform reports the keyboard hidden, the next Back dismisses the
+panel once; a stale request-to-edit flag must not consume that Back. Preserve the
+draft, the name field's focus and its bounds through keyboard dismissal. Initial
+focus still does not request a keyboard, and Go still submits only once.
+
+An enabled TV Create action keeps its theme-primary resting surface and has a broad,
+visible focus indication without enlarging its painted body. Repeat chips also keep
+their resting painted bounds on focus, whether selected or unselected; focus alone
+must not change shared Repeat. The chooser's empty-group status uses quiet supporting
+hierarchy (bodyMedium/onSurfaceVariant on Android TV), separated from Refresh by at
+least12dp.
 Busy placeholders are neutral, noninteractive surfaces matching the actual native
 two-line group row:64dp minimum,12dp vertical padding and measured headline/support
 styles. They grow with large fonts and share zero row spacing with loaded rows. Join-only permission copy precedes its group list.
 
 SyncPlay opts into shared TV panel inset, pinned-editor and focus-scroll options;
 other settings callers retain their defaults. The effective focus viewport excludes
-active32dp top and40dp bottom fades plus8dp breathing room. Fully visible targets
-do not move, violated edges move minimally, oversized targets remain stable and
-terminal48dp padding lets the last read-only roster fact clear the bottom fade.
+active32dp top fade and the actual active bottom fade, plus8dp breathing room.
+The bottom mask is at most40dp with a final8dp opaque band for cut or unknown content.
+Use unclipped item geometry: a row crossing the viewport edge must not be classified
+as whole merely because its reported visible bounds were clipped. For a wholly
+visible known last row, shorten or suppress the mask as necessary to preserve every
+solid label stroke and its trailing content at full enabled contrast. Derive painting
+and reveal clearance from the same current mask extent; absent masks reserve no
+invisible clearance. Empty, incomplete or invalid geometry retains the conservative
+40dp/8dp cut-content treatment. These opt-in rules cover every visual block in this
+SyncPlay surface and preserve other shared-component callers' default behavior.
+Fully visible targets do not move, violated edges move minimally, oversized targets
+remain stable and terminal48dp padding lets the last read-only roster fact clear the
+bottom fade.
 The Play→Wait→Repeat→Shuffle remote order remains unchanged. Transport controls
 have12dp gaps and scale1 on focus; the pinned footer keeps12dp body surface edges,
 scale1 and at least24dp bottom title-safe clearance (28dp content padding).
@@ -396,3 +419,23 @@ and launches no route. These guards do not change valid Cast confirmation,
 failed-Leave recovery, cancellation, offline behavior or group transport policy.
 Native implementations and their portable consent traces must preserve this scope
 and individual-identity contract; a prior consent never authorizes a later viewer.
+
+The14 `sync-tv-surfaces` cases are native TV rendering/input profiles, separate from
+network/timing vectors. Android executes their actual theme, font, draft, visibility
+and paint/geometry expectations through SyncPlayTvPrimaryPaintRegressionTest and
+SyncPlayTvRepeatPaintAndBackRegressionTest. Equivalent TV surfaces on other platforms
+need native focus, keyboard and measurement adapters; corpus inventory alone does
+not execute those UI contracts. Real floating-keyboard Back, font1.3, full-screen
+paint and focus traversal still require the indexed native device/director evidence.
+
+## Player intent, maintenance and compact touch presentation
+
+Retain standalone Media3 idle/end/prepare and deferred-next behavior. While participating in an usable group with a nonempty authoritative queue, the primary player action follows the shared phase: Playing offers Pause; Paused and Waiting offer Play, matching the existing group panel. A locally held/buffering decoder does not change that shared action. Unusable membership or an empty group queue disables it. Resolve the same projection again at the event boundary and dispatch through shared transport interception; Pause retains immediate local user-intent feedback while waiting for a server command. Local output state and group phase remain distinct facts. JSON sync-player-intent-presentation has12 actual core cases and Android real-player adapter coverage.
+
+Audio-output format maintenance is not viewer speed selection. A callback may reapply native parameters only for its exact current decision reference, native generation and active native player; stale callbacks have no effect. Maintenance does not emit a group speed request or viewer notice. It preserves an active temporary PCM correction and encoded audio still forces native1×. Explicit viewer speed requests retain the existing grouped-policy handling; standalone selection and source-replacement restoration remain intact. JSON sync-speed-intent-origin has4 native adapter profiles plus lifetime/rate guards. The Speed context explains the shared1× restriction and disables selection while participating. An untriggered informational Speed card must not precede group identity and transport. Actionable errors/recovery remain prominent.
+
+On compact touch group entry, the complete primary transport row is revealed within the actual usable viewport, including active fade and clearance, after its first placement. This initial reveal does not require keyboard/accessibility focus, does not repeat on clock/quality publications, and re-evaluates for membership or window/font geometry changes. An actionable recovery notice takes priority. JSON sync-phone-surfaces has7 actual native render/input/lifecycle profiles at real font1.0/1.3.
+
+Phone player chrome uses a native gradient over its measured extent, exposing the image at its upper edge and darkening toward actions. Elapsed/total time shares the seek row without reducing the slider or any action below its48dp touch target; scrolling keeps controls reachable when font/window constraints require it. Persistent adaptive-quality detail belongs to the existing Quality context. Keep its truthful fact reachable there. A newly changed reduction may show a finite visible, polite native message only in actual free space, yielding to conversion/recovery/subtitles and open sheets. Do not repeat an unchanged fact on every controls reveal, consume a pending fact while blocked, or replace a visible message with an invisible accessibility-only node. The final sync-phone-quality-cue lifecycle profiles execute the real native context and cue. Conversion/recovery notices retain their existing higher priority. JSON sync-phone-player-chrome has8 native paint/geometry/reachability profiles.
+
+The5 sync-phone-quality-cue cases execute real Quality detail, changed-fact lifetime/no replay, null reset, conversion priority and mounted-sheet priority. Start the five-second cue lifetime on actual visible placement; an insufficient gap leaves the fact pending. Android source and renderer tests remain distinct from native device, screen-reader speech, other-platform and SYN-06 qualification.

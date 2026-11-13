@@ -64,6 +64,14 @@ internal class Media3PlaybackOutput(
         return intercepted
     }
 
+    /** Main-handler sink callbacks belong to the exact decision, generation and native source. */
+    internal fun onSourceAudioOutput(decision: PlayDecision, generation: Long, source: ExoPlayer, encoded: Boolean) {
+        if (current === decision && nativeGeneration == generation && activePlayer === source) {
+            observeSyncAudioOutput(generation, encoded)
+            viewingSpeed.audioOutput(encoded, source)
+        }
+    }
+
     private var syncPcmOutput: Boolean? = null
     internal fun observeSyncAudioOutput(generation: Long, encoded: Boolean) {
         if (generation == nativeGeneration && activePlayer != null) syncPcmOutput = !encoded
@@ -318,10 +326,7 @@ internal class Media3PlaybackOutput(
             renderersFactory
                 ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions, disabledPassthrough) { encoded ->
                     loadHandler.post {
-                        if (current === decision && nativeGeneration == sourceGeneration && activePlayer === next) {
-                            observeSyncAudioOutput(sourceGeneration, encoded)
-                            viewingSpeed.audioOutput(encoded, mutablePlayer.value)
-                        }
+                        onSourceAudioOutput(decision, sourceGeneration, next, encoded)
                     }
                 }
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->

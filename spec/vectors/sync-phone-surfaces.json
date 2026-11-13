@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-phone-surfaces",
+  "cases": [
+    {
+      "id": "compact-native-font1",
+      "profile": "compact-initial-transport",
+      "input": {
+        "fontScale": 1.0,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "SPEED"
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 360,
+        "windowPhysicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "compact-native-font13",
+      "profile": "compact-initial-transport",
+      "input": {
+        "fontScale": 1.3,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "SPEED"
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 360,
+        "windowPhysicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "speed-reason-at-point-of-use",
+      "profile": "speed-reason-placement",
+      "input": {
+        "fontScale": 1.0,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "SPEED"
+      },
+      "expected": {
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 360,
+        "maximumCopies": 1,
+        "maximumReasonTextSp": 13,
+        "windowPhysicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "compact-shorter-window-no-notice-font1",
+      "profile": "compact-initial-transport",
+      "input": {
+        "fontScale": 1.0,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "NONE"
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 280,
+        "windowPhysicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "compact-shorter-window-no-notice-font13",
+      "profile": "compact-initial-transport",
+      "input": {
+        "fontScale": 1.3,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "NONE"
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 280,
+        "windowPhysicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "compact-initial-reveal-defers-actionable-recovery",
+      "profile": "compact-initial-reveal-lifecycle",
+      "input": {
+        "fontScale": 1.3,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "NONE",
+        "initialNotice": {
+          "kind": "REJOIN",
+          "tone": "WARNING",
+          "action": "REJOIN"
+        },
+        "sequence": [
+          {
+            "action": "clear-notice",
+            "phase": "Playing",
+            "quality": "UNKNOWN"
+          }
+        ]
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 280,
+        "windowPhysicalPixelTolerance": 1,
+        "scrollPhysicalPixelTolerance": 1,
+        "minimumRevealScrollPx": 1,
+        "transportRequests": 0,
+        "blockedScrollPx": 0,
+        "recoveryDisplayedBeforeClear": true
+      }
+    },
+    {
+      "id": "compact-initial-reveal-does-not-repeat-for-same-group",
+      "profile": "compact-initial-reveal-lifecycle",
+      "input": {
+        "fontScale": 1.3,
+        "queueEntries": 8,
+        "phase": "Playing",
+        "notice": "NONE",
+        "initialNotice": null,
+        "sequence": [
+          {
+            "action": "scroll-to-start"
+          },
+          {
+            "action": "publish",
+            "phase": "Paused",
+            "quality": "IN_SYNC"
+          },
+          {
+            "action": "publish",
+            "phase": "Playing",
+            "quality": "CATCHING_UP"
+          }
+        ]
+      },
+      "expected": {
+        "fadeClearanceDp": 8,
+        "minimumWidthDp": 590,
+        "maximumHeightDp": 280,
+        "windowPhysicalPixelTolerance": 1,
+        "scrollPhysicalPixelTolerance": 1,
+        "minimumRevealScrollPx": 1,
+        "transportRequests": 0,
+        "manualScrollPx": 0,
+        "scrollPxAfterPublish": 0,
+        "unchangedFocusedNodeIds": true
+      }
+    }
+  ]
+}

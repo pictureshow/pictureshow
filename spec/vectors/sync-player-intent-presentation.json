@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-player-intent-presentation",
+  "cases": [
+    {
+      "id": "group-playing-local-True",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Playing",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": true
+      },
+      "expected": {
+        "action": "pause"
+      }
+    },
+    {
+      "id": "group-playing-local-False",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Playing",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": "pause"
+      }
+    },
+    {
+      "id": "group-paused-local-True",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Paused",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": true
+      },
+      "expected": {
+        "action": "play"
+      }
+    },
+    {
+      "id": "group-paused-local-False",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Paused",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": "play"
+      }
+    },
+    {
+      "id": "group-waiting-local-True",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Waiting",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": true
+      },
+      "expected": {
+        "action": "play"
+      }
+    },
+    {
+      "id": "group-waiting-local-False",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Waiting",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": "play"
+      }
+    },
+    {
+      "id": "standalone-local-True",
+      "profile": "primary-transport",
+      "input": {
+        "participating": false,
+        "phase": "Playing",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": true
+      },
+      "expected": {
+        "action": "play"
+      }
+    },
+    {
+      "id": "standalone-local-False",
+      "profile": "primary-transport",
+      "input": {
+        "participating": false,
+        "phase": "Playing",
+        "usable": true,
+        "queueEntries": 1,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": "pause"
+      }
+    },
+    {
+      "id": "group-unavailable-False-1",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Playing",
+        "usable": false,
+        "queueEntries": 1,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": null
+      }
+    },
+    {
+      "id": "group-unavailable-True-0",
+      "profile": "primary-transport",
+      "input": {
+        "participating": true,
+        "phase": "Playing",
+        "usable": true,
+        "queueEntries": 0,
+        "localShowPlayButton": false
+      },
+      "expected": {
+        "action": null
+      }
+    },
+    {
+      "id": "speed-selection-grouped-True",
+      "profile": "speed-selection",
+      "input": {
+        "participating": true
+      },
+      "expected": {
+        "selectionAllowed": false,
+        "explanationRequired": true
+      }
+    },
+    {
+      "id": "speed-selection-grouped-False",
+      "profile": "speed-selection",
+      "input": {
+        "participating": false
+      },
+      "expected": {
+        "selectionAllowed": true,
+        "explanationRequired": false
+      }
+    }
+  ]
+}

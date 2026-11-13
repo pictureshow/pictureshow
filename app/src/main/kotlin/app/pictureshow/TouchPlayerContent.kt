@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -76,6 +77,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -91,6 +93,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.Player
+import androidx.media3.common.text.CueGroup
 import androidx.media3.ui.compose.ContentFrame
 import app.pictureshow.core.Account
 import app.pictureshow.core.SegmentMode
@@ -227,7 +231,25 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val foreground by host.output.foreground.collectAsState()
     val speed by host.output.speed.collectAsState()
     val paused = playback.paused || pauseIntent
+    val groupPresentation = host.sync?.state?.collectAsState()?.value
+    val primaryAction = if (host.deferredNext != null) "play" else touchPlayerPrimaryAction(host.sync, groupPresentation, playback.showPlayButton)
+    val playLabel = stringResource(R.string.sync_play)
+    val pauseLabel = stringResource(R.string.sync_pause)
+    val primaryState = if (host.sync?.participating == true && host.deferredNext == null && groupPresentation != null) {
+        syncPhaseText(groupPresentation)
+    } else {
+        playbackToggleState(paused, playback.showPlayButton)
+    }
     var topCues by remember { mutableStateOf(false) }
+    var captionsPresent by remember(host.player) { mutableStateOf(host.player?.currentCues?.cues?.isNotEmpty() == true) }
+    DisposableEffect(host.player) {
+        val player = host.player
+        val listener = object : Player.Listener {
+            override fun onCues(cueGroup: CueGroup) { captionsPresent = cueGroup.cues.isNotEmpty() }
+        }
+        player?.addListener(listener)
+        onDispose { player?.removeListener(listener) }
+    }
     SideEffect {
         host.onFinishing = {
             ui.sheet = null
@@ -254,6 +276,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     var controlsHeight by remember { mutableIntStateOf(0) }
     var controlsTop by remember { mutableStateOf<Int?>(null) }
     var noticeBounds by remember { mutableStateOf<Rect?>(null) }
+    var conversionCardReleased by remember(host) { mutableStateOf(false) }
+    var chipBounds by remember { mutableStateOf<Rect?>(null) }
+    var topActionsBottom by remember { mutableIntStateOf(0) }
+    var topActionsMeasured by remember(host) { mutableStateOf(false) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     var actionsHeight by remember { mutableIntStateOf(0) }
     // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
@@ -370,7 +396,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 noticeClearsControls,
             modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
             card = { notice, placement, announce, details ->
-                DisposableEffect(Unit) { onDispose { noticeBounds = null } }
+                DisposableEffect(Unit) {
+                    conversionCardReleased = false
+                    onDispose {
+                        noticeBounds = null
+                        conversionCardReleased = true
+                    }
+                }
                 TouchConversionNoticeCard(
                     notice,
                     placement.then(noticeCap?.let { Modifier.widthIn(max = it) } ?: Modifier)
@@ -382,6 +414,59 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         ) {
             ui.sheet = TouchPlayerSheet.Info
             ui.interact()
+        }
+
+        val adaptiveNotice = host.adaptiveQualityNotice.takeUnless { offlineQuality }
+        var announcedQuality by remember(host) { mutableStateOf(adaptiveNotice) }
+        var qualityCue by remember(host) { mutableStateOf<String?>(null) }
+        val chipExpected = groupPresentation?.let { it.groupId != null || it.phase == "Reconnecting" } == true
+        val qualityCueAllowed = foreground && controlsVisible && !host.state.preparing &&
+            !topCues && !captionsPresent && noticeBounds == null && (conversionNotice == null || conversionCardReleased) &&
+            topActionsMeasured && (!chipExpected || chipBounds != null)
+        LaunchedEffect(host, adaptiveNotice, qualityCueAllowed) {
+            if (adaptiveNotice == null) announcedQuality = null
+            if (!qualityCueAllowed || adaptiveNotice != qualityCue) qualityCue = null
+        }
+        LaunchedEffect(host, qualityCue) {
+            if (qualityCue != null) {
+                delay(5_000)
+                qualityCue = null
+            }
+        }
+        val qualityCandidate = adaptiveNotice?.takeIf { it != announcedQuality || it == qualityCue }
+        if (qualityCueAllowed && qualityCandidate != null && controlsTop != null) {
+            val safeTop = WindowInsets.safeDrawing.getTop(density)
+            val safeLeft = WindowInsets.safeDrawing.getLeft(density, layoutDirection)
+            val safeRight = WindowInsets.safeDrawing.getRight(density, layoutDirection)
+            val cueTop = maxOf(safeTop + with(density) { TOUCH_PLAYER_EDGE.roundToPx() },
+                chipBounds?.bottom?.toInt()?.minus(playerTop) ?: 0, topActionsBottom - playerTop)
+            val cueBottom = requireNotNull(controlsTop) - playerTop
+            // Measure the native message once. No space means defer; never draw over another role.
+            Layout(
+                content = {
+                    Snackbar(
+                        modifier = Modifier.testTag("touch:quality-cue").semantics { liveRegion = LiveRegionMode.Polite }
+                            .onGloballyPositioned {
+                                if (qualityCandidate != announcedQuality) {
+                                    announcedQuality = qualityCandidate
+                                    qualityCue = qualityCandidate
+                                }
+                            }
+                    ) { Text(qualityCandidate, Modifier.testTag("touch:quality-cue-text")) }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) { measurables, constraints ->
+                val edge = TOUCH_PLAYER_EDGE.roundToPx()
+                val width = minOf(480.dp.roundToPx(), (constraints.maxWidth - safeLeft - safeRight - edge * 2).coerceAtLeast(0))
+                val message = measurables.single().measure(Constraints.fixedWidth(width))
+                val bottom = cueBottom - 8.dp.roundToPx()
+                val fits = bottom - message.height >= cueTop + 8.dp.roundToPx()
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    if (fits && noticeBounds == null && !captionsPresent && (conversionNotice == null || conversionCardReleased)) {
+                        message.place(safeLeft + (constraints.maxWidth - safeLeft - safeRight - message.width) / 2, bottom - message.height)
+                    }
+                }
+            }
         }
 
         // Preview is an overlay above the measured controls, never a child of their column.
@@ -410,10 +495,14 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             }
         }
 
+        if (groupPresentation?.groupId == null && groupPresentation?.phase != "Reconnecting") {
+            SideEffect { chipBounds = null }
+        }
         SyncPlayerChip(
             host.sync,
             Modifier.align(Alignment.TopStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp).widthIn(max = 440.dp)
+                .onGloballyPositioned { chipBounds = it.boundsInRoot() }
         )
 
         if (controlsVisible) {
@@ -424,7 +513,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         controlsTop = it.positionInRoot().y.toInt()
                         controlsHeight = it.size.height
                     }
-                    .testTag("touch:panel").background(Color(0xE610131C))
+                    .testTag("touch:panel").touchPlayerScrim()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                     .heightIn(max = if (landscape) 260.dp else 430.dp)
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
@@ -458,9 +547,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val qualityNotice = if (offlineQuality) {
                     "Quality is fixed for this download."
                 } else {
-                    host.adaptiveQualityNotice.takeUnless {
-                        host.state.preparing
-                    }
+                    null
                 }
                 qualityNotice?.let {
                     Text(
@@ -488,13 +575,14 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     Button(
                         onClick = {
                             val pending = host.deferredNext
-                            if (pending != null) host.finish(pending) else host.player?.togglePlayback()
+                            if (pending != null) host.finish(pending) else host.player?.performTouchPrimaryAction(host.sync)
                             ui.interact()
                         },
-                        Modifier.testTag("touch:toggle").semantics {
-                            stateDescription = playbackToggleState(paused, playback.showPlayButton)
+                        enabled = primaryAction != null,
+                        modifier = Modifier.testTag("touch:toggle").semantics {
+                            stateDescription = primaryState
                         }
-                    ) { TouchReservedLabel(if (playback.showPlayButton) "Play" else "Pause", "Pause") }
+                    ) { TouchReservedLabel(if (primaryAction == "pause") pauseLabel else playLabel, pauseLabel) }
                 }
                 val back: @Composable () -> Unit = {
                     TouchBarButton(
@@ -625,6 +713,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         // Not boundsInRoot: an empty column has no bounds, which would read as a left edge of 0.
                         actionsLeft = it.positionInRoot().x
                         actionsHeight = it.size.height
+                        topActionsBottom = (it.positionInRoot().y + it.size.height).toInt()
+                        topActionsMeasured = true
                     },
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -873,24 +963,57 @@ internal fun TouchPlayerScrubber(
     val shown = preview ?: if (ended) completedPlaybackPosition(position, duration) else playbackEndPosition(position, duration)
     // The clock moves every second; the reader hears it on arrival, pause and seek, as PLAY-06 asks, never per tick.
     val spoken = spokenPlaybackPosition(if (ended) completedPlaybackPosition(position, duration) else preview ?: spokenMs, duration)
-    Column {
+    val elapsed = playerTime(shown)
+    val total = displayRuntimeMillis(duration)?.let(::playerTime)
+    val clockStyle = MaterialTheme.typography.labelMedium
+    val measurer = rememberTextMeasurer()
+    val clockWidth = with(LocalDensity.current) {
+        (measurer.measure(elapsed, clockStyle).size.width +
+            (total?.let { measurer.measure(it, clockStyle).size.width } ?: 0)).toDp()
+    }
+    val elapsedClock: @Composable () -> Unit = {
+        Text(
+            elapsed,
+            color = Color.White,
+            style = clockStyle,
+            modifier = Modifier.testTag("touch:seek-time").clearAndSetSemantics {}
+        )
+    }
+    val totalClock: @Composable () -> Unit = {
+        total?.let {
+            Text(it, color = Color.White, style = clockStyle, modifier = Modifier.clearAndSetSemantics {})
+        }
+    }
+    val slider: @Composable (Modifier) -> Unit = { modifier ->
         Slider(
             value = shown.coerceIn(0, limit).toFloat(),
             onValueChange = { onPreview(it.toLong().coerceIn(0, limit)) },
             onValueChangeFinished = onSeek,
             valueRange = 0f..limit.toFloat(),
             enabled = duration > 0,
-            modifier = Modifier.fillMaxWidth().testTag("touch:scrubber").semantics {
+            modifier = modifier.heightIn(min = 48.dp).testTag("touch:scrubber").semantics {
                 contentDescription = "Playback position"
                 stateDescription = spoken
             }
         )
-        Text(
-            displayRuntimeMillis(duration)?.let { "${playerTime(shown)} / ${playerTime(it)}" } ?: playerTime(shown),
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.clearAndSetSemantics {}
-        )
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Keep a usable track when large clocks no longer fit beside it; the panel still scrolls.
+        if (maxWidth >= clockWidth + 16.dp + 96.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                elapsedClock()
+                slider(Modifier.weight(1f))
+                totalClock()
+            }
+        } else {
+            Column {
+                slider(Modifier.fillMaxWidth())
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    elapsedClock()
+                    totalClock()
+                }
+            }
+        }
     }
 }
 

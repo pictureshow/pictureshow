@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-phone-quality-cue",
+  "cases": [
+    {
+      "id": "quality-detail-reachable",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 780,
+        "fontScale": 1.3,
+        "bandwidthA": 1000000,
+        "bandwidthB": 2000000,
+        "settleMs": 128,
+        "menuSettleMs": 400,
+        "mountSettleMs": 400
+      },
+      "expected": {
+        "automaticDetailReachable": true,
+        "overrideChanged": false,
+        "positionChanged": false,
+        "requestCount": 0
+      },
+      "profile": "quality-detail"
+    },
+    {
+      "id": "quality-changed-fact-lifetime-and-no-replay",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 780,
+        "fontScale": 1.3,
+        "bandwidthA": 1000000,
+        "bandwidthB": 2000000,
+        "settleMs": 128,
+        "durationMs": 5000,
+        "visibleCheckMs": 4500,
+        "expiryAdvanceMs": 700,
+        "controlsSettleMs": 400,
+        "mountSettleMs": 400
+      },
+      "expected": {
+        "initialVisible": false,
+        "changedVisible": true,
+        "polite": true,
+        "expiredVisible": false,
+        "equalReplay": false,
+        "controlsRevealReplay": false,
+        "requestCount": 0
+      },
+      "profile": "quality-cue-lifecycle"
+    },
+    {
+      "id": "quality-null-resets-reduction-episode",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 780,
+        "fontScale": 1.3,
+        "settleMs": 128,
+        "clearBandwidth": null,
+        "restoreBandwidth": 2000000
+      },
+      "expected": {
+        "nullFact": true,
+        "nullVisible": false,
+        "newEpisodeVisible": true
+      },
+      "profile": "quality-cue-reset"
+    },
+    {
+      "id": "quality-conversion-priority-defers",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 780,
+        "fontScale": 1.3,
+        "bandwidthA": 1000000,
+        "bandwidthB": 2000000,
+        "settleMs": 128,
+        "blockingDurationMs": 10000,
+        "blockedCheckMs": 500,
+        "expiryMarginMs": 300,
+        "cueExpiryAdvanceMs": 5300,
+        "mountSettleMs": 400
+      },
+      "expected": {
+        "conversionVisibleBeforeExpiry": true,
+        "blockedCueVisible": false,
+        "conversionVisibleAfterExpiry": false,
+        "resumedCueVisible": true
+      },
+      "profile": "quality-cue-priority"
+    },
+    {
+      "id": "quality-sheet-priority-defers",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 780,
+        "fontScale": 1.3,
+        "settleMs": 128,
+        "sheet": "Speed",
+        "sheetSettleMs": 400,
+        "holdMs": 6000,
+        "pendingBandwidth": 1000000
+      },
+      "expected": {
+        "sheetVisible": true,
+        "blockedCueVisible": false,
+        "resumedCueVisible": true,
+        "requestCount": 0
+      },
+      "profile": "quality-cue-priority"
+    }
+  ]
+}

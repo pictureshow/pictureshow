@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-tv-surfaces",
+  "cases": [
+    {
+      "id": "create-visible-focus-default",
+      "profile": "create-focus",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        }
+      },
+      "expected": {
+        "focusMarkMinThicknessDp": 2,
+        "focusMarkMinContrast": 3.0,
+        "focusMarkBandWidthFraction": 0.7,
+        "focusMarkChangedWidthFraction": 0.8,
+        "focusProbeRadiusDp": 4,
+        "stableBounds": true
+      }
+    },
+    {
+      "id": "create-visible-focus-alternate",
+      "profile": "create-focus",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "alternate",
+          "primary": "FF6ADDC4",
+          "onPrimary": "FF00382E",
+          "surface": "FF111A18",
+          "onSurface": "FFEAFFF5"
+        }
+      },
+      "expected": {
+        "focusMarkMinThicknessDp": 2,
+        "focusMarkMinContrast": 3.0,
+        "focusMarkBandWidthFraction": 0.7,
+        "focusMarkChangedWidthFraction": 0.8,
+        "focusProbeRadiusDp": 4,
+        "stableBounds": true
+      }
+    },
+    {
+      "id": "create-footer-during-edit",
+      "profile": "create-footer",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        },
+        "keyboardState": "requested"
+      },
+      "expected": {
+        "footerVisible": true,
+        "createEnabled": true,
+        "stableEditorBounds": true,
+        "retainedDraft": "Friday films",
+        "dividerChannelDeltaMin": 16,
+        "dividerChannelTolerance": 1,
+        "dividerProbeInsetDp": 4,
+        "dividerSideExcludedFraction": 0.1
+      }
+    },
+    {
+      "id": "create-footer-after-platform-dismissal",
+      "profile": "create-footer",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        },
+        "keyboardState": "platform-hidden"
+      },
+      "expected": {
+        "footerVisible": true,
+        "createEnabled": true,
+        "stableEditorBounds": true,
+        "retainedDraft": "Friday films",
+        "dividerChannelDeltaMin": 16,
+        "dividerChannelTolerance": 1,
+        "dividerProbeInsetDp": 4,
+        "dividerSideExcludedFraction": 0.1
+      }
+    },
+    {
+      "id": "whole-row-full-ink-font-1-0",
+      "profile": "whole-row-ink",
+      "input": {
+        "theme": {
+          "kind": "default"
+        },
+        "viewportWidthDp": 400,
+        "measuringViewportHeightDp": 400,
+        "rowLabels": [
+          "First setting",
+          "Shuffle",
+          "Following setting"
+        ],
+        "fontScale": 1.0,
+        "rowVisibility": "whole"
+      },
+      "expected": {
+        "maxAttenuatedSolidGlyphPixels": 0,
+        "solidGlyphChannelTolerance": 3,
+        "minReferenceSolidGlyphPixels": 8
+      }
+    },
+    {
+      "id": "whole-row-full-ink-font-1-3",
+      "profile": "whole-row-ink",
+      "input": {
+        "theme": {
+          "kind": "default"
+        },
+        "viewportWidthDp": 400,
+        "measuringViewportHeightDp": 400,
+        "rowLabels": [
+          "First setting",
+          "Shuffle",
+          "Following setting"
+        ],
+        "fontScale": 1.3,
+        "rowVisibility": "whole"
+      },
+      "expected": {
+        "maxAttenuatedSolidGlyphPixels": 0,
+        "solidGlyphChannelTolerance": 3,
+        "minReferenceSolidGlyphPixels": 8
+      }
+    },
+    {
+      "id": "empty-status-clearance",
+      "profile": "empty-status-spacing",
+      "input": {
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        }
+      },
+      "expected": {
+        "minimumGapDp": 12
+      }
+    },
+    {
+      "id": "empty-status-hierarchy",
+      "profile": "empty-status-style",
+      "input": {
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        }
+      },
+      "expected": {
+        "textStyle": "bodyMedium",
+        "textColor": "onSurfaceVariant"
+      }
+    },
+    {
+      "id": "cut-row-full-mask-font-1-0",
+      "profile": "cut-row-mask",
+      "input": {
+        "theme": {
+          "kind": "default"
+        },
+        "viewportWidthDp": 400,
+        "measuringViewportHeightDp": 400,
+        "rowLabels": [
+          "First setting",
+          "Shuffle",
+          "Following setting"
+        ],
+        "fontScale": 1.0,
+        "rowVisibility": "cut",
+        "cutFractionOfMeasuredRow": 0.5,
+        "brightContentWidthDp": 120,
+        "brightContentHeightDp": 120,
+        "underlayColors": [
+          "FFFF00FF",
+          "FF00FFFF"
+        ]
+      },
+      "expected": {
+        "bottomFadeExtentDp": 40,
+        "opaqueBandDp": 8,
+        "opaqueChannelTolerance": 1
+      }
+    },
+    {
+      "id": "cut-row-full-mask-font-1-3",
+      "profile": "cut-row-mask",
+      "input": {
+        "theme": {
+          "kind": "default"
+        },
+        "viewportWidthDp": 400,
+        "measuringViewportHeightDp": 400,
+        "rowLabels": [
+          "First setting",
+          "Shuffle",
+          "Following setting"
+        ],
+        "fontScale": 1.3,
+        "rowVisibility": "cut",
+        "cutFractionOfMeasuredRow": 0.5,
+        "brightContentWidthDp": 120,
+        "brightContentHeightDp": 120,
+        "underlayColors": [
+          "FFFF00FF",
+          "FF00FFFF"
+        ]
+      },
+      "expected": {
+        "bottomFadeExtentDp": 40,
+        "opaqueBandDp": 8,
+        "opaqueChannelTolerance": 1
+      }
+    },
+    {
+      "id": "repeat-stable-paint-font-1-0",
+      "profile": "repeat-paint",
+      "input": {
+        "fontScale": 1.0,
+        "selectedRepeat": "RepeatNone",
+        "targetModes": [
+          "RepeatNone",
+          "RepeatOne",
+          "RepeatAll"
+        ],
+        "probeOutsetDp": 6
+      },
+      "expected": {
+        "paintEdgeTolerancePx": 1,
+        "paintBackgroundChannelDeltaMin": 16,
+        "unchangedSemanticBounds": true,
+        "repeatRequests": 0
+      }
+    },
+    {
+      "id": "repeat-stable-paint-font-1-3",
+      "profile": "repeat-paint",
+      "input": {
+        "fontScale": 1.3,
+        "selectedRepeat": "RepeatNone",
+        "targetModes": [
+          "RepeatNone",
+          "RepeatOne",
+          "RepeatAll"
+        ],
+        "probeOutsetDp": 6
+      },
+      "expected": {
+        "paintEdgeTolerancePx": 1,
+        "paintBackgroundChannelDeltaMin": 16,
+        "unchangedSemanticBounds": true,
+        "repeatRequests": 0
+      }
+    },
+    {
+      "id": "back-after-zero-inset-ime-dismissal",
+      "profile": "editor-back-routing",
+      "input": {
+        "fontScale": 1.0,
+        "draft": "Friday films",
+        "imeVisibilitySequence": [
+          true,
+          false
+        ],
+        "imeBottomInsetDp": 0
+      },
+      "expected": {
+        "panelDismissalsBeforeBack": 0,
+        "panelDismissalsAfterBack": 1,
+        "draftBeforeBack": "Friday films",
+        "stableEditorBounds": true
+      }
+    },
+    {
+      "id": "back-with-zero-inset-ime-visible",
+      "profile": "editor-visible-back-guard",
+      "input": {
+        "fontScale": 1.0,
+        "draft": "Friday films",
+        "imeVisible": true,
+        "imeBottomInsetDp": 0
+      },
+      "expected": {
+        "panelDismissalsBeforeBack": 0,
+        "panelDismissalsAfterBack": 0,
+        "retainedDraft": "Friday films",
+        "stableEditorBounds": true
+      }
+    }
+  ]
+}

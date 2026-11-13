@@ -34,9 +34,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -82,8 +84,8 @@ internal fun TouchPlayerSheetContent(
 }
 
 @Composable
-private fun TouchChoiceRow(label: String, selected: Boolean, tag: String, description: String? = null, onClick: () -> Unit) {
-    TouchRadioRow(selected, Modifier.testTag(tag), description = description, onClick = onClick) {
+private fun TouchChoiceRow(label: String, selected: Boolean, tag: String, description: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    TouchRadioRow(selected, Modifier.testTag(tag), enabled = enabled, description = description, onClick = onClick) {
         Text(label, Modifier.weight(1f))
     }
 }
@@ -173,11 +175,24 @@ private fun TouchTrackChoices(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
+    val sync = host.sync
+    val groupState = sync?.state?.collectAsState()?.value
+    val selection = remember(sync, groupState) {
+        app.pictureshow.core.sync.syncPlayerSpeedSelection(sync?.participating == true)
+    }
+    val fixedSpeedReason = stringResource(R.string.sync_speed)
+    val select: (Float) -> Unit = { value ->
+        if (app.pictureshow.core.sync.syncPlayerSpeedSelection(host.sync?.participating == true).selectionAllowed) {
+            host.output.setSpeed(value)
+            onDismiss()
+        }
+    }
     val speed by host.output.speed.collectAsState()
     val speeds = availablePlaybackSpeeds(speed)
     val note: @Composable () -> Unit = {
         Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(PLAYBACK_SPEED_NOTE)
+            if (selection.explanationRequired) Text(fixedSpeedReason)
             speed.message?.let { Text(it) }
             if (host.state.decision?.method == PlayMethod.Transcode) Text(PlaybackSpeeds.TRANSCODE)
         }
@@ -189,10 +204,8 @@ private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
                 speeds.forEachIndexed { index, value ->
                     SegmentedButton(
                         selected = value == speed.speed,
-                        onClick = {
-                            host.output.setSpeed(value)
-                            onDismiss()
-                        },
+                        enabled = selection.selectionAllowed,
+                        onClick = { select(value) },
                         shape = SegmentedButtonDefaults.itemShape(index, speeds.size),
                         modifier = Modifier.heightIn(min = 48.dp).testTag("touch:speed:${(value * 100).toInt()}"),
                         icon = {},
@@ -210,10 +223,13 @@ private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
             val label = PlaybackSpeeds.label(value)
             // With encoded audio 1× is the only row, so it carries the reason the others are gone (PLAY-25).
             val selected = value == speed.speed
-            val reason = speed.message?.takeIf { selected }?.let { "$label. $it" }
-            TouchChoiceRow(label, selected, "touch:speed:${(value * 100).toInt()}", reason) {
-                host.output.setSpeed(value)
-                onDismiss()
+            val reason = if (selection.explanationRequired) {
+                "$label. $fixedSpeedReason"
+            } else {
+                speed.message?.takeIf { selected }?.let { "$label. $it" }
+            }
+            TouchChoiceRow(label, selected, "touch:speed:${(value * 100).toInt()}", reason, enabled = selection.selectionAllowed) {
+                select(value)
             }
         }
         item { note() }

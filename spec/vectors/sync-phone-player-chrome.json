@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-phone-player-chrome",
+  "cases": [
+    {
+      "id": "scrim-transparent-upper-edge",
+      "profile": "scrim-paint",
+      "input": {
+        "widthDp": 320,
+        "heightDp": 200,
+        "underlayArgb": "FFFFFFFF",
+        "sampleFractions": [
+          0,
+          0.25,
+          0.5,
+          0.75,
+          1
+        ]
+      },
+      "expected": {
+        "maxUpperEdgeChannelDelta": 4
+      }
+    },
+    {
+      "id": "scrim-opacity-ramp",
+      "profile": "scrim-paint",
+      "input": {
+        "widthDp": 320,
+        "heightDp": 200,
+        "underlayArgb": "FFFFFFFF",
+        "sampleFractions": [
+          0,
+          0.25,
+          0.5,
+          0.75,
+          1
+        ]
+      },
+      "expected": {
+        "monotonicChannelSumTolerance": 6,
+        "minimumChannelSumDrop": 300,
+        "maxActionRegionChannelSum": 180
+      }
+    },
+    {
+      "id": "seek-time-row-font-1-0",
+      "profile": "seek-row",
+      "input": {
+        "fontScale": 1.0,
+        "widthDp": 640,
+        "heightDp": 360
+      },
+      "expected": {
+        "verticalTolerancePx": 1
+      }
+    },
+    {
+      "id": "quality-detail-context-font-1-0",
+      "profile": "quality-detail",
+      "input": {
+        "fontScale": 1.0,
+        "widthDp": 640,
+        "heightDp": 360,
+        "estimatedBandwidth": 1000000
+      },
+      "expected": {
+        "persistentQualityRows": 0
+      }
+    },
+    {
+      "id": "targets-font-1-0",
+      "profile": "native-targets",
+      "input": {
+        "fontScale": 1.0,
+        "widthDp": 640,
+        "heightDp": 360,
+        "targetTags": [
+          "touch:toggle",
+          "touch:back10",
+          "touch:forward10",
+          "touch:stop",
+          "touch:syncplay",
+          "touch:open:Audio",
+          "touch:open:Subtitles",
+          "touch:open:Speed",
+          "touch:open:Info",
+          "touch:orientation"
+        ]
+      },
+      "expected": {
+        "minimumTouchTargetDp": 48,
+        "physicalPixelTolerance": 1
+      }
+    },
+    {
+      "id": "seek-time-row-font-1-3",
+      "profile": "seek-row",
+      "input": {
+        "fontScale": 1.3,
+        "widthDp": 640,
+        "heightDp": 360
+      },
+      "expected": {
+        "verticalTolerancePx": 1
+      }
+    },
+    {
+      "id": "quality-detail-context-font-1-3",
+      "profile": "quality-detail",
+      "input": {
+        "fontScale": 1.3,
+        "widthDp": 640,
+        "heightDp": 360,
+        "estimatedBandwidth": 1000000
+      },
+      "expected": {
+        "persistentQualityRows": 0
+      }
+    },
+    {
+      "id": "targets-font-1-3",
+      "profile": "native-targets",
+      "input": {
+        "fontScale": 1.3,
+        "widthDp": 640,
+        "heightDp": 360,
+        "targetTags": [
+          "touch:toggle",
+          "touch:back10",
+          "touch:forward10",
+          "touch:stop",
+          "touch:syncplay",
+          "touch:open:Audio",
+          "touch:open:Subtitles",
+          "touch:open:Speed",
+          "touch:open:Info",
+          "touch:orientation"
+        ]
+      },
+      "expected": {
+        "minimumTouchTargetDp": 48,
+        "physicalPixelTolerance": 1
+      }
+    }
+  ]
+}

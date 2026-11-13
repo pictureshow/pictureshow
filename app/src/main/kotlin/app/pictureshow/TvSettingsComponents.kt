@@ -44,9 +44,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +56,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -62,6 +65,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -95,6 +101,91 @@ import androidx.tv.material3.RadioButton
 import androidx.tv.material3.RadioButtonDefaults
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+
+/** Optional visual metadata for the measured, non-lazy SyncPlay viewport only. */
+private val LocalTvSettingsVisuals = staticCompositionLocalOf<TvSettingsVisuals?> { null }
+
+private data class TvSettingsMeasuredBounds(val bounds: Rect, val scrollOffset: Int) {
+    // Bring-into-view can ask again before the next placement callback. Account for that live
+    // scroll delta instead of using a rectangle from the previous frame as the current viewport.
+    fun atScroll(offset: Int): Rect = bounds.translate(0f, (scrollOffset - offset).toFloat())
+}
+
+private class TvSettingsVisualItem(val owner: TvSettingsVisuals, val protectWholeItem: Boolean) {
+    var bounds by mutableStateOf<TvSettingsMeasuredBounds?>(null)
+    val content = mutableStateMapOf<Any, TvSettingsMeasuredBounds?>()
+}
+
+private class TvSettingsVisuals(val scroll: ScrollState) {
+    var viewport by mutableStateOf<Rect?>(null)
+    val items = mutableStateMapOf<TvSettingsVisualItem, Unit>()
+
+    fun measure(coordinates: LayoutCoordinates): TvSettingsMeasuredBounds? {
+        if (!coordinates.isAttached) return null
+        // Clipped bounds would incorrectly report a row crossing the fold as wholly visible.
+        val bounds = coordinates.findRootCoordinates().localBoundingBoxOf(coordinates, clipBounds = false)
+        if (bounds.isEmpty || !listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all { it.isFinite() }) return null
+        return TvSettingsMeasuredBounds(bounds, scroll.value)
+    }
+
+    fun bottomFadeExtent(fullExtent: Float): Float {
+        val view = viewport ?: return fullExtent
+        if (items.isEmpty()) return fullExtent
+        val offset = scroll.value
+        val visible = items.keys.map { item ->
+            val bounds = item.bounds?.atScroll(offset) ?: return fullExtent
+            item to bounds
+        }.filter { (_, bounds) -> bounds.overlaps(view) }
+        if (visible.isEmpty()) return fullExtent
+        val lastBottom = visible.maxOf { it.second.bottom }
+        val lastItems = visible.filter { it.second.bottom >= lastBottom - .5f }
+        if (lastItems.any { (_, bounds) -> bounds.top < view.top - .5f || bounds.bottom > view.bottom + .5f }) return fullExtent
+
+        val protectedBottom = visible.maxOf { (item, bounds) ->
+            if (item.protectWholeItem) {
+                bounds.bottom
+            } else {
+                if (item.content.isEmpty()) return fullExtent
+                item.content.values.maxOf { measured ->
+                    (measured ?: return fullExtent).atScroll(offset).bottom
+                }
+            }
+        }
+        // The complete native Text boxes (and passive icons/indicators) stay above the ramp.
+        // One physical pixel of guard also keeps rasterized edge strokes out of the first stop.
+        return (view.bottom - protectedBottom - 1f).coerceIn(0f, fullExtent)
+    }
+}
+
+@Composable
+private fun rememberTvSettingsVisualItem(protectWholeItem: Boolean): TvSettingsVisualItem? {
+    val owner = LocalTvSettingsVisuals.current ?: return null
+    val item = remember(owner, protectWholeItem) { TvSettingsVisualItem(owner, protectWholeItem) }
+    DisposableEffect(owner, item) {
+        owner.items[item] = Unit
+        onDispose { owner.items.remove(item) }
+    }
+    return item
+}
+
+private fun Modifier.tvSettingsItemBounds(item: TvSettingsVisualItem?): Modifier =
+    if (item == null) this else onGloballyPositioned { item.bounds = item.owner.measure(it) }
+
+@Composable
+private fun Modifier.tvSettingsContentBounds(item: TvSettingsVisualItem?): Modifier {
+    if (item == null) return this
+    val token = remember(item) { Any() }
+    DisposableEffect(item, token) {
+        item.content[token] = null
+        onDispose { item.content.remove(token) }
+    }
+    return onGloballyPositioned { item.content[token] = item.owner.measure(it) }
+}
+
+/** Marks an existing custom block conservatively; adds no layout, semantics or focus target. */
+@Composable
+internal fun Modifier.tvSettingsVisualBlock(): Modifier =
+    tvSettingsItemBounds(rememberTvSettingsVisualItem(protectWholeItem = true))
 
 /** One focus target per row. The trailing control is a state indicator, never a second button. */
 @Composable
@@ -140,16 +231,17 @@ internal fun TvSettingsActionRow(
 /** Starts on the same 16dp inner text edge as a settings row. */
 @Composable
 internal fun TvSettingsSectionHeader(title: String, modifier: Modifier = Modifier, supportingText: String? = null) {
-    Column(modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+    val visual = rememberTvSettingsVisualItem(protectWholeItem = false)
+    Column(modifier.tvSettingsItemBounds(visual).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
         Text(
             title,
-            Modifier.semantics {
+            Modifier.tvSettingsContentBounds(visual).semantics {
                 heading()
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleSmall
         )
-        supportingText?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
+        supportingText?.let { Text(it, Modifier.tvSettingsContentBounds(visual), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -381,6 +473,7 @@ private fun TvSettingsNativeRow(
     leading: (@Composable () -> Unit)?,
     titleMaxLines: Int
 ) {
+    val visual = rememberTvSettingsVisualItem(protectWholeItem = false)
     ListItem(
         selected, onClick,
         // ListItem adds 12dp on each vertical edge. A centred 32dp minimum
@@ -390,7 +483,7 @@ private fun TvSettingsNativeRow(
             Box(Modifier.heightIn(min = if (supportingText == null) 32.dp else 0.dp), contentAlignment = Alignment.Center) {
                 Text(
                     title,
-                    Modifier.testTag("tv-settings:label:$title"),
+                    Modifier.testTag("tv-settings:label:$title").tvSettingsContentBounds(visual),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis
@@ -398,13 +491,19 @@ private fun TvSettingsNativeRow(
             }
         },
         supportingContent = supportingText?.let { text ->
-            { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
+            { Text(text, Modifier.tvSettingsContentBounds(visual), color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
-        leadingContent = leading?.let { content -> { content() } },
+        leadingContent = leading?.let { content ->
+            { if (visual == null) content() else Box(Modifier.tvSettingsContentBounds(visual)) { content() } }
+        },
         trailingContent = trailing?.let { content ->
-            { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
+            {
+                CompositionLocalProvider(LocalContentColor provides supportingColor) {
+                    if (visual == null) content() else Box(Modifier.tvSettingsContentBounds(visual)) { content() }
+                }
+            }
         },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.tvSettingsItemBounds(visual).fillMaxWidth(),
         enabled = enabled,
         scale = ListItemDefaults.scale(focusedScale = 1f),
         interactionSource = interaction
@@ -594,15 +693,21 @@ internal fun TvSettingsList(
     val surface = MaterialTheme.colorScheme.surface
     val density = LocalDensity.current
     val topClearance = with(density) { 40.dp.toPx() }
-    val bottomClearance = with(density) { 48.dp.toPx() }
+    val fullBottomFade = with(density) { 40.dp.toPx() }
+    val edgeGap = with(density) { 8.dp.toPx() }
+    val visuals = remember(scroll, minimalFocusScroll) { if (minimalFocusScroll) TvSettingsVisuals(scroll) else null }
+    val bottomFadeExtent: () -> Float = remember(scroll, visuals, fullBottomFade) {
+        { if (scroll.canScrollForward) visuals?.bottomFadeExtent(fullBottomFade) ?: fullBottomFade else 0f }
+    }
     val platformScroll = LocalBringIntoViewSpec.current
-    val minimalScroll = remember(scroll, topClearance, bottomClearance) {
+    val minimalScroll = remember(scroll, topClearance, bottomFadeExtent, edgeGap) {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
                 // The fade masks are part of the viewport. Read their live boundary states here,
                 // where bring-into-view recalculates during scrolling, not in composition.
                 val top = (if (scroll.canScrollBackward) topClearance else 0f).coerceAtMost(containerSize / 3f)
-                val bottom = containerSize - (if (scroll.canScrollForward) bottomClearance else 0f).coerceAtMost(containerSize / 3f)
+                val fade = bottomFadeExtent()
+                val bottom = containerSize - (if (fade > 0f) fade + edgeGap else 0f).coerceAtMost(containerSize / 3f)
                 return when {
                     size > bottom - top -> 0f
                     offset < top -> offset - top
@@ -612,8 +717,14 @@ internal fun TvSettingsList(
             }
         }
     }
-    Box(modifier.fillMaxWidth().testTag("tv-settings:viewport")) {
-        CompositionLocalProvider(LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll) {
+    val bottomFade = bottomFadeExtent()
+    Box(modifier.fillMaxWidth().testTag("tv-settings:viewport").then(
+        if (visuals == null) Modifier else Modifier.onGloballyPositioned { visuals.viewport = visuals.measure(it)?.bounds }
+    )) {
+        CompositionLocalProvider(
+            LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll,
+            LocalTvSettingsVisuals provides visuals
+        ) {
             Column(
                 Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().verticalScroll(scroll)
                     .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = if (minimalFocusScroll) 48.dp else 12.dp),
@@ -629,10 +740,11 @@ internal fun TvSettingsList(
             )
             if (minimalFocusScroll) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant))
         }
-        if (scroll.canScrollForward) {
+        if (bottomFade > 0f) {
+            val opaqueStart = ((bottomFade - edgeGap) / bottomFade).coerceIn(0f, 1f)
             Box(
-                Modifier.fillMaxWidth().height(40.dp).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
-                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to Color.Transparent, .8f to surface, 1f to surface)
+                Modifier.fillMaxWidth().height(with(density) { bottomFade.toDp() }).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
+                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to Color.Transparent, opaqueStart to surface, 1f to surface)
                         else Brush.verticalGradient(listOf(Color.Transparent, surface)))
             )
         }
@@ -661,7 +773,7 @@ internal fun TvSettingsList(
 @Composable
 internal fun TvSettingsRowPlaceholder(modifier: Modifier = Modifier) {
     Column(
-        modifier.fillMaxWidth().heightIn(min = 64.dp)
+        modifier.tvSettingsVisualBlock().fillMaxWidth().heightIn(min = 64.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.medium)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.Center

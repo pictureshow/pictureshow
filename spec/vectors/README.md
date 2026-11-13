@@ -480,3 +480,13 @@ Centering permits at most one physical pixel of glyph-position rounding; row hei
 The native settings layout suite also checks that a consequence stays inside its row's click target, multiline radio options align on their first label line at 1.3x font scale, and closing a group picker returns to the same scrolled opener. The first-line case runs against both settings and the actual player Quality menu; each platform supplies equivalent native geometry evidence.
 
 Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
+
+## SyncPlay native presentation profiles
+
+`sync-tv-surfaces.json` has14 native TV focus, keyboard, footer and paint profiles, executed by SyncPlayTvPrimaryPaintRegressionTest and SyncPlayTvRepeatPaintAndBackRegressionTest. `sync-phone-surfaces.json` has7 native compact-window arrival, recovery and one-time-reveal profiles, executed by SyncPhoneInitialTransportRegressionTest.
+
+`sync-player-intent-presentation.json` has12 shared-phase/action and Speed-selection cases, executed by SyncPlayerIntentPresentationVectorsTest. SyncTouchPlayerIntentRegressionTest and SyncTouchSpeedContextRegressionTest independently bind them to real native controls and event dispatch. `sync-speed-intent-origin.json` has4 actual native maintenance profiles, executed by SyncAudioOutputMaintenanceRegressionTest with source ownership, standalone and temporary-rate guards.
+
+`sync-phone-player-chrome.json` has8 native gradient, clock/seek-row, persistent-detail and input-target profiles, executed by TouchPlayerChromeRegressionTest. `sync-phone-quality-cue.json` has5 real Quality context, changed-fact/lifetime/reset and priority profiles, executed by3 methods in TouchPlayerQualityContextRegressionTest. A visible finite message cannot be replaced by an invisible accessibility-only node.
+
+Every applicable platform owes an actual native executor for these contracts. Corpus inventory and Android success do not establish other UIs, native speech delivery or SYN-06 timing.
