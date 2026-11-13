@@ -24,7 +24,7 @@ class DesktopHdrVectorsTest {
                 error("HDR vector analyzer exceeded 60 seconds: ${log.readText()}")
             }
             assertEquals(0, process.exitValue(), log.readText())
-            assertTrue(log.readText().contains("test_shared_numeric_contract"), "Numeric spec vector was not executed")
+            assertTrue(log.readText().contains("test_desktop_numeric_fixture"), "Desktop numeric fixture was not executed")
         } finally {
             log.delete()
         }

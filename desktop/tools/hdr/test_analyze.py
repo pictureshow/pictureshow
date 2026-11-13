@@ -12,8 +12,8 @@ class GateTests(unittest.TestCase):
     def setUp(self):
         self.manifest={'sdrReferenceWhiteNits':203,'files':{key:{'primaries':prim,'patches':[{'name':n,'quantizedRgbNits':rgb} for n,rgb in zip(NAMES,colors)]} for key,prim,colors in [('pq','bt2020',HDR),('sdr','bt709',SDR)]}}
         self.capture={'encoding':'linear','primaries':'bt2020','referenceWhiteNits':203,'samples':[{'name':n,'rgb':[c/203 for c in rgb]} for n,rgb in zip(NAMES,HDR)]}
-    def test_shared_numeric_contract(self):
-        contract=json.loads((Path(__file__).resolve().parents[3]/'spec/vectors/desktop-hdr-output.json').read_text())
+    def test_desktop_numeric_fixture(self):
+        contract=json.loads((Path(__file__).resolve().parent/'fixtures/desktop-hdr-output.json').read_text())
         for anchor in contract['pqAnchors']:
             self.assertAlmostEqual(pq_encode(anchor['nits']),anchor['code'],places=10)
             self.assertAlmostEqual(pq_decode(anchor['code']),anchor['nits'],places=6)

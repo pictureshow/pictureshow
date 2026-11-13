@@ -2,9 +2,9 @@
 
 `:desktop:vectorTest` executes core's compiled JVM vector test classes and desktop's HDR vector bridge. Compiled core tests keep Kotlin friend-module access; rules and their tests are shared with Android. `:desktop:test` depends on this gate and separately executes desktop app tests.
 
-The corpus inventory guard rejects a JSON file added without a registered executor, missing or stale packaged resources, empty case suites, and duplicate IDs. The ordinary runners reject unknown operations. No contract suite is exempt. The HDR contract has a different schema from the case suites, so its actual Python analyzer (including wrong-scale, wrong-gamut, clipping, malformed capture and negative-channel controls) runs as a bounded subprocess owned by a JVM test. Python 3 is required on each CI runner. This checks mathematical contracts; real compositor HDR output still needs the separate per-OS capture gates.
+The corpus inventory guard rejects a JSON file added without a registered executor, missing or stale packaged resources, nonstandard envelopes, empty case suites, and duplicate IDs. The ordinary runners reject unknown operations. No shared contract suite is exempt. Separately, the desktop-owned HDR fixture in `desktop/tools/hdr/fixtures/desktop-hdr-output.json` runs through the actual Python analyzer as a bounded subprocess owned by `DesktopHdrVectorsTest`. Its 10 checks cover numeric anchors, wrong scale, wrong gamut, clipping, malformed captures and negative channels. Python 3 is required on each CI runner. These checks establish mathematical behavior; real compositor HDR output still needs the separate per-OS capture gates.
 
-Snapshot 2026-11-12 after merging main81f73948: 46 JSON contracts, 2317 cases in the case-based contracts, plus the numeric HDR contract. A green logic gate establishes shared policy behavior, not completed desktop UI parity.
+Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts use the standard envelope and contain 2,317 cases. The desktop numeric fixture is outside the shared corpus because it measures libmpv/OS output units rather than shared application policy. Web and Apple runners enumerate only the shared corpus. A green logic gate establishes shared policy behavior, not completed desktop UI parity.
 
 | Contract | Cases | Executor |
 | --- | ---: | --- |
@@ -14,7 +14,6 @@ Snapshot 2026-11-12 after merging main81f73948: 46 JSON contracts, 2317 cases in
 | `cast-session.json` | 53 | `ControlVectorsTest` |
 | `catalog.json` | 28 | `ReferenceParityVectorsTest` |
 | `compatibility.json` | 53 | `ReferenceParityVectorsTest` |
-| `desktop-hdr-output.json` | PQ anchors, scRGB and analyzer negative controls | `DesktopHdrVectorsTest → Python test_analyze (10 checks)` |
 | `grid-navigation.json` | 40 | `GridNavigationVectorsTest` |
 | `music-catalog.json` | 30 | `MusicVectorsTest` |
 | `music-playlists.json` | 14 | `MusicVectorsTest` |

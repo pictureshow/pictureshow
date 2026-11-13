@@ -1,7 +1,32 @@
 name: Desktop app
 on:
   push:
-    branches: ["ci/137*"]
+    branches: ["main", "ci/**"]
+    paths:
+      - "desktop/**"
+      - "ui-shared/**"
+      - "core/**"
+      - "spec/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "**/*.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/desktop-app.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "ui-shared/**"
+      - "core/**"
+      - "spec/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "**/*.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/desktop-app.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,31 +34,6 @@ concurrency:
   group: desktop-app-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  mac-graphics-probe:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15-intel, macos-26-intel, macos-26]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v7
-      - name: Observe hosted Metal and CGL capabilities without app dependencies
-        env:
-          SPIKE_SOFTWARE_GPU: '1'
-        run: |
-          mkdir -p desktop-evidence/mac-graphics
-          clang -O2 -fobjc-arc desktop/tools/app-smoke/macos-preflight.m \
-            -framework Foundation -framework Metal -framework OpenGL -framework CoreGraphics -framework IOSurface \
-            -o desktop-evidence/mac-graphics/preflight
-          desktop-evidence/mac-graphics/preflight > desktop-evidence/mac-graphics/capabilities.json
-          cat desktop-evidence/mac-graphics/capabilities.json
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: mac-graphics-${{ matrix.os }}
-          retention-days: 7
-          path: desktop-evidence/mac-graphics/capabilities.json
   desktop:
     strategy:
       fail-fast: false
