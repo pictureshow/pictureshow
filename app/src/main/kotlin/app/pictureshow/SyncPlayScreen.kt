@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -87,6 +88,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -429,6 +431,9 @@ private fun SyncTvNameField(
     action: (String, String?) -> Unit
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+    val editorFocus = remember { FocusRequester() }
+    val inputMethod = remember(view) { view.context.getSystemService(InputMethodManager::class.java) }
     val select = remember { RemoteFieldNavigation(setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) }
     val namePrimary = state.groups.isEmpty() && !state.busy
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -444,8 +449,14 @@ private fun SyncTvNameField(
     }
     LaunchedEffect(keyboardRequested) {
         if (keyboardRequested) {
+            view.requestFocus()
+            editorFocus.requestFocus()
             withFrameNanos { }
             keyboard?.show()
+            // An explicit remote edit gesture requests the dialog's accepting Android view too.
+            // The Compose controller is best-effort; keep this request after the state editor's
+            // keyboard options have established its input session, never on initial focus.
+            inputMethod?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
         } else {
             keyboard?.hide()
         }
@@ -470,7 +481,7 @@ private fun SyncTvNameField(
             keyboard?.hide()
             requestKeyboard(false)
         },
-        modifier = Modifier.fillMaxWidth().testTag("sync:name")
+        modifier = Modifier.fillMaxWidth().testTag("sync:name").focusRequester(editorFocus)
             .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
             .onFocusChanged {
                 if (!it.isFocused) {

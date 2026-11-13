@@ -596,7 +596,7 @@ internal fun TvSettingsList(
                 val top = (if (scroll.canScrollBackward) topClearance else 0f).coerceAtMost(containerSize / 3f)
                 val bottom = containerSize - (if (scroll.canScrollForward) bottomClearance else 0f).coerceAtMost(containerSize / 3f)
                 return when {
-                    size > bottom - top && offset <= top && offset + size >= bottom -> 0f
+                    size > bottom - top -> 0f
                     offset < top -> offset - top
                     offset + size > bottom -> offset + size - bottom
                     else -> 0f
