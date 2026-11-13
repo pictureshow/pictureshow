@@ -88,8 +88,10 @@ jobs:
                           found.setdefault("voiceover_tvos_udid", device["udid"])
           if set(found) != {"ios_udid", "tvos_udid", "voiceover_ios_udid", "voiceover_tvos_udid"}:
               raise SystemExit(f"Native unit tests and actual VoiceOver require available iOS and tvOS simulators, including a 27+ pair: {found}")
-          # UI cases own separate fresh sandboxes. A reader's first-run system
-          # dialog must never be inherited by the ordinary catalog case.
+          # The 27+ unit pair initializes the same OS image before UI clones
+          # are allocated. UI sandboxes remain separate from units and each other.
+          found["ios_udid"] = found["voiceover_ios_udid"]
+          found["tvos_udid"] = found["voiceover_tvos_udid"]
           records = {d["udid"]: d for group in devices.values() for d in group}
           for base in set(found.values()):
               state = records[base]["state"]
@@ -177,17 +179,66 @@ jobs:
           receipt.parent.mkdir(parents=True, exist_ok=True)
           data = {"runID": os.environ["GITHUB_RUN_ID"],
                   "unitDevices": {key: found[key] for key in ["ios_udid", "tvos_udid"]},
+                  "uiSources": ui_sources,
                   "ownedUIClones": {}, "events": []}
           def persist():
               receipt.write_text(json.dumps(data, indent=2) + "\n")
           persist()  # Record the empty ownership set before creating any clone.
+          allocation_source = r'''
+          from pathlib import Path
+          import datetime, json, os, subprocess
+          receipt = Path("apple-test-results/ui-simulator-lifecycle.json")
+          data = json.loads(receipt.read_text())
+          assert data["runID"] == os.environ["GITHUB_RUN_ID"]
+          assert not data["ownedUIClones"], "Allocate this job's UI clones only once"
+          ui_sources = data["uiSources"]
+          units = set(data["unitDevices"].values())
+          assert set(ui_sources.values()) == units
+          devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "--json"], text=True))["devices"]
+          records = {d["udid"]: d for group in devices.values() for d in group}
+          # The guarded workflow step runs only after both unit results succeed
+          # and the dedicated lifecycle step shuts their exact devices down.
+          for base in units:
+              assert records[base]["state"] == "Shutdown", (base, records[base]["state"])
+          data["allocationPhase"] = "after-passed-27-unit-tests-and-unit-shutdown"
+          data["warmSourceObservations"] = {
+              base: {"state": records[base]["state"], "dataPathSize": records[base].get("dataPathSize")}
+              for base in sorted(units)
+          }
+          def persist():
+              receipt.write_text(json.dumps(data, indent=2) + "\n")
+          persist()
+          def inventory():
+              groups = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "--json"], text=True))["devices"]
+              return {d["udid"]: {**d, "runtime": runtime} for runtime, group in groups.items() for d in group}
+          def reconcile(key, base, name, before, returned=None):
+              after = inventory()
+              source = before[base]
+              matches = [d for uid, d in after.items() if uid not in before
+                         and d["name"] == name and d["runtime"] == source["runtime"]
+                         and d.get("deviceTypeIdentifier") == source.get("deviceTypeIdentifier")]
+              assert len(matches) == 1, (name, "Cannot establish unique new clone ownership", matches)
+              clone = matches[0]["udid"]
+              assert clone not in units
+              assert clone not in {d["udid"] for d in data["ownedUIClones"].values()}
+              data["ownedUIClones"][key] = {"udid": clone, "name": name, "base": base}
+              persist()
+              assert returned is None or returned == clone, "Clone output differs from verified inventory"
           try:
               for key, base in ui_sources.items():
                   name = f"Leg132-{os.environ['GITHUB_RUN_ID']}-{key}"
-                  clone = subprocess.check_output(["xcrun", "simctl", "clone", base, name], text=True).strip()
-                  data["ownedUIClones"][key] = {"udid": clone, "name": name, "base": base}
-                  persist()  # Each successful clone is recoverable even if the next creation fails.
-                  found[key] = clone
+                  before = inventory()
+                  assert not any(d["name"] == name for d in before.values()), (name, "Run-specific name already exists")
+                  try:
+                      clone = subprocess.check_output(["xcrun", "simctl", "clone", base, name], text=True).strip()
+                  except BaseException:
+                      try:
+                          reconcile(key, base, name, before)
+                      except Exception as ownership_error:
+                          data.setdefault("ownershipReconciliationErrors", []).append({"key": key, "name": name, "error": str(ownership_error)})
+                          persist()  # Ambiguous/unknown IDs are retained for diagnosis, never deleted.
+                      raise
+                  reconcile(key, base, name, before, returned=clone)
           except BaseException as creation_error:
               data["creationError"] = str(creation_error)
               persist()
@@ -201,6 +252,10 @@ jobs:
                   data["partialCleanupError"] = str(cleanup_error)
                   persist()
               raise
+          for key, clone in data["ownedUIClones"].items():
+              print(f"{key}={clone['udid']}")
+          '''
+          (Path(os.environ["RUNNER_TEMP"]) / "leg132-allocate-ui-simulators.py").write_text(allocation_source)
           for key, value in found.items():
               print(f"{key}={value}")
           PY
@@ -345,13 +400,20 @@ jobs:
         if: steps.simulators.outcome == 'success'
         run: python3 "$RUNNER_TEMP/leg132-ui-simulator-lifecycle.py" shutdown units
 
+      - name: Clone separate UI sandboxes from the tested shutdown 27 pair
+        id: ui-simulators
+        if: steps.simulators.outcome == 'success' && steps.ios-tests.outcome == 'success' && steps.tvos-tests.outcome == 'success' && (!startsWith(github.ref, 'refs/heads/ci/132') || steps.cold-subtitle-repeat.outcome == 'success')
+        continue-on-error: true
+        shell: bash
+        run: python3 "$RUNNER_TEMP/leg132-allocate-ui-simulators.py" >> "$GITHUB_OUTPUT"
+
       - name: Verify actual VoiceOver speech and navigation on iOS
         id: ios-voiceover
-        if: steps.apple-source.outputs.available == 'true' && steps.ios-tests.outputs.built == 'true'
+        if: steps.apple-source.outputs.available == 'true' && steps.ios-tests.outputs.built == 'true' && steps.ui-simulators.outcome == 'success'
         continue-on-error: true
         shell: bash
         env:
-          VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_ios_udid }}
+          VOICEOVER_SIMULATOR_ID: ${{ steps.ui-simulators.outputs.voiceover_ios_udid }}
         run: |
           set -o pipefail
           xcrun simctl bootstatus "$VOICEOVER_SIMULATOR_ID" -b
@@ -378,16 +440,16 @@ jobs:
           PYVOICEOVER
 
       - name: Shut down the owned iOS reader sandbox after its actual result
-        if: always() && steps.simulators.outcome == 'success'
+        if: always() && steps.ui-simulators.outcome == 'success'
         run: python3 "$RUNNER_TEMP/leg132-ui-simulator-lifecycle.py" shutdown voiceover_ios_udid
 
       - name: Verify actual VoiceOver speech and navigation on tvOS
         id: tvos-voiceover
-        if: steps.apple-source.outputs.available == 'true' && steps.tvos-tests.outputs.built == 'true'
+        if: steps.apple-source.outputs.available == 'true' && steps.tvos-tests.outputs.built == 'true' && steps.ui-simulators.outcome == 'success'
         continue-on-error: true
         shell: bash
         env:
-          VOICEOVER_SIMULATOR_ID: ${{ steps.simulators.outputs.voiceover_tvos_udid }}
+          VOICEOVER_SIMULATOR_ID: ${{ steps.ui-simulators.outputs.voiceover_tvos_udid }}
         run: |
           set -o pipefail
           xcrun simctl bootstatus "$VOICEOVER_SIMULATOR_ID" -b
@@ -414,17 +476,17 @@ jobs:
           PYVOICEOVER
 
       - name: Shut down the owned TV reader sandbox after its actual result
-        if: always() && steps.simulators.outcome == 'success'
+        if: always() && steps.ui-simulators.outcome == 'success'
         run: python3 "$RUNNER_TEMP/leg132-ui-simulator-lifecycle.py" shutdown voiceover_tvos_udid
 
       - name: Verify native catalog layout and TV pixel contrast
         id: catalog-visual
-        if: startsWith(github.ref, 'refs/heads/ci/132') && steps.ios-tests.outputs.built == 'true' && steps.tvos-tests.outputs.built == 'true'
+        if: startsWith(github.ref, 'refs/heads/ci/132') && steps.ios-tests.outputs.built == 'true' && steps.tvos-tests.outputs.built == 'true' && steps.ui-simulators.outcome == 'success'
         continue-on-error: true
         shell: bash
         env:
-          IOS_SIMULATOR_ID: ${{ steps.simulators.outputs.catalog_ios_udid }}
-          TVOS_SIMULATOR_ID: ${{ steps.simulators.outputs.catalog_tvos_udid }}
+          IOS_SIMULATOR_ID: ${{ steps.ui-simulators.outputs.catalog_ios_udid }}
+          TVOS_SIMULATOR_ID: ${{ steps.ui-simulators.outputs.catalog_tvos_udid }}
         run: |
           set -o pipefail
           for platform in iOS tvOS; do
@@ -527,6 +589,7 @@ jobs:
         env:
           PROJECT_OUTCOME: ${{ steps.project.outcome }}
           SIMULATORS_OUTCOME: ${{ steps.simulators.outcome }}
+          UI_SANDBOXES_OUTCOME: ${{ steps.ui-simulators.outcome }}
           IOS_OUTCOME: ${{ steps.ios-tests.outcome }}
           TVOS_OUTCOME: ${{ steps.tvos-tests.outcome }}
           IOS_VOICEOVER_OUTCOME: ${{ steps.ios-voiceover.outcome }}
@@ -545,7 +608,7 @@ jobs:
             echo "Native catalog visual regressions did not succeed: $CATALOG_VISUAL_OUTCOME"
             exit 1
           fi
-          for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$IOS_VOICEOVER_OUTCOME" "$TVOS_VOICEOVER_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do
+          for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$UI_SANDBOXES_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$IOS_VOICEOVER_OUTCOME" "$TVOS_VOICEOVER_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do
             if [[ "$outcome" != success ]]; then
               echo "Apple CI step did not succeed: $outcome"
               exit 1
