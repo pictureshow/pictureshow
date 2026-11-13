@@ -188,7 +188,7 @@ struct TelevisionChoiceLabel: View {
 struct TelevisionChoiceStyle: ViewModifier {
     let selected: Bool
     func body(content: Content) -> some View {
-        content.buttonStyle(.bordered).tint(.white)
+        content.buttonStyle(.bordered).tint(Optional<Color>.none)
     }
 }
 #endif

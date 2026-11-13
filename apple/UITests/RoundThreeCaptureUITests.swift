@@ -143,6 +143,9 @@ final class RoundThreeCaptureUITests: XCTestCase {
     }
 
     @MainActor func testNativeDestinationsRealArtworkPeopleAndEmptyStates() throws {
+        #if os(tvOS)
+        try assertRetainedInvisibleTVPillsRejected()
+        #endif
         try launchPilot()
         try signInPilot()
         #if os(tvOS)
@@ -204,10 +207,19 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(artwork.waitForExistence(timeout: 20))
         reveal(artwork)
         record("Round3 real artwork library titles")
+        #if os(tvOS)
+        focusOnly(artwork)
+        let nameChoice = app.buttons["sort-SortName"]
+        XCTAssertTrue(nameChoice.exists && nameChoice.isSelected, "Sample the actual selected Name choice")
+        try assertRenderedTextAA(nameChoice, expected: "Name", state: "selected Name resting")
+        #endif
         activate(artwork)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["play"].exists)
         record("Round3 real artwork detail hero and actions")
+        #if os(tvOS)
+        try assertTVDetailActionPixels()
+        #endif
         XCTAssertTrue(app.windows.firstMatch.frame.intersects(app.staticTexts["detailTitle"].frame))
         // The full-bleed backdrop is genuinely decorative/AX-hidden. Preserve
         // full native pixels + actual title/action frames for director judgment;
@@ -222,6 +234,13 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(app.buttons["item-" + (try required("artworkItemID"))].firstMatch.waitForExistence(timeout: 20))
         dismissKeyboard()
         settledCapture("Round3 Search settled real artwork results")
+        #if os(tvOS)
+        // Native focus only: do not open the keyboard or activate Clear.
+        focusOnly(field)
+        XCTAssertFalse(ownsFocus(app.buttons["clearSearch"]))
+        record("Round3 audit Search Clear resting before AA")
+        try assertRenderedTextAA(app.buttons["clearSearch"], expected: "Clear", state: "Search Clear resting")
+        #endif
         try clearSearch(field)
         activate(field)
         field.typeText("pictureshow-round-three-no-match")
@@ -330,7 +349,8 @@ final class RoundThreeCaptureUITests: XCTestCase {
         #if os(iOS)
         try revealFullPersonMetadata(cards[0], name: names[0], role: roles[0])
         #else
-        reveal(cards[0])
+        focusOnly(cards[0])
+        XCTAssertTrue(ownsFocus(cards[0]), "Actual native person focus must scroll the metadata into view before the first capture")
         #endif
         XCTAssertTrue(cards.allSatisfy(\.exists))
         for (card, role) in zip(cards, roles) {
@@ -340,12 +360,16 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertEqual(cards[0].frame.midY, cards[1].frame.midY, accuracy: 3, "People must form a horizontal shelf, not a ragged vertical stack")
         XCTAssertEqual(cards[1].frame.midY, cards[2].frame.midY, accuracy: 3)
         XCTAssertEqual(cards[1].frame.width, cards[2].frame.width, accuracy: 3, "Unfocused person lockups must have equal width")
+        #if os(tvOS)
+        try assertTVPersonMetadataPixels(cards[0], stationarySibling: cards[1], name: names[0], role: roles[0])
+        #endif
         record(prefix + " cast and crew horizontal equal lockups")
         let shelf = node("detailPeopleShelf")
         XCTAssertTrue(shelf.exists)
         #if os(tvOS)
-        focusOnly(cards[0]); XCUIRemote.shared.press(.right); XCUIRemote.shared.press(.right)
+        XCUIRemote.shared.press(.right); XCUIRemote.shared.press(.right)
         XCTAssertTrue(ownsFocus(cards[2]), "Two native horizontal moves must reach the third actual person")
+        try assertTVPersonMetadataPixels(cards[2], stationarySibling: cards[1], name: names[2], role: roles[2])
         #else
         shelf.swipeLeft()
         try revealFullPersonMetadata(cards[2], name: names[2], role: roles[2])
@@ -762,6 +786,123 @@ final class RoundThreeCaptureUITests: XCTestCase {
             let measured = try textContrast(image, pixels: rect)
             XCTAssertLessThan(measured, 4.5, "The authenticated old raw text must fail the exact unchanged AA measurement")
             print("ROUND3_NEGATIVE_CONTROL source=\(path) bounds=\(rect) ratio=\(measured) rejectsAA=\(measured < 4.5)")
+        }
+    }
+    // The same rendered-word locator and unchanged Settings sampler measure
+    // both retained failure pixels and the current native controls. AX supplies
+    // identity/geometry; it cannot stand in for a rendered word or readable ink.
+    private enum RenderedTextFailure: Error { case missingOrAmbiguousWords(String) }
+    private func renderedGlyphPixels(_ text: String, image: CGImage, region: CGRect) throws -> CGRect {
+        let roi = region.integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard !roi.isEmpty, let crop = image.cropping(to: roi) else { throw RenderedTextFailure.missingOrAmbiguousWords(text) }
+        let request = VNRecognizeTextRequest(); request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]; request.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: crop, options: [:]).perform([request])
+        let expected = text.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }
+        let matcher = try NSRegularExpression(pattern: "\\p{L}+")
+        var matches: [CGRect] = []
+        var observed: [String] = []
+        for observation in request.results ?? [] {
+            guard let candidate = observation.topCandidates(1).first else { continue }
+            observed.append(candidate.string)
+            let ranges = matcher.matches(in: candidate.string, range: NSRange(candidate.string.startIndex..., in: candidate.string))
+                .compactMap { Range($0.range, in: candidate.string) }
+            guard !expected.isEmpty, ranges.count >= expected.count else { continue }
+            for start in 0...(ranges.count - expected.count) {
+                let found = ranges[start..<(start + expected.count)].map { String(candidate.string[$0]) }
+                guard zip(found, expected).allSatisfy({ pair in pair.0.caseInsensitiveCompare(pair.1) == .orderedSame }) else { continue }
+                let span = ranges[start].lowerBound..<ranges[start + expected.count - 1].upperBound
+                if let box = try candidate.boundingBox(for: span) {
+                    let b = box.boundingBox
+                    matches.append(CGRect(x: roi.minX + b.minX * CGFloat(crop.width),
+                                          y: roi.minY + (1 - b.maxY) * CGFloat(crop.height),
+                                          width: b.width * CGFloat(crop.width), height: b.height * CGFloat(crop.height)))
+                }
+            }
+        }
+        print("ROUND3_RENDERED_WORDS expected=\(text) roi=\(roi) observed=\(observed) matches=\(matches)")
+        guard matches.count == 1, let glyphs = matches.first, !glyphs.isEmpty else {
+            throw RenderedTextFailure.missingOrAmbiguousWords(text)
+        }
+        return glyphs.insetBy(dx: -1, dy: -1).integral.intersection(roi)
+    }
+
+    @MainActor private func assertRenderedTextAA(_ element: XCUIElement, expected: String, state: String, image: CGImage? = nil) throws {
+        XCTAssertTrue(element.exists && !element.frame.isEmpty && app.frame.contains(element.frame), "Require the actual visible native control")
+        XCTAssertTrue(element.label.localizedCaseInsensitiveContains(expected))
+        let source = try image ?? XCTUnwrap(XCUIScreen.main.screenshot().image.cgImage)
+        let glyphs = try renderedGlyphPixels(expected, image: source, region: pixelFrame(element.frame, image: source))
+        let ratio = try textContrast(source, pixels: glyphs)
+        print("ROUND3_CONTROL_AA state=\(state) expected=\(expected) focused=\(ownsFocus(element)) actualAX=\(element.frame) glyphPixels=\(glyphs) ratio=\(ratio)")
+        XCTAssertGreaterThanOrEqual(ratio, 4.5, "The actual complete native action word must meet AA in its current focus state")
+    }
+    @MainActor private func assertTVDetailActionPixels() throws {
+        let primary = app.buttons["play"]
+        focusOnly(primary)
+        XCTAssertTrue(ownsFocus(primary))
+        record("Round3 audit detail secondary actions resting before AA")
+        let resting = try XCTUnwrap(XCUIScreen.main.screenshot().image.cgImage)
+        for (id, label) in [("startOver", "Play from start"), ("playOnDevice", "Play on TV"), ("watched", "Mark watched"), ("favorite", "Add favorite")] {
+            XCTAssertFalse(ownsFocus(app.buttons[id]), "Measure genuine resting secondary ink")
+            try assertRenderedTextAA(app.buttons[id], expected: label, state: id + " resting", image: resting)
+        }
+        let start = app.buttons["startOver"]
+        focusOnly(start)
+        XCTAssertTrue(ownsFocus(start))
+        record("Round3 audit detail start over native focused before AA")
+        try assertRenderedTextAA(start, expected: "Play from start", state: "start over focused")
+        focusOnly(primary)
+        XCTAssertTrue(ownsFocus(primary) && !ownsFocus(start))
+        record("Round3 audit detail start over resting after native focus before AA")
+        try assertRenderedTextAA(start, expected: "Play from start", state: "start over returned to rest")
+    }
+    @MainActor private func assertTVPersonMetadataPixels(_ card: XCUIElement, stationarySibling: XCUIElement, name: String, role: String) throws {
+        XCTAssertTrue(ownsFocus(card), "Native focus must establish the actual scrolled people row")
+        let window = app.windows.firstMatch.frame
+        let portraitBottom = min(card.frame.maxY, stationarySibling.frame.maxY)
+        // Native lift may enlarge the focused portrait. The stationary sibling
+        // gives the real row edge above the rendered metadata, excluding the
+        // hero title and its copy higher on screen.
+        let region = CGRect(x: max(window.minX, card.frame.minX), y: max(window.minY, portraitBottom),
+                            width: min(window.maxX, card.frame.maxX) - max(window.minX, card.frame.minX),
+                            height: window.maxY - max(window.minY, portraitBottom))
+        if region.isEmpty { record("Round3 audit people metadata region outside actual window") }
+        XCTAssertFalse(region.isEmpty, "A partially hittable portrait with metadata below the screen is not capture proof")
+        let image = try XCTUnwrap(XCUIScreen.main.screenshot().image.cgImage)
+        let pixels = pixelFrame(region, image: image)
+        let nameBox = try renderedGlyphPixels(name, image: image, region: pixels)
+        let roleBox = try renderedGlyphPixels(role, image: image, region: pixels)
+        XCTAssertTrue(pixels.contains(nameBox) && pixels.contains(roleBox), "The complete rendered person name and role must be inside the actual metadata viewport")
+        print("ROUND3_TV_PERSON_PIXELS name=\(name) role=\(role) portrait=\(card.frame) stationaryPortrait=\(stationarySibling.frame) metadataViewport=\(region) namePixels=\(nameBox) rolePixels=\(roleBox)")
+    }
+    private struct RetainedPillSample: Decodable {
+        let path: String
+        let sha256: String
+        let label: String
+        let pixels: [Double]
+    }
+    @MainActor private func assertRetainedInvisibleTVPillsRejected() throws {
+        let samples = try JSONDecoder().decode([RetainedPillSample].self, from: Data((try required("preFixTVPillSamplesJSON")).utf8))
+        XCTAssertEqual(samples.count, 5, "Four actual Detail actions and actual Search Clear are the retained negative controls")
+        for sample in samples {
+            let data = try Data(contentsOf: URL(fileURLWithPath: sample.path))
+            let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            XCTAssertEqual(sha, sample.sha256, "Authenticate the retained actual failure original")
+            let image = try XCTUnwrap(UIImage(data: data)?.cgImage)
+            XCTAssertEqual(image.width, 3840); XCTAssertEqual(image.height, 2160)
+            XCTAssertEqual(sample.pixels.count, 4)
+            let roi = CGRect(x: sample.pixels[0], y: sample.pixels[1], width: sample.pixels[2], height: sample.pixels[3])
+            XCTAssertTrue(!roi.isEmpty && CGRect(x: 0, y: 0, width: image.width, height: image.height).contains(roi))
+            do {
+                let glyphs = try renderedGlyphPixels(sample.label, image: image, region: roi)
+                let ratio = try textContrast(image, pixels: glyphs)
+                XCTAssertLessThan(ratio, 4.5, "The same matcher/sampler must reject actual retained unreadable white-pill ink")
+                print("ROUND3_PILL_NEGATIVE label=\(sample.label) sourceSHA=\(sha) glyphs=\(glyphs) ratio=\(ratio) rejected=\(ratio < 4.5)")
+            } catch RenderedTextFailure.missingOrAmbiguousWords {
+                // Missing genuine rendered words is the observed defect. File,
+                // decoding, Vision execution and sampling errors still throw.
+                print("ROUND3_PILL_NEGATIVE label=\(sample.label) sourceSHA=\(sha) rejected=true reason=completeRenderedWordsMissing")
+            }
         }
     }
     @MainActor private func assertRenderedWords(_ text: String, in element: XCUIElement) throws {

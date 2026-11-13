@@ -877,7 +877,7 @@ struct DetailView: View {
                 #if os(tvOS)
                 // Menu owns its native activation; a primitive Button style
                 // would replace its label/ink and leave an empty filled target.
-                .buttonStyle(.bordered).tint(.white)
+                .buttonStyle(.bordered).tint(Optional<Color>.none)
                 #else
                 .catalogActionStyle()
                 #endif

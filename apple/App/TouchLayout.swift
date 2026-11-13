@@ -104,7 +104,7 @@ private struct TelevisionProminentAction: View {
             TelevisionActionInk {
                 configuration.label.labelStyle(TelevisionPrimaryLabelStyle())
             }
-        }.buttonStyle(.bordered).tint(.white)
+        }.buttonStyle(.bordered).tint(Optional<Color>.none)
     }
 }
 
@@ -112,7 +112,7 @@ private struct TelevisionSecondaryActionStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button(role: configuration.role) { configuration.trigger() } label: {
             TelevisionActionInk { configuration.label }
-        }.buttonStyle(.bordered).tint(.white)
+        }.buttonStyle(.bordered).tint(Optional<Color>.none)
     }
 }
 #endif
