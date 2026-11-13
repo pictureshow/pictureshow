@@ -102,6 +102,10 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         into("live-vectors")
     }
     from(rootProject.file("spec/vectors")) {
+        include("live-presentation.json", "player-overlay-layout.json")
+        into("android-native-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
         include(offlineSuites)
         into("offline-vectors")
     }
