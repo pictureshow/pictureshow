@@ -70,7 +70,7 @@ internal fun SyncPlayCoordinator(
             }
         }
         remote.syncConnection = sync::socket
-        sync.socket(remote.socketConnected)
+        sync.socket(remote.syncSocketReady)
         val observer = LifecycleEventObserver { _, event ->
             if (BuildConfig.DEBUG) {
                 android.util.Log.d(

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-socket-readiness",
+  "cases": [
+    {
+      "id": "transport-open-is-not-session-ready",
+      "steps": [
+        {
+          "action": "open",
+          "ready": false
+        }
+      ]
+    },
+    {
+      "id": "server-registration",
+      "steps": [
+        {
+          "action": "open",
+          "ready": false
+        },
+        {
+          "action": "ready",
+          "ready": true
+        },
+        {
+          "action": "ready",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "id": "invalid-registration",
+      "steps": [
+        {
+          "action": "open",
+          "ready": false
+        },
+        {
+          "action": "invalid",
+          "ready": false
+        },
+        {
+          "action": "ready",
+          "ready": true
+        }
+      ]
+    },
+    {
+      "id": "closed-session",
+      "steps": [
+        {
+          "action": "ready",
+          "ready": true
+        },
+        {
+          "action": "close",
+          "ready": false
+        }
+      ]
+    },
+    {
+      "id": "new-session-needs-new-registration",
+      "steps": [
+        {
+          "action": "ready",
+          "ready": true
+        },
+        {
+          "action": "renew",
+          "ready": false
+        },
+        {
+          "action": "old-ready",
+          "ready": false
+        },
+        {
+          "action": "ready",
+          "ready": true
+        }
+      ]
+    }
+  ]
+}

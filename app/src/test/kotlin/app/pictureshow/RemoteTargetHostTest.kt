@@ -21,6 +21,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 
 class RemoteTargetHostTest {
@@ -552,6 +556,43 @@ class RemoteTargetHostTest {
         assertEquals(30_000, RemoteTargetHost.backoffMs(40))
     }
 
+    @Test fun syncJoinWaitsForTheCurrentSocketsServerRegistration() = runTest {
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val vectors = roots.map { java.io.File(it, "spec/vectors/sync-socket-readiness.json") }.first { it.isFile }
+        val cases = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        for (element in cases) {
+            val case = element.jsonObject
+            val rig = Rig(this)
+            val signals = mutableListOf<Boolean>()
+            rig.host.syncConnection = { signals += it }
+            rig.online(this)
+            val original = rig.sockets.single()
+            for (step in case.getValue("steps").jsonArray) {
+                val row = step.jsonObject
+                val action = row.getValue("action").jsonPrimitive.content
+                when (action) {
+                    "open" -> Unit // Rig opens transport, without inventing a server message.
+                    "renew" -> {
+                        rig.host.renewSyncSocket()
+                        runCurrent()
+                        rig.sockets.last().events.opened()
+                    }
+                    "close" -> rig.sockets.last().events.closed()
+                    "ready" -> rig.sockets.last().events.message("""{"MessageType":"ForceKeepAlive","Data":60}""")
+                    "invalid" -> rig.sockets.last().events.message("""{"MessageType":"ForceKeepAlive","Data":0}""")
+                    "old-ready" -> original.events.message("""{"MessageType":"ForceKeepAlive","Data":60}""")
+                    else -> error("Unknown readiness action $action")
+                }
+                runCurrent()
+                val expected = row.getValue("ready").jsonPrimitive.boolean
+                assertEquals(expected, rig.host.syncSocketReady, case.getValue("id").jsonPrimitive.content + ":" + action)
+                assertEquals(expected, signals.lastOrNull() == true, "Only the registered current socket can release Join")
+            }
+            rig.host.setForeground(false)
+            runCurrent()
+        }
+    }
+
     @Test fun lateCloseFromTheRenewedSocketCannotDisconnectItsReplacement() = runTest {
         val rig = Rig(this)
         val connections = mutableListOf<Boolean>()
@@ -571,6 +612,13 @@ class RemoteTargetHostTest {
         runCurrent()
         rig.watching()
         assertTrue(rig.host.socketConnected)
+        assertFalse(rig.host.syncSocketReady)
+        val heartbeat = """{"MessageType":"ForceKeepAlive","Data":60}"""
+        replacement.events.message(heartbeat)
+        runCurrent()
+        assertTrue(rig.host.syncSocketReady)
+        assertEquals(listOf(heartbeat), newMessages)
+        newMessages.clear()
         assertEquals(true, connections.last())
         val before = connections.toList()
         oldSocket.events.closed()

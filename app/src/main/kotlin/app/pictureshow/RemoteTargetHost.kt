@@ -152,6 +152,10 @@ internal class RemoteTargetHost(
     var syncConnection: (Boolean) -> Unit = {}
     var socketConnected = false
         private set
+
+    /** Server session registration, independently of the transport opening. */
+    var syncSocketReady = false
+        private set
     private var syncSocket = false
     fun requireSyncSocket(value: Boolean) {
         syncSocket = value
@@ -226,6 +230,7 @@ internal class RemoteTargetHost(
         socket?.close()
         socket = null
         socketConnected = false
+        syncSocketReady = false
         syncConnection(false)
         state = state?.let { reduceRemoteReceive(it, RemoteReceiveEvent("disconnect")) }
     }
@@ -312,7 +317,6 @@ internal class RemoteTargetHost(
                             if (!live) return@launch
                             failures = 0
                             socketConnected = true
-                            syncConnection(true)
                             trace("remote socket-open")
                             beat(DEFAULT_KEEPALIVE_SECONDS)
                             ticker = scope.launch {
@@ -333,7 +337,15 @@ internal class RemoteTargetHost(
                             if (!live) return@launch
                             groupReceiver(text)
                             val inbound = parseRemoteMessage(text)
-                            inbound.keepAliveSeconds?.let(::beat)
+                            inbound.keepAliveSeconds?.let { seconds ->
+                                beat(seconds)
+                                // Jellyfin sends this only after attaching the socket to its session controller.
+                                if (!syncSocketReady) {
+                                    syncSocketReady = true
+                                    trace("remote socket-session-ready")
+                                    syncConnection(true)
+                                }
+                            }
                             receive(inbound)
                         }
                     }
@@ -342,6 +354,7 @@ internal class RemoteTargetHost(
                             if (!live) return@launch
                             live = false
                             socketConnected = false
+                            syncSocketReady = false
                             syncConnection(false)
                             done.complete(Unit)
                         }
