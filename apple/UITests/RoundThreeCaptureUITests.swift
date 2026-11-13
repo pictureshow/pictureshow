@@ -508,7 +508,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ids.count, 3)
         func rootHeadingVisible() -> Bool {
             app.navigationBars.allElementsBoundByIndex.contains { bar in
-                let title = bar.staticTexts["Libraries"]
+                let title = bar.staticTexts["Libraries"].firstMatch
                 return bar.exists && !bar.frame.isEmpty && title.exists && !title.frame.isEmpty
                     && app.windows.firstMatch.frame.contains(title.frame)
             }
@@ -581,7 +581,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         case "Libraries":
             guard let ids = config["libraryIDs"]?.split(separator: ","), ids.count >= 3 else { return false }
             let heading = app.navigationBars.allElementsBoundByIndex.contains { bar in
-                let title = bar.staticTexts["Libraries"]
+                let title = bar.staticTexts["Libraries"].firstMatch
                 return visible(bar) && visible(title)
             }
             return heading && !app.staticTexts["Continue watching"].exists && ids.allSatisfy { app.buttons["item-" + $0].firstMatch.exists }
