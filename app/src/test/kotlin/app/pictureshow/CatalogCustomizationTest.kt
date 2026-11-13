@@ -142,8 +142,8 @@ class CatalogCustomizationTest {
             )
             @Suppress("DEPRECATION")
             assertTrue(
-                window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN != 0,
-                "The dialog lays out edge-to-edge and consumes its own system-bar insets"
+                window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LAYOUT_STABLE != 0,
+                "API30 WindowCompat edge-to-edge setup retains stable layout while the shell consumes insets"
             )
         }
         field.performClick().performTextInput("Person")
