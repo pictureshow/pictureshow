@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     header.dmSize = sizeof(header);
     if (!validSavedModeHeader(header)) return 1;
     int passed = 0;
-    for (int scenario = 0; scenario < 4; ++scenario) {
+    for (int scenario = 0; scenario < 5; ++scenario) {
         auto invalid = saved;
         size_t bytes = sizeof(invalid);
         const char *name;
@@ -28,12 +28,14 @@ int main(int argc, char **argv) {
             case 0: name = "public-prefix-too-short"; invalid.dmSize = static_cast<WORD>(minimumPublicModeBytes - 1); break;
             case 1: name = "public-prefix-over-capacity"; invalid.dmSize = sizeof(invalid) + 1; break;
             case 2: name = "unstored-private-data"; invalid.dmDriverExtra = 1; break;
-            default: name = "truncated-receipt"; bytes -= 1; break;
+            case 3: name = "truncated-receipt"; bytes -= 1; break;
+            default: name = "overlong-receipt"; break;
         }
         std::string path = std::string(argv[2]) + "-" + name + ".bin";
         {
             std::ofstream output(path, std::ios::binary | std::ios::trunc);
             if (!output.write(reinterpret_cast<const char *>(&invalid), bytes)) return 1;
+            if (scenario == 4 && !output.put('\0')) return 1;
         }
         char command[] = "display-helper";
         char restoreOption[] = "--restore";

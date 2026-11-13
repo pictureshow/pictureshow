@@ -113,15 +113,17 @@ int main(int argc, char **argv) {
         input.read(reinterpret_cast<char *>(&saved), sizeof(saved));
         const auto bytesRead = input.gcount();
         const bool complete = static_cast<bool>(input);
+        const bool exactLength = complete && input.peek() == std::char_traits<char>::eof() && !input.bad();
         std::cerr << "{\"stage\":\"restore-read-result\",\"opened\":" << (opened ? "true" : "false")
-                  << ",\"complete\":" << (complete ? "true" : "false") << ",\"bytesRead\":" << bytesRead
+                  << ",\"complete\":" << (complete ? "true" : "false") << ",\"exactLength\":" << (exactLength ? "true" : "false") << ",\"bytesRead\":" << bytesRead
                   << ",\"expectedBytes\":" << sizeof(saved) << ",\"dmSize\":" << saved.dmSize
                   << ",\"dmDriverExtra\":" << saved.dmDriverExtra
                   << ",\"minimumPublicBytes\":" << minimumPublicModeBytes
                   << ",\"publicHeaderValid\":" << (validSavedModeHeader(saved) ? "true" : "false") << "}" << std::endl;
-        if (!complete || !validSavedModeHeader(saved)) {
+        if (!exactLength || !validSavedModeHeader(saved)) {
             std::cout << "{\"restored\":false,\"stage\":\"read-saved-mode\",\"exitCode\":7,\"opened\":" << (opened ? "true" : "false")
                       << ",\"bytesRead\":" << bytesRead << ",\"expectedBytes\":" << sizeof(saved)
+                      << ",\"exactLength\":" << (exactLength ? "true" : "false")
                       << ",\"dmSize\":" << saved.dmSize << ",\"dmDriverExtra\":" << saved.dmDriverExtra
                       << ",\"minimumPublicBytes\":" << minimumPublicModeBytes
                       << ",\"publicHeaderValid\":" << (validSavedModeHeader(saved) ? "true" : "false") << "}" << std::endl;
