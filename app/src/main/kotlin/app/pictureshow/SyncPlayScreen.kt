@@ -707,7 +707,7 @@ internal fun SyncPlayerStatusChip(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             if (tv) androidx.tv.material3.Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
             else Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (tv) {
                     androidx.tv.material3.Text(
                         status, style = TvMaterialTheme.typography.bodyMedium,
@@ -719,11 +719,11 @@ internal fun SyncPlayerStatusChip(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (tv) {
-                        androidx.tv.material3.Text(name, Modifier.weight(1f).testTag("sync:chip-name"),
+                        androidx.tv.material3.Text(name, Modifier.weight(1f, fill = false).testTag("sync:chip-name"),
                             style = TvMaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         androidx.tv.material3.Text(count, Modifier.testTag("sync:chip-count"), style = TvMaterialTheme.typography.labelSmall)
                     } else {
-                        Text(name, Modifier.weight(1f).testTag("sync:chip-name"), style = MaterialTheme.typography.labelSmall,
+                        Text(name, Modifier.weight(1f, fill = false).testTag("sync:chip-name"), style = MaterialTheme.typography.labelSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(count, Modifier.testTag("sync:chip-count"), style = MaterialTheme.typography.labelSmall)
                     }
