@@ -302,3 +302,39 @@ Simulator accessibility trees establish native AX labels, values, actions and re
 ### Leg132 design-review correction round
 
 The director blocked the first visual candidate despite its passing functional gate. The correction uses native tvOS card lift with stationary titles, white unfocused action/selected-choice ink and checkmark selection, one near-white native focus treatment, adaptive native iPad tabs/sidebar, one background token on Forms/sheets, unbroken responsive sort labels, matching destination rows and title-bearing AVKit next actions. Track chooser labels now consume the same Android-derived core policy with58 shared vectors on Kotlin, Swift and TypeScript; stream indexes remain internal. Transport status uses viewer words and technical method names stay in Playback info. Actual screenshot-pixel regression assertions cover resting contrast and focused primary/secondary platters. Final runtime outcomes, round2 captures and any unqualified widths/input paths are recorded in the private leg result; a green test gate alone does not grant design approval.
+
+
+### Main-merge pending contracts (leg132 recovery, 2026-11-12)
+
+The merged main branch adds **864 cases in 15 suites** whose Apple production ports and native
+integration are still owed. These were never part of the 1,500 previously ported cases. The strict
+runner validates every active and pending envelope, global ID and exact suite/operation contract;
+unknown IDs or mismatched operations still fail. It executes all **1,500 active cases**, including
+all **58 track-label cases**, and prints the active/pending inventory separately. Fifteen named
+`PendingSpecVectorTests` use `XCTSkip` with the exact suite, count and reason. A skipped suite is
+an explicit missing port, not a passing policy test or a claim of launch parity.
+
+| Explicitly pending suite | Cases | Work owed |
+|---|---:|---|
+| frame-rate-match | 6 | Display-mode policy and native display qualification are not ported to Apple. |
+| offline-budget | 40 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-fmp4 | 43 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-job | 283 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-manifest | 98 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-next | 14 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-outbox | 83 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-plan | 45 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-reconnect | 16 | The merged offline policy and its Apple runtime integration are not ported. |
+| offline-resume | 78 | The merged offline policy and its Apple runtime integration are not ported. |
+| playback-settings-layout | 7 | These seven measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them. |
+| playback-settings | 68 | The merged playback tuning, network and preference policies are not ported to Apple. |
+| playback-start | 4 | The merged start-origin and rewind policy is not ported to Apple. |
+| player-quality | 14 | The merged per-viewing quality selection policy is not ported to Apple. |
+| settings-presentation | 65 | The merged advanced playback setting labels and consequences are not ported to Apple. |
+
+The 700 offline cases cover durable jobs, budget/resume/manifest/outbox, plans/reconnection/next
+and fragmented-MP4 indexing. The other 164 cover advanced playback preferences, quality and setting
+presentation, frame-rate matching, start provenance and seven measured layout contracts. The layout
+cases require native UI evidence; a core-generated expected answer would not establish their geometry.
+TypeScript's merged main runner exposes the same new suites as individual `it.todo` entries.
+The separate exact pending-ID manifest pins this inventory; new cases require explicit adapter review.

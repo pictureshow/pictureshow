@@ -157,44 +157,102 @@ import PictureshowCore
     func release() {
         select(nil); cache = [:]; cacheOrder = []; cachedTextBytes = 0
     }
-    nonisolated static func fetchBounded(_ url: URL, configuration: URLSessionConfiguration = .ephemeral) async throws -> Data {
+    nonisolated static func fetchBounded(_ url: URL, configuration: URLSessionConfiguration = .ephemeral,
+                                        phase: @escaping @Sendable (String) -> Void = { _ in }) async throws -> Data {
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 35
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-        let redirects = SubtitleOrigin(origin: url)
-        let (bytes, response) = try await session.bytes(for: URLRequest(url: url), delegate: redirects)
-        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
-              let finalURL = response.url, ServerURLs.isSameOrigin(url, finalURL) else { throw SubtitleFailure.delivery }
-        guard response.expectedContentLength <= Int64(TextSubtitles.maximumBytes) else { throw TextSubtitleError.tooLarge }
-        var data = Data()
-        // AsyncBytes still accounts for every byte, but buffer appends and explicit
-        // cancellation checks have bounded chunk granularity instead of per-byte cost.
-        let chunkSize = 16 * 1024
-        var chunk: [UInt8] = []
-        chunk.reserveCapacity(chunkSize)
-        var received = 0
-        try Task.checkCancellation()
-        for try await byte in bytes {
-            guard received < TextSubtitles.maximumBytes else { throw TextSubtitleError.tooLarge }
-            received += 1
-            chunk.append(byte)
-            if chunk.count == chunkSize {
-                try Task.checkCancellation()
-                data.append(contentsOf: chunk)
-                chunk.removeAll(keepingCapacity: true)
-            }
-        }
-        try Task.checkCancellation()
-        data.append(contentsOf: chunk)
+        let download = SubtitleDownload(origin: url, phase: phase)
+        let data = try await download.data(configuration: configuration)
+        phase("fetch-finished-nonisolated")
         return data
     }
 }
 
 private enum SubtitleFailure: Error { case delivery }
-private final class SubtitleOrigin: NSObject, URLSessionTaskDelegate {
-    let origin: URL
-    init(origin: URL) { self.origin = origin }
+
+/// URLSession already delivers bounded chunks. Accumulate them on its serial
+/// delegate queue instead of scheduling an AsyncBytes consumer before parsing.
+/// The lock arbitrates completion/cancellation; it never encloses a callback or
+/// continuation resume. One selection owns one session and at most 16 MiB.
+private final class SubtitleDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let origin: URL
+    private let phase: @Sendable (String) -> Void
+    private let lock = NSLock()
+    private var session: URLSession?
+    private var continuation: CheckedContinuation<Data, Error>?
+    private var buffer = Data()
+    private var finished = false
+
+    init(origin: URL, phase: @escaping @Sendable (String) -> Void) {
+        self.origin = origin; self.phase = phase
+    }
+    func data(configuration: URLSessionConfiguration) async throws -> Data {
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                // Cancellation can win before continuation registration.
+                guard !finished else {
+                    lock.unlock(); continuation.resume(throwing: CancellationError()); return
+                }
+                self.continuation = continuation
+                let queue = OperationQueue()
+                queue.maxConcurrentOperationCount = 1
+                queue.qualityOfService = .userInitiated
+                let session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)
+                self.session = session
+                let task = session.dataTask(with: origin)
+                lock.unlock()
+                task.resume()
+            }
+        } onCancel: {
+            self.finish(error: CancellationError())
+        }
+    }
+    private func finish(error: Error? = nil) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        let continuation = self.continuation, session = self.session
+        let result: Result<Data, Error> = error.map { .failure($0) } ?? .success(buffer)
+        self.continuation = nil; self.session = nil; buffer = Data()
+        lock.unlock()
+        // Deliver first: session cleanup must not sit between received bytes
+        // and the selected caption's fetch/parse continuation.
+        if let continuation {
+            phase("fetch-continuation-resuming")
+            continuation.resume(with: result)
+        }
+        session?.invalidateAndCancel()
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        lock.lock(); let alreadyFinished = finished; lock.unlock()
+        guard !alreadyFinished else { completionHandler(.cancel); return }
+        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
+              let finalURL = response.url, ServerURLs.isSameOrigin(origin, finalURL) else {
+            finish(error: SubtitleFailure.delivery); completionHandler(.cancel); return
+        }
+        guard response.expectedContentLength <= Int64(TextSubtitles.maximumBytes) else {
+            finish(error: TextSubtitleError.tooLarge); completionHandler(.cancel); return
+        }
+        phase("response-accepted")
+        completionHandler(.allow)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        // Subtraction cannot overflow, and no over-limit chunk enters the buffer.
+        guard data.count <= TextSubtitles.maximumBytes - buffer.count else {
+            lock.unlock(); finish(error: TextSubtitleError.tooLarge); return
+        }
+        buffer.append(data)
+        lock.unlock()
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        phase(error == nil ? "body-complete" : "body-failed")
+        finish(error: error)
+    }
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         completionHandler(request.url.map { ServerURLs.isSameOrigin(origin, $0) } == true ? request : nil)

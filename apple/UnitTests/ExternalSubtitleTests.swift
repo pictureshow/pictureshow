@@ -17,7 +17,7 @@ import PictureshowCore
 /// Real URLSession transport, isolated to an in-process fixture. Held responses are
 /// cancelled by URLSession; no public host or actual network connection is used.
 private final class ExternalSubtitleHTTP: URLProtocol {
-    enum Delivery { case valid, http500, malformed, held, declaredOversize, streamedOversize, streamedAtLimit }
+    enum Delivery { case valid, http500, malformed, held, declaredOversize, streamedOversize, streamedAtLimit, chunkedOversize, chunkedAtLimit }
     struct Recorded { let url: URL; let body: [String: Any]; var path: String { url.path } }
     private static let lock = NSLock()
     private static var delivery: Delivery = .valid
@@ -154,6 +154,8 @@ private final class ExternalSubtitleHTTP: URLProtocol {
             case .declaredOversize: respond(status: 200, data: Data(), headers: ["Content-Length": String(TextSubtitles.maximumBytes + 1)])
             case .streamedOversize: respond(status: 200, data: Data(repeating: 32, count: TextSubtitles.maximumBytes + 1))
             case .streamedAtLimit: respond(status: 200, data: Data(repeating: 32, count: TextSubtitles.maximumBytes))
+            case .chunkedOversize: respondChunks(byteCount: TextSubtitles.maximumBytes + 1)
+            case .chunkedAtLimit: respondChunks(byteCount: TextSubtitles.maximumBytes)
             case .valid: respond(status: 200, data: Self.caption)
             case .held: break
             }
@@ -171,6 +173,18 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         if !data.isEmpty { client?.urlProtocol(self, didLoad: data) }
         client?.urlProtocolDidFinishLoading(self)
     }
+    private func respondChunks(byteCount: Int) {
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200,
+                                                             httpVersion: "HTTP/1.1", headerFields: [:])!, cacheStoragePolicy: .notAllowed)
+        let chunk = Data(repeating: 32, count: 16 * 1024)
+        var remaining = byteCount
+        while remaining > 0 {
+            let count = min(remaining, chunk.count)
+            client?.urlProtocol(self, didLoad: chunk.prefix(count))
+            remaining -= count
+        }
+        client?.urlProtocolDidFinishLoading(self)
+    }
     override func stopLoading() {
         Self.lock.lock(); defer { Self.lock.unlock() }
         stopped = true
@@ -180,7 +194,7 @@ private final class ExternalSubtitleHTTP: URLProtocol {
 }
 
 /// A bounded cold-load trace records phases, never caption contents or request URLs.
-private final class SubtitlePhaseTrace {
+private final class SubtitlePhaseTrace: @unchecked Sendable {
     private let lock = NSLock()
     private let origin = DispatchTime.now().uptimeNanoseconds
     private var events: [String] = []
@@ -916,12 +930,55 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual(player.replacements, 0)
     }
 
+    func testColdHeldFetchCompletesWithinTwoSecondsWithoutAPlayer() async throws {
+        ExternalSubtitleHTTP.reset(.held)
+        let trace = SubtitlePhaseTrace()
+        var didFinish: (() -> Void)?
+        let url = asset().url
+        let fetch = Task {
+            let data = try await ExternalTextSubtitles.fetchBounded(url, configuration: ExternalSubtitleHTTP.configuration(),
+                                                                 phase: { trace.record($0) })
+            trace.record("fetch-return-to-test-actor")
+            didFinish?()
+            return data
+        }
+        defer { fetch.cancel() }
+        try await eventually("Cold transport request was not held") { ExternalSubtitleHTTP.heldCaptionCount == 1 }
+        let (received, markReceived) = receipt("A released cold caption must complete without a player or clock task")
+        didFinish = markReceived
+        trace.record("release-held-response")
+        XCTAssertEqual(ExternalSubtitleHTTP.completeHeldCaptions(), 1)
+        let result = await XCTWaiter.fulfillment(of: [received], timeout: 2)
+        XCTAssertEqual(result, .completed, trace.description)
+        guard result == .completed else { return }
+        let data = try await fetch.value
+        XCTAssertEqual(data, ExternalSubtitleHTTP.caption)
+        XCTAssertEqual(captionRequests.count, 1)
+        print("COLD_CAPTION_FETCH phases=[\(trace.description)]")
+    }
+
+    func testCancelledBeforeColdFetchStartsDoesNotRequestAnyBytes() async throws {
+        ExternalSubtitleHTTP.reset(.held)
+        let url = asset().url
+        let fetch = Task { try await ExternalTextSubtitles.fetchBounded(url, configuration: ExternalSubtitleHTTP.configuration()) }
+        fetch.cancel()
+        do {
+            _ = try await fetch.value
+            XCTFail("A cancelled caption request cannot succeed")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertTrue(captionRequests.isEmpty)
+        XCTAssertEqual(ExternalSubtitleHTTP.heldCaptionCount, 0)
+    }
+
     func testColdSelectedCuesPublishWhilePausedWithoutClockMovementOrResume() async throws {
         ExternalSubtitleHTTP.reset(.held)
         let trace = SubtitlePhaseTrace(), clock = SubtitleRetryClock()
         let loader = ExternalTextSubtitles(fetch: { url in
             trace.record("fetch-enter")
-            let data = try await ExternalTextSubtitles.fetchBounded(url, configuration: ExternalSubtitleHTTP.configuration())
+            let data = try await ExternalTextSubtitles.fetchBounded(url, configuration: ExternalSubtitleHTTP.configuration(),
+                                                                 phase: { trace.record($0) })
             trace.record("fetch-return-to-loader-actor")
             return data
         }, sleep: { try await clock.sleep($0) })
@@ -1096,6 +1153,23 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual(data.count, TextSubtitles.maximumBytes)
         XCTAssertEqual(data.first, 32); XCTAssertEqual(data.last, 32)
         XCTAssertEqual(captionRequests.count, 1)
+    }
+
+    func testChunkedCaptionDeliveryEnforcesTheSameExact16MiBBound() async throws {
+        for overflow in [false, true] {
+            ExternalSubtitleHTTP.reset(overflow ? .chunkedOversize : .chunkedAtLimit)
+            do {
+                let data = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
+                XCTAssertFalse(overflow, "A final over-limit chunk must be rejected")
+                XCTAssertEqual(data.count, TextSubtitles.maximumBytes)
+                XCTAssertEqual(data.first, 32); XCTAssertEqual(data.last, 32)
+            } catch {
+                XCTAssertTrue(overflow, "Chunks totaling exactly the limit must succeed")
+                XCTAssertEqual(error as? TextSubtitleError, .tooLarge)
+                XCTAssertFalse(Task.isCancelled)
+            }
+            XCTAssertEqual(captionRequests.count, 1)
+        }
     }
 
     func testUnannounced16MiBStreamOverflowIsIsolatedToOptionalText() async throws {

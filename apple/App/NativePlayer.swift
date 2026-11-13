@@ -380,7 +380,9 @@ struct PlayerOptions: View {
                 #endif
             }
             .minimumTouchListRows()
+            #if os(iOS)
             .scrollContentBackground(.hidden)
+            #endif
             .background(Theme.background)
             .accessibilityIdentifier("playerOptionsList")
             #if os(tvOS)

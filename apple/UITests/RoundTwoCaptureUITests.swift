@@ -148,16 +148,49 @@ final class RoundTwoCaptureUITests: XCTestCase {
         openSection("Settings", identifier: "openSettings")
         XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10))
         record("Round2 Settings native root")
-        activate(node("maxBitrate"))
+        let bitrate = node("maxBitrate")
+        #if os(iOS)
+        assertPickerDefault(bitrate, expected: "Auto (200 Mbps)")
+        #endif
+        activate(bitrate)
         XCTAssertTrue(app.staticTexts["Auto (200 Mbps)"].waitForExistence(timeout: 10) || app.buttons["Auto (200 Mbps)"].exists)
         record("Round2 Settings bitrate native picker")
+        #if os(iOS)
+        selectCurrentPickerValue("Auto (200 Mbps)")
+        XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10), "Closing the native picker menu keeps Settings open")
+        assertPickerDefault(bitrate, expected: "Auto (200 Mbps)")
+        #else
         back()
+        #endif
         let subtitle = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        #if os(iOS)
+        assertPickerDefault(subtitle, expected: "System")
+        #endif
         activate(subtitle)
         XCTAssertTrue(app.staticTexts["Large"].waitForExistence(timeout: 10) || app.buttons["Large"].exists)
         record("Round2 Settings subtitle size native picker")
+        #if os(iOS)
+        selectCurrentPickerValue("System")
+        XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10), "Closing the native picker menu keeps Settings open")
+        assertPickerDefault(subtitle, expected: "System")
+        #else
         back()
+        #endif
     }
+
+    #if os(iOS)
+    @MainActor private func assertPickerDefault(_ picker: XCUIElement, expected: String) {
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        let value = picker.value as? String
+        XCTAssertTrue(value == expected || picker.label.hasSuffix(expected) || picker.staticTexts[expected].exists,
+                      "Fresh-install picker must display its actual default before opening: expected \(expected), value \(value ?? "<none>"), label \(picker.label)")
+    }
+    @MainActor private func selectCurrentPickerValue(_ value: String) {
+        let button = app.buttons[value].firstMatch
+        if button.waitForExistence(timeout: 2) { activate(button) }
+        else { activate(app.staticTexts[value].firstMatch) }
+    }
+    #endif
 
     private func required(_ key: String) throws -> String { try XCTUnwrap(config[key], "Missing private pilot key: " + key) }
     private func node(_ id: String) -> XCUIElement { app.descendants(matching: .any).matching(identifier: id).firstMatch }

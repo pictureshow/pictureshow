@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 class PlaybackTrackUnicodeLabelsTest {
     @Test
     fun metadataPhrasesKeepThePlatformsOriginalRegexCaseFolding() {
-        val names = Class.forName("app.pictureshow.PlaybackTrackLabelsKt")
+        val names = Class.forName("app.pictureshow.core.playback.PlaybackTrackLabelsKt")
             .getDeclaredMethod("names", String::class.java, String::class.java)
             .apply { isAccessible = true }
         val cases = listOf(
@@ -41,7 +41,7 @@ class PlaybackTrackUnicodeLabelsTest {
 
     @Test
     fun negatedMetadataPrefixesKeepThePlatformsWordBoundarySemantics() {
-        val names = Class.forName("app.pictureshow.PlaybackTrackLabelsKt")
+        val names = Class.forName("app.pictureshow.core.playback.PlaybackTrackLabelsKt")
             .getDeclaredMethod("names", String::class.java, String::class.java)
             .apply { isAccessible = true }
         listOf(
@@ -56,7 +56,7 @@ class PlaybackTrackUnicodeLabelsTest {
 
     @Test
     fun categoryBoundariesKeepTheOriginalCaseInsensitiveSetSemantics() {
-        val names = Class.forName("app.pictureshow.PlaybackTrackLabelsKt")
+        val names = Class.forName("app.pictureshow.core.playback.PlaybackTrackLabelsKt")
             .getDeclaredMethod("names", String::class.java, String::class.java)
             .apply { isAccessible = true }
         // On Android, this combining mark folds to a letter and belongs to (?i)\p{L}.

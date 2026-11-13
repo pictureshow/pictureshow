@@ -365,11 +365,12 @@ jobs:
               path = Path("apple-test-results") / filename
               if not path.exists():
                   continue
-              matches = re.findall(r"Executed\s+(\d+)\s+tests?,\s+with\s+(\d+)\s+failures?", path.read_text(errors="replace"))
+              matches = re.findall(r"Executed\s+(\d+)\s+tests?,\s+with\s+(?:(\d+)\s+tests?\s+skipped\s+and\s+)?(\d+)\s+failures?", path.read_text(errors="replace"))
               if matches:
-                  tests, failures = map(int, matches[-1])
+                  tests, skipped, failures = (int(value or 0) for value in matches[-1])
                   totals["tests"] += tests
                   totals["failures"] += failures
+                  totals["skipped"] += skipped
 
           Path("apple-test-results/test-counts.json").write_text(json.dumps(totals, indent=2) + "\n")
           print(json.dumps(totals, sort_keys=True))

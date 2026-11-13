@@ -5,9 +5,24 @@ import XCTest
 final class CatchupPolicyTests: XCTestCase {
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
         XCTAssertEqual(SpecCaseManifest.contracts.count, 1500)
+        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 864)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 15)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 864)
+        XCTAssertTrue(Set(SpecCaseManifest.contracts.keys).isDisjoint(with: Set(PendingSpecCaseManifest.contracts.keys)))
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validate(id: "offline-job.invented", suite: "offline-job", operation: "job"))
+        let pendingID = try XCTUnwrap(PendingSpecCaseManifest.contracts.keys.first)
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validate(id: pendingID, suite: "unknown-suite", operation: "unknown-operation"))
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: "music-session.invented",suite: "music-session",operation: "session"))
         let id = try XCTUnwrap(SpecCaseManifest.contracts.keys.first)
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: id,suite: "unknown-suite",operation: "unknown-operation"))
+    }
+    func testPendingContractsRejectMalformedEnvelopes() throws {
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["input": [:]], suite: "playback-settings"))
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["input": [:], "expected": true, "steps": []], suite: "playback-start"))
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["state": [:], "steps": []], suite: "offline-job"))
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["state": [:], "steps": [["event": [:]]]], suite: "offline-job"))
+        XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["operation": "budget", "state": NSNull(), "steps": [["event": [:], "expected": ["ok": true]]]], suite: "offline-budget"))
+        XCTAssertNoThrow(try PendingSpecCaseManifest.validateEnvelope(["operation": "outbox", "state": NSNull(), "steps": [["event": [:], "expected": ["ok": true]]]], suite: "offline-outbox"))
     }
     func testSeasonRetentionRequiresTheSameMountedCard() {
         XCTAssertTrue(DetailAvailability.retainsSeasonFocus(selectedSection: "seasons", restored: true, semanticsRevealed: true, selectedId: "specials", seasonIds: ["specials", "s1"]))

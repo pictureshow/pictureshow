@@ -98,7 +98,9 @@ private struct SettingsForm: View {
                 NavigationLink("Troubleshooting · This \(deviceNoun)", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics").focused($focused, equals: "diagnostics")
             }
         }
+        #if os(iOS)
         .scrollContentBackground(.hidden)
+        #endif
         .background(Theme.background.ignoresSafeArea())
         .minimumTouchListRows()
         .background { GeometryReader { geometry in Color.clear.onAppear { windowSize = geometry.size }.onChange(of: geometry.size) { _, size in windowSize = size } } }
