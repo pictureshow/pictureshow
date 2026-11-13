@@ -6,16 +6,20 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -99,12 +103,63 @@ class LiveRound3ClosureTest {
                 show.copy(channelId = "c0")
         }
         val vm = LiveTvViewModel(account, fake, now = { 0L })
-        compose.setContent { TouchTheme { Column(Modifier.width(712.dp).height(384.dp)) { LiveTvScreen(vm, account, false, {}, {}, {}) } } }
+        var toolbarInset = 0.dp
+        compose.setContent {
+            TouchTheme {
+                val density = LocalDensity.current
+                toolbarInset = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
+                Column(Modifier.width(712.dp).height(384.dp)) { LiveTvScreen(vm, account, false, {}, {}, {}) }
+            }
+        }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        val toolbar = compose.onNodeWithTag("live:touch-app-bar").getBoundsInRoot()
+        assertEquals(48.dp, toolbar.bottom - toolbar.top - toolbarInset)
+        val controls = compose.onNodeWithTag("live:compact-guide-controls").getBoundsInRoot()
+        assertEquals(48.dp, controls.bottom - controls.top)
         val ruler = compose.onNodeWithTag("live:guide-ruler", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(24.dp, ruler.bottom - ruler.top)
         assertTrue(ruler.bottom <= 152.dp, "Guide chrome leaves three rows on a short screen: ruler bottom ${ruler.bottom}")
         val third = compose.onNodeWithTag("live:guide-row:c2", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(third.bottom <= 384.dp, "Third channel row must be fully visible: $third")
+        val visible = compose.onNodeWithTag("live:guide-row:c2", useUnmergedTree = true).assertIsDisplayed().getBoundsInRoot()
+        assertEquals(third, visible, "The third row must not be clipped by a scrolling ancestor")
+        assertEquals(60.dp, visible.bottom - visible.top)
+    }
+
+    @Test fun tvGoToChannelsNavigatesFromNoGuideAndManagementDenied() = recoveryNavigates(true)
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-mdpi")
+    fun phoneGoToChannelsNavigatesFromNoGuideAndManagementDenied() = recoveryNavigates(false)
+
+    private fun recoveryNavigates(tv: Boolean) {
+        val fake = LiveFake()
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent {
+            if (tv) {
+                PictureshowTheme { LiveTvScreen(vm, account, tv, {}, {}, {}) }
+            } else {
+                TouchTheme { LiveTvScreen(vm, account, tv, {}, {}, {}) }
+            }
+        }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("No guide data").assertIsDisplayed()
+        compose.onNodeWithText("Go to channels").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
+        compose.onNodeWithTag("live:c:c").assertIsDisplayed()
+        compose.runOnIdle {
+            fake.rights = fake.rights.copy(manage = false)
+            vm.refresh()
+        }
+        compose.onNodeWithTag("live:tab:Schedules").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Recording schedules aren't available").assertIsDisplayed()
+        compose.onNodeWithText("Go to channels").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
+        compose.onNodeWithTag("live:c:c").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(0, fake.created)
+            assertEquals(0, fake.deleted)
+        }
     }
 
     @Test fun tvNoGuideKeepsTheDateBarAtTheGridChannelWidth() {
@@ -136,6 +191,7 @@ class LiveRound3ClosureTest {
             assertEquals(0, plays)
             assertEquals(0, fake.deleted)
         }
+        compose.onNodeWithText("Close").assertDoesNotExist()
     }
 
     @Test
