@@ -137,7 +137,7 @@ class LiveTvReviewNavigationTest {
         val actionViewport = compose.onNodeWithTag("review:viewport").getBoundsInRoot()
         val editHeading = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(
-            editHeading.top >= actionViewport.top,
+            editHeading.top >= actionViewport.top && editHeading.bottom <= actionViewport.bottom,
             "Up naturally returns to Edit options; the complete heading must already be visible without an extra Left: $editHeading / $actionViewport"
         )
         val vectorFile = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first {
@@ -169,7 +169,7 @@ class LiveTvReviewNavigationTest {
             val bounds = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
             assertEquals(
                 expected.getValue("fullHeadingVisible").jsonPrimitive.boolean,
-                bounds.top >= actionViewport.top,
+                bounds.top >= actionViewport.top && bounds.bottom <= actionViewport.bottom,
                 "Every first-row focus recipient must reveal the full heading under the real TV pivot: ${vector.getValue("id")} / $bounds"
             )
             compose.runOnIdle { assertEquals(expected.getValue("writes").jsonPrimitive.int, writes) }
@@ -181,7 +181,7 @@ class LiveTvReviewNavigationTest {
         val viewport = compose.onNodeWithTag("review:viewport").getBoundsInRoot()
         val heading = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(
-            heading.top >= viewport.top,
+            heading.top >= viewport.top && heading.bottom <= viewport.bottom,
             "Returning to the first action must reveal the complete heading below the pinned header: $heading / $viewport"
         )
         compose.runOnIdle { assertEquals(0, writes) }
