@@ -116,7 +116,7 @@ class SyncPlayTouchDesignTest {
         )
         compose.setContent {
             app.pictureshow.ui.PictureshowTheme {
-                Box(Modifier.width(320.dp)) { SyncPlayerStatusChip(state, { opened++ }, Modifier.width(320.dp)) }
+                Box(Modifier.width(240.dp)) { SyncPlayerStatusChip(state, { opened++ }, Modifier.width(240.dp)) }
             }
         }
         val statusNode = compose.onNodeWithTag("sync:chip-status", useUnmergedTree = true)
@@ -132,6 +132,7 @@ class SyncPlayTouchDesignTest {
         statusNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1, layouts.size)
         val layout = layouts.single()
+        assertTrue(layout.lineCount > 1, "This regression must exercise an actual status wrap")
         for (line in 0 until layout.lineCount) {
             val text = layout.layoutInput.text.text.substring(layout.getLineStart(line), layout.getLineEnd(line)).trim()
             assertTrue(!text.startsWith("·"), "Separator must never lead a wrapped status line")

@@ -93,7 +93,6 @@
     <string name="sync_leave_unconfirmed">This device is paused. Leaving was not confirmed. Connect again and choose Leave group.</string>
     <string name="sync_speed">Speed is fixed at 1× while watching together.</string>
     <string name="sync_queue_pending">Waiting for the group queue to update…</string>
-    <string name="sync_chip_title">%1$s · %2$s</string>
     <string name="sync_fixture">UI fixture · %1$s</string>
     <string name="sync_cast_title">Leave Watch together before casting?</string>
     <string name="sync_cast_explanation">Leave the group to watch on the other device. The group keeps watching here.</string>
