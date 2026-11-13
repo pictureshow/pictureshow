@@ -13,6 +13,10 @@ import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlaybackSpeeds
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -84,8 +88,21 @@ class PlaybackSpeedTest {
             host.applySyncTimeline(null, null, 0.97)
             assertEquals(0.97f, output.player.value!!.playbackParameters.speed)
             assertEquals(1f, output.player.value!!.playbackParameters.pitch)
+            assertEquals(1f, output.speed.value.speed)
+            assertEquals(null, output.speed.value.message)
             host.applySyncTimeline(null, null, 1.03)
             assertEquals(1.03f, output.player.value!!.playbackParameters.speed)
+            assertEquals(1f, output.speed.value.speed)
+            assertEquals(null, output.speed.value.message)
+            host.applySyncTimeline(null, null, 1.0)
+            assertEquals(1f, output.speed.value.speed)
+            assertEquals(null, output.speed.value.message)
+            output.setSpeed(1.5f)
+            assertEquals(1f, output.player.value!!.playbackParameters.speed, "Group output still owns the temporary rate")
+            output.endSyncRate()
+            assertEquals(1.5f, output.player.value!!.playbackParameters.speed, "Detaching restores the viewer's selection")
+            assertEquals(1.5f, output.speed.value.speed)
+            assertEquals(null, output.speed.value.message)
             output.observeSyncAudioOutput(first, true)
             assertEquals(false, host.syncRendererSnapshot().rateSupported, "Encoded output must return to seek fallback")
             output.open(decision, 0, -1, -1, true)
@@ -101,6 +118,43 @@ class PlaybackSpeedTest {
             assertEquals(false, output.supportsSyncRate(host.player), "Released output evidence stays unavailable")
         } finally {
             output.release()
+        }
+    }
+
+
+    @Test fun groupRatesDoNotChangeViewerSpeedOrInventAnOutputAdjustment() {
+        val roots = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+        val vectors = roots.map { java.io.File(it, "spec/vectors/sync-rate-presentation.json") }.first { it.isFile }
+        val rows = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertEquals(4, rows.size)
+        for (value in rows) {
+            val row = value.jsonObject
+            val speed = ViewingPlaybackSpeed()
+            speed.select(row.getValue("viewerSpeed").jsonPrimitive.float, null)
+            for (rate in row.getValue("temporaryRates").jsonArray) {
+                speed.syncRate(rate.jsonPrimitive.float, null)
+                speed.observed(androidx.media3.common.PlaybackParameters(rate.jsonPrimitive.float))
+                // An older asynchronous parameter report is still group output, not a user selection.
+                speed.observed(androidx.media3.common.PlaybackParameters(0.97f))
+                assertEquals(row.getValue("viewerSpeed").jsonPrimitive.float, speed.state.value.speed)
+                assertEquals(null, speed.state.value.message)
+            }
+            speed.endSyncRate(null)
+            speed.observed(
+                androidx.media3.common.PlaybackParameters(0.97f),
+                androidx.media3.common.PlaybackParameters(row.getValue("viewerSpeed").jsonPrimitive.float)
+            )
+            assertEquals(row.getValue("viewerSpeed").jsonPrimitive.float, speed.state.value.speed)
+            assertEquals(null, speed.state.value.message)
+            val adjusted = row["genuineAdjustedSpeed"]
+            if (adjusted != null) {
+                speed.observed(androidx.media3.common.PlaybackParameters(adjusted.jsonPrimitive.float))
+                assertEquals(adjusted.jsonPrimitive.float, speed.state.value.speed)
+                assertNotNull(speed.state.value.message)
+            }
+            speed.audioOutput(true, null)
+            assertEquals(1f, speed.state.value.speed)
+            assertEquals(PlaybackSpeeds.ENCODED_AUDIO, speed.state.value.message)
         }
     }
 

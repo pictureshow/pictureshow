@@ -14,6 +14,19 @@ internal data class PlaybackSpeedState(val speed: Float = 1f, val encodedAudio: 
 /** Owned by a viewing's output, so a decoder replacement cannot reset its speed. */
 internal class ViewingPlaybackSpeed {
     private val mutable = MutableStateFlow(PlaybackSpeedState())
+    private var temporaryRate: Float? = null
+
+    /** Group timing changes output without replacing the viewer's own speed selection or feedback. */
+    fun syncRate(rate: Float, player: Player?) {
+        temporaryRate = rate
+        apply(player)
+    }
+
+    fun endSyncRate(player: Player?) {
+        if (temporaryRate == null) return
+        temporaryRate = null
+        apply(player)
+    }
     val state = mutable.asStateFlow()
 
     fun select(speed: Float, player: Player?) {
@@ -42,10 +55,12 @@ internal class ViewingPlaybackSpeed {
             mutable.value = mutable.value.copy(speed = 1f, message = "This player cannot change playback speed.")
             return
         }
-        player.playbackParameters = PlaybackParameters(mutable.value.speed, 1f)
+        val rate = if (mutable.value.encodedAudio) 1f else temporaryRate ?: mutable.value.speed
+        player.playbackParameters = PlaybackParameters(rate, 1f)
     }
 
-    fun observed(parameters: PlaybackParameters) {
+    fun observed(parameters: PlaybackParameters, current: PlaybackParameters = parameters) {
+        if (parameters != current || temporaryRate != null) return
         if (parameters.speed != mutable.value.speed) {
             mutable.value =
                 mutable.value.copy(

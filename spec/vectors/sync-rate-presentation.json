@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-rate-presentation",
+  "cases": [
+    {
+      "id": "temporary-slow",
+      "viewerSpeed": 1,
+      "temporaryRates": [
+        0.97,
+        1
+      ]
+    },
+    {
+      "id": "temporary-fast",
+      "viewerSpeed": 1,
+      "temporaryRates": [
+        1.03,
+        1
+      ]
+    },
+    {
+      "id": "restore-viewer-choice",
+      "viewerSpeed": 1.5,
+      "temporaryRates": [
+        0.97,
+        1.03,
+        1
+      ]
+    },
+    {
+      "id": "genuine-adjustment-after-group",
+      "viewerSpeed": 1.5,
+      "temporaryRates": [
+        1.03,
+        1
+      ],
+      "genuineAdjustedSpeed": 1
+    }
+  ]
+}

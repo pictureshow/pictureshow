@@ -76,6 +76,9 @@ internal class Media3PlaybackOutput(
 
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
+    internal fun applySyncRate(rate: Float, player: Player) = viewingSpeed.syncRate(rate, player)
+    internal fun endSyncRate() = applySync { viewingSpeed.endSyncRate(mutablePlayer.value) }
+
     fun setSpeed(value: Float) {
         viewingSpeed.select(value, mutablePlayer.value)
         PlaybackDiagnostics.write("speed requested=$value effective=${speed.value.speed} pitch=1.0 positionMs=${position().milliseconds}")
@@ -438,7 +441,7 @@ internal class Media3PlaybackOutput(
         var initialTargetMs = positionMs
         listener = object : Player.Listener {
             override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
-                if (activePlayer === next) viewingSpeed.observed(playbackParameters)
+                if (activePlayer === next) viewingSpeed.observed(playbackParameters, next.playbackParameters)
             }
 
             override fun onRenderedFirstFrame() {
@@ -709,6 +712,7 @@ internal class Media3PlaybackOutput(
 
     private fun releasePlayer(closeSession: Boolean) {
         syncPcmOutput = null
+        viewingSpeed.endSyncRate(null)
         traceNative("release", "closeSession=$closeSession")
         loadHandler.removeCallbacks(loadSummary)
         loadDiagnostics?.summary(final = true)

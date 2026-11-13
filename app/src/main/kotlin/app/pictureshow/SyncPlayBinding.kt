@@ -196,7 +196,7 @@ internal fun PlaybackHostState.applySyncTimeline(
         seekToLocal(target / 10_000, revealControls = false, bypassSync = true)
         changed = pendingSeek == null && state.seekTargetMs == null
     }
-    if (active.playbackParameters.speed != rate.toFloat()) active.setPlaybackSpeed(rate.toFloat())
+    output.applySyncRate(rate.toFloat(), active)
     if (playing != null && active.playWhenReady != playing) active.playWhenReady = playing
     output.traceNative(
         "sync-after",
@@ -252,6 +252,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             host.output.syncRequest = null
             host.output.onSyncPauseRequested = {}
             host.output.syncParticipating = { false }
+            host.output.endSyncRate()
         }
     }
 }
