@@ -28,6 +28,7 @@ import app.pictureshow.core.playback.DeviceCapabilities
 import app.pictureshow.core.playback.DisplayCapabilities
 import app.pictureshow.core.playback.VideoCodec
 import app.pictureshow.core.playback.VideoDecoder
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Rule
@@ -100,9 +101,9 @@ class DiagnosticMemoryAndSpeechTest {
                 CatalogGrid(CatalogGridState(account, MediaItem("library", "Fixture")), {}, {}, { _, _ -> }, {})
             }
         }
-        val semantics = compose.onNodeWithTag("grid:sort-order").fetchSemanticsNode().config
+        val semantics = compose.onNodeWithTag("grid:sort:SortName").fetchSemanticsNode().config
         assertTrue(semantics[SemanticsProperties.StateDescription] == "Ascending")
         assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
-        assertFalse(semantics.contains(SemanticsProperties.Text))
+        assertEquals("Name", semantics[SemanticsProperties.Text].joinToString("") { it.text })
     }
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -1163,7 +1164,10 @@ class CatalogGridLargeFontTest {
         holdDown()
         assertFocus("grid:film-0")
         // A reader's click: it reaches the chip with no key and no focus move.
-        compose.onNodeWithTag(chip).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("grid:sort:${gridState.sortBy}").performSemanticsAction(SemanticsActions.OnClick)
+        runFrames(100)
+        compose.onNodeWithText(if (chip == "grid:sort-order") "Name · Descending" else "Date added · Ascending")
+            .performSemanticsAction(SemanticsActions.OnClick)
         runFrames(200)
         gridState = gridState.copy(items = films.take(20), total = 20, loading = false)
         settle()

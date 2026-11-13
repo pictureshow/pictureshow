@@ -91,7 +91,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)
-        exclude("grid-navigation.json")
+        exclude("grid-navigation.json", "home-browse.json")
         into("parity-vectors")
     }
     from(rootProject.file("spec/vectors")) {
@@ -103,7 +103,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         into("offline-vectors")
     }
     from(rootProject.file("spec/vectors")) {
-        include("grid-navigation.json")
+        include("grid-navigation.json", "home-browse.json")
         into("grid-vectors")
     }
     from(rootProject.file("spec/vectors")) {

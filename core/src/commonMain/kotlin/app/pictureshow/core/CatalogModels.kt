@@ -99,7 +99,8 @@ data class BrowseQuery(
     val descending: Boolean = false,
     val startIndex: Int = 0,
     val limit: Int = 60,
-    val ids: List<String> = emptyList()
+    val ids: List<String> = emptyList(),
+    val filters: LibraryFilters = LibraryFilters()
 )
 
 data class HomeRow(val key: String, val title: String, val items: List<MediaItem>, val library: Boolean = false, val wide: Boolean = false)

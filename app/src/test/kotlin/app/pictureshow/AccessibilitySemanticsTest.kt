@@ -17,9 +17,11 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import app.pictureshow.core.Account
 import app.pictureshow.core.Chapter
@@ -107,8 +109,10 @@ class AccessibilitySemanticsTest {
                 CatalogGrid(CatalogGridState(account, MediaItem("library", "Films"), loading = false), {}, {}, { _, _ -> }, {})
             }
         }
-        compose.onNodeWithTag("grid:sort:SortName").assertIsSelected()
-        compose.onNodeWithTag("grid:sort-order").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ascending"))
+        compose.onNodeWithTag("grid:sort:SortName").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ascending"))
+        compose.onNodeWithTag("grid:sort:SortName").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
+        compose.onNodeWithText("Name · Ascending").assertIsSelected()
+        compose.onNodeWithText("Name · Descending").assertIsNotSelected()
     }
 
     @Test

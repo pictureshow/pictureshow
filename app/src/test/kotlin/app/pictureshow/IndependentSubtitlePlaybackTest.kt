@@ -123,6 +123,8 @@ class IndependentSubtitlePlaybackTest {
         Fixture().use { f ->
             f.open()
             f.until { f.player.playbackState == Player.STATE_READY }
+            // Subtitle HTTP starts independently; READY may arrive before its first request reaches the server.
+            f.until { f.requests.isNotEmpty() }
             assertEquals(1, f.requests.size, "Only selected subtitle may open; requests=${f.requests}")
             assertEquals("/sub1.srt", f.requests.single())
             assertTrue(f.texts.none { it.contains("Caption") })

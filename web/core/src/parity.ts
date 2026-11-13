@@ -398,6 +398,22 @@ export function imageUrl(
     height?: number | null,
     wide = false,
 ): string | null {
+    // Public image GET cannot authorize the children in a container collage.
+    if (
+        [
+            "CollectionFolder",
+            "UserView",
+            "Folder",
+            "BoxSet",
+            "Playlist",
+            "Genre",
+            "MusicGenre",
+            "Studio",
+        ].includes(item.Type) ||
+        (typeof item.CollectionType === "string" &&
+            item.CollectionType.trim() !== "")
+    )
+        return null;
     const own = (type: string) =>
         item.ImageTags?.[type]?.trim()
             ? { id: item.Id, type, tag: item.ImageTags[type] }
@@ -840,7 +856,7 @@ export class ParityCatalogClient {
         }
     }
     views() {
-        return this.request("UserViews", { fields: CARD_FIELDS });
+        return this.request("UserViews", { fields: CARD_FIELDS, includeHidden: "true" });
     }
     resume() {
         return this.request("UserItems/Resume", {
@@ -856,12 +872,11 @@ export class ParityCatalogClient {
             seriesId,
         });
     }
-    latest(parentId: string) {
-        return this.request("Items/Latest", {
-            parentId,
-            limit: 24,
-            fields: CARD_FIELDS,
-        });
+    async latest(parentId: string) {
+        const page = await this.items({ parentId, recursive: true,
+            includeItemTypes: "Movie,Series", sortBy: "DateCreated",
+            descending: true, limit: 24 });
+        return page.Items ?? [];
     }
     items(q: any = {}) {
         const limit = Math.max(1, Math.min(q.limit ?? 60, 200));

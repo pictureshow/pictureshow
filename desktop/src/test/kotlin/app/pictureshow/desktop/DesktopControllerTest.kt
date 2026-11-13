@@ -44,6 +44,7 @@ class DesktopControllerTest {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val url get() = "http://127.0.0.1:${server.address.port}"
         var failLatest = false
+        val latestFailures = java.util.concurrent.atomic.AtomicInteger()
         var slowMovie = false
         var unauthorized = false
         var itemUnauthorized = false
@@ -77,7 +78,9 @@ class DesktopControllerTest {
                     path == "/Users/Me" -> if (unauthorized) { status = 401; "" } else """{"Id":"viewer","Name":"Viewer"}"""
                     path == "/UserViews" -> """{"Items":[{"Id":"library","Name":"Movies","Type":"CollectionFolder","CollectionType":"movies","IsFolder":true}],"TotalRecordCount":1}"""
                     path == "/UserItems/Resume" || path == "/Shows/NextUp" -> """{"Items":[],"TotalRecordCount":0}"""
-                    path == "/Items/Latest" -> if (failLatest) { status = 500; "" } else "[$movie]"
+                    path == "/Items" && failLatest && e.requestURI.rawQuery.orEmpty().split("&").containsAll(
+                        listOf("parentId=library", "sortBy=DateCreated", "sortOrder=Descending")
+                    ) -> { latestFailures.incrementAndGet(); status = 500; "" }
                     path == "/Users/viewer/Items/movie" || path == "/Items/movie" -> { if (slowMovie) Thread.sleep(350); movie }
                     path.endsWith("/PlaybackInfo") && transcode -> playbackInfo(request, transcoding = true)
                     path.endsWith("/PlaybackInfo") -> playbackInfo(request)
@@ -307,6 +310,8 @@ class DesktopControllerTest {
     @Test fun partialHomeFailureKeepsSuccessfulLibraries(): Unit = runBlocking {
         Fixture().use { f -> f.failLatest = true; DesktopController(directory()).use { c ->
             c.login(f)
+            assertEquals(1, f.latestFailures.get(), "The ordinary latest browse request must receive the injected failure")
+            assertFalse(f.requests.any { it.first == "/Items/Latest" }, "Do not restore the access-unsafe legacy latest route")
             assertEquals(listOf("libraries"), c.state.value.homeRows.map { it.key })
             assertNotNull(c.state.value.error)
         } }

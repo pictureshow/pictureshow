@@ -126,6 +126,6 @@ class CatalogCardAccessibilityTest {
         compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.onNodeWithTag("grid:card").assertIsFocused()
-        compose.onNodeWithTag("grid:sort-order").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        compose.onNodeWithTag("grid:sort:SortName").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
     }
 }

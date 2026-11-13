@@ -80,7 +80,7 @@ class CorpusVectorsTest {
                     "sync-source",
                     "sync-state"
                 ),
-            "grid-vectors" to setOf("grid-navigation")
+            "grid-vectors" to setOf("grid-navigation", "home-browse")
         )
         fun directory(name: String) = File(requireNotNull(javaClass.classLoader.getResource(name)) { "Missing packaged $name" }.toURI())
         val inventory = directory("vector-inventory").listFiles()!!.filter {

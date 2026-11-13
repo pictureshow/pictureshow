@@ -21,7 +21,9 @@ data class AccountSnapshot(
     val recentSearches: Map<String, List<String>> = emptyMap(),
     val lastServer: Server? = null,
     val retiredDeviceAccounts: List<Account> = emptyList(),
-    val deviceUpgradeRetryAfter: Map<String, Long> = emptyMap()
+    val deviceUpgradeRetryAfter: Map<String, Long> = emptyMap(),
+    val homePreferences: Map<String, HomePreferences> = emptyMap(),
+    val pendingHomePreferences: Set<String> = emptySet()
 ) {
     val currentAccount: Account? get() = accounts.firstOrNull { it.key == currentKey }
     val rememberedServers: List<Server> get() = (listOfNotNull(lastServer) + accounts.map { it.server }).distinctBy { it.id to it.url }
@@ -146,6 +148,8 @@ class AccountStore(private val persistence: TextPersistence) {
             accounts = snapshot.accounts.filterNot { it.key == key },
             currentKey = snapshot.currentKey.takeUnless { it == key },
             recentSearches = snapshot.recentSearches - key,
+            homePreferences = snapshot.homePreferences - key,
+            pendingHomePreferences = snapshot.pendingHomePreferences - key,
             retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot { it.key == key },
             // Retain only the public server record, never the signed-out user's identity or token.
             lastServer = snapshot.accounts.firstOrNull { it.key == key }?.server ?: snapshot.lastServer
@@ -162,6 +166,8 @@ class AccountStore(private val persistence: TextPersistence) {
             accounts = snapshot.accounts.filterNot { it.key in removed },
             currentKey = snapshot.currentKey.takeUnless { it in removed },
             recentSearches = snapshot.recentSearches - removed,
+            homePreferences = snapshot.homePreferences - removed,
+            pendingHomePreferences = snapshot.pendingHomePreferences - removed,
             retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot { it.server.id == server.id && it.server.url == server.url },
             deviceUpgradeRetryAfter = snapshot.deviceUpgradeRetryAfter - server.id,
             lastServer = snapshot.lastServer?.takeUnless { it.id == server.id && it.url == server.url }
@@ -176,6 +182,14 @@ class AccountStore(private val persistence: TextPersistence) {
             val recent = listOf(term) + snapshot.recentSearches[key].orEmpty().filterNot { it.equals(term, ignoreCase = true) }
             snapshot.copy(recentSearches = snapshot.recentSearches + (key to recent.take(8)))
         }
+    }
+
+    suspend fun saveHomePreferences(key: String, preferences: HomePreferences, pending: Boolean) = update { snapshot ->
+        require(snapshot.accounts.any { it.key == key }) { "That account is not saved." }
+        snapshot.copy(
+            homePreferences = snapshot.homePreferences + (key to preferences),
+            pendingHomePreferences = if (pending) snapshot.pendingHomePreferences + key else snapshot.pendingHomePreferences - key
+        )
     }
 
     suspend fun clearSearches(key: String) = update { it.copy(recentSearches = it.recentSearches - key) }
