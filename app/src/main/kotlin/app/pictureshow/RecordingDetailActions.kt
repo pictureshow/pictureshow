@@ -74,7 +74,6 @@ internal fun RecordingDetailMutationButton(
                     }
                 ),
                 label,
-                modifier = Modifier.wrapContentWidth(unbounded = true),
                 Modifier.size(24.dp)
             )
         }
@@ -84,6 +83,7 @@ internal fun RecordingDetailMutationButton(
         ) {
             androidx.tv.material3.Text(
                 label,
+                modifier = Modifier.wrapContentWidth(unbounded = true),
                 style = androidx.tv.material3.MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 softWrap = false,
