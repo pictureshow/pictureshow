@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -54,12 +55,13 @@ class LiveRound3ClosureTest {
         val vm = LiveTvViewModel(account, LiveFake(), now = { 0L })
         compose.setContent { PictureshowTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithContentDescription("Later").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Favorites").performSemanticsAction(SemanticsActions.OnClick) { it() }
         val before = vm.state.value.windowStart
         compose.onNodeWithTag("live:empty-action").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("live:tab:Guide").assertIsSelected()
         compose.runOnIdle { assertEquals(before, vm.state.value.windowStart) }
-        compose.onNodeWithTag("live:guide-row:c").assertIsDisplayed()
+        compose.onNodeWithText("No guide data").assertIsDisplayed()
     }
 
     @Test fun guideUsesAvailableWidthAndKeepsVisibleLabelsAfterResize() {
