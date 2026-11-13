@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.SemanticsActions
@@ -47,6 +48,22 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncPlayTvDesignTest {
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
+        val state = SyncPlayPresentation(groupId = "g", groupName = "Films", phase = "Idle", participants = listOf("Sam"))
+        compose.setContent {
+            PictureshowTheme {
+                Box(Modifier.width(380.dp)) {
+                    SyncPlayerStatusChip(state, {}, Modifier.widthIn(max = 380.dp), tv = true)
+                }
+            }
+        }
+        val bounds = compose.onNodeWithTag("sync:player-chip").getUnclippedBoundsInRoot()
+        // A cap is not a requested width: a short status must leave substantial unused room.
+        assertTrue(bounds.right - bounds.left < 340.dp, "Short chip must wrap content instead of filling the available width cap: $bounds")
+        compose.onNodeWithText("1 person watching", useUnmergedTree = true).assertIsDisplayed()
+    }
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Before fun tvMode() {
@@ -102,6 +119,22 @@ class SyncPlayTvDesignTest {
 @Config(sdk = [30], application = Application::class, qualifiers = "w411dp-h891dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncPlayTouchDesignTest {
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
+        val state = SyncPlayPresentation(groupId = "g", groupName = "Films", phase = "Idle", participants = listOf("Sam"))
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                Box(Modifier.width(380.dp)) {
+                    SyncPlayerStatusChip(state, {}, Modifier.widthIn(max = 380.dp), tv = false)
+                }
+            }
+        }
+        val bounds = compose.onNodeWithTag("sync:player-chip").getUnclippedBoundsInRoot()
+        // A cap is not a requested width: a short status must leave substantial unused room.
+        assertTrue(bounds.right - bounds.left < 340.dp, "Short chip must wrap content instead of filling the available width cap: $bounds")
+        compose.onNodeWithText("1 person watching", useUnmergedTree = true).assertIsDisplayed()
+    }
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Before fun touchMode() {
