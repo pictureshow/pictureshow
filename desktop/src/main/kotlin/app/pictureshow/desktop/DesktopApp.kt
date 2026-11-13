@@ -260,7 +260,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                                 DesktopRoute.Servers -> ServerPage(state, controller)
                                 DesktopRoute.SignIn -> SignInPage(state, controller)
-                                DesktopRoute.QuickConnect -> FormPage("Quick Connect", "Approve this desktop from a signed-in Jellyfin app.") {
+                                DesktopRoute.QuickConnect -> FormPage("Quick Connect", "Approve this computer from a signed-in Jellyfin app.") {
                                     Text(state.quickCode?.toCharArray()?.joinToString(" ") ?: "Getting your code…", style = MaterialTheme.typography.displayLarge, modifier = Modifier.probe("quick-code").semantics { liveRegion = LiveRegionMode.Polite })
                                     Text("In Jellyfin, open Settings → Quick Connect and enter this code. Keep this window open while you approve.")
                                     InlineTextAction("Use username and password", "quick-back", controller::back)
@@ -547,7 +547,7 @@ private fun clock(seconds:Double):String { val s=seconds.toLong().coerceAtLeast(
 @Composable
 private fun SettingsPage(state:DesktopState,c:DesktopController) {
     val s=state.settings
-    FormPage("Settings","Playback and viewing preferences for this desktop.") {
+    FormPage("Settings","Playback and viewing preferences for this computer.") {
         SettingsSection("Account") {
             SettingRow(state.account?.user?.name ?: "Signed out", state.account?.server?.name ?: "No account is connected") {
                 OutlinedButton(onClick = c::signOut, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("sign-out")) { Text("Sign out") }
@@ -604,7 +604,7 @@ private fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:St
         OutlinedButton(onClick={expanded=true},contentPadding = if (icon != null) PaddingValues(horizontal = 12.dp) else ButtonDefaults.ContentPadding,modifier = Modifier.controlFocus().then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
             Row(if (fixedWidth) Modifier.fillMaxWidth() else Modifier, verticalAlignment = Alignment.CenterVertically) {
                 if(icon!=null) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
-                Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",modifier=Modifier.weight(1f, fill=false),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=MaterialTheme.typography.labelLarge.fontWeight)
+                Text(buttonValue ?: "$label · ${items.firstOrNull{it.first==selected}?.second ?: "Default"}",modifier=Modifier.weight(1f, fill=fixedWidth),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=MaterialTheme.typography.labelLarge.fontWeight)
                 if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
             }
         }
