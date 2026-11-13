@@ -187,6 +187,11 @@ internal class PlaybackHostState(
     /** A viewer pause reveals controls; a server barrier or alignment pause does not. */
     var onViewerPauseShown: () -> Unit = {}
 
+    /** Remote viewers use the same request-before-output and feedback path as hardware media keys. */
+    fun pauseFromRemote() {
+        if (!output.interceptSync("pause", null)) player?.pause()
+    }
+
     /** Before the output learns the activity stopped. */
     var onStopped: () -> Unit = {}
     val state get() = stateSource.value
@@ -387,7 +392,7 @@ private fun RemoteTargetBinding(
     val remoteBridge = remember(host) {
         object : RemotePlayerBridge {
             override fun pause() {
-                if (host.sync?.transport("pause") != true) host.player?.pause()
+                host.pauseFromRemote()
             }
             override fun unpause() {
                 if (host.sync?.transport("play") != true) host.player?.play()

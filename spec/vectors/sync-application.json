@@ -112,6 +112,20 @@
       "participating": false,
       "origin": "viewer",
       "expectedReveal": true
+    },
+    {
+      "id": "sync-application.pause-feedback-group-remote",
+      "operation": "pause-feedback",
+      "participating": true,
+      "origin": "remote",
+      "expectedReveal": true
+    },
+    {
+      "id": "sync-application.pause-feedback-solo-remote",
+      "operation": "pause-feedback",
+      "participating": false,
+      "origin": "remote",
+      "expectedReveal": true
     }
   ]
 }

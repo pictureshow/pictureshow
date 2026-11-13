@@ -179,10 +179,11 @@ class PlayerControlsTest {
 
     @Test
     fun groupPauseFeedbackFollowsOriginAndCurrentMembershipOnTheSameDecoder() {
-        val file = java.io.File("../spec/vectors/sync-application.json")
+        val file = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { java.io.File(it, "spec/vectors/sync-application.json") }.first { it.isFile }
         val rows = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
             .map { it.jsonObject }.filter { it.getValue("operation").jsonPrimitive.content == "pause-feedback" }
-        assertEquals(5, rows.size)
+        assertEquals(7, rows.size)
         val native = StatePlayer()
         val output = Media3PlaybackOutput(compose.activity, app.pictureshow.core.Server("s", "Server", "https://media.example.test", "12"))
         var grouped by mutableStateOf(false)
@@ -191,6 +192,8 @@ class PlayerControlsTest {
         output.syncRequest = { _, _ -> grouped }
         output.onSyncPauseRequested = { events += "pause" }
         val wrapped = SyncTransportPlayer(native, output::interceptSync)
+        val host = PlaybackHostState(app.pictureshow.core.MediaItem("item", "Film"), 0, output, {}, {})
+        host.playerSource = mutableStateOf(wrapped)
         compose.setContent {
             playback = rememberPlayerPlayback(wrapped, { events += "pause" }, {}, revealPause = !grouped)
         }
@@ -209,6 +212,7 @@ class PlayerControlsTest {
                         "native" -> native.pause()
                         "server" -> output.applySync { wrapped.pause() }
                         "viewer" -> wrapped.pause()
+                        "remote" -> host.pauseFromRemote()
                         else -> error(id)
                     }
                 }
@@ -216,7 +220,7 @@ class PlayerControlsTest {
                 compose.waitForIdle()
                 compose.runOnIdle {
                     assertEquals(if (row.getValue("expectedReveal").jsonPrimitive.boolean) listOf("pause") else emptyList(), events, id)
-                    val awaitingServer = grouped && row.getValue("origin").jsonPrimitive.content == "viewer"
+                    val awaitingServer = grouped && row.getValue("origin").jsonPrimitive.content in setOf("viewer", "remote")
                     assertEquals(!awaitingServer, playback?.paused, "native facts still update: $id")
                 }
             }
