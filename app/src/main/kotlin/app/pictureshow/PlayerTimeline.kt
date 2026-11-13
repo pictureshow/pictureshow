@@ -67,8 +67,14 @@ internal fun PlayerTimeline(
         }
         Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Available buffer · start", style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
-                Text("Live edge", style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
+                val endpoints = liveBufferEndpointLabels(liveWindow, positionMs, liveExpired)
+                Text(endpoints.first, style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
+                if (endpoints.second.isNotEmpty()) {
+                    Text(
+                        endpoints.second,
+                        style = androidx.tv.material3.MaterialTheme.typography.labelMedium
+                    )
+                }
             }
             LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF), expired = liveExpired)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -180,3 +186,11 @@ internal fun liveTimelineVisualStatus(readout: LiveTimelineReadout, behindMs: Lo
     } else {
         readout.status
     }
+
+/** Endpoint words never claim an available live target when the decoder cannot establish it. */
+internal fun liveBufferEndpointLabels(window: ObservedLiveWindow?, positionMs: Long, expired: Boolean): Pair<String, String> = when {
+    expired -> "Buffer expired" to ""
+    window?.canTimeShift != true -> "Time shift unavailable" to ""
+    liveTrackPositionFraction(window, positionMs, expired) != null -> "Available buffer · start" to "Live edge"
+    else -> "Measured buffer" to "Live edge unavailable"
+}

@@ -158,7 +158,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "3:14 \u2013 3:42 PM"
+      "expected": "3:14 – 3:42 PM"
     },
     {
       "id": "live-presentation.period-crossing-range",
@@ -171,7 +171,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "11:55 AM \u2013 12:10 PM"
+      "expected": "11:55 AM – 12:10 PM"
     },
     {
       "id": "live-presentation.tomorrow-range",
@@ -184,7 +184,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
+      "expected": "Tomorrow · 15:00 – 16:00"
     },
     {
       "id": "live-presentation.no-timer-dot",
@@ -535,7 +535,7 @@
       },
       "expected": {
         "title": "Painted windows",
-        "metadata": "S1:E7 \u00b7 Ends 6:30 PM \u00b7 2m",
+        "metadata": "S1:E7 · Ends 6:30 PM · 2m",
         "progress": 0.0
       }
     },
@@ -655,7 +655,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today \u00b7 6:00 PM",
+        "metadata": "Today · 6:00 PM",
         "progress": null
       }
     },
@@ -719,7 +719,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today \u00b7 6:00 PM",
+        "metadata": "Today · 6:00 PM",
         "progress": null
       }
     },
@@ -1068,7 +1068,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused \u00b7 At live edge",
+        "status": "Paused · At live edge",
         "clock": ""
       }
     },
@@ -1088,7 +1088,7 @@
       },
       "expected": {
         "status": "",
-        "clock": "\u22120:03"
+        "clock": "−0:03"
       }
     },
     {
@@ -1107,7 +1107,7 @@
       },
       "expected": {
         "status": "Paused",
-        "clock": "\u22120:03"
+        "clock": "−0:03"
       }
     },
     {
@@ -1159,7 +1159,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused \u00b7 Buffer expired",
+        "status": "Paused · Buffer expired",
         "clock": ""
       }
     },
@@ -1260,10 +1260,10 @@
         ]
       },
       "expected": [
-        "Paused \u00b7 17 sec behind live",
-        "Paused \u00b7 37 sec behind live",
+        "Paused · 17 sec behind live",
+        "Paused · 37 sec behind live",
         "Live position unavailable",
-        "Live \u00b7 Time shift unavailable"
+        "Live · Time shift unavailable"
       ]
     },
     {
@@ -1522,7 +1522,7 @@
       "input": {
         "unavailable": false
       },
-      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
+      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
     },
     {
       "id": "live-presentation.guide-successful-empty",
@@ -1709,7 +1709,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline \u00b7 last loaded 3:14 PM"
+      "expected": "Offline · last loaded 3:14 PM"
     },
     {
       "id": "live-presentation.guide-freshness-offline-fold",
@@ -1722,7 +1722,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline \u00b7 last loaded 1:30 AM -05:00"
+      "expected": "Offline · last loaded 1:30 AM -05:00"
     },
     {
       "id": "live-presentation.device-japanese-twelve-hour",
@@ -1734,7 +1734,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "\u5348\u5f8c3:14"
+      "expected": "午後3:14"
     },
     {
       "id": "live-presentation.guide-scroll-visible",
@@ -2405,17 +2405,17 @@
       "operation": "live-buffer-status",
       "input": {
         "status": "Paused",
-        "clock": "\u22120:12",
+        "clock": "−0:12",
         "behind": 12000
       },
-      "expected": "Paused \u00b7 12 sec behind live"
+      "expected": "Paused · 12 sec behind live"
     },
     {
       "id": "live-buffer-status-playing",
       "operation": "live-buffer-status",
       "input": {
         "status": "",
-        "clock": "\u22122:13",
+        "clock": "−2:13",
         "behind": 133000
       },
       "expected": "2 min 13 sec behind live"
@@ -2810,6 +2810,121 @@
         "expired": false
       },
       "expected": 10000
+    },
+    {
+      "id": "buffer-endpoint-known",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Available buffer · start",
+        "Live edge"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-missing",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": null,
+        "position": 0,
+        "expired": false
+      },
+      "expected": [
+        "Time shift unavailable",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-nonseekable",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Time shift unavailable",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-unknown-edge",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-outside",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-expired",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": [
+        "Buffer expired",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-zero-edge",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        },
+        "position": 0,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
     }
   ]
 }

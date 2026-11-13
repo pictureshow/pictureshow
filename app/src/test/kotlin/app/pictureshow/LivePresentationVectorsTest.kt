@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(217, cases.size)
+        assertEquals(224, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -378,6 +378,21 @@ class LivePresentationVectorsTest {
                     liveBufferScrubEnd(liveWindow(c["window"])!!),
                     id
                 )
+                "live-buffer-endpoints" -> {
+                    val actual =
+                        liveBufferEndpointLabels(
+                            liveWindow(c["window"]),
+                            c.getValue("position").jsonPrimitive.long,
+                            c.getValue("expired").jsonPrimitive.boolean
+                        )
+                    assertEquals(
+                        envelope.getValue("expected").jsonArray.map {
+                            it.jsonPrimitive.content
+                        },
+                        listOf(actual.first, actual.second),
+                        id
+                    )
+                }
                 "live-buffer-status" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveTimelineVisualStatus(
