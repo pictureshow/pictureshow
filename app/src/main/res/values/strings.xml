@@ -78,7 +78,7 @@
     <string name="sync_playback_error">Playback could not start.</string>
     <string name="sync_nothing_playing">Nothing playing yet</string>
     <string name="sync_quality_unknown">Sync estimate unavailable</string>
-    <string name="sync_quality_in_sync">In sync · estimate</string>
+    <string name="sync_quality_in_sync">Looks in sync</string>
     <string name="sync_quality_catching_up">Catching up</string>
     <string name="sync_quality_out">Out of sync · Rejoin</string>
     <string name="sync_estimate_explanation">Sync is estimated from this device. Other devices may differ.</string>

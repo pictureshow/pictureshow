@@ -686,29 +686,59 @@ internal fun SyncPlayerChip(sync: SyncPlayHost?, modifier: Modifier = Modifier, 
     if (sync == null) return
     val state by sync.state.collectAsState()
     if (state.groupId == null && state.phase != "Reconnecting") return
+    SyncPlayerStatusChip(state, sync::show, modifier, tv)
+}
+
+/** Status and context have their own rows; separators never become orphaned lines. */
+@Composable
+internal fun SyncPlayerStatusChip(
+    state: SyncPlayPresentation,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+    tv: Boolean = false
+) {
     val count = pluralStringResource(R.plurals.sync_people_watching, state.participants.size, syncNumber(state.participants.size))
-    val title = stringResource(R.string.sync_chip_title, state.groupName ?: stringResource(R.string.sync_your_group), count)
+    val name = state.groupName ?: stringResource(R.string.sync_your_group)
     val phase = syncPhaseText(state)
     val quality = syncQualityText(state.quality)
-    val status = if (state.phase in setOf("Playing", "Paused")) "$phase · $quality" else phase
-    val label = "$title · $status"
+    // Nonbreaking glue keeps a separator with its words if a large-font status needs two lines.
+    val status = if (state.phase in setOf("Playing", "Paused")) "$phase\u00a0·\u00a0$quality" else phase
+    val content: @Composable () -> Unit = {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+            if (tv) androidx.tv.material3.Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
+            else Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (tv) {
+                    androidx.tv.material3.Text(
+                        status, style = TvMaterialTheme.typography.bodyMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("sync:chip-status")
+                    )
+                } else {
+                    Text(status, style = MaterialTheme.typography.labelLarge, maxLines = 2,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("sync:chip-status"))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (tv) {
+                        androidx.tv.material3.Text(name, Modifier.weight(1f).testTag("sync:chip-name"),
+                            style = TvMaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        androidx.tv.material3.Text(count, Modifier.testTag("sync:chip-count"), style = TvMaterialTheme.typography.labelSmall)
+                    } else {
+                        Text(name, Modifier.weight(1f).testTag("sync:chip-name"), style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(count, Modifier.testTag("sync:chip-count"), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
     if (tv) {
         androidx.tv.material3.Button(
-            onClick = sync::show,
-            modifier = modifier.testTag("sync:player-chip").semantics {
-                liveRegion =
-                    LiveRegionMode.Polite
-            }
-        ) {
-            androidx.tv.material3.Icon(syncIcon("group"), null, Modifier.size(20.dp))
-            androidx.tv.material3.Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
+            onClick = onOpen,
+            modifier = modifier.testTag("sync:player-chip").semantics { liveRegion = LiveRegionMode.Polite }
+        ) { content() }
     } else {
         Surface(tonalElevation = 6.dp, shape = MaterialTheme.shapes.medium, modifier = modifier.testTag("sync:player-chip")) {
-            TextButton(onClick = sync::show, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                Icon(syncIcon("group"), null, Modifier.size(20.dp))
-                Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
+            TextButton(onClick = onOpen, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) { content() }
         }
     }
 }

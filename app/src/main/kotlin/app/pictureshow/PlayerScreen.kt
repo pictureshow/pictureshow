@@ -664,7 +664,7 @@ internal fun PlayerItemScreen(
                 }
                 LaunchedEffect(error) { errorFocus.requestFocus() }
             }
-            SyncPlayerChip(host.sync, Modifier.align(Alignment.TopStart).padding(36.dp).widthIn(max = 640.dp), tv = true)
+            SyncPlayerChip(host.sync, Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 28.dp).widthIn(max = 640.dp), tv = true)
             // Keep opener nodes composed while the sibling modal hides this player tree.
             if (controlsVisible || (controls && extraPanel != null && error == null && !switching)) {
                 Column(

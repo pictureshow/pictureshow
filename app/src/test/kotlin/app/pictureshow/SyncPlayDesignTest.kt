@@ -7,6 +7,14 @@ import android.app.Application
 import android.app.UiModeManager
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.performSemanticsAction
+import app.pictureshow.core.sync.SyncQuality
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -98,6 +106,38 @@ class SyncPlayTouchDesignTest {
 
     @Before fun touchMode() {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java)).setCurrentModeType(Configuration.UI_MODE_TYPE_NORMAL)
+    }
+
+    @Test fun narrowChipSeparatesContextAndKeepsIconAndCountClear() {
+        var opened = 0
+        val state = SyncPlayPresentation(
+            groupId = "g", groupName = "Friday films with friends from every time zone", phase = "Paused",
+            participants = List(12) { "Person $it" }, quality = SyncQuality.IN_SYNC
+        )
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                Box(Modifier.width(320.dp)) { SyncPlayerStatusChip(state, { opened++ }, Modifier.width(320.dp)) }
+            }
+        }
+        val statusNode = compose.onNodeWithTag("sync:chip-status", useUnmergedTree = true)
+        val status = statusNode.getUnclippedBoundsInRoot()
+        val icon = compose.onNodeWithTag("sync:chip-icon", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val name = compose.onNodeWithTag("sync:chip-name", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val count = compose.onNodeWithTag("sync:chip-count", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(status.left - icon.right >= 8.dp)
+        assertTrue(status.bottom <= name.top)
+        assertTrue(count.left - name.right >= 8.dp)
+        compose.onNodeWithText("12 people watching", useUnmergedTree = true).assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        statusNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.size)
+        val layout = layouts.single()
+        for (line in 0 until layout.lineCount) {
+            val text = layout.layoutInput.text.text.substring(layout.getLineStart(line), layout.getLineEnd(line)).trim()
+            assertTrue(!text.startsWith("·"), "Separator must never lead a wrapped status line")
+        }
+        compose.onNodeWithTag("sync:player-chip").performClick()
+        assertEquals(1, opened)
     }
 
     @Test fun fixedTransportSelectedRepeatAndInverseWaitAreServerConfirmed() {

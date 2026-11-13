@@ -133,3 +133,18 @@ TV uses native list, switch, selected repeat chip and icon transport roles with 
 Android debug builds alone register `SyncPlayFixtureActivity`, protected by `android.permission.DUMP`. Named fixtures render the actual panel without a host/gateway/account and carry a visible UI fixture banner. They establish layout/focus only and cannot qualify protocol, timing or playback. The registration and presets are absent from release builds.
 
 A queue-title lookup from another queue revision is stale even when every requested PlaylistItemId still appears in the current queue. Reject that response independently of the account, membership and entry-presence checks; the retained-entry revision case in `sync-presentation` isolates this fence.
+
+
+### Persistent group chip presentation
+
+Keep group status visible when the ordinary player controls hide. The primary line
+states the group playback phase and local sync estimate; group name and localized
+people count occupy a separate secondary row. Preserve explicit icon spacing and
+keep separators attached to their text when a status wraps. Long group names may
+ellipsize while the people count remains visible. “Looks in sync” is a local estimate,
+not measured peer-output qualification. Android TV keeps this interactive chip inside
+the title-safe area (at least48dp horizontally and27dp vertically); touch respects
+safe drawing insets. The opener remains focusable and announces state politely.
+
+Android TV safe-area source, checked2026-11-13:
+https://developer.android.com/training/tv/playback/compose/layouts .
