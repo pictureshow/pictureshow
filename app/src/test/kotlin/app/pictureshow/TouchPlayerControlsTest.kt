@@ -1991,7 +1991,21 @@ class TouchPlayerControlsTest {
         assertEquals("−0:17", behindLiveClock(17_000))
         compose.onNodeWithText("−0:17").assertDoesNotExist()
         val range = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
-        assertEquals(0f..30_000f, range.range)
+        assertEquals(
+            0f..27_000f,
+            range.range,
+            "Displayed buffer and seek gestures end at the measured live target, not its later duration tail"
+        )
+        assertEquals(10_000f, range.current)
+        compose.runOnIdle { host.position = 26_000 }
+        settled()
+        assertEquals(
+            27_000f,
+            compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current,
+            "The native thumb meets the custom fill inside the same measured live-edge tolerance"
+        )
+        compose.runOnIdle { host.position = 10_000 }
+        settled()
         val spoken = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         compose.runOnIdle { host.position = 11_000 }
         settled()

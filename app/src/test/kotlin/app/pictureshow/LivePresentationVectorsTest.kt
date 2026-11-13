@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(166, cases.size)
+        assertEquals(217, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -338,6 +338,91 @@ class LivePresentationVectorsTest {
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideRulerHeight(c.getValue("tv").jsonPrimitive.boolean, c.getValue("fontScale").jsonPrimitive.float),
                     0.001f,
+                    id
+                )
+
+                "live-pause-focus" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    livePauseRequestsControlFocus(
+                        c.getValue("live").jsonPrimitive.boolean,
+                        c.getValue("surfaceFocused").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+                "live-buffer-fill" -> {
+                    val actual =
+                        liveTrackPositionFraction(
+                            liveWindow(c["window"]),
+                            c.getValue("position").jsonPrimitive.long,
+                            c.getValue("expired").jsonPrimitive.boolean
+                        )
+                    val expected = envelope.getValue("expected")
+                    if (expected == kotlinx.serialization.json.JsonNull) {
+                        assertEquals(null, actual, id)
+                    } else {
+                        assertEquals(expected.jsonPrimitive.float, actual!!, 0.0001f, id)
+                    }
+                }
+                "live-buffer-thumb" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveBufferSliderPosition(
+                        liveWindow(c["window"])!!,
+                        c.getValue("position").jsonPrimitive.long,
+                        c.getValue("expired").jsonPrimitive.boolean
+                    ),
+                    0.001f,
+                    id
+                )
+                "live-buffer-scrub-end" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.long,
+                    liveBufferScrubEnd(liveWindow(c["window"])!!),
+                    id
+                )
+                "live-buffer-status" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveTimelineVisualStatus(
+                        LiveTimelineReadout(value("status"), value("clock")),
+                        c["behind"]?.takeUnless {
+                            it ==
+                                kotlinx.serialization.json.JsonNull
+                        }?.jsonPrimitive?.long
+                    ),
+                    id
+                )
+                "guide-ruler-label-fit" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveGuideRulerLabelFits(
+                        c.getValue("x").jsonPrimitive.float,
+                        c.getValue("width").jsonPrimitive.float,
+                        c.getValue("viewportStart").jsonPrimitive.float,
+                        c.getValue("viewportWidth").jsonPrimitive.float
+                    ),
+                    id
+                )
+                "guide-viewport-focus" -> {
+                    val cells = c.getValue("cells").jsonArray.map { element ->
+                        val item = element.jsonObject
+                        LiveGuideCell(
+                            app.pictureshow.core.livetv.LiveProgram(item.getValue("id").jsonPrimitive.content),
+                            item.getValue("x").jsonPrimitive.float / LIVE_GUIDE_WIDTH,
+                            item.getValue("width").jsonPrimitive.float / LIVE_GUIDE_WIDTH,
+                            item.getValue("lane").jsonPrimitive.int
+                        )
+                    }
+                    assertEquals(
+                        envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                        liveGuideViewportFocus(
+                            cells,
+                            c["current"]?.jsonPrimitive?.contentOrNull,
+                            c.getValue("viewportStart").jsonPrimitive.float,
+                            c.getValue("viewportWidth").jsonPrimitive.float
+                        ),
+                        id
+                    )
+                }
+                "program-recording-label" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveProgramRecordingLabel(value("status")),
                     id
                 )
 

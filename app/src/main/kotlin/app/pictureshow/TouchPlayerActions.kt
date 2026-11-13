@@ -88,8 +88,8 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
         ) {
             if (window != null && window.durationMs > 0) {
                 Slider(
-                    value = position.coerceIn(0, window.durationMs).toFloat(),
-                    valueRange = 0f..window.durationMs.toFloat(),
+                    value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
+                    valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
                     enabled = window.canTimeShift && !host.liveBufferExpired,
                     onValueChange = {
                         ui.scrubMs = it.toLong()
@@ -99,7 +99,7 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
                         ui.scrubMs?.let(host::seekTo)
                         ui.scrubMs = null
                     },
-                    track = { LivePlayerTrack(window, position, accent) },
+                    track = { LivePlayerTrack(window, position, accent, expired = host.liveBufferExpired) },
                     modifier = Modifier.weight(1f).testTag("touch:scrubber").semantics {
                         contentDescription = "Live playback position"
                         stateDescription = spoken

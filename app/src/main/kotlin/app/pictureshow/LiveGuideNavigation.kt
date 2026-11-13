@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.runtime.Composable
@@ -59,11 +58,19 @@ internal fun LiveGuideViewMode(linear: Boolean, tv: Boolean, onChange: (Boolean)
 
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun LiveGuideDateBar(start: Long, now: Long, tv: Boolean, enabled: Boolean, onChange: (Long) -> Unit) {
+internal fun LiveGuideDateBar(
+    start: Long,
+    now: Long,
+    tv: Boolean,
+    enabled: Boolean,
+    viewportAtNow: Boolean? = null,
+    onNow: (() -> Unit)? = null,
+    onChange: (Long) -> Unit
+) {
     val time = liveTime()
     val zone = ZoneId.systemDefault()
     var days by remember { mutableStateOf(false) }
-    val atNow = start == liveGuideWindowStart(now)
+    val atNow = viewportAtNow ?: (start == liveGuideWindowStart(now))
     Row(
         Modifier.fillMaxWidth().height(
             if (tv) liveGuideRulerHeight(true, androidx.compose.ui.platform.LocalDensity.current.fontScale).dp else 48.dp
@@ -75,24 +82,9 @@ internal fun LiveGuideDateBar(start: Long, now: Long, tv: Boolean, enabled: Bool
         val label = if (tv) "${time.day(start)} ▾" else "${time.day(start)} · ${time.clock(start)} ▾"
         LiveQuietAction(label, tv, Modifier.weight(1f).testTag("live:guide-day"), enabled, fillWidth = true) { days = true }
         LiveQuietIcon("later", "Later", tv, enabled) { onChange(start + LiveTvViewModel.WINDOW) }
-        if (!atNow) {
-            LiveQuietAction(
-                "Now",
-                tv,
-                Modifier.then(
-                    if (tv) {
-                        Modifier.width(
-                            (
-                                48 *
-                                    androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)
-                                ).dp
-                        )
-                    } else {
-                        Modifier
-                    }
-                ).testTag("live:guide-now"),
-                enabled
-            ) { onChange(liveGuideWindowStart(now)) }
+        // A permanent native-button slot keeps the day and direction controls still on every return path.
+        LiveQuietIcon("now", "Now", tv, enabled && !atNow) {
+            onNow?.invoke() ?: onChange(liveGuideWindowStart(now))
         }
     }
     if (days) {
@@ -153,7 +145,7 @@ internal fun LiveQuietAction(
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 private fun LiveQuietIcon(kind: String, label: String, tv: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val icon = remember(kind) { liveIcon(kind) }
+    val icon = remember(kind) { if (kind == "now") null else liveIcon(kind) }
     if (tv) {
         androidx.tv.material3.IconButton(
             onClick,
@@ -162,10 +154,20 @@ private fun LiveQuietIcon(kind: String, label: String, tv: Boolean, enabled: Boo
             ).testTag("live:guide-$kind"),
             enabled = enabled,
             colors = androidx.tv.material3.IconButtonDefaults.colors(containerColor = Color.Transparent)
-        ) { androidx.tv.material3.Icon(icon, label, Modifier.size(20.dp)) }
+        ) {
+            if (icon == null) {
+                androidx.tv.material3.Text("Now", maxLines = 1, style = androidx.tv.material3.MaterialTheme.typography.bodySmall)
+            } else {
+                androidx.tv.material3.Icon(icon, label, Modifier.size(20.dp))
+            }
+        }
     } else {
-        androidx.compose.material3.IconButton(onClick, enabled = enabled) {
-            androidx.compose.material3.Icon(icon, label, Modifier.size(24.dp))
+        androidx.compose.material3.IconButton(onClick, Modifier.testTag("live:guide-$kind"), enabled = enabled) {
+            if (icon == null) {
+                androidx.compose.material3.Text("Now", maxLines = 1, style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
+            } else {
+                androidx.compose.material3.Icon(icon, label, Modifier.size(24.dp))
+            }
         }
     }
 }

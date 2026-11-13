@@ -22,12 +22,15 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -37,10 +40,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.livetv.LiveChannel
 import app.pictureshow.core.livetv.LiveProgram
+import kotlinx.coroutines.flow.collectLatest
 
 internal const val LIVE_GUIDE_WIDTH = 1080f
 internal const val LIVE_GUIDE_TEXT_MIN = 72f
@@ -80,20 +86,51 @@ internal fun LiveGuideContent(
         programs.groupBy { it.channelId }.mapValues { (_, shows) -> liveGuideCells(shows, start, end) }
     }
     val firstChannel = channels.firstOrNull { rows[it.id].orEmpty().isNotEmpty() }?.id
+    var activeChannel by remember { mutableStateOf<String?>(null) }
+    var activeProgram by remember { mutableStateOf<String?>(null) }
+    var viewportFocus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(rows, scroll, viewportWidth, density.density) {
+        snapshotFlow { Triple(scroll.value, scroll.isScrollInProgress, activeProgram) }.collectLatest { position ->
+            if (position.second || viewportWidth <= 0f) return@collectLatest
+            // Let native bring-into-view and focus changes settle before reconciling a manual time scroll.
+            repeat(2) { withFrameNanos { } }
+            if (scroll.isScrollInProgress || scroll.value != position.first || activeProgram != position.third) return@collectLatest
+            val cells = activeChannel?.let(rows::get).orEmpty()
+            val candidate = liveGuideViewportFocus(cells, position.third, position.first / density.density, viewportWidth, inset)
+            if (candidate != null && candidate != position.third) viewportFocus = "p:$candidate"
+        }
+    }
+    val textMeasurer = rememberTextMeasurer()
+    val rulerStyle = if (tv) {
+        androidx.tv.material3.MaterialTheme.typography.bodySmall
+    } else {
+        androidx.compose.material3.MaterialTheme.typography.bodySmall
+    }
     val rulerHeight = liveGuideRulerHeight(tv, density.fontScale).dp
     Row(Modifier.fillMaxWidth().height(rulerHeight).testTag("live:guide-ruler")) {
         Box(Modifier.width(channelWidth).height(rulerHeight), contentAlignment = Alignment.CenterStart) { if (tv) channelHeader() }
         Box(Modifier.weight(1f)) {
             Box(Modifier.horizontalScroll(scroll).width(canvasWidth.dp).height(rulerHeight)) {
                 (0..6).forEach { tick ->
-                    Box(Modifier.offset(x = (inset + liveGuideTickX(tick)).dp).height(rulerHeight).testTag("live:tick:$tick")) {
-                        LiveText(
-                            time.clock(start + tick * 30 * 60_000L),
-                            tv,
-                            Modifier.align(Alignment.CenterStart),
-                            small = true,
-                            maxLines = 1
-                        )
+                    val tickX = inset + liveGuideTickX(tick)
+                    val label = time.clock(start + tick * 30 * 60_000L)
+                    val labelWidth = remember(label, rulerStyle, textMeasurer, density.density) {
+                        textMeasurer.measure(AnnotatedString(label), style = rulerStyle, softWrap = false, maxLines = 1).size.width /
+                            density.density
+                    }
+                    val labelFits by remember(tickX, labelWidth, scroll, viewportWidth, density.density) {
+                        derivedStateOf { liveGuideRulerLabelFits(tickX, labelWidth, scroll.value / density.density, viewportWidth) }
+                    }
+                    Box(Modifier.offset(x = tickX.dp).height(rulerHeight).testTag("live:tick:$tick")) {
+                        if (labelFits) {
+                            LiveText(
+                                label,
+                                tv,
+                                Modifier.align(Alignment.CenterStart).testTag("live:tick-label:$tick"),
+                                small = true,
+                                maxLines = 1
+                            )
+                        }
                         Box(Modifier.align(Alignment.BottomStart).width(1.dp).height(6.dp).background(LiveMuted))
                     }
                 }
@@ -164,8 +201,12 @@ internal fun LiveGuideContent(
                                 .onFocusChanged { isFocused = it.isFocused }
                                 .liveFocus(
                                     key,
-                                    returnFocus == key || returnFocus == null && channel.id == firstChannel && show.id == initial
+                                    viewportFocus?.let { it == key }
+                                        ?: (returnFocus == key || returnFocus == null && channel.id == firstChannel && show.id == initial)
                                 ) {
+                                    activeChannel = channel.id
+                                    activeProgram = show.id
+                                    viewportFocus = null
                                     onFocus(key)
                                 }.semantics { contentDescription = label }
                             // Surface owns the focus scale, while the outer layer owns its edge translation.
@@ -282,5 +323,7 @@ internal fun liveGuideFocusShift(x: Float, width: Float, viewportLeft: Float, vi
     val growth = width.coerceAtLeast(0f) * .05f
     val minimum = viewportLeft + 8 - (x - growth)
     val maximum = viewportLeft + viewportWidth - 8 - (x + width + growth)
-    return if (minimum <= maximum) 0f.coerceIn(minimum, maximum) else minimum
+    val requested = if (minimum <= maximum) 0f.coerceIn(minimum, maximum) else minimum
+    val limit = growth + 8
+    return requested.coerceIn(-limit, limit)
 }

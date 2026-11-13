@@ -27,20 +27,30 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.playback.ObservedLiveWindow
 
-/** The live marker is the measured default position, which can precede the end of the decoder's window. */
+/** The track ends at the measured decoder default, not the potentially later window-duration tail. */
+internal fun liveTrackPositionFraction(window: ObservedLiveWindow?, positionMs: Long, expired: Boolean = false): Float? {
+    val measured = window?.takeIf { it.canTimeShift && it.contains(positionMs) && !expired } ?: return null
+    val edge = measured.goLivePosition()?.takeIf { it > 0 } ?: return null
+    return if (measured.atLiveEdge(positionMs)) 1f else (positionMs.toDouble() / edge).toFloat().coerceIn(0f, 1f)
+}
+
+/** Both ends describe the observed buffer; there is no wall-clock mapping to a scheduled programme. */
 @Composable
-internal fun LivePlayerTrack(window: ObservedLiveWindow?, positionMs: Long, accent: Color, modifier: Modifier = Modifier) {
+internal fun LivePlayerTrack(
+    window: ObservedLiveWindow?,
+    positionMs: Long,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    expired: Boolean = false
+) {
+    val fraction = liveTrackPositionFraction(window, positionMs, expired)
     Canvas(modifier.fillMaxWidth().height(12.dp).testTag("player:live-track").clearAndSetSemantics {}) {
         val y = size.height / 2
         val stroke = 4.dp.toPx()
         drawLine(Color.White.copy(alpha = .28f), Offset(0f, y), Offset(size.width, y), stroke, StrokeCap.Round)
-        if (window != null && window.durationMs > 0) {
-            val fraction = (positionMs.toFloat() / window.durationMs).coerceIn(0f, 1f)
-            drawLine(accent, Offset(0f, y), Offset(size.width * fraction, y), stroke, StrokeCap.Round)
-            window.goLivePosition()?.let { edge ->
-                val x = size.width * edge.toFloat() / window.durationMs
-                drawLine(Color.White, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
-            }
+        fraction?.let {
+            drawLine(accent, Offset(0f, y), Offset(size.width * it, y), stroke, StrokeCap.Round)
+            drawLine(Color.White, Offset(size.width, 0f), Offset(size.width, size.height), 2.dp.toPx())
         }
     }
 }
@@ -104,12 +114,29 @@ internal fun PlayerLiveEdgeChip(window: ObservedLiveWindow?, positionMs: Long, e
         if (atEdge && !paused) {
             LiveEdgeBadge(tv = true, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("player:go-live"))
         } else {
-            androidx.tv.material3.Button(
+            PlayerActionButton(
                 onClick = onGoLive,
+                liveStyle = true,
+                fillContentWidth = true,
                 enabled = window?.goLivePosition() != null,
                 scale = playerButtonScale(),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("player:go-live")
-            ) { androidx.tv.material3.Text("Go live") }
+            ) {
+                Canvas(Modifier.size(6.dp).clearAndSetSemantics {}) { drawCircle(Color(0xFFFF6B6B)) }
+                androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                androidx.tv.material3.Text("Go live")
+            }
         }
     }
+}
+
+/** A scrub range ends at the measured live target; an unknown target retains only the measured window range. */
+internal fun liveBufferScrubEnd(window: ObservedLiveWindow): Long =
+    window.goLivePosition()?.takeIf { it > 0 } ?: window.durationMs.coerceAtLeast(0)
+
+/** Native thumb and custom fill use the same two-second edge threshold. */
+internal fun liveBufferSliderPosition(window: ObservedLiveWindow, positionMs: Long, expired: Boolean): Float {
+    val end = liveBufferScrubEnd(window)
+    return liveTrackPositionFraction(window, positionMs, expired)?.let { it * end.toFloat() }
+        ?: positionMs.coerceIn(0, end).toFloat()
 }

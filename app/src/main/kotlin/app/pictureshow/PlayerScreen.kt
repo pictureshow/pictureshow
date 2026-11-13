@@ -211,8 +211,11 @@ internal fun PlayerItemScreen(
     var interaction by remember { mutableLongStateOf(0) }
     var position by host::position
     val duration by host::duration
+    var rootFocused by remember { mutableStateOf(false) }
+    var focusControls by remember { mutableStateOf(false) }
     val playback = rememberPlayerPlayback(player, onPause = {
         controls = true
+        if (livePauseRequestsControlFocus(host.isLive, rootFocused)) focusControls = true
         interaction++
     }, onResume = { interaction++ })
     val paused = playback.paused || pauseIntent
@@ -248,8 +251,6 @@ internal fun PlayerItemScreen(
     val tiles by host::tiles
     var chaptersOpen by remember { mutableStateOf(false) }
     var seekPreview by host::seekPreview
-    var rootFocused by remember { mutableStateOf(false) }
-    var focusControls by remember { mutableStateOf(false) }
     var actionsFocused by remember { mutableStateOf(false) }
     val nextCancelled by host::nextCancelled
     val ended by host::ended
@@ -371,7 +372,7 @@ internal fun PlayerItemScreen(
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
         if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && extraPanel == null && !restoringSeekFocus) {
-            playFocus.requestFocus()
+            if (host.isLive && !host.liveCanTimeShift) audioFocus.requestFocus() else playFocus.requestFocus()
             focusControls = false
         }
     }
@@ -767,7 +768,8 @@ internal fun PlayerItemScreen(
                                     }
                                 ),
                             ended,
-                            enabled = !host.isLive || host.liveCanTimeShift
+                            enabled = !host.isLive || host.liveCanTimeShift,
+                            liveStyle = host.isLive
                         ) {
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()
@@ -781,7 +783,7 @@ internal fun PlayerItemScreen(
                                 }
                             }
                         }
-                        Button(scale = playerButtonScale(), onClick = {
+                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Audio,
                                 trackMenus,
@@ -790,7 +792,7 @@ internal fun PlayerItemScreen(
                                 state.audioIndex
                             )
                         }, modifier = Modifier.focusRequester(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
-                        Button(scale = playerButtonScale(), onClick = {
+                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Subtitle,
                                 trackMenus,
@@ -802,14 +804,15 @@ internal fun PlayerItemScreen(
                             Text("Subtitles")
                         }
                         if (metadata.chapters.isNotEmpty()) {
-                            Button(scale = playerButtonScale(), onClick = {
+                            PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                                 chaptersOpen = true
                                 seekPreview = null
                             }, modifier = Modifier.focusRequester(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
                                 Text("Chapters")
                             }
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Playback speed", speedFocus)
@@ -821,7 +824,8 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Playback info", infoFocus)
@@ -831,7 +835,8 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Playback info")
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Quality", qualityFocus)
@@ -850,7 +855,8 @@ internal fun PlayerItemScreen(
                                 },
                             enabled = offline == null && !state.preparing && state.decision != null
                         ) { Text("Quality · ${if (offline != null) "Download" else host.qualityLabel}") }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = { finish(reason = "stop-button") },
                             modifier = readerOpenerOnly("player:stop")

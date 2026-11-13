@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -52,7 +53,19 @@ class LiveProgramEntryTest {
         assertEquals(48.dp, compose.onNodeWithTag("live:program-artwork", useUnmergedTree = true).getUnclippedBoundsInRoot().left)
     }
 
-    private fun render(current: Boolean) {
+    @Test fun scheduledProgrammeNamesItsRecordingStateSeparatelyFromCancel() {
+        render(current = false)
+        compose.onNodeWithText("Recording scheduled").assertIsDisplayed()
+        compose.onNodeWithText("Cancel recording…").assertIsFocused()
+    }
+
+    @Test fun inProgressProgrammeNamesItsActualRecordingState() {
+        render(current = true, status = "InProgress")
+        compose.onNodeWithText("Recording").assertIsDisplayed()
+        compose.onNodeWithText("Watch now").assertIsFocused()
+    }
+
+    private fun render(current: Boolean, status: String = "New") {
         val program = LiveProgram(
             "p",
             "Programme",
@@ -67,7 +80,7 @@ class LiveProgramEntryTest {
                 put("Name", "Scheduled programme")
                 put("ProgramId", "p")
                 put("ChannelId", "c")
-                put("Status", "New")
+                put("Status", status)
             }
         )
         val state = LiveTvState(

@@ -66,10 +66,14 @@ internal fun PlayerTimeline(
             liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(positionMs))
         }
         Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Available buffer · start", style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
+                Text("Live edge", style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
+            }
+            LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF), expired = liveExpired)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    readout.status,
+                    liveTimelineVisualStatus(readout, liveWindow?.behindLiveMs(positionMs)),
                     modifier = Modifier.clearAndSetSemantics {}
                 )
                 Box(
@@ -168,3 +172,11 @@ internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: 
     behindMs != null && behindMs > 2_000 -> liveBehindDescription(behindMs)
     else -> "Live"
 }
+
+/** Keep the compact negative clock, with explicit units nearby to distinguish seconds from programme minutes. */
+internal fun liveTimelineVisualStatus(readout: LiveTimelineReadout, behindMs: Long?): String =
+    if (readout.clock.isNotEmpty() && behindMs != null) {
+        listOf(readout.status, liveBehindDescription(behindMs)).filter(String::isNotBlank).joinToString(" · ")
+    } else {
+        readout.status
+    }

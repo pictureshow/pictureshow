@@ -26,10 +26,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +54,7 @@ import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -105,7 +108,14 @@ internal fun LiveTvScreen(
     }
     val guideList = androidx.compose.runtime.key(scrollOwner) { rememberLazyListState() }
     val guideScroll = rememberScrollState()
+    val guideScope = rememberCoroutineScope()
+    val guideAtStart by remember { derivedStateOf { guideScroll.value == 0 } }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    fun resetGuideNow() {
+        guideScope.launch { guideScroll.scrollTo(0) }
+        vm.refresh(liveGuideWindowStart(now))
+    }
+
     LaunchedEffect(state.fetchedAt) {
         while (true) {
             now = System.currentTimeMillis()
@@ -145,7 +155,6 @@ internal fun LiveTvScreen(
         draft != null -> if (state.draftSeries) "Record series" else "Record once"
         schedule != null -> if (cancelling) "Cancel ${if (selectedSeries) "series" else "recording"}?" else "Recording schedule"
         program != null -> "Program details"
-        recording != null -> "Delete recording?"
         else -> "Live TV"
     }
     val guideHeader = tv && !detail && tab in listOf("Channels", "Guide")
@@ -409,13 +418,35 @@ internal fun LiveTvScreen(
         val body: @Composable () -> Unit = {
             if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
-                    if (!tv) LiveGuideDateBar(state.windowStart, now, false, !state.loading, vm::refresh)
+                    if (!tv) {
+                        LiveGuideDateBar(
+                            state.windowStart,
+                            now,
+                            false,
+                            !state.loading,
+                            viewportAtNow =
+                            state.windowStart == liveGuideWindowStart(now) && guideAtStart,
+                            onNow = ::resetGuideNow,
+                            onChange = vm::refresh
+                        )
+                    }
                     if (state.programs.isEmpty() && !state.loading) LiveText(liveGuideEmptyMessage(guideUnavailable), tv, small = true)
                     LiveGuide(
                         channels, state.programs, account, tv, state.windowStart, now, guideScroll, guideList,
                         returnFocus, restoreFocus, ::focused,
                         guideUnavailable = guideUnavailable,
-                        channelHeader = { LiveGuideDateBar(state.windowStart, now, true, !state.loading, vm::refresh) }
+                        channelHeader = {
+                            LiveGuideDateBar(
+                                state.windowStart,
+                                now,
+                                true,
+                                !state.loading,
+                                viewportAtNow =
+                                state.windowStart == liveGuideWindowStart(now) && guideAtStart,
+                                onNow = ::resetGuideNow,
+                                onChange = vm::refresh
+                            )
+                        }
                     ) {
                         selectedProgram =
                             it
@@ -423,7 +454,20 @@ internal fun LiveTvScreen(
                 }
             } else {
                 Column {
-                    if (!detail && tab == "Guide") LiveGuideDateBar(state.windowStart, now, tv, !state.loading, vm::refresh)
+                    if (!detail &&
+                        tab == "Guide"
+                    ) {
+                        LiveGuideDateBar(
+                            state.windowStart,
+                            now,
+                            tv,
+                            !state.loading,
+                            viewportAtNow =
+                            state.windowStart == liveGuideWindowStart(now),
+                            onNow = ::resetGuideNow,
+                            onChange = vm::refresh
+                        )
+                    }
                     val recordingShelf = tv && !detail && tab == "Recordings"
                     val lastRecordingGroup = state.recordings.map { it.seriesName?.takeIf(String::isNotBlank) ?: "Recordings" }
                         .distinct().lastOrNull()

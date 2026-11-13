@@ -24,6 +24,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import app.pictureshow.core.livetv.canTune
+import app.pictureshow.core.livetv.recordingStatus
 
 @Composable
 internal fun LiveProgramDetail(
@@ -70,6 +71,16 @@ internal fun LiveProgramDetail(
                 tv,
                 small = true
             )
+            timer?.let { scheduled ->
+                Row(
+                    Modifier.testTag("live:program-recording-status"),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (scheduled.status == "New") LiveRecordingDot()
+                    LiveStatus(liveProgramRecordingLabel(scheduled.status), tv, scheduled.status)
+                }
+            }
             if (!current && liveInstant(program.startDate) > now) LiveText("Starts at ${time.clock(program.startDate)}", tv, small = true)
             program.overview?.takeIf { it.isNotBlank() }?.let { LiveText(it, tv) }
             LiveProgramActions(
@@ -169,3 +180,6 @@ internal fun liveProgramRecordInitialFocus(tv: Boolean, primary: Boolean): Boole
 
 /** The destination owns32dp; TV programme content reaches the shared48dp page keyline. */
 internal fun liveProgramContentInset(tv: Boolean): Int = if (tv) 16 else 0
+
+/** Keep an explicit recording fact separate from its action, preserving every non-scheduled server status. */
+internal fun liveProgramRecordingLabel(status: String): String = if (status == "New") "Recording scheduled" else recordingStatus(status)

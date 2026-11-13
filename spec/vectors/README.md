@@ -480,3 +480,5 @@ Android font and radio geometry checks use Robolectric native graphics so measur
 `live-presentation` also defines minimum-distance guide focus scrolling on each axis: fully visible programmes retain their saved position, clipped programmes reveal their nearest edge, and a programme spanning the viewport stays put. Native Back tests retain the selected key and both time/channel offsets under a parent catalog focus pivot.
 
 Live presentation additionally covers programme entry focus for existing timers and the TV programme48dp keyline (native16dp inset inside destination32dp); touch inset remains0.
+
+Live presentation also fixes bounded TV focus paint, visible-programme reconciliation after manual time scrolling, exact-tick whole-label ruler visibility and permanent Now geometry. Live transport vectors cover surface-only pause focus, measured-default buffer normalization, native thumb/track edge agreement, unknown/expired ranges, human behind-live units and separate programme recording status. The native guide/player regressions additionally exercise real focus, scrolling and large-font button geometry.

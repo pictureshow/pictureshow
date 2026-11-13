@@ -16,7 +16,11 @@
     "app/src/main/kotlin/app/pictureshow/LiveGuideScroll.kt",
     "app/src/main/kotlin/app/pictureshow/LiveGuideTextWindow.kt",
     "app/src/main/kotlin/app/pictureshow/RecordingDetailActions.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveConfirmations.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveConfirmations.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveProgramDetail.kt",
+    "app/src/main/kotlin/app/pictureshow/PlayerControls.kt",
+    "app/src/main/kotlin/app/pictureshow/PlayerTimeline.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideViewport.kt"
   ],
   "cases": [
     {
@@ -2034,55 +2038,778 @@
     },
     {
       "id": "program-entry-true-true",
-      "kind": "program-record-entry-focus",
       "input": {
         "tv": true,
         "primary": true
+      },
+      "expected": true,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-true-false",
+      "input": {
+        "tv": true,
+        "primary": false
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-false-true",
+      "input": {
+        "tv": false,
+        "primary": true
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-false-false",
+      "input": {
+        "tv": false,
+        "primary": false
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-content-inset-true",
+      "input": {
+        "tv": true
+      },
+      "expected": 16,
+      "operation": "program-content-inset"
+    },
+    {
+      "id": "program-content-inset-false",
+      "input": {
+        "tv": false
+      },
+      "expected": 0,
+      "operation": "program-content-inset"
+    },
+    {
+      "id": "programme-recording-status-New",
+      "input": {
+        "status": "New"
+      },
+      "expected": "Recording scheduled",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-InProgress",
+      "input": {
+        "status": "InProgress"
+      },
+      "expected": "Recording",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-Error",
+      "input": {
+        "status": "Error"
+      },
+      "expected": "Failed",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-Cancelled",
+      "input": {
+        "status": "Cancelled"
+      },
+      "expected": "Cancelled",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-ProviderX",
+      "input": {
+        "status": "ProviderX"
+      },
+      "expected": "Unknown status (ProviderX)",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "live-media-pause-focus-True-True",
+      "operation": "live-pause-focus",
+      "input": {
+        "live": true,
+        "surfaceFocused": true
       },
       "expected": true
     },
     {
-      "id": "program-entry-true-false",
-      "kind": "program-record-entry-focus",
+      "id": "live-media-pause-focus-True-False",
+      "operation": "live-pause-focus",
       "input": {
-        "tv": true,
-        "primary": false
+        "live": true,
+        "surfaceFocused": false
       },
       "expected": false
     },
     {
-      "id": "program-entry-false-true",
-      "kind": "program-record-entry-focus",
+      "id": "live-media-pause-focus-False-True",
+      "operation": "live-pause-focus",
       "input": {
-        "tv": false,
-        "primary": true
+        "live": false,
+        "surfaceFocused": true
       },
       "expected": false
     },
     {
-      "id": "program-entry-false-false",
-      "kind": "program-record-entry-focus",
+      "id": "live-media-pause-focus-False-False",
+      "operation": "live-pause-focus",
       "input": {
-        "tv": false,
-        "primary": false
+        "live": false,
+        "surfaceFocused": false
       },
       "expected": false
     },
     {
-      "id": "program-content-inset-true",
-      "kind": "program-content-inset",
+      "id": "live-buffer-fill-normal",
+      "operation": "live-buffer-fill",
       "input": {
-        "tv": true
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
       },
-      "expected": 16
+      "expected": 0.37037037037037035
     },
     {
-      "id": "program-content-inset-false",
-      "kind": "program-content-inset",
+      "id": "live-buffer-fill-threshold",
+      "operation": "live-buffer-fill",
       "input": {
-        "tv": false
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-near-edge",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-ahead",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 28000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-missing",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": null,
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-no-default",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-no-seek",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-expired",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-outside",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-negative",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": -1,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-zero-edge",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        },
+        "position": 0,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-invalid-default",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 31000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-scrub-end-measured",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-scrub-end-no-default",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-zero",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-no-seek",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        }
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-scrub-end-invalid",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 31000,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-empty",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 0,
+          "default": 27000,
+          "seekable": true
+        }
       },
       "expected": 0
+    },
+    {
+      "id": "live-buffer-status-paused",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Paused",
+        "clock": "\u22120:12",
+        "behind": 12000
+      },
+      "expected": "Paused \u00b7 12 sec behind live"
+    },
+    {
+      "id": "live-buffer-status-playing",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "",
+        "clock": "\u22122:13",
+        "behind": 133000
+      },
+      "expected": "2 min 13 sec behind live"
+    },
+    {
+      "id": "live-buffer-status-edge",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Live",
+        "clock": "",
+        "behind": 0
+      },
+      "expected": "Live"
+    },
+    {
+      "id": "live-buffer-status-unknown",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Live position unavailable",
+        "clock": "",
+        "behind": null
+      },
+      "expected": "Live position unavailable"
+    },
+    {
+      "id": "guide-ruler-fit-left-clipped",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 180,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-ruler-fit-left-gutter",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 208,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-ruler-fit-right-clipped",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 560,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-ruler-fit-right-gutter",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 532,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-ruler-fit-empty",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 208,
+        "width": 0,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-viewport-focus-keep",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 0,
+        "viewportWidth": 400
+      },
+      "expected": "a"
+    },
+    {
+      "id": "guide-viewport-focus-left",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 300,
+        "viewportWidth": 400
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-right",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "c",
+        "viewportStart": 0,
+        "viewportWidth": 300
+      },
+      "expected": "a"
+    },
+    {
+      "id": "guide-viewport-focus-boundary",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 180,
+        "viewportWidth": 300
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-no-current",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": null,
+        "viewportStart": 300,
+        "viewportWidth": 400
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-no-visible",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 700,
+        "viewportWidth": 100
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-viewport-focus-no-viewport",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 0,
+        "viewportWidth": 0
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-focus-cap-far-left",
+      "operation": "focus-shift",
+      "input": {
+        "x": 0,
+        "width": 98,
+        "viewportLeft": 500,
+        "viewportWidth": 500
+      },
+      "expected": 12.9
+    },
+    {
+      "id": "guide-focus-cap-far-right",
+      "operation": "focus-shift",
+      "input": {
+        "x": 900,
+        "width": 98,
+        "viewportLeft": 0,
+        "viewportWidth": 500
+      },
+      "expected": -12.9
+    },
+    {
+      "id": "live-buffer-thumb-normal",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-threshold",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "expired": false
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-thumb-ahead",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 28000,
+        "expired": false
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-thumb-unknown",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-expired",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-nonseekable",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
     }
   ]
 }
