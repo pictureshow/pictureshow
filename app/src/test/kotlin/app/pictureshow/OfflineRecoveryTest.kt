@@ -235,7 +235,14 @@ class OfflineRecoveryTest {
         userStopped(permit.issuedAt)
         assertEquals(null, offlineRecoveryPermit(app))
         assertTrue(offlineRecoveryPermit(app, viewerReturned = true) != null)
-        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(10))
+        // Permits use wall time; advancing the paused scheduler does not move that clock.
+        for (attempt in 0 until 1_000) {
+            if (offlineNewRecoveryPermit(app).issuedAt > permit.issuedAt) break
+            Thread.sleep(1)
+        }
+        val returnedAt = offlineNewRecoveryPermit(app).issuedAt
+        assertTrue("Viewer return must follow the stop in wall time: ${permit.issuedAt} -> $returnedAt", returnedAt > permit.issuedAt)
+        assertEquals(null, offlineRecoveryPermit(app))
         assertTrue(offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS, viewerReturned = true))
         val renewed = offlineStoredRecoveryPermit(scheduler.getPendingJob(OFFLINE_JOB)!!.extras)!!
         assertTrue(renewed.issuedAt > permit.issuedAt)
