@@ -89,14 +89,20 @@ class LiveChannelMarkTest {
             }
             assertEquals(size, original.right - original.left)
             compose.runOnIdle { channel.value = channel.value.copy(imageTags = mapOf("Primary" to "missing")) }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
             compose.waitUntil(10_000) { started.get() >= 1 }
             compose.onNodeWithText("A", useUnmergedTree = true).assertIsDisplayed()
             gate.complete(Unit)
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
             compose.waitUntil(10_000) { failed.get() >= 1 }
             compose.waitForIdle()
             compose.onNodeWithText("A", useUnmergedTree = true).assertIsDisplayed()
             assertEquals(original, compose.onNodeWithTag("live:channel-mark:c").getUnclippedBoundsInRoot())
             compose.runOnIdle { channel.value = channel.value.copy(imageTags = mapOf("Primary" to "success")) }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText("A", useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
             }
@@ -104,6 +110,8 @@ class LiveChannelMarkTest {
             compose.runOnIdle {
                 channel.value = channel.value.copy(name = "Borealis", imageTags = mapOf("Primary" to "another-missing"))
             }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
             compose.waitUntil(10_000) { failed.get() >= 2 }
             compose.waitForIdle()
             compose.onNodeWithText("B", useUnmergedTree = true).assertIsDisplayed()
