@@ -82,6 +82,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
             XCTAssertFalse(done.frame.intersects(submit.frame), "Keyboard chrome must not overlap Sign in")
         }
         XCTAssertLessThanOrEqual(submit.frame.height, 64, "Primary auth control should fit the ordinary touch scale")
+        let passwordSubmitFrame = submit.frame
         // Exercise the native password Go/Return submit, not a launch hook.
         password.typeText("\n")
         #else
@@ -116,7 +117,43 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(code.waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.buttons["signIn"].exists)
         XCTAssertFalse(app.staticTexts["signInError"].exists, "Returning to password sign-in must not restore the previous rejected attempt's error")
+        #if os(iOS)
+        let returnedKeyboard = app.keyboards.firstMatch
+        func returnedViewport() -> CGRect {
+            let window = app.windows.firstMatch.frame
+            let keyboardTop = [returnedKeyboard, app.otherElements["SystemInputAssistantView"].firstMatch,
+                               app.otherElements["inputView"].firstMatch]
+                .filter { $0.exists && !$0.frame.isEmpty && $0.frame.intersects(window) }
+                .map { $0.frame.minY }.min() ?? window.maxY
+            return CGRect(x: window.minX, y: window.minY, width: window.width,
+                          height: max(0, min(window.maxY, keyboardTop) - window.minY))
+        }
+        let returnedPasswordReady = wait(5) {
+            returnedKeyboard.exists && password.debugDescription.contains("Keyboard Focused") &&
+            !password.frame.isEmpty && !submit.frame.isEmpty &&
+            returnedViewport().contains(password.frame) && returnedViewport().contains(submit.frame)
+        }
+        #endif
         record("Round3 Quick Connect cancelled password route retained")
+        #if os(iOS)
+        XCTAssertTrue(returnedPasswordReady, "Use password must focus the retained password field and expose it with Sign in above the actual keyboard and input assistant")
+        XCTAssertFalse(username.debugDescription.contains("Keyboard Focused"), "A filled username must not reclaim keyboard focus after Quick Connect")
+        XCTAssertTrue((password.value as? String)?.contains("•") == true, "The retained synthetic password must still have a masked native AX value; this does not prove rasterized bullets")
+        XCTAssertTrue(password.isHittable && submit.isHittable)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(password.frame))
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(submit.frame))
+        XCTAssertTrue(returnedViewport().contains(password.frame))
+        XCTAssertTrue(returnedViewport().contains(submit.frame))
+        XCTAssertEqual(submit.frame.minX, passwordSubmitFrame.minX, accuracy: 2, "Returning to password must retain the action gutter")
+        XCTAssertEqual(submit.frame.width, passwordSubmitFrame.width, accuracy: 2, "Returning to password must retain the action width")
+        XCTAssertEqual(submit.frame.height, passwordSubmitFrame.height, accuracy: 2, "Returning to password must retain the action height")
+        XCTAssertLessThanOrEqual(submit.frame.height, 64)
+        if done.exists && !done.frame.isEmpty {
+            XCTAssertFalse(done.frame.intersects(show.frame), "Keyboard chrome must not overlap Show password after Quick Connect")
+            XCTAssertFalse(done.frame.intersects(submit.frame), "Keyboard chrome must not overlap Sign in after Quick Connect")
+        }
+        XCTAssertEqual(fixture.authenticationRequests, 1, "Returning focus must not submit another password authentication")
+        #endif
         assertViewerCopy()
     }
 

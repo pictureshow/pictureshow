@@ -324,7 +324,14 @@ private struct SignInForm: View {
             Button { flow.clear(); flow.begin(server: server, model: model) } label: { Text("Renew Quick Connect code") }
                 .secondaryActionStyle().modifier(SignInActionTarget()).disabled(flow.busy)
         }
-        Button { flow.hide(); focused = "username" } label: { Text("Use password") }
+        Button {
+            flow.hide()
+            #if os(iOS)
+            focused = username.isEmpty ? "username" : "password"
+            #else
+            focused = "username"
+            #endif
+        } label: { Text("Use password") }
             .secondaryActionStyle().modifier(SignInActionTarget()).accessibilityIdentifier("cancelQuick")
     }
 
