@@ -476,3 +476,5 @@ Centering permits at most one physical pixel of glyph-position rounding; row hei
 The native settings layout suite also checks that a consequence stays inside its row's click target, multiline radio options align on their first label line at 1.3x font scale, and closing a group picker returns to the same scrolled opener. The first-line case runs against both settings and the actual player Quality menu; each platform supplies equivalent native geometry evidence.
 
 Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
+
+`live-presentation` also defines minimum-distance guide focus scrolling on each axis: fully visible programmes retain their saved position, clipped programmes reveal their nearest edge, and a programme spanning the viewport stays put. Native Back tests retain the selected key and both time/channel offsets under a parent catalog focus pivot.

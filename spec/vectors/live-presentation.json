@@ -12,7 +12,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveScheduleEditor.kt",
     "app/src/main/kotlin/app/pictureshow/LivePlayerPresentation.kt",
     "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveGuideFreshness.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveGuideFreshness.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideScroll.kt"
   ],
   "cases": [
     {
@@ -1727,6 +1728,86 @@
         "now": "2026-11-10T18:00:00Z"
       },
       "expected": "午後3:14"
+    },
+    {
+      "id": "live-presentation.guide-scroll-visible",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 100,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-leading",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -15,
+        "size": 40,
+        "container": 500
+      },
+      "expected": -15
+    },
+    {
+      "id": "live-presentation.guide-scroll-trailing",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 480,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 20
+    },
+    {
+      "id": "live-presentation.guide-scroll-covers",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -100,
+        "size": 800,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-oversized-leading",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 40,
+        "size": 800,
+        "container": 500
+      },
+      "expected": 40
+    },
+    {
+      "id": "live-presentation.guide-scroll-oversized-trailing",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -400,
+        "size": 800,
+        "container": 500
+      },
+      "expected": -100
+    },
+    {
+      "id": "live-presentation.guide-scroll-leading-boundary",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 0,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-trailing-boundary",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 460,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
     }
   ]
 }

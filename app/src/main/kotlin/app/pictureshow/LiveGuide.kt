@@ -50,7 +50,7 @@ internal fun liveGuideRulerHeight(tv: Boolean, fontScale: Float): Float = if (tv
 
 /** All rows share the same scroll position and mapping, including the single sticky ruler. */
 @Composable
-internal fun LiveGuide(
+internal fun LiveGuideContent(
     channels: List<LiveChannel>,
     programs: List<LiveProgram>,
     account: Account,

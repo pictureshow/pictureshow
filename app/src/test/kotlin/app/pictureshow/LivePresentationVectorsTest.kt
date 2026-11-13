@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(134, cases.size)
+        assertEquals(142, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -48,6 +48,12 @@ class LivePresentationVectorsTest {
                 )
             }
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "guide-scroll" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveGuideScrollDistance(value("offset").toFloat(), value("size").toFloat(), value("container").toFloat()),
+                    id
+                )
+
                 "schedule-group" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveScheduleGroup(
