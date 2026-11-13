@@ -177,11 +177,12 @@ final class RoundThreeCaptureUITests: XCTestCase {
             XCTAssertLessThan(tab.frame.width, app.frame.width * 0.5)
             record("Round3 native TV tab " + name + " focused whole label")
             try assertRenderedWords(name, in: tab)
-            XCUIRemote.shared.press(.select)
+            // Focusing a native tvOS tab activates its destination. An extra
+            // Select after capture can instead activate the newly focused body.
             let changed = wait(10) { self.nativeDestinationIsVisible(name) }
             if !changed { record("Round3 native TV tab " + name + " failed destination actual state") }
             print("ROUND3_NATIVE_TAB_DESTINATION name=\(name) selectedFlag=\(tab.isSelected) actualDestination=\(changed)")
-            XCTAssertTrue(changed, "Real remote Select must show the exact native destination")
+            XCTAssertTrue(changed, "Real native remote focus must show the exact destination")
             leaveNativeTabBarForContent()
         }
         #endif
@@ -500,8 +501,17 @@ final class RoundThreeCaptureUITests: XCTestCase {
         // setup must pop the previously visited detail/library routes itself.
         revealNativeTabBar()
         let tab = try nativeTab("Libraries")
+        #if os(tvOS)
+        focusOnly(tab)
+        let returned = wait(10) {
+            self.nativeDestinationIsVisible("Libraries")
+                || (self.app.staticTexts["detailTitle"].exists && self.app.buttons["play"].exists)
+                || self.app.navigationBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "BackButton", "Back")).firstMatch.exists
+        }
+        if !returned { record("Round3 Libraries retained destination not reached after native tab focus") }
+        XCTAssertTrue(returned, "Native Libraries focus must restore its actual root or retained detail/Back route before Menu")
+        #else
         activate(tab)
-        #if os(iOS)
         XCTAssertTrue(wait(10) { tab.isSelected }, "Return to the actual Libraries tab before popping its retained stack")
         #endif
         let ids = try required("libraryIDs").split(separator: ",").map(String.init)
@@ -543,14 +553,15 @@ final class RoundThreeCaptureUITests: XCTestCase {
     @MainActor private func selectTab(_ name: String) throws {
         revealNativeTabBar()
         let tab = try nativeTab(name)
-        activate(tab)
         #if os(tvOS)
+        focusOnly(tab)
         let changed = wait(10) { self.nativeDestinationIsVisible(name) }
         if !changed { record("Round3 native TV tab " + name + " failed destination actual state") }
         print("ROUND3_NATIVE_TAB_DESTINATION name=\(name) selectedFlag=\(tab.isSelected) actualDestination=\(changed)")
-        XCTAssertTrue(changed, "Real remote Select must show the exact native destination")
+        XCTAssertTrue(changed, "Real native remote focus must show the exact destination")
         leaveNativeTabBarForContent()
         #else
+        activate(tab)
         XCTAssertTrue(wait(10) { tab.isSelected }, "Native selected state must match actual destination")
         #endif
         if name == "Settings" { XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10)) }
