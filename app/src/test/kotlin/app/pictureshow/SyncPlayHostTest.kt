@@ -34,6 +34,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
@@ -68,7 +70,7 @@ class SyncPlayHostTest {
                 value.copy(
                     positionTicks = positionTicks.takeIf { positionChanged } ?: value.positionTicks,
                     playing =
-                        playing ?: value.playing,
+                    playing ?: value.playing,
                     playWhenReady = value.playWhenReady?.let { playing ?: it },
                     native = value.native?.let { native -> native.copy(playWhenReady = playing ?: native.playWhenReady) }
                 )
@@ -1618,6 +1620,47 @@ class SyncPlayHostTest {
             assertEquals(renderer, rig.renderer.value, kind)
             assertEquals(applied, rig.renderer.applied, kind)
             assertTrue(rig.opens.isEmpty(), kind)
+        }
+    }
+
+    @Test fun earlyMembershipIntentUsesTheBoundedCurrentSocketWait() = runTest {
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val vectors = roots.map { java.io.File(it, "spec/vectors/sync-membership-registration.json") }.first { it.isFile }
+        val cases = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        for (element in cases) {
+            val case = element.jsonObject
+            val creating = case.getValue("intent").jsonPrimitive.content == "create"
+            val rig = Rig(this)
+            rig.refresh()
+            rig.host.socket(false)
+            val rotations = mutableListOf<Pair<Long, Boolean>>()
+            rig.host.membershipSocket = { epoch, joining -> rotations += epoch to joining }
+            if (creating) rig.host.create("Evening") else rig.host.join("g")
+            runCurrent()
+            assertEquals("Joining", rig.host.membership.phase, case.getValue("id").jsonPrimitive.content)
+            assertEquals(listOf(rig.host.membership.generation to true), rotations)
+            assertTrue(rig.operations().isEmpty())
+            advanceTimeBy(9_999)
+            runCurrent()
+            assertTrue(rig.operations().isEmpty())
+            when (case.getValue("terminal").jsonPrimitive.content) {
+                "ready" -> rig.host.socket(true)
+                "leave" -> {
+                    rig.host.leave()
+                    runCurrent()
+                    rig.host.socket(true)
+                    advanceTimeBy(10_001)
+                }
+                "timeout" -> advanceTimeBy(2)
+                else -> error("Unknown registration terminal")
+            }
+            runCurrent()
+            val expected = case.getValue("posted").jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(expected, rig.operations().filter { it in listOf("New", "Join") })
+            assertEquals(case.getValue("phase").jsonPrimitive.content, rig.host.membership.phase)
+            assertFalse(rig.renderer.value.playing)
+            rig.host.leave()
+            runCurrent()
         }
     }
 

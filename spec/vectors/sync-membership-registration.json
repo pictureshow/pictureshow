@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-membership-registration",
+  "cases": [
+    {
+      "id": "join-ready",
+      "intent": "join",
+      "terminal": "ready",
+      "posted": [
+        "Join"
+      ],
+      "phase": "Joining"
+    },
+    {
+      "id": "join-leave",
+      "intent": "join",
+      "terminal": "leave",
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "join-timeout",
+      "intent": "join",
+      "terminal": "timeout",
+      "posted": [],
+      "phase": "Reconnecting"
+    },
+    {
+      "id": "create-ready",
+      "intent": "create",
+      "terminal": "ready",
+      "posted": [
+        "New"
+      ],
+      "phase": "Joining"
+    },
+    {
+      "id": "create-leave",
+      "intent": "create",
+      "terminal": "leave",
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "create-timeout",
+      "intent": "create",
+      "terminal": "timeout",
+      "posted": [],
+      "phase": "Reconnecting"
+    }
+  ]
+}

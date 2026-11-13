@@ -386,7 +386,7 @@ internal class SyncPlayHost(
     fun create(name: String) = begin(syncCreate(name), null, true)
     private fun begin(request: SyncRequest, group: String?, creating: Boolean) {
         val target = account ?: return
-        if (!connected) {
+        if (!connected && membershipSocket == null) {
             note("Waiting for the server connection. Try again when connected.")
             return
         }
@@ -779,7 +779,9 @@ internal class SyncPlayHost(
             note("Watch together is unavailable for this source. Leave the group to play it separately.")
         }
         pendingSource?.let { pending ->
-            if (pending.token !== rendererToken || pending.generation != membership.generation || !participating ||
+            if (pending.token !== rendererToken ||
+                pending.generation != membership.generation ||
+                !participating ||
                 !membership.canSelectSource
             ) {
                 pendingSource = null
