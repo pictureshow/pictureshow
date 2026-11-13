@@ -1,7 +1,27 @@
 name: Desktop numeric HDR Windows
 on:
+  # Full compositor capture is reserved for renderer/HDR changes; dispatch remains available.
   push:
-    branches: ["ci/136-windows*", "ci/136-hdr*"]
+    branches: ["main", "ci/**"]
+    paths:
+      - "desktop/src/native/**"
+      - "desktop/src/main/kotlin/app/pictureshow/desktop/**"
+      - "desktop/tools/hdr/**"
+      - "desktop/build.gradle.kts"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/desktop-hdr-windows.yml"
+  pull_request:
+    paths:
+      - "desktop/src/native/**"
+      - "desktop/src/main/kotlin/app/pictureshow/desktop/**"
+      - "desktop/tools/hdr/**"
+      - "desktop/build.gradle.kts"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/desktop-hdr-windows.yml"
   workflow_dispatch:
 permissions:
   contents: read

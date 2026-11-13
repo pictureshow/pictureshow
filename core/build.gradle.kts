@@ -90,7 +90,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)
-        exclude("grid-navigation.json", "desktop-hdr-output.json")
+        exclude("grid-navigation.json")
         into("parity-vectors")
     }
     from(rootProject.file("spec/vectors")) {

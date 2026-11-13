@@ -71,7 +71,7 @@ class CorpusVectorsTest {
         val inventory = directory("vector-inventory").listFiles()!!.filter {
             it.extension == "json"
         }.associateBy { it.nameWithoutExtension }
-        assertEquals(groups.values.flatten().toSet() + "desktop-hdr-output", inventory.keys, "A new contract needs an executable JVM suite")
+        assertEquals(groups.values.flatten().toSet(), inventory.keys, "A new contract needs an executable JVM suite")
         groups.forEach { (resource, names) ->
             assertEquals(
                 names,
@@ -83,7 +83,10 @@ class CorpusVectorsTest {
             names.forEach { name ->
                 val source = inventory.getValue(name).readText()
                 assertEquals(source, File(directory(resource), "$name.json").readText(), "Stale resource $name")
-                val cases = Json.parseToJsonElement(source).jsonObject.getValue("cases").jsonArray
+                val envelope = Json.parseToJsonElement(source).jsonObject
+                assertEquals("1", envelope.getValue("schemaVersion").jsonPrimitive.content, "Schema version $name")
+                assertTrue(envelope.getValue("suite").jsonPrimitive.content.isNotBlank(), "Missing suite $name")
+                val cases = envelope.getValue("cases").jsonArray
                 assertTrue(cases.isNotEmpty(), "Empty contract $name")
                 val ids = cases.map { it.jsonObject.getValue("id").jsonPrimitive.content }
                 assertEquals(ids.size, ids.toSet().size, "Duplicate ids in $name")
