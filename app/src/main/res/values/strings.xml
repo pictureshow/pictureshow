@@ -33,7 +33,7 @@
     <string name="sync_access_denied">Your account cannot join groups. Ask your server admin to turn on SyncPlay.</string>
     <string name="sync_groups_failed">Could not load groups. Refresh to try again.</string>
     <string name="sync_refresh">Refresh groups</string>
-    <string name="sync_empty">No groups yet. Create one to start watching together.</string>
+    <string name="sync_empty">No groups are available on this server.</string>
     <string name="sync_join">Join</string>
     <string name="sync_create">Create a group</string>
     <string name="sync_group_name">Group name</string>
@@ -44,7 +44,7 @@
     <string name="sync_next">Next</string>
     <string name="sync_play">Play</string>
     <string name="sync_pause">Pause</string>
-    <string name="sync_wait_for_me">Wait for me when I am buffering</string>
+    <string name="sync_wait_for_me">Wait for me when I’m buffering</string>
     <string name="sync_wait_explanation">When off, the group keeps playing while this device catches up.</string>
     <string name="sync_repeat">Repeat</string>
     <string name="sync_repeat_off">Off</string>

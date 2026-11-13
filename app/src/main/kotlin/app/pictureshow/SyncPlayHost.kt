@@ -54,6 +54,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal interface SyncPlayGateway {
@@ -132,6 +134,7 @@ internal class SyncPlayHost(
     private var titleQueue: List<Pair<String, String>> = emptyList()
     private val titles = mutableMapOf<String, String?>()
     private val titleRequests = mutableSetOf<String>()
+    private val titleLookupSlots = Semaphore(4)
     private var noticeRevision = 0L
     private var titleRevision = 0L
     private var waitReason: String? = null
@@ -1493,7 +1496,13 @@ internal class SyncPlayHost(
             entries.map { it.itemId }.distinct().filter { it !in titles && titleRequests.add(it) }.forEach { item ->
                 val requestedEntries = signature.filter { it.second == item }.map { it.first }.toSet()
                 scope.launch {
-                    val result = gateway.title(target, item)
+                    val result = titleLookupSlots.withPermit {
+                        // A queued lookup must not start using credentials after its viewing scope has changed.
+                        if (account?.key != target.key || account?.accessToken != target.accessToken || titleScope != lookupScope) {
+                            return@launch
+                        }
+                        gateway.title(target, item)
+                    }
                     if (account?.key != target.key ||
                         account?.accessToken != target.accessToken ||
                         !app.pictureshow.core.sync.syncAcceptTitle(
