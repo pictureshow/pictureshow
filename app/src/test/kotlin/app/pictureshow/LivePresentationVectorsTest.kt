@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(293, cases.size)
+        assertEquals(300, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -70,6 +70,20 @@ class LivePresentationVectorsTest {
                     assertEquals(expected.getValue("disabledAlpha").jsonPrimitive.float, LIVE_SEEK_DISABLED_ALPHA, .001f, id)
                     assertEquals(expected.getValue("scrimAlpha").jsonPrimitive.float, LIVE_SEEK_SCRIM_ALPHA, .001f, id)
                 }
+                "tv-review-surface" -> {
+                    val expected = envelope.getValue("expected").jsonObject
+                    assertEquals(expected.getValue("minimumRowHeightDp").jsonPrimitive.int, LIVE_REVIEW_SUMMARY_MIN_HEIGHT_DP, id)
+                    assertEquals(expected.getValue("disabledFocusBorderDp").jsonPrimitive.int, LIVE_DISABLED_FOCUS_BORDER_DP, id)
+                    // LiveTvReviewClosureTest also runs these font/wrapping/contrast cases against the real native surfaces.
+                }
+                "review-header-reveal" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveEditorShouldRevealHeader(
+                        c.getValue("tv").jsonPrimitive.boolean,
+                        c.getValue("firstActionFocused").jsonPrimitive.boolean
+                    ),
+                    id
+                )
                 "program-recording-time-state" -> {
                     val expected = envelope.getValue("expected").jsonObject
                     val end = c["endDate"]?.jsonPrimitive?.contentOrNull

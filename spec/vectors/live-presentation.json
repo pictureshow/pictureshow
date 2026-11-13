@@ -4022,6 +4022,87 @@
         "below": false,
         "dividerDp": 1
       }
+    },
+    {
+      "id": "live-presentation.review-surface-normal",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1,
+        "wrappedValue": false
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.review-surface-large",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1.3,
+        "wrappedValue": false
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.review-surface-wrapped",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1.3,
+        "wrappedValue": true
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.header-reveal-false-false",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": false,
+        "firstActionFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-false-true",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": false,
+        "firstActionFocused": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-true-false",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": true,
+        "firstActionFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-true-true",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": true,
+        "firstActionFocused": true
+      },
+      "expected": true
     }
   ]
 }

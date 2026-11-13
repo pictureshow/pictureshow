@@ -6,19 +6,24 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -32,6 +37,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.livetv.LiveSchedule
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -72,8 +78,10 @@ class LiveTvReviewNavigationTest {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1.3f)) {
                 PictureshowTheme {
-                    LazyColumn(Modifier.fillMaxSize().background(LiveBackground), contentPadding = PaddingValues(32.dp)) {
-                        item { LiveScheduleEditor(original, true, true, false, false) { writes++ } }
+                    Box(Modifier.fillMaxSize().background(LiveBackground).padding(top = 104.dp)) {
+                        LazyColumn(Modifier.fillMaxSize().testTag("review:viewport"), contentPadding = PaddingValues(32.dp)) {
+                            item { LiveScheduleEditor(original, true, true, false, false) { writes++ } }
+                        }
                     }
                 }
             }
@@ -110,6 +118,12 @@ class LiveTvReviewNavigationTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed().assertIsFocused()
+        val viewport = compose.onNodeWithTag("review:viewport").getBoundsInRoot()
+        val heading = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(
+            heading.top >= viewport.top,
+            "Returning to the first action must reveal the complete heading below the pinned header: $heading / $viewport"
+        )
         compose.runOnIdle { assertEquals(0, writes) }
     }
 
