@@ -108,6 +108,7 @@ class SyncPlayTouchDesignTest {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java)).setCurrentModeType(Configuration.UI_MODE_TYPE_NORMAL)
     }
 
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test fun narrowChipSeparatesContextAndKeepsIconAndCountClear() {
         var opened = 0
         val state = SyncPlayPresentation(
