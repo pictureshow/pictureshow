@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -475,8 +474,17 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         ui.interact()
                     },
                     enabled = !host.isLive || host.liveCanTimeShift,
+                    colors = if (host.isLive) {
+                        androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
+                            contentColor = Color.White,
+                            disabledContainerColor = Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA),
+                            disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
+                        )
+                    } else {
+                        androidx.compose.material3.IconButtonDefaults.filledIconButtonColors()
+                    },
                     modifier = Modifier.size(64.dp)
-                        .then(if (host.isLive) Modifier.background(Color.Black.copy(alpha = .4f), CircleShape) else Modifier)
                         .testTag("touch:toggle").semantics {
                             contentDescription = if (playback.showPlayButton) "Play" else "Pause"
                             stateDescription = playbackToggleState(paused, playback.showPlayButton)

@@ -2117,6 +2117,15 @@ class TouchPlayerControlsTest {
         assertEquals(row.right, bounds("touch:quality").right)
         val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(2, marks.size)
+        val toggle = compose.onNodeWithTag("touch:toggle")
+        val scale = toggle.fetchSemanticsNode().layoutInfo.density.density
+        val box = toggle.getBoundsInRoot()
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val scrim = pixels[((box.left.value + 8) * scale).toInt(), (((box.top.value + box.bottom.value) / 2) * scale).toInt()]
+        assertTrue(
+            scrim.red < .05f && scrim.green < .05f && scrim.blue < .05f,
+            "Live toggle paints its black scrim over the black video fixture: $scrim"
+        )
     }
 
     private fun launch(
