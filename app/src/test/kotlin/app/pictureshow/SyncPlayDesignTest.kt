@@ -125,6 +125,23 @@ class SyncPlayTouchDesignTest {
         compose.onNodeWithTag("sync:leave").assertIsDisplayed()
     }
 
+    @Test fun sharedCastConsentKeepsActualCancelAndConfirmCallbacks() {
+        var dismissed = 0
+        var confirmed = 0
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                SyncLeaveForCastConsent(onDismiss = { dismissed++ }, onConfirm = { confirmed++ })
+            }
+        }
+        compose.onNodeWithText("Leave Watch together before casting?").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(1, dismissed)
+        assertEquals(0, confirmed)
+        compose.onNodeWithText("Leave group and cast").performClick()
+        assertEquals(1, confirmed)
+        assertEquals(1, dismissed)
+    }
+
     @Test fun rawDiagnosticAndPhaseEnumsNeverReachViewersAndErrorsHaveActions() {
         val state = SyncPlayPresentation(
             groupId = "g",

@@ -36,22 +36,28 @@ class SyncPlayFixtureActivity : ComponentActivity() {
             }
             PictureshowTheme {
                 Box(Modifier.fillMaxSize()) {
-                    SyncPlayPanel(state, { operation, value ->
-                        // Local fixture transitions exercise focus/composition only; there is no network transport.
-                        state = when (operation) {
-                            "leave" -> requireNotNull(syncPlayFixture("empty"))
-                            "join", "create" -> requireNotNull(syncPlayFixture("joined3"))
-                            "refresh" -> requireNotNull(syncPlayFixture("list"))
-                            "play" -> state.copy(phase = "Playing")
-                            "pause" -> state.copy(phase = "Paused")
-                            "repeat" -> state.copy(repeat = value ?: state.repeat)
-                            "shuffle" -> state.copy(shuffle = value ?: state.shuffle)
-                            "ignore-wait" -> state.copy(ignoreWait = value == "true")
-                            "remove-entry" -> state.copy(queue = state.queue.filterNot { it.id == value })
-                            "select-entry" -> state.copy(queue = state.queue.map { it.copy(current = it.id == value) })
-                            else -> state
+                    if (preset == "cast-consent") {
+                        app.pictureshow.ui.PictureshowTheme {
+                            SyncLeaveForCastConsent(onDismiss = ::finish, onConfirm = ::finish, fixtureLabel = preset)
                         }
-                    }, onDismiss = ::finish, fixtureLabel = preset)
+                    } else {
+                        SyncPlayPanel(state, { operation, value ->
+                            // Local fixture transitions exercise focus/composition only; there is no network transport.
+                            state = when (operation) {
+                                "leave" -> requireNotNull(syncPlayFixture("empty"))
+                                "join", "create" -> requireNotNull(syncPlayFixture("joined3"))
+                                "refresh" -> requireNotNull(syncPlayFixture("list"))
+                                "play" -> state.copy(phase = "Playing")
+                                "pause" -> state.copy(phase = "Paused")
+                                "repeat" -> state.copy(repeat = value ?: state.repeat)
+                                "shuffle" -> state.copy(shuffle = value ?: state.shuffle)
+                                "ignore-wait" -> state.copy(ignoreWait = value == "true")
+                                "remove-entry" -> state.copy(queue = state.queue.filterNot { it.id == value })
+                                "select-entry" -> state.copy(queue = state.queue.map { it.copy(current = it.id == value) })
+                                else -> state
+                            }
+                        }, onDismiss = ::finish, fixtureLabel = preset)
+                    }
                 }
             }
         }
@@ -64,7 +70,7 @@ internal fun syncPlayFixture(preset: String): SyncPlayPresentation? {
         groupId = "fixture-group",
         groupName = "Friday films",
         phase = "Paused",
-        participants = listOf("Morgan", "Sam", "Riley", "Alex", "Jordan", "Casey"),
+        participants = listOf("Morgan", "Sam", "Riley", "Taylor", "Jordan", "Casey"),
         localPlayback = SyncLocalPlayback.READY,
         queue = listOf(
             SyncPlayQueueRow("entry-1", "Big Buck Bunny", true, "film-1"),
@@ -80,7 +86,7 @@ internal fun syncPlayFixture(preset: String): SyncPlayPresentation? {
         "list" -> chooser.copy(
             groups = listOf(SyncPlayGroupRow("fixture-group", "Friday films", 3), SyncPlayGroupRow("fixture-two", "Weekend music", 1))
         )
-        "joined3" -> joined
+        "joined3", "cast-consent" -> joined
         "RepeatOne" -> joined.copy(repeat = "RepeatOne", shuffle = "Shuffle")
         "RepeatAll" -> joined.copy(repeat = "RepeatAll", shuffle = "Shuffle", ignoreWait = true)
         "waiting" -> joined.copy(phase = "Waiting", waitReason = "Buffer", localPlayback = SyncLocalPlayback.BUFFERING)
@@ -90,7 +96,12 @@ internal fun syncPlayFixture(preset: String): SyncPlayPresentation? {
             quality = SyncQuality.UNKNOWN,
             notice = SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.ERROR, SyncNoticeAction.REJOIN)
         )
-        "error", "librarydenied" -> joined.copy(
+        "error" -> joined.copy(
+            phase = "Error",
+            localPlayback = SyncLocalPlayback.UNAVAILABLE,
+            notice = SyncNotice(SyncNoticeKind.PLAYBACK_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
+        )
+        "librarydenied" -> joined.copy(
             phase = "Error",
             localPlayback = SyncLocalPlayback.UNAVAILABLE,
             notice = SyncNotice(SyncNoticeKind.LIBRARY_DENIED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)

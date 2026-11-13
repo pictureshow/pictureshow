@@ -111,26 +111,40 @@ internal fun SyncPlayCoordinator(
     val presentation by sync.state.collectAsState()
     if (sync.panelOpen) SyncPlayPanel(presentation, sync::action) { sync.panelOpen = false }
     if (sync.pendingExternalRoute != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = sync::cancelExternalRoute,
-            title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_title)) },
-            text = {
-                androidx.compose.material3.Text(
-                    androidx.compose.ui.res.stringResource(R.string.sync_cast_explanation)
-                )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = sync::leaveForExternalRoute) {
-                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_confirm))
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = sync::cancelExternalRoute) {
-                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cancel))
-                }
-            }
-        )
+        SyncLeaveForCastConsent(onDismiss = sync::cancelExternalRoute, onConfirm = sync::leaveForExternalRoute)
     }
+}
+
+/** The actual consent component is also used by the explicitly labeled, network-free debug fixture. */
+@Composable
+internal fun SyncLeaveForCastConsent(onDismiss: () -> Unit, onConfirm: () -> Unit, fixtureLabel: String? = null) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            androidx.compose.foundation.layout.Column {
+                fixtureLabel?.let {
+                    androidx.compose.material3.Text(
+                        androidx.compose.ui.res.stringResource(R.string.sync_fixture, it),
+                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge
+                    )
+                }
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_title))
+            }
+        },
+        text = {
+            androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_explanation))
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cast_confirm))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_cancel))
+            }
+        }
+    )
 }
 
 /** Shared by TV and touch; download provenance belongs to the actual viewing, not its metadata or connection. */

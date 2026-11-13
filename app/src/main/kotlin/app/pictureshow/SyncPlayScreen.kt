@@ -74,15 +74,16 @@ import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
 import java.text.NumberFormat
 
-/** Native role components on each surface; every action remains a server request. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Preserve the production three-argument API, including its trailing dismiss lambda. */
 @Composable
-internal fun SyncPlayPanel(
-    state: SyncPlayPresentation,
-    onAction: (String, String?) -> Unit,
-    onDismiss: () -> Unit,
-    fixtureLabel: String? = null
-) {
+internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit) {
+    SyncPlayPanel(state, onAction, onDismiss, fixtureLabel = null)
+}
+
+/** Native role components on each surface; every action remains a server request. */
+@OptIn(ExperimentalMaterial3Api::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit, fixtureLabel: String?) {
     val tv = usesTvInterface(LocalContext.current)
     val pane = stringResource(R.string.sync_title)
     var name by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
@@ -329,7 +330,7 @@ private fun SyncGroups(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SyncJoined(
     state: SyncPlayPresentation,
