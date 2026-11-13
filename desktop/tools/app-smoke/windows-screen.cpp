@@ -5,6 +5,7 @@
 #define _UNICODE
 #include <windows.h>
 #include <cstdlib>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -22,6 +23,13 @@ static bool primaryMonitor(MONITORINFO &result) {
 }
 static bool fits(const RECT &area) {
     return area.right - area.left >= 1920 && area.bottom - area.top >= 1080;
+}
+// EnumDisplaySettings may return an older public DEVMODE prefix than this
+// SDK allocates. Preserve that returned size; require every field we compare
+// and reject private bytes that our fixed receipt does not store.
+static constexpr size_t minimumPublicModeBytes = offsetof(DEVMODEW, dmDisplayFrequency) + sizeof(DWORD);
+static bool validSavedModeHeader(const DEVMODEW &saved) {
+    return saved.dmSize >= minimumPublicModeBytes && saved.dmSize <= sizeof(saved) && saved.dmDriverExtra == 0;
 }
 static bool sameMode(const DEVMODEW &a, const DEVMODEW &b) {
     return a.dmPelsWidth == b.dmPelsWidth && a.dmPelsHeight == b.dmPelsHeight &&
@@ -108,11 +116,15 @@ int main(int argc, char **argv) {
         std::cerr << "{\"stage\":\"restore-read-result\",\"opened\":" << (opened ? "true" : "false")
                   << ",\"complete\":" << (complete ? "true" : "false") << ",\"bytesRead\":" << bytesRead
                   << ",\"expectedBytes\":" << sizeof(saved) << ",\"dmSize\":" << saved.dmSize
-                  << ",\"dmDriverExtra\":" << saved.dmDriverExtra << "}" << std::endl;
-        if (!complete || saved.dmSize != sizeof(saved)) {
+                  << ",\"dmDriverExtra\":" << saved.dmDriverExtra
+                  << ",\"minimumPublicBytes\":" << minimumPublicModeBytes
+                  << ",\"publicHeaderValid\":" << (validSavedModeHeader(saved) ? "true" : "false") << "}" << std::endl;
+        if (!complete || !validSavedModeHeader(saved)) {
             std::cout << "{\"restored\":false,\"stage\":\"read-saved-mode\",\"exitCode\":7,\"opened\":" << (opened ? "true" : "false")
                       << ",\"bytesRead\":" << bytesRead << ",\"expectedBytes\":" << sizeof(saved)
-                      << ",\"dmSize\":" << saved.dmSize << ",\"dmDriverExtra\":" << saved.dmDriverExtra << "}" << std::endl;
+                      << ",\"dmSize\":" << saved.dmSize << ",\"dmDriverExtra\":" << saved.dmDriverExtra
+                      << ",\"minimumPublicBytes\":" << minimumPublicModeBytes
+                      << ",\"publicHeaderValid\":" << (validSavedModeHeader(saved) ? "true" : "false") << "}" << std::endl;
             traceResult("restore-complete", 7);
             return 7;
         }
