@@ -37,18 +37,30 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(address.waitForExistence(timeout: 10), "Require the fresh address route, not a remembered account")
         assertViewerCopy()
         record("Round3 authentication server address")
+        #if os(iOS)
+        let title = app.staticTexts["Pictureshow"].firstMatch
+        let closedTitle = title.frame
+        let closedAddress = address.frame
+        #endif
         activate(address)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         record("Round3 authentication address keyboard")
+        #if os(iOS)
+        XCTAssertEqual(title.frame.height, closedTitle.height, accuracy: 2, "Opening the address keyboard must not switch typography tokens")
+        XCTAssertEqual(title.frame.minX, closedTitle.minX, accuracy: 2, "Opening the address keyboard must not switch the header gutter")
+        XCTAssertEqual(title.frame.width, closedTitle.width, accuracy: 2, "Opening the address keyboard must retain the header width")
+        XCTAssertEqual(address.frame.minX, closedAddress.minX, accuracy: 2, "Opening the address keyboard must not switch the form gutter")
+        XCTAssertEqual(address.frame.width, closedAddress.width, accuracy: 2, "Opening the address keyboard must retain the form width")
+        address.typeText("\n") // Native address Go submits Connect once.
+        #else
         dismissKeyboard()
         activate(app.buttons["connect"])
+        #endif
         XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 25))
-        dismissKeyboard()
         let username = app.textFields["username"]
-        let title = app.staticTexts["Pictureshow"].firstMatch
-        let beforeTitleHeight = title.frame.height
         let beforeField = username.frame
         #if os(tvOS)
+        dismissKeyboard()
         record("Round3 authentication password form keyboard dismissed")
         #endif
         let password = app.secureTextFields["password"]
@@ -56,7 +68,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         record("Round3 authentication password keyboard")
         #if os(iOS)
-        XCTAssertEqual(title.frame.height, beforeTitleHeight, accuracy: 2, "The keyboard must not switch typography tokens")
+        XCTAssertEqual(title.frame.height, closedTitle.height, accuracy: 2, "The password keyboard must retain the closed address route typography token")
         XCTAssertEqual(username.frame.minX, beforeField.minX, accuracy: 2, "The keyboard must not switch the form gutter")
         XCTAssertEqual(username.frame.width, beforeField.width, accuracy: 2, "Keyboard-safe scrolling must retain form width")
         let submit = app.buttons["signIn"]
@@ -345,7 +357,14 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(app.buttons["connect"].waitForExistence(timeout: 10), "Every selected case must start with a genuinely fresh app sandbox")
         activate(app.buttons["connect"])
         XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 25))
+        #if os(iOS)
+        let password = app.secureTextFields["password"]
+        activate(password)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        password.typeText("\n") // Actual native password Go submits Sign in once.
+        #else
         dismissKeyboard(); activate(app.buttons["signIn"])
+        #endif
         let resumeID = try required("resumeID")
         let home = wait(30) {
             self.app.staticTexts["Continue watching"].exists && self.app.buttons["item-" + resumeID].firstMatch.exists
@@ -433,7 +452,10 @@ final class RoundThreeCaptureUITests: XCTestCase {
             return visible(app.staticTexts["Continue watching"]) && app.buttons["item-" + id].firstMatch.exists
         case "Libraries":
             guard let ids = config["libraryIDs"]?.split(separator: ","), ids.count >= 3 else { return false }
-            let heading = app.staticTexts.matching(NSPredicate(format: "label == %@", "Libraries")).allElementsBoundByIndex.contains(where: { visible($0) && $0.frame.minY > (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.maxY : 0) })
+            let heading = app.navigationBars.allElementsBoundByIndex.contains { bar in
+                let title = bar.staticTexts["Libraries"]
+                return visible(bar) && visible(title)
+            }
             return heading && !app.staticTexts["Continue watching"].exists && ids.allSatisfy { app.buttons["item-" + $0].firstMatch.exists }
         case "Search": return visible(app.textFields["searchField"])
         case "Settings": return visible(node("settingsTitle")) && node("maxBitrate").exists
@@ -561,7 +583,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
         request.recognitionLanguages = ["en-US"]; request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: crop, options: [:]).perform([request])
         let words = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
-        XCTAssertTrue(words.contains(where: { $0.caseInsensitiveCompare(text) == .orderedSame }), "The actual native tab must render its WHOLE word, not a middle-truncated AX-only label: \(text); pixels read \(words)")
+        // Native tab icons can share an OCR observation with their label
+        // (actual house icon + Home was read as "• Home"). Match a complete
+        // rendered word, never a substring that could accept a truncated label.
+        let renderedWords = words.flatMap { $0.components(separatedBy: CharacterSet.letters.inverted) }.filter { !$0.isEmpty }
+        XCTAssertTrue(renderedWords.contains(where: { $0.caseInsensitiveCompare(text) == .orderedSame }), "The actual native tab must render its WHOLE word, not a middle-truncated AX-only label: \(text); pixels read \(words)")
     }
     @MainActor private func assertTextAA(_ element: XCUIElement, expected: String, name: String) throws {
         XCTAssertTrue(element.exists && !element.frame.isEmpty)
