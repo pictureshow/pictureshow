@@ -232,11 +232,12 @@ final class RoundTwoCaptureUITests: XCTestCase {
             record(name + " saved selection " + value)
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
-        XCTAssertTrue(bitrate.label.contains("Max streaming bitrate"))
-        XCTAssertTrue(app.staticTexts["Max streaming bitrate"].exists)
-        XCTAssertTrue(app.staticTexts["Subtitle size"].exists)
-        XCTAssertTrue(app.staticTexts["Subtitle background"].exists)
-        XCTAssertTrue(subtitle.label.contains("Subtitle size"))
+        record("Round2 Settings named native menus before assertions")
+        for (picker, title) in [(bitrate, "Max streaming bitrate"), (subtitle, "Subtitle size"), (app.buttons["subtitleBackground"], "Subtitle background")] {
+            XCTAssertTrue(picker.exists)
+            XCTAssertEqual(picker.label.components(separatedBy: title).count - 1, 1, "The actual native menu must announce its field name exactly once")
+            XCTAssertFalse((picker.value as? String ?? "").isEmpty, "The named native menu must retain its current value")
+        }
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
         choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates, name: "Round2 Settings bitrate native picker")
@@ -415,9 +416,14 @@ final class RoundTwoCaptureUITests: XCTestCase {
         reveal(element)
         XCTAssertTrue(element.waitForExistence(timeout: 10))
         #if os(tvOS)
+        func focused(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? {
+            node.children.compactMap(focused).first ?? (node.hasFocus ? node : nil)
+        }
         for _ in 0..<45 {
-            if element.hasFocus { XCUIRemote.shared.press(.select); return }
-            let current = app.descendants(matching: .any).allElementsBoundByIndex.first(where: \.hasFocus)?.frame
+            // The native menu may focus its value child inside the full row.
+            // Its own snapshot subtree establishes ownership without a centre guess.
+            if element.hasFocus || (try? element.snapshot()).flatMap(focused) != nil { XCUIRemote.shared.press(.select); return }
+            let current = (try? app.snapshot()).flatMap(focused)?.frame
             if let current, current.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)), current.height < element.frame.height * 3 { XCUIRemote.shared.press(.select); return }
             guard let current else { XCUIRemote.shared.press(.down); continue }
             let target = element.frame
@@ -425,6 +431,8 @@ final class RoundTwoCaptureUITests: XCTestCase {
             else if target.minY >= current.maxY - 12 { XCUIRemote.shared.press(.down) }
             else { XCUIRemote.shared.press(target.midX < current.midX ? .left : .right) }
         }
+        record("Round2 failed native focus target " + element.identifier)
+        print("ROUND2_NATIVE_FOCUS target=\(element.frame) deepestFocused=\(String(describing: (try? app.snapshot()).flatMap(focused)?.frame))")
         XCTFail("Native remote could not focus configured target: " + element.identifier)
         #else
         XCTAssertTrue(element.isHittable)

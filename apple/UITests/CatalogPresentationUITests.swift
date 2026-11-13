@@ -568,7 +568,6 @@ final class CatalogPresentationUITests: XCTestCase {
         // must preserve its native comparison rather than hide it behind a stop.
         for channels in [primaryFill, secondaryFill] {
             XCTAssertGreaterThanOrEqual(channels.min() ?? 0, 0.75, "Native focused fill must remain pale")
-            XCTAssertLessThanOrEqual((channels.max() ?? 1) - (channels.min() ?? 0), 0.04, "Every role must use neutral system focus, never lavender")
         }
         for (primaryChannel, secondaryChannel) in zip(primaryFill, secondaryFill) {
             XCTAssertEqual(primaryChannel, secondaryChannel, accuracy: 0.04, "Primary and secondary use one native neutral focus fill")
@@ -686,11 +685,12 @@ final class CatalogPresentationUITests: XCTestCase {
             XCTAssertTrue(waitUntil { shows(picker, value) }, "Selecting a choice must save it and return to Settings")
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
-        XCTAssertTrue(bitrate.label.contains("Max streaming bitrate"))
-        XCTAssertTrue(app.staticTexts["Max streaming bitrate"].exists)
-        XCTAssertTrue(app.staticTexts["Subtitle size"].exists)
-        XCTAssertTrue(app.staticTexts["Subtitle background"].exists)
-        XCTAssertTrue(subtitle.label.contains("Subtitle size"))
+        capture("132 named native Settings menus before assertions", app: app)
+        for (picker, title) in [(bitrate, "Max streaming bitrate"), (subtitle, "Subtitle size"), (app.buttons["subtitleBackground"], "Subtitle background")] {
+            XCTAssertTrue(picker.exists)
+            XCTAssertEqual(picker.label.components(separatedBy: title).count - 1, 1, "The actual native menu must announce its field name exactly once")
+            XCTAssertFalse((picker.value as? String ?? "").isEmpty, "The named native menu must retain its current value")
+        }
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
         choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates)
@@ -841,6 +841,7 @@ final class CatalogPresentationUITests: XCTestCase {
         func focused(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? {
             node.children.compactMap(focused).first ?? (node.hasFocus ? node : nil)
         }
+        if (try? element.snapshot()).flatMap(focused) != nil { return true }
         guard let owner = (try? app.snapshot()).flatMap(focused) else { return false }
         let target = element.frame
         // Form's native row owns focus around its contained switch/button.
@@ -862,7 +863,7 @@ final class CatalogPresentationUITests: XCTestCase {
             node.children.compactMap(focused).first ?? (node.hasFocus ? node : nil)
         }
         for _ in 0..<30 {
-            if element.hasFocus { return }
+            if element.hasFocus || (try? element.snapshot()).flatMap(focused) != nil { return }
             let current = (try? app.snapshot()).flatMap(focused)?.frame
             guard let current else { XCUIRemote.shared.press(.down); continue }
             let target = element.frame

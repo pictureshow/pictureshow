@@ -341,7 +341,7 @@ struct PlayerOptions: View {
                         Button("Cancel", action: closePanel)
                             .accessibilityIdentifier("cancelPendingTracks")
                             .focused($pendingCancelFocused)
-                            .buttonStyle(.borderedProminent)
+                            .secondaryActionStyle()
                             .padding(.horizontal, 18)
                             .listRowBackground(Color.clear)
                         #endif
@@ -1095,11 +1095,9 @@ private struct SeekOptions: View {
             // automatic row action from activating both opposing seek controls.
             .buttonStyle(.borderless)
             #else
-            // AVKit hosts this Info tab in a separate focus environment. Use
-            // native filled buttons and one focus section so the remote can
-            // enter the actions from the tab strip and still read their labels.
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.accent)
+            // AVKit hosts this Info tab in a separate focus environment. Keep
+            // its remote focus section and the shared secondary button family.
+            .secondaryActionStyle()
             .focusSection()
             #endif
         }
@@ -1113,7 +1111,7 @@ private struct SeekOptions: View {
     }
     @ViewBuilder private func seekButtonLabel(_ title: String) -> some View {
         #if os(tvOS)
-        Text(title).minimumTouchTarget().foregroundStyle(Theme.background)
+        Text(title).minimumTouchTarget()
         #else
         Text(title).minimumTouchTarget()
         #endif

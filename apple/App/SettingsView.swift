@@ -135,8 +135,11 @@ private struct SettingsForm: View {
         #if os(tvOS)
         // Native menu pickers expose choices on TV, but omit their field label.
         // Keep a system-aligned visible label and name the actual menu control.
-        LabeledContent(title) {
+        LabeledContent {
             control().labelsHidden().pickerStyle(.menu).accessibilityLabel(title).accessibilityValue(value)
+        } label: {
+            // The native menu already owns the spoken field name and value.
+            Text(title).accessibilityHidden(true)
         }
         #else
         control()

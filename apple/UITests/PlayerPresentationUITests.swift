@@ -104,6 +104,37 @@ final class PlayerPresentationUITests: XCTestCase {
     #endif
 
     #if os(tvOS)
+    @MainActor func testTVPendingTracksCancelUsesSharedNativeSecondaryFocus() throws {
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120)
+        app.launchEnvironment["PICTURESHOW_TEST_TRACK_MENU_GATE"] = try fixture.start()
+        defer { fixture.releaseAllMenuWorkers(); fixture.stop(); app.terminate() }
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        activate(app.buttons["play"])
+        XCTAssertTrue(waitForRemoteUI(timeout: 15) {
+            fixture.snapshot.menuWorkerRequests.count == 1 && fixture.snapshot.startCount == 1
+        }, "The ordinary track worker is held while the real decoder starts this viewing")
+        XCTAssertTrue(fixture.snapshot.menuWorkerRequests.first?.path.hasSuffix("/background") == true)
+        XCUIRemote.shared.press(.playPause)
+        activate(nativeAction(id: "pendingAudio", prefix: "Audio"))
+        let cancel = app.buttons["cancelPendingTracks"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        let enteredCancel = waitForRemoteUI(timeout: 5) {
+            guard cancel.exists, cancel.isHittable, let focus = try? self.focusedSnapshot(timeout: 0.1) else { return false }
+            return cancel.hasFocus || (focus.frame.contains(CGPoint(x: cancel.frame.midX, y: cancel.frame.midY)) && focus.frame.height < cancel.frame.height * 3)
+        }
+        record("132 TV held tracks Cancel automatic native focus")
+        XCTAssertTrue(enteredCancel, "The existing pending focus must enter the actual Cancel control without extra navigation")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "preparingTracks").firstMatch.exists)
+        assertPlayerButtonPixels(cancel, app: app, style: "held tracks Cancel focused", focused: true, text: "Cancel")
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "The actual focused Cancel must dismiss pending tracks while its worker is still held")
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "preparingTracks").firstMatch.exists)
+        XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1)
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, 1)
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 0)
+        record("132 TV held tracks Cancel dismissed same viewing")
+    }
     @MainActor func testNativePlaybackTabShowsConversionReasonsAndReceivedFormats() throws {
         let fixture = try NativeTrackHTTPFixture(durationSeconds: 120,
             conversionReasons: ["VideoCodecNotSupported", "ContainerBitrateExceedsLimit", "unrecognized-private-reason"])
@@ -166,6 +197,16 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(reachedTabRow, "Two native Down inputs must reach the actual Info/Playback tab row through the scrubber")
         guard reachedTabRow else { return }
         activate(playbackTab)
+        let back = app.buttons["seekBackward"]
+        let forward = app.buttons["seekForward"]
+        activate(back, select: false)
+        assertPlayerButtonPixels(back, app: app, style: "native Playback Back focused", focused: true, text: "Back 10 seconds")
+        assertPlayerButtonPixels(forward, app: app, style: "native Playback Forward resting", text: "Forward 10 seconds")
+        record("132 TV native Playback Back focused Forward resting")
+        activate(forward, select: false)
+        assertPlayerButtonPixels(forward, app: app, style: "native Playback Forward focused", focused: true, text: "Forward 10 seconds")
+        assertPlayerButtonPixels(back, app: app, style: "native Playback Back resting", text: "Back 10 seconds")
+        record("132 TV native Playback Forward focused Back resting")
         let reason = app.descendants(matching: .any).matching(identifier: "conversionReason-0").firstMatch
         XCTAssertTrue(reason.waitForExistence(timeout: 10))
         reveal(reason)
@@ -661,12 +702,28 @@ final class PlayerPresentationUITests: XCTestCase {
         record("132 next episode running at half speed")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
-        let pausedContextSettled = waitForRemoteUI(timeout: 5) {
-            self.trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
+        let pausedNumberRemoved = waitForRemoteUI(timeout: 5) {
+            self.trailingNumber(playNext.label) == nil
+        }
+        record("132 TV single native Pause countdown and actual HUD state")
+        XCTAssertTrue(pausedNumberRemoved, "The existing single Pause must remove the number within the original five-second pause bound")
+        XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
+        XCTAssertTrue(nativePlayer.exists, "The original player must remain mounted after Pause")
+        let pausedHUD = nativePlayer.value as? String
+        print("LEG132_NATIVE_PAUSE_HUD value=\(pausedHUD ?? "unknown") countRemoved=\(pausedNumberRemoved)")
+        var menuHidHUD = true
+        if nativePlayer.exists, nativePlayer.value as? String == "Controls visible" {
+            // Native Pause may reveal AVKit's HUD. One standard Menu dismisses
+            // only that visible HUD; never send Menu to an already hidden player.
+            XCUIRemote.shared.press(.menu)
+            menuHidHUD = waitForRemoteUI(timeout: 5) {
+                nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
+            }
         }
         let pausedScreenshot = record("132 TV paused contextual state before assertions")
-        XCTAssertTrue(pausedContextSettled, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
-        XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
+        XCTAssertTrue(menuHidHUD, "One native Menu must hide a visible HUD within its separate five-second action bound")
+        XCTAssertTrue(nativePlayer.exists, "Dismissing the HUD must retain the original native player")
+        XCTAssertEqual(nativePlayer.value as? String, "Controls hidden", "Paused contextual proof requires the actual hidden native HUD")
         let pausedContext = try contextualPixels(pausedScreenshot, running: false)
         XCTAssertNil(pausedContext.countdown)
         // These are OCR glyph bounds, not an invented AX/control frame. They
@@ -1057,6 +1114,119 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTFail("Real remote input did not focus the visible contextual Cancel near-white platter")
         throw NSError(domain: "PictureshowContextualFocus", code: 1)
     }
+    @MainActor private func assertPlayerButtonPixels(_ element: XCUIElement, app: XCUIApplication, style: String, focused: Bool = false, text: String? = nil,
+                                               file: StaticString = #filePath, line: UInt = #line) {
+        let image = XCUIScreen.main.screenshot().image
+        let pixelAttachment = XCTAttachment(image: image)
+        pixelAttachment.name = "132 TV actual pixel sample " + style
+        pixelAttachment.lifetime = .keepAlways
+        add(pixelAttachment)
+        let treeAttachment = XCTAttachment(string: app.debugDescription)
+        treeAttachment.name = "132 TV actual pixel sample " + style + " accessibility"
+        treeAttachment.lifetime = .keepAlways
+        add(treeAttachment)
+        XCTAssertTrue(element.exists, file: file, line: line)
+        let owner = try? focusedSnapshot(timeout: 0.1)
+        let ownsFocus = element.hasFocus || (owner.map { $0.frame.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) && $0.frame.height < element.frame.height * 3 } ?? false)
+        XCTAssertEqual(ownsFocus, focused, "Sample the required actual focus state: \(style)", file: file, line: line)
+        guard let source = image.cgImage else { XCTFail("Missing screenshot pixels", file: file, line: line); return }
+        let scaleX = CGFloat(source.width) / app.frame.width
+        let scaleY = CGFloat(source.height) / app.frame.height
+        let frame: CGRect
+        if let text {
+            // SwiftUI can omit child Text nodes or give one the whole button's
+            // frame. Recognize the expected words inside this button's pixels
+            // so an icon/checkmark cannot conceal low-contrast label ink.
+            let control = CGRect(x: (element.frame.minX - app.frame.minX) * scaleX,
+                                 y: (element.frame.minY - app.frame.minY) * scaleY,
+                                 width: element.frame.width * scaleX, height: element.frame.height * scaleY).integral
+            guard let buttonPixels = source.cropping(to: control) else {
+                XCTFail("No visible control pixels: \(style)", file: file, line: line); return
+            }
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = ["en-US"]
+            request.usesLanguageCorrection = false
+            do { try VNImageRequestHandler(cgImage: buttonPixels, options: [:]).perform([request]) }
+            catch { XCTFail("Could not locate actual label glyphs: \(error)", file: file, line: line); return }
+            let matches: [CGRect] = (request.results ?? []).compactMap { observation in
+                for candidate in observation.topCandidates(3) {
+                    if let range = candidate.string.range(of: text, options: .caseInsensitive),
+                       let box = try? candidate.boundingBox(for: range) { return box.boundingBox }
+                }
+                return nil
+            }
+            XCTAssertEqual(matches.count, 1, "Locate exactly the expected text independently from its icon/checkmark: \(text)", file: file, line: line)
+            guard matches.count == 1, let glyphs = matches.first else { return }
+            // Vision uses a bottom-left origin; CGImage crops use top-left.
+            let local = CGRect(x: glyphs.minX * CGFloat(buttonPixels.width),
+                               y: (1 - glyphs.maxY) * CGFloat(buttonPixels.height),
+                               width: glyphs.width * CGFloat(buttonPixels.width),
+                               height: glyphs.height * CGFloat(buttonPixels.height)).insetBy(dx: -1, dy: -1).integral
+            let glyphPixels = local.intersection(CGRect(x: 0, y: 0, width: buttonPixels.width, height: buttonPixels.height))
+            XCTAssertGreaterThan(glyphPixels.width, 0, file: file, line: line)
+            XCTAssertGreaterThan(glyphPixels.height, 0, file: file, line: line)
+            frame = CGRect(x: app.frame.minX + (control.minX + glyphPixels.minX) / scaleX,
+                           y: app.frame.minY + (control.minY + glyphPixels.minY) / scaleY,
+                           width: glyphPixels.width / scaleX, height: glyphPixels.height / scaleY)
+            print("LEG132_PIXEL_TEXT_ROI style=\(style) text=\(text) control=\(control) glyphPixels=\(glyphPixels)")
+        } else {
+            frame = element.frame.insetBy(dx: element.frame.width * 0.12, dy: element.frame.height * 0.27)
+        }
+        let pixels = CGRect(x: (frame.minX - app.frame.minX) * scaleX, y: (frame.minY - app.frame.minY) * scaleY,
+                            width: frame.width * scaleX, height: frame.height * scaleY).integral
+        guard let crop = source.cropping(to: pixels) else { XCTFail("No visible label crop: \(style)", file: file, line: line); return }
+        let width = crop.width, height = crop.height
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height)); return true
+        }
+        XCTAssertTrue(rendered, file: file, line: line)
+        func linear(_ byte: UInt8) -> Double {
+            let value = Double(byte) / 255
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminances = stride(from: 0, to: rgba.count, by: 4).map {
+            0.2126 * linear(rgba[$0]) + 0.7152 * linear(rgba[$0 + 1]) + 0.0722 * linear(rgba[$0 + 2])
+        }.sorted()
+        guard !luminances.isEmpty else { XCTFail("Empty label crop", file: file, line: line); return }
+        let bins = Dictionary(grouping: luminances, by: { Int($0 * 128) })
+        let backgroundBin = bins.max(by: { $0.value.count < $1.value.count })!.value.sorted()
+        let background = backgroundBin[backgroundBin.count / 2]
+        if focused {
+            // Native TV focus can be neutral pale gray (observed L≈0.598).
+            // Reject the old lavender by colour, then compare both roles above;
+            // luminance alone cannot distinguish lavender from native gray.
+            let backgroundKey = Int(background * 128)
+            let offsets = stride(from: 0, to: rgba.count, by: 4).filter {
+                let l = 0.2126 * linear(rgba[$0]) + 0.7152 * linear(rgba[$0 + 1]) + 0.0722 * linear(rgba[$0 + 2])
+                return Int(l * 128) == backgroundKey
+            }
+            let channels = (0..<3).map { channel in
+                let values = offsets.map { Double(rgba[$0 + channel]) / 255 }.sorted()
+                return values[values.count / 2]
+            }
+            print("LEG132_FOCUS_PLATTER style=\(style) backgroundLuminance=\(background) rgb=\(channels)")
+            XCTAssertGreaterThanOrEqual(channels.min() ?? 0, 0.75, "Native focused fill must remain pale", file: file, line: line)
+        }
+        // Find ink by its difference from the dominant background, including
+        // dark ink. Never pre-filter for passing contrast or include the checkmark.
+        let ink = luminances.filter { abs($0 - background) > 0.02 }
+        let foreground = ink.isEmpty ? background : ink[ink.count / 2]
+        let ratio = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+        print("LEG132_PIXEL_CONTRAST style=\(style) id=\(element.identifier) text=\(text ?? "") ratio=\(ratio) backgroundLuminance=\(background) inkLuminance=\(foreground) inkPixels=\(ink.count) sampledPixels=\(luminances.count)")
+        XCTAssertGreaterThanOrEqual(ink.count, max(12, luminances.count / 500), "A meaningful population of resting text ink must be visible: \(style)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(ratio, 4.5, "Actual label contrast: \(style)", file: file, line: line)
+        if focused {
+            XCTAssertLessThan(foreground, background, "Focused secondary controls use dark label ink on their native pale platter", file: file, line: line)
+        } else {
+            XCTAssertGreaterThan(foreground, background, "Resting secondary controls use light label ink on their dark native platter", file: file, line: line)
+        }
+    }
+
     @MainActor private func nativeAction(id: String, prefix: String) -> XCUIElement {
         let result = app.cells.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", id, prefix)).firstMatch
         revealNativeTransportIfHidden()
