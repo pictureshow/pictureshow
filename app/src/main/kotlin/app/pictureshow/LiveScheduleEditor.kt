@@ -141,7 +141,7 @@ internal fun LiveScheduleEditor(
                         enabled,
                         Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed),
                         readOnly = confirmed,
-                        changed = original.fields[key] != merged[key]
+                        changed = liveScheduleFieldChanged(original, key, merged[key])
                     ) { edits = edits + (key to it) }
                 }
             }
@@ -182,7 +182,7 @@ internal fun LiveScheduleEditor(
                             tv,
                             enabled,
                             readOnly = confirmed,
-                            changed = original.fields[key] != merged[key]
+                            changed = liveScheduleFieldChanged(original, key, merged[key])
                         ) {
                             edits =
                                 edits + (key to it)
@@ -212,7 +212,7 @@ internal fun LiveScheduleEditor(
                         tv,
                         enabled,
                         readOnly = confirmed,
-                        changed = original.fields["KeepUpTo"] != merged["KeepUpTo"]
+                        changed = liveScheduleFieldChanged(original, "KeepUpTo", merged["KeepUpTo"])
                     ) { edits = edits + ("KeepUpTo" to it) }
                 }
                 if ("KeepUntil" in original.fields) {
@@ -236,13 +236,18 @@ internal fun LiveScheduleEditor(
                         enabled,
                         readOnly = confirmed,
                         changed =
-                        original.fields["KeepUntil"] != merged["KeepUntil"]
+                        liveScheduleFieldChanged(original, "KeepUntil", merged["KeepUntil"])
                     ) { edits = edits + ("KeepUntil" to it) }
                 }
                 if ("Days" in original.fields) {
                     val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
                     if (confirmed) {
-                        LiveOptionSummary("Days", liveRecordingDaysLabel(days), tv, original.fields["Days"] != merged["Days"])
+                        LiveOptionSummary(
+                            "Days",
+                            liveRecordingDaysLabel(days),
+                            tv,
+                            liveScheduleFieldChanged(original, "Days", merged["Days"])
+                        )
                     } else {
                         LiveText("Days", tv, textInset, small = true)
                         FlowRow(
@@ -270,7 +275,7 @@ internal fun LiveScheduleEditor(
                         tv,
                         enabled,
                         readOnly = confirmed,
-                        changed = original.fields["Priority"] != merged["Priority"]
+                        changed = liveScheduleFieldChanged(original, "Priority", merged["Priority"])
                     ) {
                         edits =
                             edits + ("Priority" to it)
@@ -414,7 +419,7 @@ private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boole
 }
 
 internal fun liveScheduleHasChanges(original: LiveSchedule, edits: Map<String, JsonElement>): Boolean =
-    edits.any { (key, value) -> original.fields[key] != value }
+    edits.any { (key, value) -> liveScheduleFieldChanged(original, key, value) }
 
 internal fun liveScheduleReviewLabel(existing: Boolean, changed: Boolean): String = if (!existing) {
     "Review recording"
@@ -425,3 +430,9 @@ internal fun liveScheduleReviewLabel(existing: Boolean, changed: Boolean): Strin
 }
 
 internal fun liveScheduleCanConfirm(existing: Boolean, changed: Boolean, busy: Boolean): Boolean = !busy && (!existing || changed)
+
+/** Weekdays are membership, not the insertion order produced while toggling chips. */
+internal fun liveScheduleFieldChanged(original: LiveSchedule, key: String, value: JsonElement?): Boolean {
+    val before = original.fields[key]
+    return if (key == "Days" && before is JsonArray && value is JsonArray) before.toSet() != value.toSet() else before != value
+}

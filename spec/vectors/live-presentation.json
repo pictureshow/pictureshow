@@ -3093,6 +3093,81 @@
         "busy": true
       },
       "expected": false
+    },
+    {
+      "id": "schedule-days-membership-reordered",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Friday",
+            "Monday"
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-days-membership-member-removed",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Friday"
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-days-membership-member-added",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-days-membership-same-members-duplicate",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Monday",
+            "Friday",
+            "Monday"
+          ]
+        }
+      },
+      "expected": false
     }
   ]
 }

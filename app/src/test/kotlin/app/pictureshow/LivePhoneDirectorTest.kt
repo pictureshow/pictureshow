@@ -112,6 +112,25 @@ class LivePhoneDirectorTest {
         assertTrue(card.top - heading.bottom <= 12.dp, "TV focus space must not separate a touch shelf heading from its cards")
     }
 
+    @Test fun togglingOriginalWeekdaysOffAndOnDoesNotEnableSave() {
+        val schedule = LiveSchedule(
+            kotlinx.serialization.json.JsonObject(
+                original.fields + (
+                    "Days" to
+                        kotlinx.serialization.json.JsonArray(
+                            listOf(kotlinx.serialization.json.JsonPrimitive("Monday"), kotlinx.serialization.json.JsonPrimitive("Friday"))
+                        )
+                    )
+            )
+        )
+        compose.setContent { TouchTheme { LazyColumn { item { LiveScheduleEditor(schedule, true, false, false, true) {} } } } }
+        compose.onNodeWithText("Monday: On").performScrollTo().performClick()
+        compose.onNodeWithText("Monday: Off").performClick()
+        compose.onNodeWithText("Review schedule").performScrollTo().performClick()
+        compose.onNodeWithText("Save changes").assertIsNotEnabled()
+        compose.onNodeWithText("Monday, Friday").assertIsDisplayed()
+    }
+
     @Test fun disabledChannelRowsLookDisabledAndRetainTheirGuard() {
         val enabled = mutableStateOf(true)
         val account = Account(Server("s", "Demo", "https://example.test", "12"), User("u", "Viewer"), "token")
