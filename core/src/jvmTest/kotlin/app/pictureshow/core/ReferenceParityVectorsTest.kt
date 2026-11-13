@@ -83,7 +83,21 @@ class ReferenceParityVectorsTest {
             val document = json.parseToJsonElement(file.readText()).jsonObject
             assertEquals(1, document.int("schemaVersion"), file.name)
             val suite = document.text("suite")
-            require(suite in setOf("reference", "application", "recovery", "playback-information")) {
+            require(
+                suite in
+                    setOf(
+                        "reference",
+                        "application",
+                        "recovery",
+                        "playback-information",
+                        "playback-settings",
+                        "player-quality",
+                        "settings-presentation",
+                        "playback-settings-layout",
+                        "frame-rate-match",
+                        "playback-start"
+                    )
+            ) {
                 "Unhandled suite $suite in ${file.name}"
             }
             val cases = document.getValue("cases").jsonArray

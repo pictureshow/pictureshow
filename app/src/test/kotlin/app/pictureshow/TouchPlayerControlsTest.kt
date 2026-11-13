@@ -691,8 +691,9 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun creditsCard(position: Long = 50_000) {
+    private fun creditsCard(position: Long = 50_000, earlyNext: Boolean = true) {
         compose.runOnIdle {
+            if (earlyNext) host.enableCreditsCountdown()
             host.position = position
             host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
@@ -701,6 +702,13 @@ class TouchPlayerControlsTest {
     }
 
     private fun bounds(tag: String) = compose.onNodeWithTag(tag).getBoundsInRoot()
+
+    @Test fun keepScenesCardOffersManualPlayWithoutEarlyCountdown() {
+        launch()
+        creditsCard(earlyNext = false)
+        compose.onNodeWithText("s left", substring = true).assertDoesNotExist()
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+    }
 
     // TOUCH-13: a number shows only while it is really counting.
     @Test fun nextCardCountsOnlyWhileTheCountdownRuns() {
@@ -733,6 +741,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:speed:200").performScrollTo().performClick()
         settled()
         compose.runOnIdle {
+            host.enableCreditsCountdown()
             host.position = 52_000
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
         }
@@ -854,6 +863,53 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithText("Play").assertIsDisplayed()
         assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w320dp-h700dp-port-xhdpi")
+    @Test
+    fun qualityActionSharesTheTitleLineAndLeavesTransportAndOptionsSeparate() {
+        launch(fontScale = 1.5f)
+        decided(PlayMethod.DirectPlay)
+        settled()
+        val quality = bounds("touch:quality")
+        val title = bounds("touch:title")
+        assertTrue(title.right <= quality.left)
+        assertTrue(quality.right <= bounds("touch:panel").right)
+        assertTrue(quality.bottom <= bounds("touch:toggle").top)
+        assertTrue(quality.right - quality.left >= 48.dp)
+        val before = host.position
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.runOnIdle { assertNull(host.qualityOverrideMbps) }
+        compose.onNodeWithTag("player:quality-choice:4").performClick()
+        compose.runOnIdle {
+            assertEquals(4, host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+        compose.onNodeWithTag("touch:quality").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 Mbps")
+        )
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.onNodeWithTag("player:quality-choice:auto").performClick()
+        compose.runOnIdle {
+            assertNull(host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+        compose.onNodeWithTag("touch:quality").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w1600dp-h700dp-land-xhdpi")
+    @Test
+    fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
+        launch()
+        settled()
+        val chapter = textBounds("Chapters")
+        val speed = textBounds("Speed · 1×")
+        val info = textBounds("Playback info")
+        assertEquals(chapter.top.value, speed.top.value, 1f)
+        assertEquals(speed.top.value, info.top.value, 1f)
+        assertEquals((speed.left - chapter.right).value, (info.left - speed.right).value, 1f)
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.
@@ -1495,7 +1551,14 @@ class TouchPlayerControlsTest {
         return hosts
     }
 
+    private fun PlaybackHostState.enableCreditsCountdown() {
+        localPreferences = localPreferences.copy(
+            tuning = localPreferences.tuning.copy(postCredits = app.pictureshow.core.playback.PostCredits.NextEpisode)
+        )
+    }
+
     private fun PlaybackHostState.reachCredits() {
+        enableCreditsCountdown()
         position = 50_000
         segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
         nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("0123456789abcdef0123456789abcde2", "Next episode")))

@@ -39,6 +39,12 @@ one tick = 100 ns. Division truncates toward zero; do not round saved positions 
 | `catalog.json` | Home rows' endpoints, browse sort/filter/pagination/bounds, IDs freshness query, detail's batch user-data projection, watched/favorite mutations, five search categories, person items, encoding cleanup and report endpoints. |
 | `recovery.json` | Reduced-rate server-seek eligibility/clamping/URL rewrite, copied versus encoded audio, forced video-copy recovery and burn-in subtitle refusal; [RECOVERY.md](RECOVERY.md). |
 | `application.json` | Local settings decoding/validation/effective values, server configuration preservation, server-priority track selection, caption accessibility overrides and aliases, resume/final positions, segment safety/boundaries and next-episode adjacency/timing. |
+| `player-quality.json` | Explicit viewing quality choices, Auto/manual labels, Home/Remote/Metered automatic ceilings and truthful adaptive quality notices. |
+| `playback-settings-layout.json` | Native UI acceptance at the measured 360dp landscape/1.3x text boundary: first setting, current value and Done remain fully visible; the second setting title reveals more content, the preview stays beside the choice list with vertical overlap, preview labels align with their cue centers, and one choice window replaces the group content. A real portrait allocation also remains full-width with the preview above its choices when an injected outer window hint changes between landscape and portrait; preview height follows the actual allocation (64dp compact, 108dp portrait). The 720×360dp/font1.3 player Quality menu uses at least 480dp of scroll-content width, fully renders and shows the Auto limit/reduction explanation before scrolling, reveals lower choices with a visible scroll cue, and commits a scrolled-to lower cap once before closing. Its native runner injects the observed 320dp phone allocation only for platform-default-width dialogs; explicit full-window dialogs use their actual allocation. Android executes this through real Compose layout; ports owe their native UI runner. The Android preview integration also checks the actual subtitle renderer against system caption scaling and an explicit size override. |
+| `settings-presentation.json` | Viewer-facing labels, distinct HDR/Dolby Vision consequences, passthrough permission/detection/downmix truth table and stable receiver-format summary order (Dolby Digital, Dolby Digital Plus, Dolby Atmos, Dolby TrueHD, DTS, DTS-HD), independent of the platform enum or detection-set order. |
+| `playback-settings.json` | SET-13..21: network caps and IPv6 unique-local classification, adaptation guards and progressive active-read windows (excluding inter-read idle), subtitle style normalization and burn policy, audio/HDR profiles and request channels, credits/resume preferences, tolerant persistence and truthful conversion information. |
+| `frame-rate-match.json` | Same-resolution integer cadence selection, fractional timing tolerance, preserving known HDR support and refusing unknown frame rates. A selected mode is a request, not proof the display switched. |
+| `playback-start.json` | Rewind only initial saved resume, preserving exact explicit handoff positions and clamping at zero. |
 
 `ProfileEvaluator` is the existing Kotlin test model of the relevant Jellyfin direct-play conditions; it is not a
 production negotiation engine. `compatibility` runs the real `DeviceProfileBuilder`, then that reduced independent
@@ -445,3 +451,13 @@ apart from what the OS did. `music-reports` gives one viewing per time a track i
 ceilings, the audio profile and the lossless claim. `music-playlists` refuses to send an edit again after an ambiguous
 answer until the list has been read back, and pins the create body: `IsPublic` is always sent and false unless the viewer chose
 otherwise, since the server's own default is public.
+
+
+Android settings UI checks distinguish the merged accessibility row from its rendered text. A row that replaces
+its accessibility semantics can still have visible text children in Compose's unmerged test tree. Geometry checks
+select that visual text, while separate native AccessibilityNodeInfo checks verify the exported checked state.
+Centering permits at most one physical pixel of glyph-position rounding; row height and radio alignment remain exact.
+
+The native settings layout suite also checks that a consequence stays inside its row's click target, multiline radio options align on their first label line at 1.3x font scale, and closing a group picker returns to the same scrolled opener. The first-line case runs against both settings and the actual player Quality menu; each platform supplies equivalent native geometry evidence.
+
+Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
