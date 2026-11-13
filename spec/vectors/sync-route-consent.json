@@ -25,9 +25,7 @@
       "rebind": "same",
       "expectedPending": true,
       "expectedRoutes": 1
-    }
-  ],
-  "identityCases": [
+    },
     {
       "id": "stale-confirm",
       "expectedPendingAfterObsolete": true,

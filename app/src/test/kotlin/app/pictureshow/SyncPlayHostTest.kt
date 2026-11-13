@@ -2701,7 +2701,9 @@ class SyncPlayHostTest {
     private suspend fun TestScope.routeConsentScopeCase(id: String) {
         val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
         val vectors = roots.map { java.io.File(it, "spec/vectors/sync-route-consent.json") }.first { it.isFile }
-        val cases = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        val traces = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertEquals(10, traces.size, "All consent scenarios belong to the portable case inventory")
+        val cases = traces.filter { "rebind" in it.jsonObject }
         assertEquals(4, cases.size)
         val case = cases.single { it.jsonObject.getValue("id").jsonPrimitive.content == id }.jsonObject
         val rig = Rig(this)
@@ -2731,7 +2733,9 @@ class SyncPlayHostTest {
     private suspend fun TestScope.routeConsentIdentityCase(id: String) {
         val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
         val vectors = roots.map { java.io.File(it, "spec/vectors/sync-route-consent.json") }.first { it.isFile }
-        val cases = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("identityCases").jsonArray
+        val traces = kotlinx.serialization.json.Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertEquals(10, traces.size, "All consent scenarios belong to the portable case inventory")
+        val cases = traces.filter { "rebind" !in it.jsonObject }
         assertEquals(6, cases.size)
         val case = cases.single { it.jsonObject.getValue("id").jsonPrimitive.content == id }.jsonObject
         val rig = Rig(this)
