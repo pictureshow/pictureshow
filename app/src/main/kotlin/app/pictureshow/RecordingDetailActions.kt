@@ -28,6 +28,7 @@ internal fun recordingDetailActionOrder(hasFromStart: Boolean, hasDownload: Bool
 }
 
 internal const val RECORDING_DETAIL_MUTATION_SIZE_DP = 48
+internal const val RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP = 28
 
 /** Reserve caption height, while its label never changes the action row's pitch. */
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)

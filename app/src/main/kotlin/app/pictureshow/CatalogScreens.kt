@@ -3158,7 +3158,7 @@ private fun DetailActions(
                             onClick = { if (!blocked) onDownload?.invoke() },
                             enabled = !blocked,
                             modifier = Modifier.testTag("detail:download").heightIn(min = 48.dp).align(Alignment.Top)
-                        ) { DetailActionLabel("Download", "download", Modifier, compact = true) }
+                        ) { DetailActionLabel("Download", "download", Modifier.testTag("detail:download-label"), compact = true) }
                         "played", "favorite" -> {
                             val played = target == "played"
                             val click = if (played) pending?.onPlayed ?: onPlayed else pending?.onFavorite ?: onFavorite
@@ -3305,7 +3305,16 @@ private fun DetailActions(
                         modifier = Modifier.testTag("detail:download")
                             .then(if (compact) Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp) else Modifier)
                     ) {
-                        if (compact) DetailActionLabel("Download", "download", Modifier, compact = true) else Text("Download")
+                        if (compact) {
+                            DetailActionLabel(
+                                "Download",
+                                "download",
+                                Modifier.testTag("detail:download-label"),
+                                compact = true
+                            )
+                        } else {
+                            Text("Download")
+                        }
                     }
                 }
             }
@@ -3357,7 +3366,9 @@ private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) 
 @Composable
 private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier, compact: Boolean = false) {
     if (compact) {
-        Text(label, modifier = modifier, maxLines = 1, softWrap = false)
+        Box(Modifier.heightIn(min = RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP.dp), contentAlignment = Alignment.Center) {
+            Text(label, modifier = modifier, maxLines = 1, softWrap = false)
+        }
     } else if (stableTarget == null) {
         Text(label, modifier = modifier)
     } else {

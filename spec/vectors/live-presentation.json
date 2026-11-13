@@ -158,7 +158,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "3:14 – 3:42 PM"
+      "expected": "3:14 \u2013 3:42 PM"
     },
     {
       "id": "live-presentation.period-crossing-range",
@@ -171,7 +171,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "11:55 AM – 12:10 PM"
+      "expected": "11:55 AM \u2013 12:10 PM"
     },
     {
       "id": "live-presentation.tomorrow-range",
@@ -184,7 +184,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Tomorrow · 15:00 – 16:00"
+      "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
     },
     {
       "id": "live-presentation.no-timer-dot",
@@ -535,7 +535,7 @@
       },
       "expected": {
         "title": "Painted windows",
-        "metadata": "S1:E7 · Ends 6:30 PM · 2m",
+        "metadata": "S1:E7 \u00b7 Ends 6:30 PM \u00b7 2m",
         "progress": 0.0
       }
     },
@@ -655,7 +655,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today · 6:00 PM",
+        "metadata": "Today \u00b7 6:00 PM",
         "progress": null
       }
     },
@@ -719,7 +719,7 @@
       },
       "expected": {
         "title": "Recording",
-        "metadata": "Today · 6:00 PM",
+        "metadata": "Today \u00b7 6:00 PM",
         "progress": null
       }
     },
@@ -1068,7 +1068,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused · At live edge",
+        "status": "Paused \u00b7 At live edge",
         "clock": ""
       }
     },
@@ -1088,7 +1088,7 @@
       },
       "expected": {
         "status": "",
-        "clock": "−0:03"
+        "clock": "\u22120:03"
       }
     },
     {
@@ -1107,7 +1107,7 @@
       },
       "expected": {
         "status": "Paused",
-        "clock": "−0:03"
+        "clock": "\u22120:03"
       }
     },
     {
@@ -1159,7 +1159,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused · Buffer expired",
+        "status": "Paused \u00b7 Buffer expired",
         "clock": ""
       }
     },
@@ -1260,10 +1260,10 @@
         ]
       },
       "expected": [
-        "Paused · 17 sec behind live",
-        "Paused · 37 sec behind live",
+        "Paused \u00b7 17 sec behind live",
+        "Paused \u00b7 37 sec behind live",
         "Live position unavailable",
-        "Live · Time shift unavailable"
+        "Live \u00b7 Time shift unavailable"
       ]
     },
     {
@@ -1522,7 +1522,7 @@
       "input": {
         "unavailable": false
       },
-      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
+      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
     },
     {
       "id": "live-presentation.guide-successful-empty",
@@ -1709,7 +1709,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline · last loaded 3:14 PM"
+      "expected": "Offline \u00b7 last loaded 3:14 PM"
     },
     {
       "id": "live-presentation.guide-freshness-offline-fold",
@@ -1722,7 +1722,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Offline · last loaded 1:30 AM -05:00"
+      "expected": "Offline \u00b7 last loaded 1:30 AM -05:00"
     },
     {
       "id": "live-presentation.device-japanese-twelve-hour",
@@ -1734,7 +1734,7 @@
         "zone": "America/New_York",
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "午後3:14"
+      "expected": "\u5348\u5f8c3:14"
     },
     {
       "id": "live-presentation.guide-scroll-visible",
@@ -2405,17 +2405,17 @@
       "operation": "live-buffer-status",
       "input": {
         "status": "Paused",
-        "clock": "−0:12",
+        "clock": "\u22120:12",
         "behind": 12000
       },
-      "expected": "Paused · 12 sec behind live"
+      "expected": "Paused \u00b7 12 sec behind live"
     },
     {
       "id": "live-buffer-status-playing",
       "operation": "live-buffer-status",
       "input": {
         "status": "",
-        "clock": "−2:13",
+        "clock": "\u22122:13",
         "behind": 133000
       },
       "expected": "2 min 13 sec behind live"
@@ -2824,7 +2824,7 @@
         "expired": false
       },
       "expected": [
-        "Available buffer · start",
+        "Available buffer \u00b7 start",
         "Live edge"
       ]
     },
@@ -3771,14 +3771,14 @@
       "operation": "program-metadata-lines",
       "input": {
         "channel": "Ch 4 Open Sky",
-        "range": "4:19 – 4:46 AM",
+        "range": "4:19 \u2013 4:46 AM",
         "episode": "S1 E15",
         "title": "Generated episode 15",
         "tv": false
       },
       "expected": [
-        "Ch 4 Open Sky · 4:19 – 4:46 AM",
-        "S1 E15 · Generated episode 15"
+        "Ch 4 Open Sky \u00b7 4:19 \u2013 4:46 AM",
+        "S1 E15 \u00b7 Generated episode 15"
       ]
     },
     {
@@ -3786,13 +3786,13 @@
       "operation": "program-metadata-lines",
       "input": {
         "channel": "Ch 4 Open Sky",
-        "range": "4:19 – 4:46 AM",
+        "range": "4:19 \u2013 4:46 AM",
         "episode": "S1 E15",
         "title": "Generated episode 15",
         "tv": true
       },
       "expected": [
-        "Ch 4 Open Sky · 4:19 – 4:46 AM · S1 E15 · Generated episode 15"
+        "Ch 4 Open Sky \u00b7 4:19 \u2013 4:46 AM \u00b7 S1 E15 \u00b7 Generated episode 15"
       ]
     },
     {
@@ -3856,6 +3856,61 @@
         "disabledAlpha": 0.38,
         "scrimAlpha": 0.4
       }
+    },
+    {
+      "id": "live-presentation.compact-label-inner-body",
+      "operation": "recording-label-body",
+      "input": {},
+      "expected": 28
+    },
+    {
+      "id": "live-presentation.tv-readonly-review-focus",
+      "operation": "review-summary-focus",
+      "input": {
+        "tv": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.touch-readonly-review-no-keyboard-stops",
+      "operation": "review-summary-focus",
+      "input": {
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.stale-new-confirm-disabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false,
+        "canSubmit": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.stale-edited-confirm-disabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": false,
+        "canSubmit": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.fresh-new-confirm-enabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false,
+        "canSubmit": true
+      },
+      "expected": true
     }
   ]
 }

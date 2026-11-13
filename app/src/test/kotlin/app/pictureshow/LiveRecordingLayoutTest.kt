@@ -9,10 +9,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -27,6 +29,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
@@ -289,6 +292,53 @@ class LiveRecordingLayoutTest {
         assertEquals(1, downloads)
         assertTrue(liveRecordingItemRoute(recording).endsWith("&liveRecording=true"))
         assertTrue(!itemRoute(recording).contains("liveRecording"), "Ordinary item routes retain their layout default")
+    }
+
+    @Test fun compactActionLabelsMatchButtonAndIconCentersAtStandardFont() = verifyActionCenters(1f)
+
+    @Test fun compactActionLabelsMatchButtonAndIconCentersAtLargeFont() = verifyActionCenters(1.3f)
+
+    private fun verifyActionCenters(fontScale: Float) {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
+                PictureshowTheme {
+                    CatalogDetail(
+                        CatalogDetailState(
+                            account,
+                            recording.copy(userData = recording.userData.copy(playbackPositionTicks = 450_000_000)),
+                            loading = false
+                        ),
+                        {},
+                        {},
+                        {},
+                        {},
+                        {},
+                        recordingContext = true,
+                        onDownload = { _, _, _ -> }
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        listOf("play", "download", "played").forEach { focus ->
+            compose.onNodeWithTag("detail:$focus").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) {
+                it()
+            }
+            compose.mainClock.advanceTimeBy(500)
+            val icon = compose.onNodeWithTag("detail:played").getUnclippedBoundsInRoot()
+            listOf("play", "from-start", "download").forEach { target ->
+                val button = compose.onNodeWithTag("detail:$target").getUnclippedBoundsInRoot()
+                val label = compose.onNodeWithTag("detail:$target-label", useUnmergedTree = true).getUnclippedBoundsInRoot()
+                val centre = (button.top + button.bottom) / 2
+                assertEquals(
+                    centre.value,
+                    ((label.top + label.bottom) / 2).value,
+                    .5f,
+                    "$target text must centre in its own surface; focus=$focus font=$fontScale"
+                )
+                assertEquals(centre.value, ((icon.top + icon.bottom) / 2).value, .5f, "$target and toggle share the row centre")
+            }
+        }
     }
 
     @Test fun ordinaryCatalogDetailRetainsItsExisting220dpHero() {

@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(278, cases.size)
+        assertEquals(284, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -85,6 +85,16 @@ class LivePresentationVectorsTest {
                         c["title"]?.jsonPrimitive?.contentOrNull,
                         c.getValue("tv").jsonPrimitive.boolean
                     ),
+                    id
+                )
+                "recording-label-body" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.int,
+                    RECORDING_DETAIL_LABEL_MIN_HEIGHT_DP,
+                    id
+                )
+                "review-summary-focus" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveReviewSummaryFocusable(c.getValue("tv").jsonPrimitive.boolean),
                     id
                 )
                 "recording-mutation-slot" -> assertEquals(
@@ -522,7 +532,8 @@ class LivePresentationVectorsTest {
                     liveScheduleCanConfirm(
                         c.getValue("existing").jsonPrimitive.boolean,
                         c.getValue("changed").jsonPrimitive.boolean,
-                        c.getValue("busy").jsonPrimitive.boolean
+                        c.getValue("busy").jsonPrimitive.boolean,
+                        c["canSubmit"]?.jsonPrimitive?.boolean ?: true
                     ),
                     id
                 )

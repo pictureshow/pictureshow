@@ -5,6 +5,7 @@ package app.pictureshow
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -14,12 +15,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -44,6 +47,7 @@ internal fun LiveScheduleEditor(
     tv: Boolean,
     busy: Boolean,
     existing: Boolean,
+    canSubmit: Boolean = true,
     onSave: (LiveSchedule) -> Unit
 ) {
     val time = liveTime()
@@ -80,8 +84,13 @@ internal fun LiveScheduleEditor(
                 LiveAction(
                     if (existing) "Save changes" else "Confirm recording",
                     tv,
-                    Modifier.liveFocus("editor:confirm", tv && (!existing || hasChanges)),
-                    liveScheduleCanConfirm(existing, hasChanges, busy)
+                    Modifier.testTag("live:editor:confirm").liveFocus(
+                        "editor:confirm",
+                        tv && (!existing || hasChanges),
+                        enabled =
+                        canSubmit && !busy
+                    ),
+                    liveScheduleCanConfirm(existing, hasChanges, busy, canSubmit)
                 ) {
                     runCatching { editSchedule(original, JsonObject(edits), series) }
                         .onSuccess {
@@ -283,7 +292,11 @@ internal fun LiveScheduleEditor(
                 }
             }
         }
-        LiveText("Some options depend on your server.", tv, textInset, small = true)
+        if (tv && confirmed) {
+            LiveTvReadOnlySummaryRow("Some options depend on your server.", null, Modifier.testTag("live:review:footer"), small = true)
+        } else {
+            LiveText("Some options depend on your server.", tv, textInset, small = true)
+        }
     }
 }
 
@@ -368,16 +381,37 @@ internal fun liveRecordingPriorityLabel(value: String?): String = when (value) {
 private fun LiveOptionSummary(title: String, value: String, tv: Boolean, changed: Boolean = false) {
     val modifier = Modifier.testTag("live:summary:$title").semantics(mergeDescendants = true) {}
     if (tv) {
+        LiveTvReadOnlySummaryRow(title, value, modifier)
+    } else {
+        TouchValueSummary(title, value, modifier, changed)
+    }
+}
+
+/** Read-only summaries still need real remote stops; focus never selects, edits or writes. */
+internal fun liveReviewSummaryFocusable(tv: Boolean): Boolean = tv
+
+@Composable
+private fun LiveTvReadOnlySummaryRow(title: String, value: String?, modifier: Modifier, small: Boolean = false) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = androidx.tv.material3.MaterialTheme.colorScheme
+    CompositionLocalProvider(
+        androidx.tv.material3.LocalContentColor provides if (focused) colors.inverseOnSurface else colors.onSurface
+    ) {
         Row(
-            modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .background(
+                    if (focused) colors.inverseSurface else androidx.compose.ui.graphics.Color.Transparent,
+                    androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                ).semantics(mergeDescendants = true) {}
+                .onFocusChanged { focused = it.isFocused }
+                .focusable(enabled = liveReviewSummaryFocusable(true))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            LiveText(title, true, Modifier.weight(1f))
-            LiveText(value, true)
+            LiveText(title, true, Modifier.weight(1f), small = small)
+            value?.let { LiveText(it, true) }
         }
-    } else {
-        TouchValueSummary(title, value, modifier, changed)
     }
 }
 
@@ -433,7 +467,8 @@ internal fun liveScheduleReviewLabel(existing: Boolean, changed: Boolean): Strin
     "Review schedule"
 }
 
-internal fun liveScheduleCanConfirm(existing: Boolean, changed: Boolean, busy: Boolean): Boolean = !busy && (!existing || changed)
+internal fun liveScheduleCanConfirm(existing: Boolean, changed: Boolean, busy: Boolean, canSubmit: Boolean = true): Boolean =
+    canSubmit && !busy && (!existing || changed)
 
 /** Weekdays are membership, not the insertion order produced while toggling chips. */
 internal fun liveScheduleFieldChanged(original: LiveSchedule, key: String, value: JsonElement?): Boolean {
