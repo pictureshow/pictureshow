@@ -433,7 +433,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
             return visible(app.staticTexts["Continue watching"]) && app.buttons["item-" + id].firstMatch.exists
         case "Libraries":
             guard let ids = config["libraryIDs"]?.split(separator: ","), ids.count >= 3 else { return false }
-            let heading = app.staticTexts["Libraries"].allElementsBoundByIndex.contains(where: { visible($0) && $0.frame.minY > (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.maxY : 0) })
+            let heading = app.staticTexts.matching(NSPredicate(format: "label == %@", "Libraries")).allElementsBoundByIndex.contains(where: { visible($0) && $0.frame.minY > (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.maxY : 0) })
             return heading && !app.staticTexts["Continue watching"].exists && ids.allSatisfy { app.buttons["item-" + $0].firstMatch.exists }
         case "Search": return visible(app.textFields["searchField"])
         case "Settings": return visible(node("settingsTitle")) && node("maxBitrate").exists
