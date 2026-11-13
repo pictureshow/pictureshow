@@ -307,7 +307,8 @@ internal fun LiveMenu(
     onDismiss: () -> Unit,
     actions: List<Pair<String, () -> Unit>>,
     destructiveLabels: Set<String> = emptySet(),
-    selectedIndex: Int? = null
+    selectedIndex: Int? = null,
+    uniformRows: Boolean = false
 ) {
     if (!tv) {
         LiveTouchChoiceMenu(title, onDismiss, actions, destructiveLabels, selectedIndex)
@@ -320,7 +321,8 @@ internal fun LiveMenu(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             LiveText(title, tv, heading = true)
-            actions.forEachIndexed { index, action ->
+            val rows = if (uniformRows) actions + ("Close" to onDismiss) else actions
+            rows.forEachIndexed { index, action ->
                 val destructive = action.first in destructiveLabels
                 androidx.tv.material3.ListItem(
                     selected = false,
@@ -332,21 +334,36 @@ internal fun LiveMenu(
                                 androidx.tv.material3.MaterialTheme.colorScheme.error
                             } else {
                                 androidx.tv.material3.LocalContentColor.current
+                            },
+                            style = if (uniformRows) {
+                                androidx.tv.material3.MaterialTheme.typography.bodyLarge
+                            } else {
+                                androidx.tv.material3.LocalTextStyle.current
                             }
                         )
                     },
-                    leadingContent = if (destructive) {
+                    leadingContent = if (uniformRows || destructive) {
                         {
                             androidx.tv.material3.Icon(
-                                liveIcon("trash"),
+                                when {
+                                    destructive -> liveIcon("trash")
+                                    action.first == "Play" -> touchActionIcon("play")
+                                    else -> liveIcon("back")
+                                },
                                 null,
-                                tint = androidx.tv.material3.MaterialTheme.colorScheme.error
+                                if (uniformRows) Modifier.size(24.dp) else Modifier,
+                                tint = if (destructive) {
+                                    androidx.tv.material3.MaterialTheme.colorScheme.error
+                                } else {
+                                    androidx.tv.material3.LocalContentColor.current
+                                }
                             )
                         }
                     } else {
                         null
                     },
-                    modifier = Modifier.fillMaxWidth().liveFocus("menu:$index", index == 0),
+                    modifier = Modifier.fillMaxWidth().then(if (uniformRows) Modifier.height(48.dp) else Modifier)
+                        .liveFocus("menu:$index", index == 0),
                     colors = androidx.tv.material3.ListItemDefaults.colors(
                         containerColor = androidx.compose.ui.graphics.Color.Transparent,
                         focusedContainerColor = if (destructive) {
@@ -358,7 +375,7 @@ internal fun LiveMenu(
                     scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
                 )
             }
-            LiveQuietAction("Close", tv, onClick = onDismiss)
+            if (!uniformRows) LiveQuietAction("Close", tv, onClick = onDismiss)
         }
     }
 }

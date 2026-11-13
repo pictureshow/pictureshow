@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.dp
 internal enum class LiveEmptyAction(val label: String) {
     Back("Back"),
     Retry("Retry"),
-    Channels("Show all channels"),
+    AllChannels("Show all channels"),
+    Channels("Go to channels"),
     Guide("Browse guide"),
     ClearFilters("Clear filters")
 }
@@ -86,9 +87,9 @@ internal fun liveEmptyPresentation(
             return if (favorites && search.isBlank()) {
                 LiveEmptyPresentation(
                     "star-outline",
-                    "No favourite channels yet",
+                    "No favorite channels yet",
                     "Star a channel to pin it here.",
-                    LiveEmptyAction.Channels
+                    LiveEmptyAction.AllChannels
                 )
             } else {
                 LiveEmptyPresentation(
@@ -103,7 +104,7 @@ internal fun liveEmptyPresentation(
             return LiveEmptyPresentation(
                 "tv",
                 liveGuideEmptyMessage(false),
-                "Try another time, or ask your administrator to check the XMLTV guide.",
+                "Try another time, or ask your server administrator to set up a TV guide.",
                 LiveEmptyAction.Channels,
                 showGuideNavigation = true
             )
@@ -113,7 +114,7 @@ internal fun liveEmptyPresentation(
         return LiveEmptyPresentation(
             "tv",
             "No recordings yet",
-            "Record a programme from the guide to watch it here later.",
+            "Record a program from the guide to watch it here later.",
             LiveEmptyAction.Guide
         )
     }
@@ -121,7 +122,7 @@ internal fun liveEmptyPresentation(
         return LiveEmptyPresentation(
             "tv",
             "No scheduled recordings",
-            "Choose a programme in the guide to record once or as a series.",
+            "Choose a program in the guide to record once or as a series.",
             LiveEmptyAction.Guide
         )
     }

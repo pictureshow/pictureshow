@@ -90,7 +90,7 @@ internal fun LiveScheduleEditor(
             )
             if (confirmed) {
                 LiveText(
-                    liveScheduleReviewSummary(LiveSchedule(merged), series, existing, time),
+                    liveScheduleReviewSummary(LiveSchedule(merged), series, existing, time, touch = !tv),
                     tv,
                     textInset
                 )
@@ -510,9 +510,16 @@ internal fun liveScheduleFieldChanged(original: LiveSchedule, key: String, value
 }
 
 /** Review describes the selected options without claiming an omitted server default. */
-internal fun liveScheduleReviewSummary(schedule: LiveSchedule, series: Boolean, existing: Boolean, time: LiveTime): String {
+internal fun liveScheduleReviewSummary(
+    schedule: LiveSchedule,
+    series: Boolean,
+    existing: Boolean,
+    time: LiveTime,
+    touch: Boolean = false
+): String {
     if (existing) return "Applies these options to this ${if (series) "series rule" else "recording schedule"}."
     if (!series) {
+        if (touch) return "Records this airing once."
         return "Records ${schedule.name} on ${schedule.channelName ?: "this channel"}, ${time.range(
             schedule.startDate,
             schedule.endDate
