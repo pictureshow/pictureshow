@@ -104,12 +104,16 @@ class LiveRound3ClosureTest {
     @Test
     @Config(qualifiers = "w853dp-h384dp-mdpi")
     fun shortGuideChromeLeavesThreeCompleteChannelRows() {
+        val clock = System.currentTimeMillis()
         val fake = LiveFake().apply {
             channelRows = (0..7).map { LiveChannel("c$it", "Channel $it", "$it") }
-            show =
-                show.copy(channelId = "c0")
+            show = show.copy(
+                channelId = "c0",
+                startDate = Instant.ofEpochMilli(clock - 60_000).toString(),
+                endDate = Instant.ofEpochMilli(clock + 1_800_000).toString()
+            )
         }
-        val vm = LiveTvViewModel(account, fake, now = { 0L })
+        val vm = LiveTvViewModel(account, fake)
         compose.setContent {
             TouchTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -118,6 +122,7 @@ class LiveRound3ClosureTest {
             }
         }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:guide-warning").assertDoesNotExist()
         val toolbar = compose.onNodeWithTag("live:touch-app-bar").getBoundsInRoot()
         assertEquals(48.dp, toolbar.bottom - toolbar.top)
         val controls = compose.onNodeWithTag("live:compact-guide-controls").getBoundsInRoot()
