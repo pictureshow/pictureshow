@@ -7,16 +7,13 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -91,7 +88,11 @@ class LiveRound3ClosureTest {
         }
         fun checkWidth() {
             val box = compose.onNodeWithTag("live:guide-channel:c", useUnmergedTree = true).getUnclippedBoundsInRoot()
-            assertEquals(80.dp, box.right - box.left, "The guide breakpoint uses its available content, not the whole window")
+            // This semantic content excludes its4dp trailing channel gutter.
+            assertEquals(76.dp, box.right - box.left, "Compact channel content reserves its gutter")
+            val row = compose.onNodeWithTag("live:guide-row:c", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val zero = compose.onNodeWithTag("live:tick:0", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertEquals(80.dp, zero.left - row.left, "The complete channel slot uses available content width")
         }
         checkWidth()
         compose.runOnIdle { width.value = 712.dp }
@@ -109,11 +110,8 @@ class LiveRound3ClosureTest {
                 show.copy(channelId = "c0")
         }
         val vm = LiveTvViewModel(account, fake, now = { 0L })
-        var toolbarInset = 0.dp
         compose.setContent {
             TouchTheme {
-                val density = LocalDensity.current
-                toolbarInset = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
                 Box(Modifier.fillMaxSize()) {
                     Column(Modifier.width(712.dp).height(384.dp)) { LiveTvScreen(vm, account, false, {}, {}, {}) }
                 }
@@ -121,14 +119,14 @@ class LiveRound3ClosureTest {
         }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
         val toolbar = compose.onNodeWithTag("live:touch-app-bar").getBoundsInRoot()
-        assertEquals(48.dp, toolbar.bottom - toolbar.top - toolbarInset)
+        assertEquals(48.dp, toolbar.bottom - toolbar.top)
         val controls = compose.onNodeWithTag("live:compact-guide-controls").getBoundsInRoot()
         assertEquals(48.dp, controls.bottom - controls.top)
         val ruler = compose.onNodeWithTag("live:guide-ruler", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertEquals(24.dp, ruler.bottom - ruler.top)
         assertTrue(
-            ruler.bottom - toolbarInset <= 120.dp,
-            "Guide chrome is120dp plus actual system inset: ${ruler.bottom}, inset $toolbarInset"
+            ruler.bottom - toolbar.top <= 120.dp,
+            "Guide controls occupy120dp below the actual toolbar top: ${ruler.bottom}, top ${toolbar.top}"
         )
         val third = compose.onNodeWithTag("live:guide-row:c2", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(third.bottom <= 384.dp, "Third channel row must be fully visible: $third")
