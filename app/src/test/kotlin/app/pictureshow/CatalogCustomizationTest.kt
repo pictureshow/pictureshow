@@ -147,6 +147,8 @@ class CatalogCustomizationTest {
             )
         }
         field.performClick().performTextInput("Person")
+        compose.mainClock.advanceTimeBy(350)
+        compose.onNodeWithTag("catalog:choice:person-1").assertIsDisplayed()
         compose.runOnIdle {
             val imm = compose.activity.getSystemService(InputMethodManager::class.java)
             imm.showSoftInput(requireNotNull(window.decorView.findFocus()), InputMethodManager.SHOW_IMPLICIT)
