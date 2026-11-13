@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,6 +33,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+internal const val LIVE_DISABLED_FOCUS_BORDER_DP = 2
 
 internal val LiveBackground = Color(0xFF10131C)
 internal val LiveMuted = Color(0xFFC3C9D8)
@@ -119,6 +122,10 @@ internal fun LiveAction(
     onClick: () -> Unit
 ) {
     if (tv) {
+        val focusedDisabledBorder = androidx.tv.material3.Border(
+            border = BorderStroke(LIVE_DISABLED_FOCUS_BORDER_DP.dp, androidx.tv.material3.MaterialTheme.colorScheme.onSurface),
+            shape = CircleShape
+        )
         val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
             androidx.tv.material3.Text(label)
         }
@@ -128,6 +135,7 @@ internal fun LiveAction(
                 modifier.heightIn(min = 40.dp),
                 enabled = enabled,
                 contentPadding = PaddingValues(16.dp, 10.dp),
+                border = androidx.tv.material3.ButtonDefaults.border(focusedDisabledBorder = focusedDisabledBorder),
                 content = content
             )
         } else {
@@ -136,6 +144,7 @@ internal fun LiveAction(
                 modifier.heightIn(min = 40.dp),
                 enabled = enabled,
                 contentPadding = PaddingValues(16.dp, 10.dp),
+                border = androidx.tv.material3.OutlinedButtonDefaults.border(focusedDisabledBorder = focusedDisabledBorder),
                 content = content
             )
         }

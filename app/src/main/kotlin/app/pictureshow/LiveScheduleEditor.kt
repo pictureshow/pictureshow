@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -14,12 +15,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -60,54 +65,68 @@ internal fun LiveScheduleEditor(
     val hasChanges = liveScheduleHasChanges(original, edits)
     val firstPadding = listOf("PrePaddingSeconds", "PostPaddingSeconds").firstOrNull { it in original.fields }
     val textInset = if (tv) Modifier.padding(start = 16.dp) else Modifier
+    val headerRequester = remember(original) { BringIntoViewRequester() }
+    var firstActionFocused by remember(original, confirmed) { mutableStateOf(false) }
+    LaunchedEffect(tv, confirmed, firstActionFocused) {
+        if (liveEditorShouldRevealHeader(tv, firstActionFocused)) {
+            withFrameNanos { }
+            headerRequester.bringIntoView()
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        LiveText(original.name, tv, textInset, heading = true)
-        LiveText(
-            "${original.channelName ?: "Channel ${original.channelId}"} · ${time.range(original.startDate, original.endDate)}",
-            tv,
-            textInset,
-            small = true
-        )
-        if (confirmed) {
+        Column(
+            Modifier.then(if (tv) Modifier.bringIntoViewRequester(headerRequester) else Modifier).testTag("live:editor:header-group"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LiveText(original.name, tv, textInset, heading = true)
             LiveText(
-                if (existing) {
-                    "Save changes to this ${if (series) "series rule" else "recording schedule"}. Completed recordings are kept."
-                } else {
-                    "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
-                        "Completed recordings are retained if you cancel the schedule."
-                },
+                "${original.channelName ?: "Channel ${original.channelId}"} · ${time.range(original.startDate, original.endDate)}",
                 tv,
-                textInset
+                textInset,
+                small = true
             )
-            validationError?.let { LiveText(it, tv, textInset, warning = true) }
-            FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LiveAction(
-                    if (existing) "Save changes" else "Confirm recording",
+            if (confirmed) {
+                LiveText(
+                    if (existing) {
+                        "Save changes to this ${if (series) "series rule" else "recording schedule"}. Completed recordings are kept."
+                    } else {
+                        "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
+                            "Completed recordings are retained if you cancel the schedule."
+                    },
                     tv,
-                    Modifier.testTag("live:editor:confirm").liveFocus(
-                        "editor:confirm",
-                        tv && (!existing || hasChanges),
-                        enabled =
-                        canSubmit && !busy
-                    ),
-                    liveScheduleCanConfirm(existing, hasChanges, busy, canSubmit)
-                ) {
-                    runCatching { editSchedule(original, JsonObject(edits), series) }
-                        .onSuccess {
-                            validationError = null
-                            onSave(it)
-                        }
-                        .onFailure { validationError = it.message ?: "Review the recording options before saving." }
+                    textInset
+                )
+                validationError?.let { LiveText(it, tv, textInset, warning = true) }
+                FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LiveAction(
+                        if (existing) "Save changes" else "Confirm recording",
+                        tv,
+                        Modifier.testTag("live:editor:confirm").onFocusChanged { firstActionFocused = it.isFocused }.liveFocus(
+                            "editor:confirm",
+                            tv && (!existing || hasChanges),
+                            enabled =
+                            canSubmit && !busy
+                        ),
+                        liveScheduleCanConfirm(existing, hasChanges, busy, canSubmit)
+                    ) {
+                        runCatching { editSchedule(original, JsonObject(edits), series) }
+                            .onSuccess {
+                                validationError = null
+                                onSave(it)
+                            }
+                            .onFailure { validationError = it.message ?: "Review the recording options before saving." }
+                    }
+                    LiveAction("Edit options", tv, enabled = !busy, primary = false) { confirmed = false }
                 }
-                LiveAction("Edit options", tv, enabled = !busy, primary = false) { confirmed = false }
+            } else {
+                LiveAction(
+                    liveScheduleReviewLabel(existing, hasChanges),
+                    tv,
+                    textInset.onFocusChanged { firstActionFocused = it.isFocused }
+                        .liveFocus("editor:review", tv && firstPadding == null, enabled = !busy),
+                    enabled = !busy
+                ) { confirmed = true }
             }
-        } else {
-            LiveAction(
-                liveScheduleReviewLabel(existing, hasChanges),
-                tv,
-                textInset.liveFocus("editor:review", tv && firstPadding == null, enabled = !busy),
-                enabled = !busy
-            ) { confirmed = true }
         }
         Column(
             Modifier.then(
@@ -387,18 +406,23 @@ private fun LiveOptionSummary(title: String, value: String, tv: Boolean, changed
     }
 }
 
+internal const val LIVE_REVIEW_SUMMARY_MIN_HEIGHT_DP = 48
+
+/** Revealing the header follows actual TV action focus and stops when the reader leaves it. */
+internal fun liveEditorShouldRevealHeader(tv: Boolean, firstActionFocused: Boolean): Boolean = tv && firstActionFocused
+
 /** Read-only summaries still need real remote stops; focus never selects, edits or writes. */
 internal fun liveReviewSummaryFocusable(tv: Boolean): Boolean = tv
 
 @Composable
-private fun LiveTvReadOnlySummaryRow(title: String, value: String?, modifier: Modifier, small: Boolean = false) {
+internal fun LiveTvReadOnlySummaryRow(title: String, value: String?, modifier: Modifier, small: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
     val colors = androidx.tv.material3.MaterialTheme.colorScheme
     CompositionLocalProvider(
         androidx.tv.material3.LocalContentColor provides if (focused) colors.inverseOnSurface else colors.onSurface
     ) {
-        Row(
-            modifier.fillMaxWidth().heightIn(min = 48.dp)
+        Box(
+            modifier.fillMaxWidth().heightIn(min = LIVE_REVIEW_SUMMARY_MIN_HEIGHT_DP.dp)
                 .background(
                     if (focused) colors.inverseSurface else androidx.compose.ui.graphics.Color.Transparent,
                     androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
@@ -406,11 +430,16 @@ private fun LiveTvReadOnlySummaryRow(title: String, value: String?, modifier: Mo
                 .onFocusChanged { focused = it.isFocused }
                 .focusable(enabled = liveReviewSummaryFocusable(true))
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            contentAlignment = Alignment.Center
         ) {
-            LiveText(title, true, Modifier.weight(1f), small = small)
-            value?.let { LiveText(it, true) }
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                LiveText(title, true, Modifier.weight(1f), small = small)
+                value?.let { LiveText(it, true) }
+            }
         }
     }
 }
