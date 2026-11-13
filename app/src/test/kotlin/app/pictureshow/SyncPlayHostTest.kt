@@ -2035,4 +2035,41 @@ class SyncPlayHostTest {
         assertEquals(rig.host.membership.generation, later.generation)
         assertEquals("later-duplicate-entry", rig.host.membership.queue?.current?.playlistItemId)
     }
+
+    @Test fun snapshotLossAndBindingReinstallationCannotReplaceTheServerQueueFromLocalResume() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.host.receive(rig.command("Pause", id = "accepted"))
+        runCurrent()
+        // A different older command must still fail closed and invalidate the queue.
+        val old = rig.command("Seek", id = "older").replace(
+            "\"EmittedAt\":\"${syncUtcTimestamp(rig.wall())}\"",
+            "\"EmittedAt\":\"${syncUtcTimestamp(rig.wall() - 1)}\""
+        )
+        rig.host.receive(old)
+        assertEquals("Reconnecting", rig.host.membership.phase)
+        assertFalse(rig.host.membership.hasSnapshot)
+        rig.host.clearRenderer(rig.renderer)
+        rig.host.bindRenderer(rig.renderer, rig.renderer, SyncLocalSelection("local-item", 0))
+        rig.host.tick()
+        runCurrent()
+        assertFalse("SetNewQueue" in rig.operations(), "recovery must never reseed from the existing decoder")
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Waiting")
+                    put("Reason", "Buffering")
+                }
+            )
+        )
+        assertEquals("Joining", rig.host.membership.phase)
+        rig.host.clearRenderer(rig.renderer)
+        rig.host.bindRenderer(rig.renderer, rig.renderer, SyncLocalSelection("local-item", 0))
+        rig.host.tick()
+        runCurrent()
+        assertFalse("SetNewQueue" in rig.operations(), "a later state event does not restore queue authority")
+    }
 }

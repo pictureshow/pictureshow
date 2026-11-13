@@ -186,12 +186,17 @@ data class SyncMembership(
     val queue: SyncQueue? = null,
     val command: SyncCommand? = null,
     val lastCommandTicks: Long? = null,
+    val lastAcceptedCommand: SyncCommand? = null,
     val observedState: String? = null,
     val seenMessageIds: List<String> = emptyList(),
     val notice: String? = null
 ) {
     val active: Boolean get() = phase !in setOf("Leaving", "Error") && (groupId != null || phase == "Joining" || phase == "Reconnecting")
     val hasSnapshot: Boolean get() = group != null && queue != null
+
+    // A missing recovery snapshot is never evidence that the viewer selected another title.
+    val canSelectSource: Boolean get() = active && group != null &&
+        phase !in setOf("Joining", "Reconnecting") && (hasSnapshot || phase == "Idle")
 }
 
 /**
@@ -284,11 +289,23 @@ fun reduceSyncEvent(state: SyncMembership, event: SyncEvent, generation: Long): 
         is SyncEvent.Command -> {
             val command = event.command
             when {
-                state.lastCommandTicks != null && command.emittedAtTicks < state.lastCommandTicks -> recoverSync(next)
+                state.lastCommandTicks != null && command.emittedAtTicks < state.lastCommandTicks -> {
+                    // Readiness replies may arrive out of emission order. An exact repeat adds no
+                    // timeline information: ignore it without replaying it or losing the snapshot.
+                    val previous = state.lastAcceptedCommand
+                    if (state.hasSnapshot && previous != null &&
+                        command.copy(emittedAtTicks = previous.emittedAtTicks) == previous
+                    ) {
+                        next
+                    } else {
+                        recoverSync(next)
+                    }
+                }
 
                 command.command == "Stop" && state.group != null && state.queue == null -> next.copy(
                     command = command,
                     lastCommandTicks = command.emittedAtTicks,
+                    lastAcceptedCommand = command,
                     phase = "Idle"
                 )
 
@@ -301,6 +318,7 @@ fun reduceSyncEvent(state: SyncMembership, event: SyncEvent, generation: Long): 
                 else -> next.copy(
                     command = command,
                     lastCommandTicks = command.emittedAtTicks,
+                    lastAcceptedCommand = command,
                     phase = when (command.command) {
                         "Unpause" -> "Playing"
                         "Stop" -> "Idle"

@@ -188,14 +188,17 @@ class SyncProtocolTest {
                     assertEquals(step.getValue("report").jsonPrimitive.boolean, observation.report, "$id step $index")
                     state = observation.state
                 }
+
                 "position-applied" -> {
                     checkKeys(step, setOf("op", "changed"))
                     state = state.afterPositionApplied(step.getValue("changed").jsonPrimitive.boolean)
                 }
+
                 "reset" -> {
                     checkKeys(step, setOf("op"))
                     state = SyncReadinessState()
                 }
+
                 else -> error("Unknown readiness step in $id")
             }
         }
@@ -285,6 +288,7 @@ class SyncProtocolTest {
         put("groupId", state.groupId?.let(::JsonPrimitive) ?: JsonNull)
         put("phase", state.phase)
         put("hasSnapshot", state.hasSnapshot)
+        put("canSelectSource", state.canSelectSource)
         put("currentEntry", state.queue?.current?.playlistItemId?.let(::JsonPrimitive) ?: JsonNull)
         put("entries", JsonArray(state.queue?.entries.orEmpty().map { JsonPrimitive(it.playlistItemId) }))
         put("items", JsonArray(state.queue?.entries.orEmpty().map { JsonPrimitive(it.itemId) }))

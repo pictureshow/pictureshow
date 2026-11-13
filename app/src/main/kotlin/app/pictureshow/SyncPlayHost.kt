@@ -307,6 +307,8 @@ internal class SyncPlayHost(
             return
         }
         if (after.phase == "Reconnecting") {
+            pendingSource = null
+            awaitingSource = null
             scheduled?.cancel()
             pause("membership-reconnecting")
             timeline = null
@@ -538,7 +540,7 @@ internal class SyncPlayHost(
         if (opening != null && opening.entryId == openingEntry) openingEntry = null
         awaitingSource = null
         pendingSource = localSelection?.takeIf {
-            participating && membership.group != null && it.itemId == next.snapshot().itemId
+            participating && membership.canSelectSource && it.itemId == next.snapshot().itemId
         }?.let { PendingSource(token, membership.generation, it) }
         if (participating) {
             pause("bind", next)
@@ -777,7 +779,9 @@ internal class SyncPlayHost(
             note("Watch together is unavailable for this source. Leave the group to play it separately.")
         }
         pendingSource?.let { pending ->
-            if (pending.token !== rendererToken || pending.generation != membership.generation || !participating) {
+            if (pending.token !== rendererToken || pending.generation != membership.generation || !participating ||
+                !membership.canSelectSource
+            ) {
                 pendingSource = null
             } else if (membership.queue?.current?.itemId == pending.selection.itemId) {
                 // Another participant selected it first; the server's position and entry identity win.
