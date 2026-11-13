@@ -66,9 +66,12 @@ internal fun LiveScheduleEditor(
     val firstPadding = listOf("PrePaddingSeconds", "PostPaddingSeconds").firstOrNull { it in original.fields }
     val textInset = if (tv) Modifier.padding(start = 16.dp) else Modifier
     val headerRequester = remember(original) { BringIntoViewRequester() }
-    var firstActionFocused by remember(original, confirmed) { mutableStateOf(false) }
-    LaunchedEffect(tv, confirmed, firstActionFocused) {
-        if (liveEditorShouldRevealHeader(tv, firstActionFocused)) {
+    var confirmFocused by remember(original, confirmed) { mutableStateOf(false) }
+    var editFocused by remember(original, confirmed) { mutableStateOf(false) }
+    var reviewFocused by remember(original, confirmed) { mutableStateOf(false) }
+    val firstActionRowFocused = if (confirmed) confirmFocused || editFocused else reviewFocused
+    LaunchedEffect(tv, confirmed, firstActionRowFocused) {
+        if (liveEditorShouldRevealHeader(tv, firstActionRowFocused)) {
             withFrameNanos { }
             headerRequester.bringIntoView()
         }
@@ -101,7 +104,7 @@ internal fun LiveScheduleEditor(
                     LiveAction(
                         if (existing) "Save changes" else "Confirm recording",
                         tv,
-                        Modifier.testTag("live:editor:confirm").onFocusChanged { firstActionFocused = it.isFocused }.liveFocus(
+                        Modifier.testTag("live:editor:confirm").onFocusChanged { confirmFocused = it.isFocused }.liveFocus(
                             "editor:confirm",
                             tv && (!existing || hasChanges),
                             enabled =
@@ -116,13 +119,19 @@ internal fun LiveScheduleEditor(
                             }
                             .onFailure { validationError = it.message ?: "Review the recording options before saving." }
                     }
-                    LiveAction("Edit options", tv, enabled = !busy, primary = false) { confirmed = false }
+                    LiveAction(
+                        "Edit options",
+                        tv,
+                        Modifier.onFocusChanged { editFocused = it.isFocused },
+                        enabled = !busy,
+                        primary = false
+                    ) { confirmed = false }
                 }
             } else {
                 LiveAction(
                     liveScheduleReviewLabel(existing, hasChanges),
                     tv,
-                    textInset.onFocusChanged { firstActionFocused = it.isFocused }
+                    textInset.onFocusChanged { reviewFocused = it.isFocused }
                         .liveFocus("editor:review", tv && firstPadding == null, enabled = !busy),
                     enabled = !busy
                 ) { confirmed = true }
@@ -409,7 +418,7 @@ private fun LiveOptionSummary(title: String, value: String, tv: Boolean, changed
 internal const val LIVE_REVIEW_SUMMARY_MIN_HEIGHT_DP = 48
 
 /** Revealing the header follows actual TV action focus and stops when the reader leaves it. */
-internal fun liveEditorShouldRevealHeader(tv: Boolean, firstActionFocused: Boolean): Boolean = tv && firstActionFocused
+internal fun liveEditorShouldRevealHeader(tv: Boolean, firstActionRowFocused: Boolean): Boolean = tv && firstActionRowFocused
 
 /** Read-only summaries still need real remote stops; focus never selects, edits or writes. */
 internal fun liveReviewSummaryFocusable(tv: Boolean): Boolean = tv
