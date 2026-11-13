@@ -78,7 +78,7 @@ class AboutLicensesTest {
     fun remoteTraversesSettingsAboutListReaderAndRestoresFocusAtEveryBack() {
         open()
         compose.onNodeWithTag("settings:bitrate").assertIsFocused()
-        key(Key.DirectionUp)
+        compose.walkSettingsFromHomeTo("settings:about")
         compose.onNodeWithTag("settings:about").assertIsFocused()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("about:licenses").assertIsFocused()

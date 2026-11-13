@@ -102,7 +102,6 @@ import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeCardSeconds
-import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
 import kotlinx.coroutines.delay
@@ -198,6 +197,8 @@ private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalO
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
     var moreOpen by remember { mutableStateOf(false) }
+    var qualityOpen by remember { mutableStateOf(false) }
+    val offlineQuality = LocalOfflinePlayback.current != null
     val entry = LocalTouchPlayerCast.current
     val castOutput = remember(host) { PlayerCastOutput(host) }
     // Null without a sender, so a player that has none reads nothing from it.
@@ -233,6 +234,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         host.onFinishing = {
             ui.sheet = null
             moreOpen = false
+            qualityOpen = false
             ui.scrubMs = null
             // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
             entry?.cast?.localLeaving(castOutput)
@@ -258,11 +260,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
     var heldNoticeGap by remember(density.fontScale) { mutableStateOf(0.dp) }
     var playerTop by remember { mutableStateOf(0) }
-    val controlsVisible = ui.visible && ui.sheet == null && host.error == null && !host.switching
-    val actionsVisible = ui.sheet == null && host.error == null && !host.switching
+    val controlsVisible = ui.visible && ui.sheet == null && !qualityOpen && host.error == null && !host.switching
+    val actionsVisible = ui.sheet == null && !qualityOpen && host.error == null && !host.switching
     val latestControlsVisible by rememberUpdatedState(controlsVisible)
     BackHandler {
-        if (moreOpen) {
+        if (qualityOpen) {
+            qualityOpen = false
+        } else if (moreOpen) {
             moreOpen = false
         } else if (host.switching) {
             host.finish(reason = "back-during-next")
@@ -270,7 +274,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             ui.back { host.finish(reason = "back") }
         }
     }
-    ControlsAutoHide(ui.visible, accessible || paused || ui.sheet != null || moreOpen || ui.scrubMs != null, ui.interaction) {
+    ControlsAutoHide(
+        ui.visible,
+        accessible || paused || ui.sheet != null || moreOpen || qualityOpen || ui.scrubMs != null,
+        ui.interaction
+    ) {
         ui.visible = false
     }
     LaunchedEffect(accessible) { if (accessible) ui.visible = true }
@@ -280,6 +288,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         if (host.error != null || host.switching) {
             ui.sheet = null
             moreOpen = false
+            qualityOpen = false
             ui.scrubMs = null
         }
     }
@@ -289,7 +298,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             playerLeft = it.positionInRoot().x.toInt()
         }
     ) {
-        ContentFrame(host.player, Modifier.fillMaxSize())
+        val presentationPlayer = remember(host.player) { host.player?.let(::ListenerCleanupPlayer) }
+        ContentFrame(presentationPlayer, Modifier.fillMaxSize())
         // Skip and the next card sit at the top, so only the controls panel lifts the captions.
         val overlayTop = controlsTop.takeIf { controlsVisible }
         PlayerSubtitles(
@@ -354,7 +364,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         val noticeRoom = maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2 - TOUCH_ACTIONS_WIDTH - 12.dp
         val noticeCap = noticeRoom.takeIf { it >= TOUCH_NOTICE_MIN_BESIDE }
         val conversionNotice = host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
-            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
+            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice, host.localPreferences.tuning)
         }
         // A short window at a large font has no room for the notice above the controls, so it waits for them to hide
         // rather than covering them. Measured as the card lays out: its width, the title and the line at this font.
@@ -495,11 +505,46 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f).testTag("touch:title")
+                    )
+                    TouchBarButton(
+                        {
+                            qualityOpen = true
+                            ui.interact()
+                        },
+                        Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
+                            contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
+                            stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
+                        },
+                        enabled = !offlineQuality && !host.state.preparing && host.state.decision != null
+                    ) {
+                        Text(
+                            "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                val qualityNotice = if (offlineQuality) {
+                    "Quality is fixed for this download."
+                } else {
+                    host.adaptiveQualityNotice.takeUnless {
+                        host.state.preparing
+                    }
+                }
+                qualityNotice?.let {
+                    Text(
+                        it,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("touch:quality-notice")
+                    )
+                }
                 if (host.isLive) {
                     val time = liveTime()
                     Text(
@@ -638,7 +683,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val next = (host.deferredNext ?: host.nextEpisode)?.takeUnless { host.nextCancelled }
-                val trigger = nextEpisodeTriggerMs(host.duration, host.segments)
+                val trigger = host.nextTriggerMs()
                 val eligible = host.deferredNext != null || (trigger != null && host.position >= trigger)
                 // With the card up its Play now is the one primary, and Skip travels inside it, quietly.
                 val cardUp = next != null && actionsVisible && (eligible || host.ended)
@@ -657,8 +702,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                 ui.scrubMs != null ||
                                 choosing ||
                                 moreOpen
-                        val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
-                        val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
+                        val creditsCountdown = host.creditsCountdown && creditsStartMs(host.duration, host.segments) != null
+                        val autoPlay = !accessible &&
+                            foreground &&
+                            !pauseIntent &&
+                            host.deferredNext == null &&
+                            host.localPreferences.tuning.canAutomaticallyAdvance(host.ended)
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
                             ?.takeIf { (host.localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         NextEpisodeControl(
@@ -711,6 +760,15 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             }
         }
     }
+    if (qualityOpen && host.error == null && !host.switching && !offlineQuality) {
+        PlayerQualityMenu(host.qualityOverrideMbps, host.automaticQualityContext, host.adaptiveQualityNotice, true, {
+            host.setQualityOverride(it)
+            ui.interact()
+        }, {
+            qualityOpen = false
+            ui.interact()
+        })
+    }
     ui.sheet?.let { sheet ->
         TouchPlayerSheetContent(sheet, host, trackMenus, account, onDismiss = {
             ui.sheet = null
@@ -750,7 +808,7 @@ internal fun touchOptionColumns(textWidths: List<Int>, room: Int, air: Int): Int
 /**
  * The narrow panel's options, in fixed columns so labels don't move with their neighbours' wording. A button keeps its natural
  * width rather than the column's, so its label never wraps; the text starts on the column's edge and the target hangs out by
- * its inset. Measured, so the font scale and the reserved Speed label count.
+ * its inset. Measured, so the font scale and each current label count.
  */
 @Composable
 private fun TouchOptionGrid(options: List<@Composable (Modifier) -> Unit>) {
@@ -802,7 +860,7 @@ internal fun TouchPlayOnMark(status: String?, filled: Boolean, enabled: Boolean,
  * Three groups on one line when all of them fit at their natural size: transport, options, and Stop at the far end, since
  * it exits at once. Otherwise transport and Stop, then the options on a line of their own with their text on Pause's edge,
  * as in the portrait panel. Measured, so the font scale, the title having chapters and the safe insets all count, and a
- * reserved label keeps the choice from flipping when the speed or Play/Pause changes.
+ * reserved Play/Pause label keeps the transport stable when its state changes.
  */
 @Composable
 private fun TouchWideControls(

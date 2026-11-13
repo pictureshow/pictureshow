@@ -109,8 +109,14 @@ class PlaybackEntryTest {
         }
         val session = session(http)
         assertEquals(ResolvedPlaybackEntry.Open(item, 45_678), resolvePlaybackEntry(PlaybackEntry(id), account, session))
-        assertEquals(ResolvedPlaybackEntry.Open(item, 0), resolvePlaybackEntry(PlaybackEntry(id, 0), account, session))
-        assertEquals(ResolvedPlaybackEntry.Open(item, 123), resolvePlaybackEntry(PlaybackEntry(id, 123), account, session))
+        assertEquals(
+            ResolvedPlaybackEntry.Open(item, 0, PlaybackStartOrigin.ExplicitPosition),
+            resolvePlaybackEntry(PlaybackEntry(id, 0), account, session)
+        )
+        assertEquals(
+            ResolvedPlaybackEntry.Open(item, 123, PlaybackStartOrigin.ExplicitPosition),
+            resolvePlaybackEntry(PlaybackEntry(id, 123), account, session)
+        )
         assertEquals(6, requests)
         http.close()
     }

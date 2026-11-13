@@ -316,6 +316,12 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 subtitleStreamIndex = playback.subtitleStreamIndex,
                 mediaSourceId = playback.mediaSourceId,
                 deviceProfile = DeviceProfileBuilder.build(capabilities),
+                maxAudioChannels = if (capabilities.settings.tuning.downmix) {
+                    2
+                } else {
+                    capabilities.settings.tuning.normalized().maxAudioChannels
+                },
+                alwaysBurnInSubtitleWhenTranscoding = capabilities.settings.tuning.subtitleBurnIn == SubtitleBurnIn.Always,
                 enableDirectPlay = playback.enableDirectPlay,
                 enableDirectStream = playback.enableDirectStream,
                 allowVideoStreamCopy = playback.allowVideoStreamCopy,

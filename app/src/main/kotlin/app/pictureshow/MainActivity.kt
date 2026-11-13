@@ -94,6 +94,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.playback.PassthroughEncoding
 import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
@@ -235,10 +236,14 @@ class MainActivity : ComponentActivity() {
 internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
 internal fun liveRecordingItemRoute(item: MediaItem) = itemRoute(item) + if (item.isMusic()) "" else "&liveRecording=true"
 
-internal fun playerRoute(item: MediaItem, resume: Boolean) =
-    playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
+internal fun playerRoute(item: MediaItem, resume: Boolean) = playerRoute(
+    item,
+    app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume),
+    if (resume) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
+)
 
-internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+internal fun playerRoute(item: MediaItem, positionMs: Long, startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.ExplicitPosition) =
+    "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs&savedResume=${startOrigin == PlaybackStartOrigin.SavedResume}"
 
 /** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
 internal fun remoteKeyCode(name: String): Int? = when (name) {
@@ -273,7 +278,7 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
         launchSingleTop = true
     }
     nav.navigate(itemRoute(entry.item))
-    nav.navigate(playerRoute(entry.item, entry.positionMs))
+    nav.navigate(playerRoute(entry.item, entry.positionMs, entry.startOrigin))
 }
 
 /** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
@@ -893,10 +898,12 @@ internal fun Pictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val settingsContext = LocalContext.current
                 var accepted by remember { mutableStateOf("Checking…") }
+                var supportedPassthrough by remember { mutableStateOf(emptySet<PassthroughEncoding>()) }
                 DisposableEffect(Unit) {
                     val probe = DeviceCapabilityProbe(settingsContext)
                     fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
-                        accepted = passthroughEncodingLabels(capabilities.audioOutput.passthrough)
+                        supportedPassthrough = capabilities.audioOutput.passthrough
+                        accepted = passthroughEncodingLabels(supportedPassthrough)
                     }
                     update(probe.snapshot())
                     probe.start(::update)
@@ -911,7 +918,8 @@ internal fun Pictureshow(
                     onBack = { nav.popBackStack() },
                     onThisTv = { nav.navigate("this-tv") },
                     onAbout = { nav.navigate("about") },
-                    onSupport = { nav.navigate("supporter") }
+                    onSupport = { nav.navigate("supporter") },
+                    supportedPassthrough = supportedPassthrough
                 )
             }
         }
@@ -948,12 +956,16 @@ internal fun Pictureshow(
             }
         }
         composable(
-            "player?item={item}&start={start}",
+            "player?item={item}&start={start}&savedResume={savedResume}",
             arguments = listOf(
                 navArgument("item") { type = NavType.StringType },
                 navArgument("start") {
                     type = NavType.LongType
                     defaultValue = 0L
+                },
+                navArgument("savedResume") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { entry ->
@@ -965,7 +977,11 @@ internal fun Pictureshow(
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                 }) { onCurrentItem ->
-                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        LocalPlaybackStartOrigin provides playbackStartOrigin(entry.arguments?.getBoolean("savedResume") == true)
+                    ) {
+                        PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    }
                 }
             }
         }

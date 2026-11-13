@@ -260,7 +260,7 @@ private fun LiveOption(
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
-        BoxOption(modifier) { TouchValueRow(title, value, enabled = enabled) { open = true } }
+        BoxOption(modifier) { TouchValueRow(title, value, modifier = Modifier, enabled = enabled) { open = true } }
     }
     if (open) {
         LiveMenu(

@@ -49,7 +49,7 @@ internal fun PlayerConversionNotice(
     onDetails: () -> Unit
 ) {
     val notice = decision?.takeIf { preferences.conversionNotice }?.let {
-        ConversionNotice.of(it, subtitleIndex, CONVERSION_NOTICE_DEVICE)
+        ConversionNotice.of(it, subtitleIndex, CONVERSION_NOTICE_DEVICE, preferences.tuning)
     }
     ConversionNoticeHost(notice, allowed, modifier, onDetails = onDetails)
 }
