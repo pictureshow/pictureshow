@@ -50,6 +50,24 @@ private final class PresentationInertPlayer: AVPlayer {
 }
 
 @MainActor final class PlayerPresentationTests: XCTestCase {
+    #if os(tvOS)
+    func testNativeOptionsCloseHandsOffOnceWhenCancellationReenters() {
+        let close = NativePlayerOptionsClose()
+        var hostDismissals = 0
+        var playerMounted = true
+        func dismissOptionsHost() {
+            hostDismissals += 1
+            // Setting panel=nil cancels a held track request. Its publication
+            // can reenter PlayerOptions.closePanel before host dismissal ends.
+            close.close { hostDismissals += 1; playerMounted = false }
+        }
+        close.close(done: dismissOptionsHost)
+        close.close { hostDismissals += 1; playerMounted = false }
+        XCTAssertEqual(hostDismissals, 1, "Only the native options owner receives the close, even during reentry")
+        XCTAssertTrue(playerMounted, "A repeated close must never reach another dismissal callback")
+    }
+    #endif
+
     func testCaptionExcludesOverlayCardWithoutCollapsingNarrowVideo() {
         let overlay = CGRect(x: 0, y: 0, width: 874, height: 402)
         let portraitVideo = CGRect(x: 324, y: 0, width: 226, height: 402)

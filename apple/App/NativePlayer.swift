@@ -261,6 +261,19 @@ struct TrackMenuPresentation: Identifiable, Equatable {
     }
 }
 
+#if os(tvOS)
+/// UIKit owns the native options host. Track cancellation can synchronously
+/// request another close while that same host is already being dismissed.
+@MainActor final class NativePlayerOptionsClose {
+    private var closing = false
+    func close(done: () -> Void) {
+        guard !closing else { return }
+        closing = true
+        done()
+    }
+}
+#endif
+
 struct PlayerOptions: View {
     @ObservedObject var session: PlaybackSession
     @ObservedObject private var trackMenus: TrackLabelCache
@@ -275,6 +288,7 @@ struct PlayerOptions: View {
     @AccessibilityFocusState private var readerChapter: Int?
     #if os(tvOS)
     @FocusState private var pendingCancelFocused: Bool
+    @State private var nativeClose = NativePlayerOptionsClose()
     #endif
     init(session: PlaybackSession, kind: String, done: @escaping () -> Void) {
         self.session = session; self.kind = kind; self.done = done
@@ -457,7 +471,15 @@ struct PlayerOptions: View {
     private var panelTitle: String {
         kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : kind == "speed" ? "Speed" : kind == "info" ? "Playback info" : trackPanelTitle
     }
-    private func closePanel() { done(); dismiss() }
+    private func closePanel() {
+        #if os(tvOS)
+        // panel=nil dismisses the exact UIKit optionsHost. Environment dismiss
+        // would add a second dismissal while cancellation reenters this path.
+        nativeClose.close(done: done)
+        #else
+        done(); dismiss()
+        #endif
+    }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
         Button {
             #if DEBUG

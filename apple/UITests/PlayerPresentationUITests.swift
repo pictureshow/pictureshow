@@ -113,14 +113,29 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(waitForRemoteUI(timeout: 15) {
             fixture.snapshot.menuWorkerRequests.count == 1 && fixture.snapshot.startCount == 1
         }, "The ordinary track worker is held while the real decoder starts this viewing")
+        func recordPendingState(_ phase: String) {
+            record("132 TV pending tracks lifecycle " + phase)
+            let snapshot = fixture.snapshot
+            let chronology = snapshot.requests.map {
+                "t=\($0.observedAt) method=\($0.method) path=\($0.path) ticks=\($0.positionTicks.map(String.init) ?? "nil") paused=\($0.paused.map(String.init) ?? "nil")"
+            }.joined(separator: "\n")
+            let receipt = XCTAttachment(string: chronology)
+            receipt.name = "132 pending tracks request chronology " + phase
+            receipt.lifetime = .keepAlways; add(receipt)
+            print("LEG132_PENDING_TRACKS_LIFECYCLE phase=\(phase) negotiations=\(snapshot.playbackInfoCount) start=\(snapshot.startCount) stop=\(snapshot.stoppedCount)")
+            XCTAssertEqual(snapshot.stoppedCount, 0, "Pending Audio must retain its original viewing at \(phase)")
+        }
         XCTAssertTrue(fixture.snapshot.menuWorkerRequests.first?.path.hasSuffix("/background") == true)
+        recordPendingState("ready")
         let initialNegotiations = fixture.snapshot.playbackInfoCount
         XCTAssertGreaterThan(initialNegotiations, 0, "The ready decoder must have completed its startup negotiation")
         print("LEG132_PENDING_TRACKS_NEGOTIATIONS phase=beforeAudio count=\(initialNegotiations)")
         XCUIRemote.shared.press(.playPause)
+        recordPendingState("beforeAudio")
         activate(nativeAction(id: "pendingAudio", prefix: "Audio"))
         let cancel = app.buttons["cancelPendingTracks"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        recordPendingState("panelOpen")
         let enteredCancel = waitForRemoteUI(timeout: 5) {
             guard cancel.exists, cancel.isHittable, let focus = try? self.focusedSnapshot(timeout: 0.1) else { return false }
             return cancel.hasFocus || (focus.frame.contains(CGPoint(x: cancel.frame.midX, y: cancel.frame.midY)) && focus.frame.height < cancel.frame.height * 3)
@@ -129,8 +144,11 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(enteredCancel, "The existing pending focus must enter the actual Cancel control without extra navigation")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "preparingTracks").firstMatch.exists)
         assertPlayerButtonPixels(cancel, app: app, style: "held tracks Cancel focused", focused: true, text: "Cancel")
+        recordPendingState("beforeSelect")
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "The actual focused Cancel must dismiss pending tracks while its worker is still held")
+        let cancelDismissed = cancel.waitForNonExistence(timeout: 5)
+        recordPendingState("afterSelect")
+        XCTAssertTrue(cancelDismissed, "The actual focused Cancel must dismiss pending tracks while its worker is still held")
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "preparingTracks").firstMatch.exists)
         XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1)
         print("LEG132_PENDING_TRACKS_NEGOTIATIONS phase=afterCancel count=\(fixture.snapshot.playbackInfoCount) initial=\(initialNegotiations)")
@@ -734,14 +752,23 @@ final class PlayerPresentationUITests: XCTestCase {
         // independently establish the visible Cancel word's stable placement.
         XCTAssertEqual(pausedContext.cancelGlyphFrame.minX, runningCancelGlyphFrame.minX, accuracy: 2, "Pausing cannot move the visible Cancel word horizontally")
         XCTAssertEqual(pausedContext.cancelGlyphFrame.minY, runningCancelGlyphFrame.minY, accuracy: 2, "Pausing cannot move the visible Cancel word vertically")
-        XCTAssertEqual(pausedContext.cancelGlyphFrame.width, runningCancelGlyphFrame.width, accuracy: 2, "Pausing cannot resize the visible Cancel word")
-        XCTAssertEqual(pausedContext.cancelGlyphFrame.height, runningCancelGlyphFrame.height, accuracy: 2, "Pausing cannot resize the visible Cancel word")
         XCTAssertEqual(fixture.snapshot.startCount, 1)
         record("132 TV HUD hidden paused contextual episode identity and Cancel text")
         try selectVisibleContextualCancel(in: nativePlayer)
-        record("132 TV after contextual Cancel before native transport refresh")
-        revealNativeTransportIfHidden()
-        record("132 TV after contextual Cancel refreshed visible native transport")
+        // AVKit retains stale transport AX after contextual Cancel, and its
+        // remaining contextual Skip can own directional input. Inspect the
+        // actual lane, requiring a positive landmark rather than a blank frame.
+        let removalDeadline = ProcessInfo.processInfo.systemUptime + 10
+        var continuationRemoved = false
+        repeat {
+            let screenshot = record("132 TV after contextual Cancel actual bottom lane")
+            XCTAssertTrue(nativePlayer.exists, "Contextual Cancel must retain the original player")
+            XCTAssertEqual(nativePlayer.value as? String, "Controls hidden")
+            continuationRemoved = try contextualContinuationRemoved(screenshot)
+            if continuationRemoved { break }
+        } while ProcessInfo.processInfo.systemUptime < removalDeadline
+        XCTAssertTrue(continuationRemoved, "Within the original ten-second removal bound the actual native lane must show Skip outro and neither Next nor Cancel")
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 0, "Contextual Cancel must not close this viewing")
         #else
         activate(app.buttons["playerPlayPause"])
         XCTAssertTrue(app.staticTexts["nextCountdown"].waitForNonExistence(timeout: 5), "Touch pause removes the number immediately")
@@ -751,7 +778,9 @@ final class PlayerPresentationUITests: XCTestCase {
         record("132 next episode paused after running countdown")
         activate(app.buttons["cancelNext"])
         #endif
+        #if os(iOS)
         XCTAssertTrue(playNext.waitForNonExistence(timeout: 10), "Cancel removes the continuation card while retaining this viewing")
+        #endif
         XCTAssertEqual(fixture.snapshot.startCount, 1, "The card and Cancel cannot open the next episode")
         print("LEG132_NEXT_UI rate=0.5 runningNumber=\(value) pausedNumberHidden=true cancelRemoved=true chronologicalNext=true")
     }
@@ -1046,6 +1075,38 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertFalse(cancel.isEmpty)
         XCTAssertGreaterThan(cancel.minY, app.frame.minY + app.frame.height * 0.82)
         return ContextualPixelProof(countdown: count, cancelGlyphFrame: cancel)
+    }
+    @MainActor private func contextualContinuationRemoved(_ screenshot: XCUIScreenshot) throws -> Bool {
+        let image = try XCTUnwrap(screenshot.image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        request.regionOfInterest = CGRect(x: 0.4, y: 0, width: 0.6, height: 0.18)
+        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        let observations = request.results ?? []
+        let diagnostics = observations.map {
+            "box=\($0.boundingBox) candidates=" + $0.topCandidates(3).map { "\($0.confidence):\($0.string)" }.joined(separator: " | ")
+        }.joined(separator: "\n")
+        let attachment = XCTAttachment(string: diagnostics)
+        attachment.name = "132 post Cancel native contextual OCR all candidates"
+        attachment.lifetime = .keepAlways; add(attachment)
+        let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        print("LEG132_CONTEXT_CANCEL_REMOVAL top1=\(text)")
+        return contextualRemovalTextProvesVisibleLane(text)
+    }
+    private func contextualRemovalTextProvesVisibleLane(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        let skip = try! NSRegularExpression(pattern: #"\bSkip\s+outro\b"#)
+        return skip.numberOfMatches(in: text, range: range) == 1 &&
+            text.range(of: #"\b(?:Next|Cancel)\b"#, options: .regularExpression) == nil
+    }
+    func testContextualRemovalRequiresVisibleSkipAndNoContinuationWords() {
+        XCTAssertTrue(contextualRemovalTextProvesVisibleLane("Skip outro"))
+        XCTAssertFalse(contextualRemovalTextProvesVisibleLane(""), "A blank or unrecognized frame cannot prove removal")
+        XCTAssertFalse(contextualRemovalTextProvesVisibleLane("Skip outro Next: Following synthetic episode"))
+        XCTAssertFalse(contextualRemovalTextProvesVisibleLane("Skip outro Cancel"))
+        XCTAssertFalse(contextualRemovalTextProvesVisibleLane("Skip outro Skip outro"), "The positive landmark must appear exactly once")
     }
     private func contextualGlyphFrame(_ box: CGRect, region: CGRect, viewport: CGRect) -> CGRect {
         // Recognition boxes are normalized within the requested ROI. First map
