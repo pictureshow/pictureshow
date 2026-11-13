@@ -499,11 +499,19 @@ final class RoundThreeCaptureUITests: XCTestCase {
     private func retainedNativeLibraryRouteIsVisible() -> Bool {
         guard let artworkID = config["artworkItemID"], !artworkID.isEmpty,
               !app.staticTexts["detailTitle"].exists else { return false }
-        let heading = node("libraryHeading"), count = node("libraryCount"), viewport = node("catalogViewport")
-        let window = app.windows.firstMatch.frame
-        return heading.exists && count.exists && viewport.exists
-            && !viewport.frame.isEmpty && window.intersects(viewport.frame)
-            && app.buttons["item-" + artworkID].firstMatch.exists
+        let heading = app.staticTexts["libraryHeading"], count = app.staticTexts["libraryCount"]
+        let artwork = app.buttons["item-" + artworkID].firstMatch
+        guard heading.exists && count.exists && artwork.exists else { return false }
+        // The optional catalogViewport DEBUG overlay is not native geometry.
+        // Identify the real library ScrollView by its actual descendants.
+        let scrolls = app.scrollViews.allElementsBoundByIndex.filter {
+            $0.staticTexts["libraryHeading"].exists && $0.staticTexts["libraryCount"].exists
+                && $0.buttons["item-" + artworkID].firstMatch.exists
+        }
+        guard scrolls.count == 1 else { return false }
+        let viewport = app.windows.firstMatch.frame.intersection(scrolls[0].frame)
+        return !viewport.isEmpty && !heading.frame.isEmpty && !count.frame.isEmpty && !artwork.frame.isEmpty
+            && viewport.contains(heading.frame) && viewport.contains(count.frame) && viewport.contains(artwork.frame)
     }
     #endif
     @MainActor private func revealNativeTabBar() {
