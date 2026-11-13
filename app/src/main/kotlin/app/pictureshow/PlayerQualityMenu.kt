@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.pictureshow.core.playback.PlaybackQualityPresentation
+
+internal const val QUALITY_SCROLL_DIVIDER_DP = 1
 
 internal fun qualityScrollCues(offsetDp: Float, remainingDp: Float): Pair<Boolean, Boolean> = (offsetDp > 8f) to (remainingDp > 8f)
 
@@ -181,6 +184,13 @@ internal fun PlayerQualityMenu(
                                                 )
                                             ).testTag(if (above) "player:quality-more-above" else "player:quality-more-below")
                                             .clearAndSetSemantics {}
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.align(if (above) Alignment.TopCenter else Alignment.BottomCenter)
+                                            .testTag(if (above) "player:quality-divider-above" else "player:quality-divider-below")
+                                            .clearAndSetSemantics {},
+                                        thickness = QUALITY_SCROLL_DIVIDER_DP.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant
                                     )
                                 }
                             }

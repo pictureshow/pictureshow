@@ -38,24 +38,20 @@ internal fun LiveProgramActions(
     if (tv) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (canWatch) watch(Modifier, true)
-            if (canRecord) {
-                record(recordModifier, !canWatch)
-                if (hasSeries) series(seriesModifier, false)
-            }
+            if (canRecord) record(recordModifier, !canWatch)
+            if (hasSeries) series(seriesModifier, !canWatch && !canRecord)
         }
     } else {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (canWatch) watch(Modifier.fillMaxWidth(), true)
-            if (canRecord) {
-                if (canWatch) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        record(recordModifier.weight(1f), false)
-                        if (hasSeries) series(seriesModifier.weight(1f), false)
-                    }
-                } else {
-                    record(recordModifier.fillMaxWidth(), true)
-                    if (hasSeries) series(seriesModifier.fillMaxWidth(), false)
+            if (canWatch && (canRecord || hasSeries)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (canRecord) record(recordModifier.weight(1f), false)
+                    if (hasSeries) series(seriesModifier.weight(1f), false)
                 }
+            } else {
+                if (canRecord) record(recordModifier.fillMaxWidth(), true)
+                if (hasSeries) series(seriesModifier.fillMaxWidth(), !canRecord)
             }
         }
     }

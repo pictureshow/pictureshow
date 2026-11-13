@@ -42,6 +42,8 @@ internal fun LiveProgramDetail(
     val time = liveTime()
     val channel = state.channels.firstOrNull { it.id == program.channelId }
     val current = canTune(program, now)
+    val ended = liveProgramEnded(program.endDate, now)
+    val creationAvailable = liveProgramCreationAvailable(program.endDate, now)
     val timer = state.timers.firstOrNull { it.programId == program.id || it.id == program.timerId }
     val seriesRule = state.series.firstOrNull { it.id == program.seriesTimerId && it.id.isNotBlank() }
     val item = MediaItem(program.id, program.name, imageTags = program.imageTags, backdropImageTags = program.backdropImageTags)
@@ -78,13 +80,17 @@ internal fun LiveProgramDetail(
                     LiveStatus(liveProgramRecordingLabel(scheduled.status), tv, scheduled.status)
                 }
             }
-            if (!current && liveInstant(program.startDate) > now) LiveText("Starts at ${time.clock(program.startDate)}", tv, small = true)
+            if (ended) {
+                LiveText("Ended at ${time.clock(program.endDate)}", tv, small = true)
+            } else if (!current && liveInstant(program.startDate) > now) {
+                LiveText("Starts at ${time.clock(program.startDate)}", tv, small = true)
+            }
             program.overview?.takeIf { it.isNotBlank() }?.let { LiveText(it, tv) }
             LiveProgramActions(
                 tv = tv,
                 canWatch = current && channel != null,
-                canRecord = state.policy?.manage == true,
-                hasSeries = program.isSeries,
+                canRecord = state.policy?.manage == true && (creationAvailable || timer != null),
+                hasSeries = state.policy?.manage == true && (seriesRule != null || (program.isSeries && creationAvailable)),
                 watch = { modifier, primary ->
                     LiveProgramAction(
                         "Watch now",
@@ -110,7 +116,7 @@ internal fun LiveProgramDetail(
                             tv,
                             primary,
                             modifier.liveFocus("program:record", liveProgramRecordInitialFocus(tv, primary)),
-                            enabled = canAct && !state.writing && liveInstant(program.endDate) > now,
+                            enabled = canAct && !state.writing,
                             onClick = onOnce
                         )
                     }
@@ -120,8 +126,8 @@ internal fun LiveProgramDetail(
                         if (seriesRule != null) "Manage series…" else "Record series…",
                         tv,
                         primary,
-                        modifier,
-                        enabled = canAct && !state.writing && liveInstant(program.endDate) > now,
+                        modifier.liveFocus("program:series", liveProgramRecordInitialFocus(tv, primary)),
+                        enabled = canAct && !state.writing,
                         onClick = { if (seriesRule != null) onSchedule(seriesRule, true) else onSeries() }
                     )
                 }
@@ -189,3 +195,9 @@ internal fun liveProgramMetadataLines(channel: String?, range: String, episode: 
         listOf(listOfNotNull(channel, range).joinToString(" · "), listOfNotNull(episode, title).joinToString(" · "))
             .filter(String::isNotBlank)
     }
+
+/** Only a known airing end establishes that the broadcast has finished. */
+internal fun liveProgramEnded(endDate: String?, now: Long): Boolean = liveInstant(endDate).let { it != Long.MIN_VALUE && it <= now }
+
+/** Creating a recording requires a known end still ahead of the current clock. */
+internal fun liveProgramCreationAvailable(endDate: String?, now: Long): Boolean = liveInstant(endDate) > now
