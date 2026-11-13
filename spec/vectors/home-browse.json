@@ -2287,6 +2287,86 @@
         "hasMessage": false
       },
       "expected": "none"
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-0-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": false,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-0-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": false,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-1-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": true,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-0-pending-1-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": false,
+        "retryable": true,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-0-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": false,
+        "saving": false
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-0-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": false,
+        "saving": true
+      },
+      "expected": false
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-1-saving-0",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": true,
+        "saving": false
+      },
+      "expected": true
+    },
+    {
+      "id": "home-recovery-open-ready-1-pending-1-saving-1",
+      "operation": "home-retry-on-open",
+      "input": {
+        "ready": true,
+        "retryable": true,
+        "saving": true
+      },
+      "expected": false
     }
   ]
 }

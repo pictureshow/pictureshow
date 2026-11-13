@@ -1,6 +1,6 @@
 # Viewer home and library browsing
 
-Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 134 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
+Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 142 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
 
 | ID | Viewer behavior | Acceptance |
 |---|---|---|
@@ -61,3 +61,5 @@ Touch full-screen editors own system-bar and IME insets. The dialog opts out of 
 Eight save-presentation vectors distinguish TV progress from silent touch saves, actionable failure, retry and missing-message states. Other platforms must translate this presentation decision and their native inset/focus/scroll equivalents.
 
 Keyboard evidence records the focused picker dialog's window mode and visible IME frame together with Back, title and query bounds. An Activity-only window dump does not establish the picker's geometry.
+
+Opening the home editor explicitly retries one pending server save when this viewer's preferences are ready and no save is already running. It resends the pending local layout through the existing read/merge/write path, preserving unrelated server fields. Successful synchronization clears the pending marker, old failure and Retry; an unsuccessful attempt keeps the local layout and offers Retry. Ordinary reads do not overwrite pending local data or cause retry loops, and reopening an already synchronized layout does not write again. The eight home-recovery-open vectors cover readiness, pending failure and in-flight save combinations.

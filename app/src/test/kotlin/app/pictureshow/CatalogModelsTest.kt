@@ -535,6 +535,56 @@ class CatalogModelsTest {
         }
     }
 
+    @Test fun reopeningHomeEditorReconcilesPriorFailureAfterServerRecovery() = runTest(dispatcher) {
+        accounts.remember(account)
+        var reachable = false
+        var writes = 0
+        var savedDocument = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"CustomPrefs":{"unrelated":"retain"}}"""
+        ) as kotlinx.serialization.json.JsonObject
+        val unavailable = ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Offline"))
+        val recoveryService = object : CatalogService by service {
+            override suspend fun displayPreferences(account: Account) = if (reachable) ClientResult.Success(savedDocument) else unavailable
+            override suspend fun saveDisplayPreferences(
+                account: Account,
+                document: kotlinx.serialization.json.JsonObject
+            ): ClientResult<Unit> {
+                writes++
+                if (!reachable) return unavailable
+                savedDocument = document
+                return ClientResult.Success(Unit)
+            }
+        }
+        val vm = own(CatalogHomeViewModel(account, CatalogSession(recoveryService, accounts)))
+        vm.reload()
+        advanceUntilIdle()
+        vm.customize { it.copy(mergeWatching = true, landing = "libraries") }
+        advanceUntilIdle()
+        assertTrue(vm.state.value.preferenceRetryable)
+        assertTrue(account.key in accounts.load().pendingHomePreferences)
+        val pending = vm.state.value.preferences
+        // Closing leaves the local edit intact; an offline reopen is one attempt, not a loop.
+        vm.customizationOpened()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.preferenceRetryable)
+        assertEquals(pending, vm.state.value.preferences)
+        reachable = true
+        vm.customizationOpened()
+        assertTrue(vm.state.value.saving)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.preferenceRetryable, "A reachable server must clear the prior failure on reopen")
+        assertNull(vm.state.value.preferenceStatus)
+        assertFalse(vm.state.value.saving)
+        assertEquals(pending, vm.state.value.preferences)
+        assertFalse(account.key in accounts.load().pendingHomePreferences)
+        assertEquals(pending, app.pictureshow.core.readHomePreferences(savedDocument))
+        assertEquals("\"retain\"", (savedDocument["CustomPrefs"] as kotlinx.serialization.json.JsonObject)["unrelated"].toString())
+        assertEquals(1, writes)
+        vm.customizationOpened()
+        advanceUntilIdle()
+        assertEquals(1, writes, "An already synchronized editor does not resave on reopen")
+    }
+
     internal class FakeCatalog : CatalogService {
         var libraryViews: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
         var resumeItems: ClientResult<ItemPage> = ClientResult.Success(ItemPage())

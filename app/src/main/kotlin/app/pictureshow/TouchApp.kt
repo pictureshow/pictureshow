@@ -356,7 +356,12 @@ internal fun TouchPictureshow(
                             },
                             onResume = vm::resumed,
                             librariesOnly = destination == "libraries",
-                            onCustomize = { if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) editing = true },
+                            onCustomize = {
+                                if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) {
+                                    vm.customizationOpened()
+                                    editing = true
+                                }
+                            },
                             onWatchDownloads = watchDownloads
                         )
                     }

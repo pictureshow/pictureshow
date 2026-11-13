@@ -315,6 +315,13 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
         if (readLifecycle.resumed()) reload()
     }
 
+    /** Reopening is an explicit recovery opportunity; ordinary reads keep pending local edits intact. */
+    fun customizationOpened() {
+        if (app.pictureshow.core.retryHomeSaveOnOpen(state.value.preferencesReady, state.value.preferenceRetryable, state.value.saving)) {
+            customize { it }
+        }
+    }
+
     fun customize(transform: (app.pictureshow.core.HomePreferences) -> app.pictureshow.core.HomePreferences) {
         if (state.value.saving) return
         mutableState.update { it.copy(saving = true) }

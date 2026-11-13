@@ -122,3 +122,6 @@ fun homeSavePresentation(tv: Boolean, saving: Boolean, retryable: Boolean, hasMe
     retryable && hasMessage -> "failure"
     else -> "none"
 }
+
+/** Retry only on an explicit editor opening, after this viewer's preferences have loaded. */
+fun retryHomeSaveOnOpen(ready: Boolean, retryable: Boolean, saving: Boolean): Boolean = ready && retryable && !saving

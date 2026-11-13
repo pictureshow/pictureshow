@@ -901,7 +901,12 @@ internal fun Pictureshow(
                         onSearch = { nav.navigate(searchRoute()) },
                         onResume = vm::resumed,
                         onSettings = { nav.navigate("settings") },
-                        onCustomize = { if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) editing = true },
+                        onCustomize = {
+                            if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) {
+                                vm.customizationOpened()
+                                editing = true
+                            }
+                        },
                         onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
                         onWatchDownloads = watchDownloads
                     )
