@@ -221,6 +221,46 @@ class SyncPlayHostTest {
         }.toString()
     }
 
+    @Test fun titleLookupsAreBoundedAndQueuedOldAccountRequestsNeverStart() = runTest {
+        val rig = Rig(this)
+        val gates = List(6) { CompletableDeferred<String?>() }
+        rig.titleGates += gates
+        rig.join()
+        rig.joined()
+        rig.host.receive(
+            rig.update(
+                "PlayQueue",
+                buildJsonObject {
+                    put("Reason", "NewPlaylist")
+                    put("LastUpdate", syncUtcTimestamp(rig.wall()))
+                    put(
+                        "Playlist",
+                        JsonArray(
+                            (1..6).map { index ->
+                                buildJsonObject {
+                                    put("ItemId", "film-$index")
+                                    put("PlaylistItemId", "entry-$index")
+                                }
+                            }
+                        )
+                    )
+                    put("PlayingItemIndex", 0)
+                    put("StartPositionTicks", 0)
+                    put("IsPlaying", false)
+                    put("RepeatMode", "RepeatNone")
+                    put("ShuffleMode", "Sorted")
+                }
+            )
+        )
+        runCurrent()
+        assertEquals(4, rig.titleCalls.size)
+        rig.host.bind(other)
+        gates.forEach { it.complete("Old account title") }
+        runCurrent()
+        assertEquals(4, rig.titleCalls.size, "Two waiting requests must be fenced before using the old credentials")
+        assertTrue(rig.host.state.value.queue.isEmpty())
+    }
+
     @Test fun titleReplyFromRemovedQueueCannotLabelItsReplacement() = runTest {
         val rig = Rig(this)
         val old = CompletableDeferred<String?>()
