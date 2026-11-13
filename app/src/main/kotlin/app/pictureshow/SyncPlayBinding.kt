@@ -155,7 +155,8 @@ internal fun PlaybackHostState.syncRendererSnapshot(): SyncRendererState {
         // Media3's generic speed command does not advertise these exact rates for encoded output.
         // Until separately qualified, use the required bounded seek fallback.
         rateSupported = false,
-        native = output.syncNativeSnapshot()
+        native = output.syncNativeSnapshot(),
+        playWhenReady = p?.playWhenReady == true
     )
 }
 

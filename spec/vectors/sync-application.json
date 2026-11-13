@@ -32,6 +32,51 @@
       "expectedNativeSeeks": [],
       "expectedGroupSeekAfterCompletion": true,
       "nextViewerSeekMs": 9000
+    },
+    {
+      "id": "sync-application.readiness-playing",
+      "operation": "readiness-unpaused",
+      "playWhenReady": true,
+      "buffering": false,
+      "suppressed": false,
+      "expectedRendering": true,
+      "expectedIsPlaying": true
+    },
+    {
+      "id": "sync-application.readiness-buffering-unpaused",
+      "operation": "readiness-unpaused",
+      "playWhenReady": true,
+      "buffering": true,
+      "suppressed": false,
+      "expectedRendering": false,
+      "expectedIsPlaying": true
+    },
+    {
+      "id": "sync-application.readiness-suppressed-unpaused",
+      "operation": "readiness-unpaused",
+      "playWhenReady": true,
+      "buffering": false,
+      "suppressed": true,
+      "expectedRendering": false,
+      "expectedIsPlaying": true
+    },
+    {
+      "id": "sync-application.readiness-buffering-paused",
+      "operation": "readiness-unpaused",
+      "playWhenReady": false,
+      "buffering": true,
+      "suppressed": false,
+      "expectedRendering": false,
+      "expectedIsPlaying": false
+    },
+    {
+      "id": "sync-application.readiness-paused",
+      "operation": "readiness-unpaused",
+      "playWhenReady": false,
+      "buffering": false,
+      "suppressed": false,
+      "expectedRendering": false,
+      "expectedIsPlaying": false
     }
   ]
 }

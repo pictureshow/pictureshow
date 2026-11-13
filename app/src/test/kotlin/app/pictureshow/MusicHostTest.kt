@@ -1087,6 +1087,21 @@ class MusicHostTest {
         return music to rig
     }
 
+    @Test fun aNativeAudioSeekRetainsUnpausedReadinessWhileRenderingIsBuffering() {
+        val (music, _) = groupedMusic()
+        music.syncBridge.apply(null, true, 1.0)
+        val native = requireNotNull(lastPlayer)
+        assertTrue(native.playWhenReady)
+        native.seekTo(40L)
+        assertEquals(Player.STATE_BUFFERING, native.playbackState, "Observe the real immediate native seek state before pumping recovery")
+        val observed = music.syncBridge.snapshot()
+        assertFalse(observed.playing)
+        assertTrue(observed.unpaused, "A buffering native decoder still has play intent")
+        val body = app.pictureshow.core.sync.syncReadiness(false, 1234, observed.positionTicks, observed.unpaused, "group-a").body!!
+        assertEquals(JsonPrimitive(true), body["IsPlaying"])
+        assertEquals(JsonPrimitive("group-a"), body["PlaylistItemId"])
+    }
+
     @Test fun aSyncAudioEntryUsesTheServerPlaylistIdentityAndPreparesWithoutPlayingOrReporting() {
         val (music, rig) = groupedMusic()
         assertEquals(listOf("group-a"), music.state.value.queue!!.entries.map { it.id })

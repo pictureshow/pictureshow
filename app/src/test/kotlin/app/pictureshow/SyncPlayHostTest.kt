@@ -68,7 +68,7 @@ class SyncPlayHostTest {
                 value.copy(
                     positionTicks = positionTicks.takeIf { positionChanged } ?: value.positionTicks,
                     playing =
-                    playing ?: value.playing
+                        playing ?: value.playing
                 )
             if (bufferOnSeek && positionChanged) value = value.copy(ready = false, buffering = true)
             return positionChanged
@@ -1052,6 +1052,39 @@ class SyncPlayHostTest {
         runCurrent()
         assertEquals(1, rig.operations().count { it == "Ready" })
         assertTrue(rig.renderer.applied.none { it.position != null })
+    }
+
+    @Test fun bufferingReportsUnpausedIntentInsteadOfMistakingNoFramesForPause() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.renderer.value = rig.renderer.value.copy(
+            positionTicks = 144_100_000L,
+            ready = false,
+            buffering = true,
+            playing = false,
+            native = SyncNativeRendererState(4, 2, true, 0, false, 14_410, 98_416, 84_006)
+        )
+        rig.host.tick()
+        runCurrent()
+        val buffer = rig.sent.single { it.second.operation == "Buffering" }.second.body!!
+        assertEquals(JsonPrimitive(true), buffer["IsPlaying"], "Buffering does not cancel native play intent")
+        assertEquals(JsonPrimitive(144_100_000L), buffer["PositionTicks"])
+        assertEquals(JsonPrimitive("entry-a"), buffer["PlaylistItemId"])
+        assertEquals(JsonPrimitive(syncUtcTimestamp(rig.wall())), buffer["When"])
+        assertFalse(rig.renderer.value.playing)
+        // The client has actually paused for the barrier. Its next Ready reports that observed intent,
+        // rather than borrowing the earlier play intent or a not-yet-applied server Unpause.
+        rig.renderer.value = rig.renderer.value.copy(
+            ready = true,
+            buffering = false,
+            native = SyncNativeRendererState(4, 3, false, 0, false, 14_410, 98_416, 84_006)
+        )
+        rig.host.tick()
+        runCurrent()
+        val ready = rig.sent.single { it.second.operation == "Ready" }.second.body!!
+        assertEquals(JsonPrimitive(false), ready["IsPlaying"])
     }
 
     @Test fun bufferingAndReadyCarryActualEntryPositionAndRendererState() = runTest {

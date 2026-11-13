@@ -1113,6 +1113,7 @@ internal class MusicHost(
                 // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
                 rateSupported = false,
                 playlistItemId = running?.currentMediaItem?.mediaId,
+                playWhenReady = matches && running?.playWhenReady == true,
                 native = running?.takeIf { BuildConfig.DEBUG }?.let {
                     SyncNativeRendererState(
                         System.identityHashCode(it).toLong(),

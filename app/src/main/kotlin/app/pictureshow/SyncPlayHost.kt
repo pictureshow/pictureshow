@@ -85,8 +85,13 @@ internal data class SyncRendererState(
     val seekable: Boolean,
     val rateSupported: Boolean = false,
     val playlistItemId: String? = null,
-    val native: SyncNativeRendererState? = null
-)
+    val native: SyncNativeRendererState? = null,
+    /** Native play intent, including while buffering or suppressed; never inferred from a future server command. */
+    val playWhenReady: Boolean? = null
+) {
+    // Simple renderers can omit the separate native intent; both Media3 adapters always provide it in release builds too.
+    val unpaused: Boolean get() = playWhenReady ?: native?.playWhenReady ?: playing
+}
 
 internal interface SyncRenderer {
     /** A stable bridge can outlive the native decoder it currently controls. */
@@ -222,6 +227,7 @@ internal class SyncPlayHost(
                     note(policy.error.message)
                     return@launch
                 }
+
                 is ClientResult.Success -> {
                     if (!current(target, version)) return@launch
                     mutable.value = mutable.value.copy(policy = policy.value, policyKnown = true, status = "")
@@ -828,9 +834,10 @@ internal class SyncPlayHost(
             diagnostic("readiness", "ready=$ready buffering=${r.buffering} playing=${r.playing}")
             trace(
                 "ready-request",
-                "ready=$ready whenMs=${now / 10_000} positionTicks=${r.positionTicks} playing=${r.playing} " + stateFields(r)
+                "ready=$ready whenMs=${now / 10_000} positionTicks=${r.positionTicks} playing=${r.playing} unpaused=${r.unpaused} " +
+                    stateFields(r)
             )
-            send(syncReadiness(ready, now / 10_000, r.positionTicks, r.playing, current.playlistItemId))
+            send(syncReadiness(ready, now / 10_000, r.positionTicks, r.unpaused, current.playlistItemId))
         }
         val command = timeline ?: run {
             tickTrace("no-timeline", r)

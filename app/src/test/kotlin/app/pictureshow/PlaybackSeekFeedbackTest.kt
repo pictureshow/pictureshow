@@ -17,6 +17,7 @@ import com.google.common.util.concurrent.Futures
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -40,6 +41,8 @@ class PlaybackSeekFeedbackTest {
         private var seekable = true
         private var position = 1_000L
         private var playing = false
+        private var buffering = false
+        private var suppressed = false
         override fun getState(): State = State.Builder()
             .setAvailableCommands(
                 Player.Commands.Builder().apply {
@@ -57,7 +60,10 @@ class PlaybackSeekFeedbackTest {
                         .setDurationUs(600_000_000).setIsSeekable(true).build()
                 )
             )
-            .setPlaybackState(Player.STATE_READY)
+            .setPlaybackState(if (buffering) Player.STATE_BUFFERING else Player.STATE_READY)
+            .setPlaybackSuppressionReason(
+                if (suppressed) Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS else Player.PLAYBACK_SUPPRESSION_REASON_NONE
+            )
             .setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(position)
             .build()
@@ -67,6 +73,11 @@ class PlaybackSeekFeedbackTest {
         }
         override fun handleRelease() = Futures.immediateVoidFuture()
         override fun handleSetPlayWhenReady(playWhenReady: Boolean) = Futures.immediateVoidFuture().also { playing = playWhenReady }
+        fun renderState(buffering: Boolean, suppressed: Boolean) {
+            this.buffering = buffering
+            this.suppressed = suppressed
+            invalidateState()
+        }
         fun moveTo(value: Long) {
             position = value
             invalidateState()
@@ -157,7 +168,13 @@ class PlaybackSeekFeedbackTest {
     @Test fun deferredServerAlignmentRetainsItsBypassInsteadOfEchoingAGroupSeek() {
         val vectors = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
             .map { java.io.File(it, "spec/vectors/sync-application.json") }.first { it.isFile }
-        val cases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        val allCases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertTrue(
+            allCases.all {
+                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused")
+            }
+        )
+        val cases = allCases.filter { it.jsonObject.getValue("operation").jsonPrimitive.content == "deferred-seek" }
         assertEquals(3, cases.size)
         for (value in cases) {
             val row = value.jsonObject
@@ -203,6 +220,49 @@ class PlaybackSeekFeedbackTest {
                 assertEquals(row.getValue("expectedNativeSeeks").jsonArray.map { it.jsonPrimitive.long }, native.seeks, id)
             } finally {
                 exposed.release()
+                output.release()
+            }
+        }
+    }
+
+    @Test fun actualVideoReadinessDistinguishesUnpausedIntentFromRendering() {
+        val vectors = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { java.io.File(it, "spec/vectors/sync-application.json") }.first { it.isFile }
+        val allCases = Json.parseToJsonElement(vectors.readText()).jsonObject.getValue("cases").jsonArray
+        assertTrue(
+            allCases.all {
+                it.jsonObject.getValue("operation").jsonPrimitive.content in setOf("deferred-seek", "readiness-unpaused")
+            }
+        )
+        val cases = allCases.filter { it.jsonObject.getValue("operation").jsonPrimitive.content == "readiness-unpaused" }
+        assertEquals(5, cases.size)
+        for (value in cases) {
+            val row = value.jsonObject
+            val id = row.getValue("id").jsonPrimitive.content
+            val output =
+                Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("s", "Server", "https://media.example.test", "12"))
+            val player = LocalPlayer()
+            try {
+                val host = PlaybackHostState(MediaItem("item", "Film"), 0, output, {}, {})
+                host.playerSource = mutableStateOf(player)
+                player.playWhenReady = row.getValue("playWhenReady").jsonPrimitive.boolean
+                player.renderState(row.getValue("buffering").jsonPrimitive.boolean, row.getValue("suppressed").jsonPrimitive.boolean)
+                val snapshot = host.syncRendererSnapshot()
+                assertNull(
+                    snapshot.native,
+                    "The native debug snapshot is absent for this injected decoder: test the release-capable field, $id"
+                )
+                assertEquals(row.getValue("expectedRendering").jsonPrimitive.boolean, snapshot.playing, id)
+                val request = app.pictureshow.core.sync.syncReadiness(
+                    !row.getValue("buffering").jsonPrimitive.boolean && !row.getValue("suppressed").jsonPrimitive.boolean,
+                    1234,
+                    snapshot.positionTicks,
+                    snapshot.unpaused,
+                    "entry"
+                )
+                assertEquals(row.getValue("expectedIsPlaying"), request.body!!.getValue("IsPlaying"), id)
+            } finally {
+                player.release()
                 output.release()
             }
         }
