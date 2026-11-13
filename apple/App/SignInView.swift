@@ -150,6 +150,14 @@ private struct SignInForm: View {
                 .padding(Theme.gutter)
                 .frame(maxWidth: .infinity)
             }
+            .onChange(of: error ?? flow.error) { _, message in
+                guard let message else { return }
+                UIAccessibility.post(notification: .announcement, argument: message)
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("signInError", anchor: .center) }
+                }
+            }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
             .buttonBorderShape(.roundedRectangle(radius: 12))
@@ -208,7 +216,8 @@ private struct SignInForm: View {
                             .secondaryActionStyle().modifier(SignInActionTarget())
                     }
                 }
-                Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity) }
+                errorMessage
+                Button { focused = nil; signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity) }
                     .buttonStyle(ProminentActionStyle()).modifier(SignInActionTarget())
                     .disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
             }.id("passwordSubmission")
@@ -255,8 +264,10 @@ private struct SignInForm: View {
                     .textInputAutocapitalization(.never).keyboardType(.URL)
                     #endif
             }
-            Text("Enter your Jellyfin server address, such as https://jellyfin.example.org.")
-                .font(.callout).foregroundStyle(Theme.muted)
+            Text(verbatim: "Enter your Jellyfin server address, including its port or path if needed.")
+                .font(.callout).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("serverAddressHelp")
+            errorMessage
             Button(action: connect) { Text("Connect").frame(maxWidth: .infinity) }
                 .buttonStyle(ProminentActionStyle()).modifier(SignInActionTarget())
                 .disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
@@ -272,7 +283,14 @@ private struct SignInForm: View {
 
     @ViewBuilder private var progressAndError: some View {
         if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
-        if let message = error ?? flow.error { Text(message).foregroundStyle(.orange).accessibilityIdentifier("signInError") }
+        if flow.showingQuick { errorMessage }
+    }
+
+    @ViewBuilder private var errorMessage: some View {
+        if let message = error ?? flow.error {
+            Text(verbatim: message).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("signInError").id("signInError")
+        }
     }
 
     #if os(iOS)
@@ -378,7 +396,7 @@ private struct SignInForm: View {
             catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
     }
-    private func leaveServer() { work?.cancel(); flow.clear(); server = nil; model.signInServer = nil; password = ""; users = []; quickEnabled = nil; focused = "server" }
+    private func leaveServer() { work?.cancel(); flow.clear(); error = nil; server = nil; model.signInServer = nil; password = ""; users = []; quickEnabled = nil; focused = "server" }
 }
 
 /// Visible labels stay outside the editable value; the input itself remains a native

@@ -24,6 +24,145 @@ final class RoundThreeCaptureUITests: XCTestCase {
     }
     override func tearDownWithError() throws { app?.terminate() }
 
+    @MainActor func testRoundFourAuthenticationHelperAndVisibleErrors() throws {
+        let fixture = try RoundThreeAuthenticationFixture()
+        defer { fixture.stop() }
+        launch(server: fixture.address, username: "Round four fixture viewer", password: "synthetic-invalid-password")
+        XCTAssertTrue(app.textFields["serverAddress"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.links.count, 0, "Server guidance must never open an example URL")
+        let helper = app.staticTexts["serverAddressHelp"]
+        XCTAssertTrue(helper.exists && app.windows.firstMatch.frame.contains(helper.frame))
+        record("Round4 server address plain helper")
+        activate(app.buttons["connect"])
+        XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 25))
+        #if os(iOS)
+        let password = app.secureTextFields["password"]
+        activate(password)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        password.typeText("\n")
+        #else
+        dismissKeyboard(); activate(app.buttons["signIn"])
+        #endif
+        let error = app.staticTexts["signInError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 20))
+        XCTAssertEqual(fixture.authenticationRequests, 1)
+        XCTAssertTrue(wait(5) {
+            let window = self.app.windows.firstMatch.frame
+            let keyboard = self.app.keyboards.firstMatch
+            return window.contains(error.frame) && (!keyboard.exists || error.frame.maxY <= keyboard.frame.minY)
+        }, "The whole actual authentication error must be visible, including phone landscape")
+        XCTAssertLessThanOrEqual(error.frame.maxY, app.buttons["signIn"].frame.minY, "Auth error belongs beside Password, before Sign in")
+        record("Round4 wrong password visible beside Password")
+    }
+    #if os(iOS)
+    @MainActor func testRoundFourPhoneLandscapeErrors() throws {
+        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .phone)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        try testRoundFourAuthenticationHelperAndVisibleErrors()
+        app.terminate()
+        try testRoundFourUnreachableServerError()
+    }
+    #endif
+    @MainActor func testRoundFourUnreachableServerError() throws {
+        let fixture = try RoundThreeAuthenticationFixture()
+        let address = fixture.address; fixture.stop()
+        launch(server: address, username: "Round four fixture viewer", password: "synthetic-invalid-password")
+        XCTAssertTrue(app.buttons["connect"].waitForExistence(timeout: 10))
+        activate(app.buttons["connect"])
+        let error = app.staticTexts["signInError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 20))
+        XCTAssertTrue(wait(5) { self.app.windows.firstMatch.frame.contains(error.frame) })
+        XCTAssertLessThanOrEqual(error.frame.maxY, app.buttons["connect"].frame.minY)
+        XCTAssertEqual(app.links.count, 0)
+        record("Round4 unreachable address error visible before Connect")
+    }
+    #if os(iOS)
+    @MainActor func testRoundFourIPadHomeSettledArtwork() throws {
+        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
+        try launchPilot(); try signInPilot()
+        let first = app.buttons["item-" + (try required("resumeID"))].firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 15))
+        try waitForActualArtwork(first)
+        record("Round4 iPad Home portrait settled real artwork")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(wait(5) { self.app.windows.firstMatch.frame.width > self.app.windows.firstMatch.frame.height })
+        try waitForActualArtwork(first)
+        record("Round4 iPad Home landscape settled real artwork")
+    }
+    @MainActor private func waitForActualArtwork(_ card: XCUIElement) throws {
+        // Sample the picture's upper area, excluding labels and progress. A flat
+        // navy/grey film glyph cannot pass the demo poster's chromatic coverage.
+        XCTAssertTrue(wait(20) {
+            guard card.exists, !card.frame.isEmpty, let image = XCUIScreen.main.screenshot().image.cgImage else { return false }
+            let window = self.app.frame
+            let rect = CGRect(x: card.frame.minX * CGFloat(image.width) / window.width,
+                              y: card.frame.minY * CGFloat(image.height) / window.height,
+                              width: card.frame.width * CGFloat(image.width) / window.width,
+                              height: card.frame.height * 0.6 * CGFloat(image.height) / window.height)
+            guard let crop = image.cropping(to: rect) else { return false }
+            var rgba = [UInt8](repeating: 0, count: 64 * 64 * 4)
+            let drawn = rgba.withUnsafeMutableBytes { bytes -> Bool in
+                guard let context = CGContext(data: bytes.baseAddress, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
+                                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                context.draw(crop, in: CGRect(x: 0, y: 0, width: 64, height: 64)); return true
+            }
+            let colourful = stride(from: 0, to: rgba.count, by: 4).filter {
+                Int(max(rgba[$0], rgba[$0+1], rgba[$0+2])) - Int(min(rgba[$0], rgba[$0+1], rgba[$0+2])) > 50
+            }.count
+            return drawn && colourful > 409 // More than10% chromatic picture pixels.
+        }, "Require actual coloured demo artwork pixels, not an AX-only card or film placeholder")
+    }
+    #endif
+    #if os(tvOS)
+    @MainActor func testRoundFourTVSettledTabsAndSettingsValueContrast() throws {
+        try launchPilot(); try signInPilot()
+        for name in ["Libraries", "Search", "Settings"] {
+            try selectTab(name)
+            XCTAssertTrue(wait(10) { self.nativeDestinationIsVisible(name) })
+            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+            XCTAssertTrue(nativeDestinationIsVisible(name))
+            record("Round4 TV settled " + name)
+        }
+        let size = node("subtitleSize")
+        XCTAssertTrue(size.waitForExistence(timeout: 10))
+        XCTAssertFalse(ownsFocus(size))
+        try assertRenderedTextAA(size, expected: "System", state: "Settings value unfocused")
+        try assertTextAA(app.staticTexts["playbackSectionHeader"], expected: "Playback", name: "Round4 Settings header AA")
+        try assertTextAA(app.staticTexts["audioOutputExplanation"], expected: "Apple TV chooses", name: "Round4 Settings footer AA")
+        // Actual pre-fix white-on-white raster, paired with the review's AX
+        // System bounds. The exact live glyph detector must reject these pixels.
+        let data = try Data(contentsOf: URL(fileURLWithPath: try required("whiteValuePNG")))
+        XCTAssertEqual(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(), try required("whiteValueSHA256"))
+        let old = try XCTUnwrap(UIImage(data: data)?.cgImage)
+        let numbers = try required("whiteValueBounds").split(separator: ",").compactMap { Double($0) }
+        XCTAssertEqual(numbers.count, 4)
+        let bounds = CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
+        XCTAssertThrowsError(try renderedGlyphPixels("System", image: old, region: bounds), "Old white-on-white pixels must fail the SAME live value assertion")
+        focusOnly(size)
+        XCTAssertTrue(ownsFocus(size))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        try assertRenderedTextAA(size, expected: "System", state: "Settings value focused")
+        record("Round4 Settings Subtitle size focused")
+        activate(size)
+        let large = app.buttons["Large"].firstMatch
+        XCTAssertTrue(large.waitForExistence(timeout: 5))
+        activate(large)
+        XCTAssertTrue(wait(5) { (size.value as? String) == "Large" })
+        record("Round4 Settings native choice applied Large")
+        // Restore the same core preference via the visible menu.
+        activate(size); activate(app.buttons["System"].firstMatch)
+        XCTAssertTrue(wait(5) { (size.value as? String) == "System" })
+        focusOnly(node("segment-Intro"))
+        record("Round4 Settings Skip segments values")
+        try assertRenderedTextAA(node("segment-Intro"), expected: "Ask", state: "Intro focused")
+        focusOnly(node("audioLanguage"))
+        record("Round4 Settings Jellyfin preferences values")
+        try assertRenderedTextAA(node("subtitleMode"), expected: "Default", state: "Subtitle mode unfocused")
+    }
+    #endif
+
     @MainActor func testAuthenticationKeyboardErrorsAndQuickConnect() throws {
         let fixture = try RoundThreeAuthenticationFixture()
         defer { fixture.stop() }
@@ -874,7 +1013,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
 
     @MainActor private func assertRenderedTextAA(_ element: XCUIElement, expected: String, state: String, image: CGImage? = nil) throws {
         XCTAssertTrue(element.exists && !element.frame.isEmpty && app.frame.contains(element.frame), "Require the actual visible native control")
-        XCTAssertTrue(element.label.localizedCaseInsensitiveContains(expected))
+        XCTAssertTrue((element.label + " " + (element.value as? String ?? "")).localizedCaseInsensitiveContains(expected))
         let source = try image ?? XCTUnwrap(XCUIScreen.main.screenshot().image.cgImage)
         let glyphs = try renderedGlyphPixels(expected, image: source, region: pixelFrame(element.frame, image: source))
         let ratio = try textContrast(source, pixels: glyphs)

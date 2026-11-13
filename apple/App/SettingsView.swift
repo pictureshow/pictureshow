@@ -60,9 +60,8 @@ private struct SettingsForm: View {
     private var settingsForm: some View {
         Form {
             Section {
-                labeledSetting("Max streaming bitrate", value: preferences.value.bitrateMbps.map { "\($0) Mbps" } ?? "Auto (200 Mbps)") {
-                    Picker("Max streaming bitrate", selection: preference(\.bitrateMbps)) { ForEach(PlaybackPreferences.bitrates, id: \.self) { value in Text(value.map { "\($0) Mbps" } ?? "Auto (200 Mbps)").tag(value) } }.accessibilityIdentifier("maxBitrate").focused($focused, equals: "bitrate")
-                }
+                settingPicker("Max streaming bitrate", selection: preference(\.bitrateMbps), choices: PlaybackPreferences.bitrates,
+                              identifier: "maxBitrate", focusKey: "bitrate") { $0.map { "\($0) Mbps" } ?? "Auto (200 Mbps)" }
                 Toggle(isOn: preference(\.showConversionNotice)) {
                     conversionNoticeLabel
                     #if os(iOS)
@@ -73,12 +72,10 @@ private struct SettingsForm: View {
             } header: { Text("Playback").foregroundStyle(Theme.muted).accessibilityIdentifier("playbackSectionHeader") }
               footer: { Text(audioOutputFooter).foregroundStyle(Theme.muted).accessibilityIdentifier("audioOutputExplanation") }
             Section {
-                labeledSetting("Subtitle size", value: preferences.value.subtitleSize.rawValue) {
-                    Picker("Subtitle size", selection: preference(\.subtitleSize)) { ForEach(SubtitleSize.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }.accessibilityIdentifier("subtitleSize")
-                }
-                labeledSetting("Subtitle background", value: preferences.value.subtitleBackground.rawValue) {
-                    Picker("Subtitle background", selection: preference(\.subtitleBackground)) { ForEach(SubtitleBackground.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) } }.accessibilityIdentifier("subtitleBackground")
-                }
+                settingPicker("Subtitle size", selection: preference(\.subtitleSize), choices: SubtitleSize.allCases,
+                              identifier: "subtitleSize") { $0.rawValue }
+                settingPicker("Subtitle background", selection: preference(\.subtitleBackground), choices: SubtitleBackground.allCases,
+                              identifier: "subtitleBackground") { $0.rawValue }
             } header: { Text("Subtitles").foregroundStyle(Theme.muted) }
               footer: { Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted) }
             Section {
@@ -90,9 +87,8 @@ private struct SettingsForm: View {
                 if let configuration {
                     serverPicker("Audio language", key: "AudioLanguagePreference", value: configuration.audioLanguage, identifier: "audioLanguage")
                     serverPicker("Subtitle language", key: "SubtitleLanguagePreference", value: configuration.subtitleLanguage, identifier: "subtitleLanguage")
-                    labeledSetting("Subtitle mode", value: configuration.subtitleMode) {
-                        Picker("Subtitle mode", selection: Binding(get: { self.configuration?.subtitleMode ?? "Default" }, set: { save("SubtitleMode", $0) })) { ForEach(["Default", "Always", "OnlyForced", "None", "Smart"], id: \.self) { Text($0).tag($0) } }.disabled(serverBusy).accessibilityIdentifier("subtitleMode")
-                    }
+                    settingPicker("Subtitle mode", selection: Binding(get: { self.configuration?.subtitleMode ?? "Default" }, set: { save("SubtitleMode", $0) }),
+                                  choices: ["Default", "Always", "OnlyForced", "None", "Smart"], identifier: "subtitleMode", disabled: serverBusy) { $0 }
                     Text("Jellyfin uses these preferences to choose the starting audio and subtitle tracks.").font(.caption).foregroundStyle(Theme.muted)
                 } else { Text(serverBusy ? "Loading server preferences…" : "Server preferences unavailable").foregroundStyle(Theme.muted) }
                 if serverBusy { ProgressView("Saving or loading…") }
@@ -122,27 +118,34 @@ private struct SettingsForm: View {
         let selection = Binding<SegmentMode>(
             get: { preferences.value.segmentModes[type] ?? .ask },
             set: { choice in preferences.update { $0.segmentModes[type] = choice } })
-        return labeledSetting(type.rawValue, value: segmentChoiceLabel(selection.wrappedValue)) {
-            Picker(type.rawValue, selection: selection) {
-                ForEach(SegmentMode.allCases, id: \.rawValue) { mode in
-                    Text(segmentChoiceLabel(mode)).tag(mode)
-                }
-            }
-        }
+        return settingPicker(type.rawValue, selection: selection, choices: SegmentMode.allCases,
+                             identifier: "segment-" + type.rawValue, label: segmentChoiceLabel)
     }
     private func segmentChoiceLabel(_ mode: SegmentMode) -> String { mode == .automatic ? "Skip automatically" : mode.rawValue }
-    @ViewBuilder private func labeledSetting<Control: View>(_ title: String, value: String, @ViewBuilder control: () -> Control) -> some View {
+    @ViewBuilder private func settingPicker<Value: Hashable>(_ title: String, selection: Binding<Value>, choices: [Value],
+                                                            identifier: String, focusKey: String? = nil, disabled: Bool = false,
+                                                            label: @escaping (Value) -> String) -> some View {
         #if os(tvOS)
-        // Native menu pickers expose choices on TV, but omit their field label.
-        // Keep a system-aligned visible label and name the actual menu control.
         LabeledContent {
-            control().labelsHidden().pickerStyle(.menu).accessibilityLabel(title).accessibilityValue(value)
-        } label: {
-            // The native menu already owns the spoken field name and value.
-            Text(title).accessibilityHidden(true)
-        }
+            // Native Picker's menu platter can resolve to white inside a TV tab
+            // container. Own its visible value ink; retain the system menu,
+            // selection checkmark, focus lift and the same preference binding.
+            Menu {
+                Picker(title, selection: selection) {
+                    ForEach(choices, id: \.self) { choice in Text(label(choice)).tag(choice) }
+                }
+            } label: {
+                TelevisionActionInk { Text(label(selection.wrappedValue)) }
+            }
+            .menuStyle(.button).buttonStyle(.bordered).tint(Optional<Color>.none)
+            .disabled(disabled).focused($focused, equals: focusKey ?? identifier)
+            .accessibilityLabel(title).accessibilityValue(label(selection.wrappedValue))
+            .accessibilityIdentifier(identifier)
+        } label: { Text(title).foregroundStyle(.white).accessibilityHidden(true) }
         #else
-        control()
+        Picker(title, selection: selection) {
+            ForEach(choices, id: \.self) { choice in Text(label(choice)).tag(choice) }
+        }.disabled(disabled).accessibilityIdentifier(identifier).focused($focused, equals: focusKey ?? identifier)
         #endif
     }
     private var conversionNoticeLabel: some View {
@@ -175,12 +178,8 @@ private struct SettingsForm: View {
     }
     private func preference<T>(_ key: WritableKeyPath<PlaybackPreferences,T>) -> Binding<T> { Binding(get: { preferences.value[keyPath: key] }, set: { choice in preferences.update { $0[keyPath: key] = choice } }) }
     private func serverPicker(_ title: String, key: String, value: String, identifier: String) -> some View {
-        labeledSetting(title, value: languageNames[value] ?? value) {
-            Picker(title, selection: Binding(get: { key == "AudioLanguagePreference" ? configuration?.audioLanguage ?? "" : configuration?.subtitleLanguage ?? "" }, set: { save(key, $0) })) {
-                ForEach(languages, id: \.self) { language in Text(languageNames[language] ?? language).tag(language) }
-                if !languages.contains(value) { Text(value).tag(value) }
-            }.disabled(serverBusy).accessibilityIdentifier(identifier)
-        }
+        settingPicker(title, selection: Binding(get: { key == "AudioLanguagePreference" ? configuration?.audioLanguage ?? "" : configuration?.subtitleLanguage ?? "" }, set: { save(key, $0) }),
+                      choices: languages.contains(value) ? languages : languages + [value], identifier: identifier, disabled: serverBusy) { languageNames[$0] ?? $0 }
     }
     private func load() async {
         guard let account = model.account, !serverBusy else { return }; serverBusy = true; serverError = nil
