@@ -27,6 +27,12 @@ class CorpusVectorsTest {
                     "playback-information",
                     "playback",
                     "profiles",
+                    "frame-rate-match",
+                    "playback-settings-layout",
+                    "playback-settings",
+                    "playback-start",
+                    "player-quality",
+                    "settings-presentation",
                     "recovery"
                 ),
             "control-vectors" to

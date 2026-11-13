@@ -4,7 +4,7 @@
 
 The corpus inventory guard rejects a JSON file added without a registered executor, missing or stale packaged resources, empty case suites, and duplicate IDs. The ordinary runners reject unknown operations. No contract suite is exempt. The HDR contract has a different schema from the case suites, so its actual Python analyzer (including wrong-scale, wrong-gamut, clipping, malformed capture and negative-channel controls) runs as a bounded subprocess owned by a JVM test. Python 3 is required on each CI runner. This checks mathematical contracts; real compositor HDR output still needs the separate per-OS capture gates.
 
-Snapshot 2026-11-10: 40 JSON contracts, 2153 cases in the case-based contracts, plus the numeric HDR contract. A green logic gate establishes shared policy behavior, not completed desktop UI parity.
+Snapshot 2026-11-12 after merging main81f73948: 46 JSON contracts, 2317 cases in the case-based contracts, plus the numeric HDR contract. A green logic gate establishes shared policy behavior, not completed desktop UI parity.
 
 | Contract | Cases | Executor |
 | --- | ---: | --- |
@@ -48,3 +48,9 @@ Snapshot 2026-11-10: 40 JSON contracts, 2153 cases in the case-based contracts, 
 | `remote-wire.json` | 77 | `RemoteVectorsTest` |
 | `session-command.json` | 35 | `ControlVectorsTest` |
 | `session-owner.json` | 17 | `ControlVectorsTest` |
+| `frame-rate-match.json` | 6 | `FrameRateMatchVectorsTest` |
+| `playback-settings-layout.json` | 7 | `ReferenceParityVectorsTest` |
+| `playback-settings.json` | 68 | `PlaybackSettingsVectorsTest` |
+| `playback-start.json` | 4 | `FrameRateMatchVectorsTest` |
+| `player-quality.json` | 14 | `PlaybackQualityPresentationVectorsTest` |
+| `settings-presentation.json` | 65 | `SettingsPresentationVectorsTest` |
