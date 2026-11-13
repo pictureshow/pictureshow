@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import app.pictureshow.core.MediaItem
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -31,7 +32,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(350, cases.size)
+        assertEquals(357, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -256,6 +257,28 @@ class LivePresentationVectorsTest {
                 "touch-parent" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.contentOrNull,
                     touchTabFor(c["route"]?.jsonPrimitive?.contentOrNull),
+                    id
+                )
+                "library-cards" -> assertEquals(
+                    envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.content },
+                    listOf("destination:live-tv") + liveOrdinaryLibraries(
+                        c.getValue("items").jsonArray.map { Json.decodeFromJsonElement<MediaItem>(it) }
+                    ).map { it.id },
+                    id
+                )
+                "library-destination" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    if (MediaItem(
+                            "view",
+                            value("name"),
+                            value("type"),
+                            collectionType = c["collectionType"]?.jsonPrimitive?.contentOrNull
+                        ).isLiveTvLibrary()
+                    ) {
+                        "live-tv"
+                    } else {
+                        "catalog"
+                    },
                     id
                 )
                 "visible-error" -> assertEquals(envelope.getValue("expected").jsonPrimitive.content, liveVisibleError(value("message")), id)

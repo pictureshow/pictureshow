@@ -222,7 +222,7 @@ private fun TouchLibrariesGrid(
                 reserveLines = false
             )
         }
-        items(libraries, key = MediaItem::id) { library ->
+        items(liveOrdinaryLibraries(libraries), key = MediaItem::id) { library ->
             TouchCatalogCard(library, account, true, { onOpen(library) }, Modifier.fillMaxWidth(), reserveLines = false)
         }
     }

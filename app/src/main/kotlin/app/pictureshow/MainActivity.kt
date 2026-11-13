@@ -233,7 +233,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
+/** Jellyfin's live UserView is a destination, not an ordinary item collection. */
+internal fun MediaItem.isLiveTvLibrary() =
+    type in setOf("UserView", "CollectionFolder") && collectionType.equals("livetv", ignoreCase = true)
+
+internal fun liveOrdinaryLibraries(libraries: List<MediaItem>) = libraries.filterNot { it.isLiveTvLibrary() }
+
+internal fun itemRoute(item: MediaItem) = when {
+    item.isLiveTvLibrary() -> "live-tv"
+    item.isMusic() -> musicRoute(item)
+    else -> "item?item=${Uri.encode(Json.encodeToString(item))}"
+}
 internal fun liveRecordingItemRoute(item: MediaItem) = itemRoute(item) + if (item.isMusic()) "" else "&liveRecording=true"
 
 internal fun playerRoute(item: MediaItem, resume: Boolean) = playerRoute(

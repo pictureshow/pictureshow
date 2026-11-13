@@ -20,7 +20,8 @@
     "app/src/main/kotlin/app/pictureshow/LiveProgramDetail.kt",
     "app/src/main/kotlin/app/pictureshow/PlayerControls.kt",
     "app/src/main/kotlin/app/pictureshow/PlayerTimeline.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveGuideViewport.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveGuideViewport.kt",
+    "app/src/main/kotlin/app/pictureshow/MainActivity.kt"
   ],
   "cases": [
     {
@@ -4676,6 +4677,96 @@
         "fontScale": 1.0
       },
       "expected": 200
+    },
+    {
+      "id": "live-library-destination-1",
+      "input": {
+        "type": "UserView",
+        "collectionType": "livetv",
+        "name": "Live TV"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-2",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "livetv",
+        "name": "Broadcast"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-3",
+      "input": {
+        "type": "UserView",
+        "collectionType": "LiveTv",
+        "name": "Broadcast"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-4",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "movies",
+        "name": "Live TV"
+      },
+      "expected": "catalog",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-5",
+      "input": {
+        "type": "Movie",
+        "collectionType": "livetv",
+        "name": "Live TV"
+      },
+      "expected": "catalog",
+      "operation": "library-destination"
+    },
+    {
+      "id": "round3-live-card-empty-libraries",
+      "operation": "library-cards",
+      "input": {
+        "items": []
+      },
+      "expected": [
+        "destination:live-tv"
+      ]
+    },
+    {
+      "id": "round3-live-card-no-duplicate-preserve-name",
+      "operation": "library-cards",
+      "input": {
+        "items": [
+          {
+            "Id": "server-live",
+            "Name": "Live TV",
+            "Type": "UserView",
+            "CollectionType": "livetv"
+          },
+          {
+            "Id": "ordinary",
+            "Name": "Live TV",
+            "Type": "CollectionFolder",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "server-live-2",
+            "Name": "TV",
+            "Type": "CollectionFolder",
+            "CollectionType": "LiveTv"
+          }
+        ]
+      },
+      "expected": [
+        "destination:live-tv",
+        "ordinary"
+      ]
     }
   ]
 }
