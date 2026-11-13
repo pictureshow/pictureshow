@@ -1011,11 +1011,20 @@ final class CatalogPresentationUITests: XCTestCase {
         element.tap()
         #endif
     }
-    #if os(iOS)
     private func activateSettingsChrome(_ app: XCUIApplication) {
         // Native top/bottom tabs use Buttons; an expanded sidebar uses Cells.
         // Same-frame parent/child AX wrappers represent one visible control.
         let query = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Settings"))
+        #if os(tvOS)
+        // Native top tabs can collapse while content owns focus. Reveal only
+        // that actual native bar with a bounded eight remote Up inputs.
+        for _ in 0..<8 {
+            if query.allElementsBoundByIndex.contains(where: {
+                ($0.elementType == .button || $0.elementType == .cell) && $0.isHittable && !$0.frame.isEmpty
+            }) { break }
+            XCUIRemote.shared.press(.up)
+        }
+        #endif
         let exists = query.firstMatch.waitForExistence(timeout: 15)
         let window = app.windows.firstMatch.frame
         let candidates = query.allElementsBoundByIndex.filter { $0.elementType == .button || $0.elementType == .cell }
@@ -1043,6 +1052,7 @@ final class CatalogPresentationUITests: XCTestCase {
         settings.tap()
         #endif
     }
+    #if os(iOS)
     private func assertSingleLineTouchHeight(_ element: XCUIElement) {
         // AX geometry uses floating-point coordinates; this tolerance is far below a physical pixel.
         XCTAssertGreaterThanOrEqual(element.frame.height + 0.000_001, 48, "\(element.identifier) must keep its true 48 pt touch target")
