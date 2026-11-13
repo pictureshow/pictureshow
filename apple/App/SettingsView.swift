@@ -8,7 +8,7 @@ import PictureshowCore
     @Published var error: String?
     private static var url: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("playback-preferences-v1.json") }
     init() {
-        if let data = try? Data(contentsOf: Self.url) ?? UserDefaults.standard.data(forKey: "playback-preferences-v1"), let decoded = try? JSONDecoder().decode(PlaybackPreferences.self, from: data) { value = decoded }
+        if let data = (try? Data(contentsOf: Self.url)) ?? UserDefaults.standard.data(forKey: "playback-preferences-v1"), let decoded = try? JSONDecoder().decode(PlaybackPreferences.self, from: data) { value = decoded }
         else { value = .init() }
     }
     func update(_ change: (inout PlaybackPreferences) -> Void) {
@@ -83,9 +83,7 @@ private struct SettingsForm: View {
               footer: { Text("Subtitles follow your Apple accessibility settings. Text subtitles use these choices when their format supports them. Subtitles already included in the picture cannot change appearance or timing.").font(.caption).foregroundStyle(Theme.muted) }
             Section("Skip segments") {
                 ForEach(SegmentType.allCases.filter { $0 != .unknown }, id: \.rawValue) { type in
-                    labeledSetting(type.rawValue, value: segmentChoiceLabel(preferences.value.segmentModes[type] ?? .ask)) {
-                        Picker(type.rawValue, selection: Binding(get: { preferences.value.segmentModes[type] ?? .ask }, set: { choice in preferences.update { $0.segmentModes[type] = choice } })) { ForEach(SegmentMode.allCases, id: \.rawValue) { mode in Text(segmentChoiceLabel(mode)).tag(mode) } }
-                    }
+                    segmentPicker(type)
                 }
             }
             Section("Jellyfin preferences") {
@@ -119,6 +117,18 @@ private struct SettingsForm: View {
         #if os(tvOS)
         .defaultFocus($focused, opener)
         #endif
+    }
+    private func segmentPicker(_ type: SegmentType) -> some View {
+        let selection = Binding<SegmentMode>(
+            get: { preferences.value.segmentModes[type] ?? .ask },
+            set: { choice in preferences.update { $0.segmentModes[type] = choice } })
+        return labeledSetting(type.rawValue, value: segmentChoiceLabel(selection.wrappedValue)) {
+            Picker(type.rawValue, selection: selection) {
+                ForEach(SegmentMode.allCases, id: \.rawValue) { mode in
+                    Text(segmentChoiceLabel(mode)).tag(mode)
+                }
+            }
+        }
     }
     private func segmentChoiceLabel(_ mode: SegmentMode) -> String { mode == .automatic ? "Skip automatically" : mode.rawValue }
     @ViewBuilder private func labeledSetting<Control: View>(_ title: String, value: String, @ViewBuilder control: () -> Control) -> some View {
