@@ -52,6 +52,7 @@ class LiveGuideEdgeRegressionTest {
     @Test fun movingTheViewportAwayFocusesARealProgrammeAtItsOwnTimeWithoutOpeningIt() {
         lateinit var scroll: ScrollState
         lateinit var scope: CoroutineScope
+        var selected by mutableStateOf("p:p0")
         val shows = (0..3).map { index ->
             LiveProgram(
                 "p$index",
@@ -68,7 +69,9 @@ class LiveGuideEdgeRegressionTest {
                 Column(Modifier.height(400.dp)) {
                     LiveGuide(
                         listOf(LiveChannel("c", "Channel", "1")), shows, account, true, 0, 900_000,
-                        scroll, rememberLazyListState(), "p:p0", true, {}, onOpen = { error("Focus must not open or tune a programme") }
+                        scroll, rememberLazyListState(), selected, true, {
+                            selected = it
+                        }, onOpen = { error("Focus must not open or tune a programme") }
                     )
                 }
             }
