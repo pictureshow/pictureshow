@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -77,13 +78,22 @@ class LiveTvReviewNavigationTest {
                 }
             }
         }
-        compose.onNodeWithText("Review recording").performScrollTo().performClick()
+        compose.onNodeWithText("Review recording").performScrollTo()
+            .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("live:editor:confirm").assertIsFocused()
+        var priorityWasFocused = false
         repeat(14) {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             compose.mainClock.advanceTimeBy(300)
+            if (compose.onNodeWithTag("live:summary:Priority").fetchSemanticsNode()
+                    .config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Focused) { false }
+            ) {
+                priorityWasFocused = true
+            }
         }
+        compose.runOnIdle { assertEquals(true, priorityWasFocused, "Remote traversal focuses Priority before the footer") }
         compose.onNodeWithTag("live:review:footer").assertIsDisplayed().assertIsFocused()
         compose.onNodeWithTag("live:summary:Priority").assertIsDisplayed()
         compose.onNodeWithTag("live:review:footer").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
@@ -93,7 +103,7 @@ class LiveTvReviewNavigationTest {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
             compose.mainClock.advanceTimeBy(300)
         }
-        compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed()
+        compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed().assertIsFocused()
         compose.runOnIdle { assertEquals(0, writes) }
     }
 

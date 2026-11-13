@@ -262,6 +262,29 @@ class LiveTvScreensTest {
     }
 
     @Test
+    fun cachedDraftReviewDisablesParentConfirmationAfterGuideBecomesUnavailable() {
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            show = show.copy(startDate = now.minusSeconds(30).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, {}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.runOnIdle { vm.defaults(fake.show, false) }
+        compose.waitUntil(5_000) { vm.state.value.draft != null && !vm.state.value.writing }
+        compose.onNodeWithText("Review recording").performScrollTo().performClick()
+        compose.onNodeWithTag("live:editor:confirm").performScrollTo().assertIsEnabled()
+        compose.runOnIdle {
+            fake.failPrograms = true
+            vm.refresh()
+        }
+        compose.onNodeWithTag("live:editor:confirm").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("live:summary:Priority").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Edit options").performScrollTo().assertIsEnabled()
+        compose.runOnIdle { assertEquals(0, fake.created, "Cached review never submits while the guide is unavailable") }
+    }
+
+    @Test
     fun phoneFavoriteIsACheckedTrailingActionAndDoesNotTuneTheParentRow() {
         var tuned = 0
         val fake = LiveFake()

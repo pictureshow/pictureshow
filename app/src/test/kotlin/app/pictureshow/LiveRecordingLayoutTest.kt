@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -325,10 +326,10 @@ class LiveRecordingLayoutTest {
                 it()
             }
             compose.mainClock.advanceTimeBy(500)
-            val icon = compose.onNodeWithTag("detail:played").getUnclippedBoundsInRoot()
+            val icon = compose.onNodeWithTag("detail:played").getBoundsInRoot()
             listOf("play", "from-start", "download").forEach { target ->
-                val button = compose.onNodeWithTag("detail:$target").getUnclippedBoundsInRoot()
-                val label = compose.onNodeWithTag("detail:$target-label", useUnmergedTree = true).getUnclippedBoundsInRoot()
+                val button = compose.onNodeWithTag("detail:$target").getBoundsInRoot()
+                val label = compose.onNodeWithTag("detail:$target-label", useUnmergedTree = true).getBoundsInRoot()
                 val centre = (button.top + button.bottom) / 2
                 assertEquals(
                     centre.value,
