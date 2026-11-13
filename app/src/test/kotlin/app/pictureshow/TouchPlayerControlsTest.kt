@@ -903,12 +903,18 @@ class TouchPlayerControlsTest {
     fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
         launch()
         settled()
-        val chapter = textBounds("Chapters")
-        val speed = textBounds("Speed · 1×")
-        val info = textBounds("Playback info")
-        assertEquals(chapter.top.value, speed.top.value, 1f)
-        assertEquals(speed.top.value, info.top.value, 1f)
-        assertEquals((speed.left - chapter.right).value, (info.left - speed.right).value, 1f)
+        val audio = bounds("touch:open:Audio")
+        val subtitles = bounds("touch:open:Subtitles")
+        val speed = bounds("touch:open:Speed")
+        val more = bounds("touch:more")
+        assertEquals(audio.top.value, speed.top.value, 1f)
+        assertEquals(speed.top.value, more.top.value, 1f)
+        assertEquals((subtitles.left - audio.right).value, (speed.left - subtitles.right).value, 1f)
+        assertEquals((speed.left - subtitles.right).value, (more.left - speed.right).value, 1f)
+        assertEquals((audio.right - audio.left).value, (speed.right - speed.left).value, 1f)
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.onNodeWithTag("touch:open:Chapters").assertIsDisplayed()
+        compose.onNodeWithTag("touch:open:Info").assertIsDisplayed()
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.
@@ -2014,6 +2020,7 @@ class TouchPlayerControlsTest {
 
     @Test fun liveQualityMenuReturnsToTheSameMeasuredBufferAndTransport() {
         launch(paused = true, live = true)
+        decided(PlayMethod.DirectPlay)
         compose.runOnIdle {
             host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
             host.position = 10_000
