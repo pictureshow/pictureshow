@@ -216,7 +216,7 @@ class SyncPlayTouchDesignTest {
                 SyncLeaveForCastConsent(onDismiss = { dismissed++ }, onConfirm = { confirmed++ })
             }
         }
-        compose.onNodeWithText("Leave Watch together before casting?").assertIsDisplayed()
+        compose.onNodeWithText("Leave the group to cast?").assertIsDisplayed()
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(1, dismissed)
         assertEquals(0, confirmed)
