@@ -209,6 +209,28 @@
       "expected": false
     },
     {
+      "id": "title-revision-changed-with-retained-entry",
+      "op": "title",
+      "request": [
+        "a",
+        1,
+        2
+      ],
+      "current": [
+        "a",
+        1,
+        3
+      ],
+      "entries": [
+        "e1",
+        "e2"
+      ],
+      "asked": [
+        "e1"
+      ],
+      "expected": false
+    },
+    {
       "id": "title-entry-removed",
       "op": "title",
       "request": [

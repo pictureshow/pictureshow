@@ -24,7 +24,7 @@ class SyncPresentationVectorsTest {
     @Test fun allPresentationRules() {
         val resource = requireNotNull(javaClass.classLoader.getResource("sync-vectors/sync-presentation.json"))
         val cases = Json.parseToJsonElement(resource.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(24, cases.size)
+        assertEquals(25, cases.size)
         cases.forEach { element ->
             val c = element.jsonObject
             val id = c.getValue("id").jsonPrimitive.content
