@@ -16,6 +16,10 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -201,7 +205,10 @@ class LiveRound3StatesTest {
             }
         }
         val mark = compose.onNodeWithTag("live:channel-mark:c", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val headline = compose.onNodeWithText("Generated", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val headline = compose.onNode(
+            hasText("Generated") and hasAnyAncestor(hasTestTag("live:c:c")),
+            useUnmergedTree = true
+        ).getUnclippedBoundsInRoot()
         assertEquals(16.dp, headline.left - mark.right)
     }
 
