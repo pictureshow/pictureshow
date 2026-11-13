@@ -114,6 +114,9 @@ final class PlayerPresentationUITests: XCTestCase {
             fixture.snapshot.menuWorkerRequests.count == 1 && fixture.snapshot.startCount == 1
         }, "The ordinary track worker is held while the real decoder starts this viewing")
         XCTAssertTrue(fixture.snapshot.menuWorkerRequests.first?.path.hasSuffix("/background") == true)
+        let initialNegotiations = fixture.snapshot.playbackInfoCount
+        XCTAssertGreaterThan(initialNegotiations, 0, "The ready decoder must have completed its startup negotiation")
+        print("LEG132_PENDING_TRACKS_NEGOTIATIONS phase=beforeAudio count=\(initialNegotiations)")
         XCUIRemote.shared.press(.playPause)
         activate(nativeAction(id: "pendingAudio", prefix: "Audio"))
         let cancel = app.buttons["cancelPendingTracks"]
@@ -130,7 +133,8 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "The actual focused Cancel must dismiss pending tracks while its worker is still held")
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "preparingTracks").firstMatch.exists)
         XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1)
-        XCTAssertEqual(fixture.snapshot.playbackInfoCount, 1)
+        print("LEG132_PENDING_TRACKS_NEGOTIATIONS phase=afterCancel count=\(fixture.snapshot.playbackInfoCount) initial=\(initialNegotiations)")
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, initialNegotiations, "Opening and cancelling pending Audio must not renegotiate the ready viewing")
         XCTAssertEqual(fixture.snapshot.startCount, 1)
         XCTAssertEqual(fixture.snapshot.stoppedCount, 0)
         record("132 TV held tracks Cancel dismissed same viewing")
@@ -735,6 +739,9 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(fixture.snapshot.startCount, 1)
         record("132 TV HUD hidden paused contextual episode identity and Cancel text")
         try selectVisibleContextualCancel(in: nativePlayer)
+        record("132 TV after contextual Cancel before native transport refresh")
+        revealNativeTransportIfHidden()
+        record("132 TV after contextual Cancel refreshed visible native transport")
         #else
         activate(app.buttons["playerPlayPause"])
         XCTAssertTrue(app.staticTexts["nextCountdown"].waitForNonExistence(timeout: 5), "Touch pause removes the number immediately")
