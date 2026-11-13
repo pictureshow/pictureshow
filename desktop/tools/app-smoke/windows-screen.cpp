@@ -31,25 +31,50 @@ static void writeMode(const DEVMODEW &value) {
     std::cout << "{\"width\":" << value.dmPelsWidth << ",\"height\":" << value.dmPelsHeight
               << ",\"bits\":" << value.dmBitsPerPel << ",\"frequency\":" << value.dmDisplayFrequency << "}";
 }
+// Flushed, value-free stage names plus numeric API/header facts survive a
+// native crash. Keep paths and opaque driver data out of published receipts.
+static void traceStage(const char *stage) {
+    std::cerr << "{\"stage\":\"" << stage << "\"}" << std::endl;
+}
+static void traceResult(const char *stage, LONG result) {
+    std::cerr << "{\"stage\":\"" << stage << "\",\"result\":" << result << "}" << std::endl;
+}
+static void traceMode(const char *stage, const DEVMODEW &value, bool observed) {
+    std::cerr << "{\"stage\":\"" << stage << "\",\"observed\":" << (observed ? "true" : "false")
+              << ",\"dmSize\":" << value.dmSize << ",\"dmDriverExtra\":" << value.dmDriverExtra
+              << ",\"width\":" << value.dmPelsWidth << ",\"height\":" << value.dmPelsHeight
+              << ",\"bits\":" << value.dmBitsPerPel << ",\"frequency\":" << value.dmDisplayFrequency << "}" << std::endl;
+}
 static int restore(DEVMODEW saved) {
     auto current = mode();
+    traceStage("restore-observe-before");
     const bool observedBefore = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current);
+    traceMode("restore-observed-before", current, observedBefore);
     const bool alreadyOriginal = observedBefore && sameMode(current, saved);
     LONG changeResult = DISP_CHANGE_SUCCESSFUL, resetResult = DISP_CHANGE_SUCCESSFUL;
     bool resetAttempted = false;
     if (!alreadyOriginal) {
+        traceStage("restore-explicit-change-start");
         changeResult = ChangeDisplaySettingsExW(nullptr, &saved, nullptr, 0, nullptr);
+        traceResult("restore-explicit-change-returned", changeResult);
         // A dynamic mode may already be back at its original value. Observe
         // before making another request, even if the driver returned failure.
-        if (!EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current) || !sameMode(current, saved)) {
+        traceStage("restore-observe-after-explicit-change");
+        const bool observedChanged = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current);
+        traceMode("restore-observed-after-explicit-change", current, observedChanged);
+        if (!observedChanged || !sameMode(current, saved)) {
             // Win32 documents NULL mode + zero flags as restoring the registry
             // default after a dynamic change. Verify that it is our saved mode.
             resetAttempted = true;
+            traceStage("restore-default-reset-start");
             resetResult = ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr);
+            traceResult("restore-default-reset-returned", resetResult);
         }
     }
     auto actual = mode();
+    traceStage("restore-observe-final");
     const bool observedAfter = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &actual);
+    traceMode("restore-observed-final", actual, observedAfter);
     const bool restored = observedAfter && sameMode(actual, saved);
     std::cout << "{\"restored\":" << (restored ? "true" : "false")
               << ",\"alreadyOriginal\":" << (alreadyOriginal ? "true" : "false")
@@ -58,9 +83,10 @@ static int restore(DEVMODEW saved) {
               << ",\"defaultResetAttempted\":" << (resetAttempted ? "true" : "false")
               << ",\"defaultResetResult\":" << resetResult
               << ",\"observedAfter\":" << (observedAfter ? "true" : "false") << ",\"expected\":";
-    writeMode(saved); std::cout << ",\"actual\":"; writeMode(actual); std::cout << "}\n";
-    if (restored) return 0;
-    return (changeResult != DISP_CHANGE_SUCCESSFUL || (resetAttempted && resetResult != DISP_CHANGE_SUCCESSFUL)) ? 8 : 9;
+    writeMode(saved); std::cout << ",\"actual\":"; writeMode(actual); std::cout << "}" << std::endl;
+    const int exitCode = restored ? 0 : ((changeResult != DISP_CHANGE_SUCCESSFUL || (resetAttempted && resetResult != DISP_CHANGE_SUCCESSFUL)) ? 8 : 9);
+    traceResult("restore-complete", exitCode);
+    return exitCode;
 }
 int main(int argc, char **argv) {
     const char *hosted = std::getenv("GITHUB_ACTIONS");
@@ -72,10 +98,24 @@ int main(int argc, char **argv) {
     // The receipt is private binary DEVMODE data, used only by this helper's
     // finally step. No user-controlled dimensions are reconstructed from JSON.
     if (argc == 3 && std::string(argv[1]) == "--restore") {
+        traceStage("restore-read-start");
         auto saved = mode();
         std::ifstream input(argv[2], std::ios::binary);
-        if (!input.read(reinterpret_cast<char *>(&saved), sizeof(saved)) ||
-            saved.dmSize != sizeof(saved)) return 7;
+        const bool opened = input.is_open();
+        input.read(reinterpret_cast<char *>(&saved), sizeof(saved));
+        const auto bytesRead = input.gcount();
+        const bool complete = static_cast<bool>(input);
+        std::cerr << "{\"stage\":\"restore-read-result\",\"opened\":" << (opened ? "true" : "false")
+                  << ",\"complete\":" << (complete ? "true" : "false") << ",\"bytesRead\":" << bytesRead
+                  << ",\"expectedBytes\":" << sizeof(saved) << ",\"dmSize\":" << saved.dmSize
+                  << ",\"dmDriverExtra\":" << saved.dmDriverExtra << "}" << std::endl;
+        if (!complete || saved.dmSize != sizeof(saved)) {
+            std::cout << "{\"restored\":false,\"stage\":\"read-saved-mode\",\"exitCode\":7,\"opened\":" << (opened ? "true" : "false")
+                      << ",\"bytesRead\":" << bytesRead << ",\"expectedBytes\":" << sizeof(saved)
+                      << ",\"dmSize\":" << saved.dmSize << ",\"dmDriverExtra\":" << saved.dmDriverExtra << "}" << std::endl;
+            traceResult("restore-complete", 7);
+            return 7;
+        }
         return restore(saved);
     }
     if (argc != 3 || std::string(argv[1]) != "--save") return 2;
@@ -120,7 +160,9 @@ int main(int argc, char **argv) {
     auto after = mode();
     if (!EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &after) ||
         !primaryMonitor(primary) || !fits(primary.rcMonitor)) return 5;
-    std::cout << "{\"beforeWidth\":" << before.dmPelsWidth << ",\"beforeHeight\":" << before.dmPelsHeight
+    std::cout << "{\"savedBytes\":" << sizeof(before) << ",\"savedDmSize\":" << before.dmSize
+              << ",\"savedDmDriverExtra\":" << before.dmDriverExtra
+              << ",\"beforeWidth\":" << before.dmPelsWidth << ",\"beforeHeight\":" << before.dmPelsHeight
               << ",\"width\":" << after.dmPelsWidth << ",\"height\":" << after.dmPelsHeight
               << ",\"x\":" << primary.rcMonitor.left << ",\"y\":" << primary.rcMonitor.top
               << ",\"workAreaX\":" << primary.rcWork.left << ",\"workAreaY\":" << primary.rcWork.top

@@ -124,8 +124,24 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Desktop E2E smoke failed' }
           } finally {
             if (Test-Path desktop/build/smoke-display-mode.bin) {
-              & desktop/build/windows-smoke-screen.exe --restore desktop/build/smoke-display-mode.bin | Set-Content desktop-evidence/display/restore.json
-              if ($LASTEXITCODE -ne 0) { throw 'Hosted display mode restoration failed' }
+              $modeBytes = (Get-Item desktop/build/smoke-display-mode.bin).Length
+              [ordered]@{stage='starting'; savedModeBytes=$modeBytes; helperExists=(Test-Path desktop/build/windows-smoke-screen.exe)} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/restore-invocation.json
+              $restoreOutput = @()
+              $restoreCode = $null
+              $restoreCompleted = $false
+              try {
+                $restoreOutput = @(& desktop/build/windows-smoke-screen.exe --restore desktop/build/smoke-display-mode.bin 2> desktop-evidence/display/restore-stages.jsonl)
+                $restoreCode = $LASTEXITCODE
+                $restoreCompleted = $true
+              } finally {
+                if ($null -eq $restoreCode) { $restoreCode = $LASTEXITCODE }
+                # Explicit Value creates the receipt even when a native process
+                # emits nothing; a pipeline with no input did not create it.
+                Set-Content -Path desktop-evidence/display/restore.json -Value ($restoreOutput -join [Environment]::NewLine)
+                [ordered]@{nativeExitCode=$restoreCode; invocationCompleted=$restoreCompleted; stdoutLines=$restoreOutput.Count; savedModeBytes=$modeBytes} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/restore-exit.json
+                Write-Host "Hosted display restore native exit=$restoreCode completed=$restoreCompleted stdoutLines=$($restoreOutput.Count)"
+              }
+              if ($restoreCode -ne 0) { throw "Hosted display mode restoration failed (native exit $restoreCode)" }
             }
           }
       - uses: actions/upload-artifact@v7
