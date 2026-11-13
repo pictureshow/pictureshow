@@ -73,7 +73,7 @@ class RecordingDetailActionSpacingTest {
             }
         }
         assertTrue(brightest("enabled") > .9f)
-        assertTrue(brightest("disabled") in .25f...5f, "Disabled ink stays visibly distinct over video")
+        assertTrue(brightest("disabled") in 0.25f..0.5f, "Disabled ink stays visibly distinct over video")
     }
 
     private fun verify(fontScale: Float) {
