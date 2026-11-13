@@ -189,7 +189,8 @@ internal fun LiveGuideContent(
                                 Box(Modifier.fillMaxSize()) {
                                     if (liveGuideShowsText(textWindow.width)) {
                                         Column(
-                                            Modifier.offset(x = textWindow.inset.dp).width(textWindow.width.dp).fillMaxHeight()
+                                            Modifier.offset { androidx.compose.ui.unit.IntOffset(textWindow.inset.dp.roundToPx(), 0) }
+                                                .width(textWindow.width.dp).fillMaxHeight()
                                                 .testTag("live:cell-text:${show.id}")
                                                 .padding(
                                                     start = 8.dp,

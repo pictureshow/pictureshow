@@ -36,8 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,7 +67,8 @@ internal fun LiveTvScreen(
     onBack: () -> Unit
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val compactHeight = !tv && liveCompactHeight(LocalConfiguration.current.screenHeightDp, tv)
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val compactHeight = with(LocalDensity.current) { liveCompactHeight(windowHeight.toDp().value.toInt(), tv) }
     val appBarScroll = androidx.compose.material3.TopAppBarDefaults.enterAlwaysScrollBehavior()
     var scrollingFilters: (@Composable () -> Unit)? = null
     val time = liveTime()
