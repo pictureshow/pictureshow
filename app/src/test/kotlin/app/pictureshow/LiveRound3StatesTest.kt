@@ -255,8 +255,10 @@ class LiveRound3StatesTest {
             TouchTheme { LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, false, {}, {}, {}) }
         }
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        assertEquals(200.dp, compose.onNodeWithTag("live:guide-channel:c", useUnmergedTree = true).getUnclippedBoundsInRoot().width)
-        assertTrue(compose.onNodeWithTag("live:guide-time").getUnclippedBoundsInRoot().width <= 400.dp)
+        val channelBounds = compose.onNodeWithTag("live:guide-channel:c", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val dateBounds = compose.onNodeWithTag("live:guide-time").getUnclippedBoundsInRoot()
+        assertEquals(200.dp, channelBounds.right - channelBounds.left)
+        assertTrue(dateBounds.right - dateBounds.left <= 400.dp)
     }
 
     @Test fun tvRecordingMenuStartsOnPlayAndInvokesOrdinaryPlaybackWithoutDeleting() {

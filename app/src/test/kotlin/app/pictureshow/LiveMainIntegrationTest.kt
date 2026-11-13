@@ -47,7 +47,6 @@ class LiveMainIntegrationTest {
                     {},
                     {},
                     {},
-                    librariesOnly = libraries.value,
                     onLiveTv = { live++ },
                     onCustomize = { custom++ }
                 )
