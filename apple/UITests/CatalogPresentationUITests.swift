@@ -1016,11 +1016,20 @@ final class CatalogPresentationUITests: XCTestCase {
         // Same-frame parent/child AX wrappers represent one visible control.
         let query = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Settings"))
         #if os(tvOS)
+        func ownedVisibleNativeTab(_ element: XCUIElement) -> Bool {
+            let window = app.windows.firstMatch.frame, target = element.frame
+            guard !target.isEmpty && window.contains(target) else { return false }
+            return app.tabBars.allElementsBoundByIndex.contains { bar in
+                !bar.frame.isEmpty && window.contains(bar.frame) && bar.frame.contains(target)
+                    && bar.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND identifier == %@", element.label, element.identifier))
+                        .allElementsBoundByIndex.contains(where: { $0.frame == target && ($0.elementType == .button || $0.elementType == .cell) })
+            }
+        }
         // Native top tabs can collapse while content owns focus. Reveal only
         // that actual native bar with a bounded eight remote Up inputs.
         for _ in 0..<8 {
             if query.allElementsBoundByIndex.contains(where: {
-                ($0.elementType == .button || $0.elementType == .cell) && $0.isHittable && !$0.frame.isEmpty
+                ($0.elementType == .button || $0.elementType == .cell) && ownedVisibleNativeTab($0)
             }) { break }
             XCUIRemote.shared.press(.up)
         }
@@ -1031,8 +1040,12 @@ final class CatalogPresentationUITests: XCTestCase {
         var uniqueVisible: [XCUIElement] = []
         for candidate in candidates {
             let frame = candidate.frame
+            #if os(tvOS)
+            let visible = ownedVisibleNativeTab(candidate)
+            #else
             let visible = candidate.isHittable && !frame.isEmpty && window.contains(frame)
-            print("LEG132_SETTINGS_CHROME role=\(candidate.elementType.rawValue) id=\(candidate.identifier) frame=\(frame) hittable=\(candidate.isHittable) fullyVisible=\(visible)")
+            #endif
+            print("LEG132_SETTINGS_CHROME role=\(candidate.elementType.rawValue) id=\(candidate.identifier) frame=\(frame) hittable=\(candidate.isHittable) focused=\(candidate.hasFocus) selected=\(candidate.isSelected) fullyVisible=\(visible)")
             guard visible else { continue }
             if let duplicate = uniqueVisible.firstIndex(where: {
                 $0.frame == frame && $0.identifier == candidate.identifier && $0.label == candidate.label
@@ -1045,12 +1058,14 @@ final class CatalogPresentationUITests: XCTestCase {
         guard uniqueVisible.count == 1, let settings = uniqueVisible.first else { return }
         XCTAssertEqual(settings.label, "Settings")
         XCTAssertTrue(settings.elementType == .button || settings.elementType == .cell)
-        XCTAssertTrue(settings.isHittable && !settings.frame.isEmpty && window.contains(settings.frame), "The actual Settings control must be hittable and fully inside the app window")
         #if os(tvOS)
+        XCTAssertTrue(ownedVisibleNativeTab(settings), "The remote Settings target must belong to the actual visible native tab bar")
         activate(settings, app: app)
         #else
+        XCTAssertTrue(settings.isHittable && !settings.frame.isEmpty && window.contains(settings.frame), "The actual Settings control must be hittable and fully inside the app window")
         settings.tap()
         #endif
+
     }
     #if os(iOS)
     private func assertSingleLineTouchHeight(_ element: XCUIElement) {

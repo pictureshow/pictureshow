@@ -161,7 +161,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
             record("Round3 native TV tab " + name + " focused whole label")
             try assertRenderedWords(name, in: tab)
             XCUIRemote.shared.press(.select)
-            XCTAssertTrue(wait(10) { self.nativeTabCandidate(name)?.isSelected == true })
+            XCTAssertTrue(wait(10) { tab.isSelected })
         }
         #endif
         try selectTab("Libraries")
@@ -340,9 +340,29 @@ final class RoundThreeCaptureUITests: XCTestCase {
         if !home { record("Round3 sign-in failed actual native state") }
         XCTAssertTrue(home, "Actual pilot authentication must reach the native shell")
     }
+    #if os(tvOS)
+    private func visibleNativeTabBarOwning(_ element: XCUIElement) -> XCUIElement? {
+        let window = app.windows.firstMatch.frame, target = element.frame
+        guard !target.isEmpty && window.contains(target) else { return nil }
+        return app.tabBars.allElementsBoundByIndex.first { bar in
+            !bar.frame.isEmpty && window.contains(bar.frame) && bar.frame.contains(target)
+                && bar.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND identifier == %@", element.label, element.identifier))
+                    .allElementsBoundByIndex.contains(where: { $0.frame == target && ($0.elementType == .button || $0.elementType == .cell) })
+        }
+    }
+    #endif
     private func nativeTabCandidate(_ name: String) -> XCUIElement? {
-        let candidates = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).allElementsBoundByIndex.filter {
-            ($0.elementType == .button || $0.elementType == .cell) && $0.isHittable && !$0.frame.isEmpty && $0.frame.intersects(app.windows.firstMatch.frame)
+        let window = app.windows.firstMatch.frame
+        let candidates = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).allElementsBoundByIndex.filter { candidate in
+            guard candidate.elementType == .button || candidate.elementType == .cell else { return false }
+            #if os(tvOS)
+            let bar = visibleNativeTabBarOwning(candidate)
+            let eligible = bar != nil
+            print("ROUND3_NATIVE_TAB name=\(name) role=\(candidate.elementType.rawValue) frame=\(candidate.frame) hittable=\(candidate.isHittable) focused=\(candidate.hasFocus) selected=\(candidate.isSelected) nativeBar=\(String(describing: bar?.frame)) eligible=\(eligible)")
+            return eligible
+            #else
+            return candidate.isHittable && !candidate.frame.isEmpty && candidate.frame.intersects(window)
+            #endif
         }
         // Native sidebar/tab modes can expose hidden duplicates. Prefer actual selection.
         return candidates.first(where: \.isSelected) ?? candidates.first
@@ -362,8 +382,9 @@ final class RoundThreeCaptureUITests: XCTestCase {
     }
     @MainActor private func selectTab(_ name: String) throws {
         revealNativeTabBar()
-        activate(try nativeTab(name))
-        XCTAssertTrue(wait(10) { self.nativeTabCandidate(name)?.isSelected == true }, "Native selected state must match actual destination")
+        let tab = try nativeTab(name)
+        activate(tab)
+        XCTAssertTrue(wait(10) { tab.isSelected }, "Native selected state must match actual destination")
         if name == "Settings" { XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10)) }
         if name == "Home" { XCTAssertTrue(app.staticTexts["Continue watching"].waitForExistence(timeout: 20)) }
     }
@@ -397,6 +418,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
     }
     @MainActor private func reveal(_ element: XCUIElement) {
         for _ in 0..<24 {
+            #if os(tvOS)
+            // Native TV tabs are remote targets, not touch hit points. This is
+            // restricted to the actual visible native bar; focus still must move.
+            if element.exists && visibleNativeTabBarOwning(element) != nil { return }
+            #endif
             if element.exists && element.isHittable && element.frame.intersects(app.windows.firstMatch.frame) { return }
             #if os(tvOS)
             XCUIRemote.shared.press(.down)
