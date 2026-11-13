@@ -615,7 +615,7 @@ internal fun LiveTvScreen(
                         }
                         when {
                             draft != null -> item {
-                                LiveScheduleEditor(draft, state.draftSeries, tv, state.writing, false, canSubmit = state.actionsAvailable) {
+                                LiveScheduleEditor(draft, state.draftSeries, tv, state.writing, false, canSubmit = canAct) {
                                     vm.save(it, state.draftSeries, false)
                                 }
                             }
@@ -651,7 +651,7 @@ internal fun LiveTvScreen(
                                             tv,
                                             state.writing,
                                             true,
-                                            canSubmit = state.actionsAvailable
+                                            canSubmit = canAct
                                         ) {
                                             vm.save(it, selectedSeries, true)
                                         }
