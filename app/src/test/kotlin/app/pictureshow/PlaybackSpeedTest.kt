@@ -91,20 +91,28 @@ class PlaybackSpeedTest {
             assertEquals(true, host.syncRendererSnapshot().rateSupported, "Confirmed PCM on our software sink supports temporary rates")
             host.applySyncTimeline(null, null, 0.97)
             assertEquals(0.97f, output.player.value!!.playbackParameters.speed)
+            assertEquals(0.97f, requireNotNull(output.syncNativeSnapshot()).playbackRate, "The native decoder must receive the correction")
             assertEquals(1f, output.player.value!!.playbackParameters.pitch)
             assertEquals(1f, output.speed.value.speed)
             assertEquals(null, output.speed.value.message)
             host.applySyncTimeline(null, null, 1.03)
             assertEquals(1.03f, output.player.value!!.playbackParameters.speed)
+            assertEquals(
+                1.03f,
+                requireNotNull(output.syncNativeSnapshot()).playbackRate,
+                "A masked wrapper value cannot prove native application"
+            )
             assertEquals(1f, output.speed.value.speed)
             assertEquals(null, output.speed.value.message)
             host.applySyncTimeline(null, null, 1.0)
+            assertEquals(1f, requireNotNull(output.syncNativeSnapshot()).playbackRate)
             assertEquals(1f, output.speed.value.speed)
             assertEquals(null, output.speed.value.message)
             output.setSpeed(1.5f)
             assertEquals(1f, output.player.value!!.playbackParameters.speed, "Group output still owns the temporary rate")
             output.endSyncRate()
             assertEquals(1.5f, output.player.value!!.playbackParameters.speed, "Detaching restores the viewer's selection")
+            assertEquals(1.5f, requireNotNull(output.syncNativeSnapshot()).playbackRate, "Restoration reaches the native decoder")
             assertEquals(1.5f, output.speed.value.speed)
             assertEquals(null, output.speed.value.message)
             output.observeSyncAudioOutput(first, true)

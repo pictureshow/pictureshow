@@ -113,7 +113,8 @@ internal class Media3PlaybackOutput(
             p.isLoading,
             p.currentPosition,
             p.bufferedPosition,
-            p.totalBufferedDuration
+            p.totalBufferedDuration,
+            p.playbackParameters.speed
         )
     }
 
@@ -126,7 +127,7 @@ internal class Media3PlaybackOutput(
                 "state=${p?.playbackState ?: 0} pwr=${p?.playWhenReady} suppression=${p?.suppressionReason ?: -1} " +
                 "loading=${p?.isLoading} positionMs=${p?.positionMs ?: -1} bufferedPositionMs=${p?.bufferedPositionMs ?: -1} " +
                 "bufferedDurationMs=${p?.bufferedDurationMs ?: -1} foreground=${mutableForeground.value} " +
-                "pcm=$syncPcmOutput rate=${mutablePlayer.value?.playbackParameters?.speed ?: 1f} $fields"
+                "pcm=$syncPcmOutput nativeRate=${p?.playbackRate ?: 1f} exposedRate=${mutablePlayer.value?.playbackParameters?.speed ?: 1f} $fields"
         )
     }
     private var loadDiagnostics: PlaybackLoadDiagnostics? = null
@@ -441,7 +442,10 @@ internal class Media3PlaybackOutput(
         var initialTargetMs = positionMs
         listener = object : Player.Listener {
             override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
-                if (activePlayer === next) viewingSpeed.observed(playbackParameters, next.playbackParameters)
+                if (activePlayer === next) {
+                    traceNative("parameters", "reportedRate=${playbackParameters.speed}")
+                    viewingSpeed.observed(playbackParameters, next.playbackParameters)
+                }
             }
 
             override fun onRenderedFirstFrame() {

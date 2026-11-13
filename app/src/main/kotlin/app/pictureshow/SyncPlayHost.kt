@@ -72,7 +72,8 @@ internal data class SyncNativeRendererState(
     val isLoading: Boolean,
     val positionMs: Long,
     val bufferedPositionMs: Long,
-    val bufferedDurationMs: Long
+    val bufferedDurationMs: Long,
+    val playbackRate: Float = 1f
 )
 
 internal data class SyncRendererState(
@@ -1193,7 +1194,8 @@ internal class SyncPlayHost(
             "pending=${timeline != null && !timelineApplied} intendedPlaying=$timelinePlaying applied=$timelineApplied " +
             "timelineId=${traceToken(timeline)} whenMs=${timeline?.whenMs ?: -1} lastSeekMs=${drift.lastSeekMonotonicMillis ?: -1} " +
             "native=${n != null} nativeGeneration=${n?.generation ?: -1} nativeState=${n?.playbackState ?: -1} " +
-            "nativePwr=${n?.playWhenReady} nativeSuppression=${n?.suppressionReason ?: -1} nativeLoading=${n?.isLoading} " +
+            "nativeRate=${n?.playbackRate ?: 1f} nativePwr=${n?.playWhenReady} " +
+            "nativeSuppression=${n?.suppressionReason ?: -1} nativeLoading=${n?.isLoading} " +
             "nativePositionMs=${n?.positionMs ?: -1} nativeBufferedPositionMs=${n?.bufferedPositionMs ?: -1} " +
             "nativeBufferedDurationMs=${n?.bufferedDurationMs ?: -1}"
     }
