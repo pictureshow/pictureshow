@@ -83,7 +83,7 @@ class SyncPlayTvDesignTest {
             )
         }
         compose.onNodeWithTag("sync:join:g").assertIsFocused()
-        compose.runOnIdle { state = state.copy(groupId = "g", groupName = "Film night", phase = "Paused") }
+        compose.runOnIdle { state = state.copy(groupId = "g", groupName = "Film night", phase = "Paused", queue = listOf(SyncPlayQueueRow("e", "Film", true))) }
         compose.onNodeWithTag("sync:play").assertIsFocused()
         compose.runOnIdle { state = state.copy(groupId = null, groupName = null, phase = "Idle", groups = emptyList()) }
         compose.onNodeWithTag("sync:name").assertIsFocused()
