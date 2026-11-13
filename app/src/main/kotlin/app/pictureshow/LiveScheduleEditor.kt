@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ internal fun LiveScheduleEditor(
     var validationError by remember(original) { mutableStateOf<String?>(null) }
     val merged = JsonObject(original.fields + edits)
     val enabled = !confirmed && !busy
+    val hasChanges = liveScheduleHasChanges(original, edits)
     val firstPadding = listOf("PrePaddingSeconds", "PostPaddingSeconds").firstOrNull { it in original.fields }
     val textInset = if (tv) Modifier.padding(start = 16.dp) else Modifier
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -64,18 +66,22 @@ internal fun LiveScheduleEditor(
         )
         if (confirmed) {
             LiveText(
-                "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
-                    "Completed recordings are retained if you cancel the schedule.",
+                if (existing) {
+                    "Save changes to this ${if (series) "series rule" else "recording schedule"}. Completed recordings are kept."
+                } else {
+                    "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
+                        "Completed recordings are retained if you cancel the schedule."
+                },
                 tv,
                 textInset
             )
             validationError?.let { LiveText(it, tv, textInset, warning = true) }
             FlowRow(textInset, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 LiveAction(
-                    if (existing) "Confirm save changes" else "Confirm recording",
+                    if (existing) "Save changes" else "Confirm recording",
                     tv,
-                    Modifier.liveFocus("editor:confirm", tv),
-                    !busy
+                    Modifier.liveFocus("editor:confirm", tv && (!existing || hasChanges)),
+                    liveScheduleCanConfirm(existing, hasChanges, busy)
                 ) {
                     runCatching { editSchedule(original, JsonObject(edits), series) }
                         .onSuccess {
@@ -88,146 +94,187 @@ internal fun LiveScheduleEditor(
             }
         } else {
             LiveAction(
-                "Review ${if (existing) "changes" else "recording"}",
+                liveScheduleReviewLabel(existing, hasChanges),
                 tv,
                 textInset.liveFocus("editor:review", tv && firstPadding == null, enabled = !busy),
                 enabled = !busy
             ) { confirmed = true }
         }
-        val padding = listOf(0, 1, 2, 5, 10, 15).map { minutes ->
-            JsonPrimitive(minutes * 60) to if (minutes ==
-                0
-            ) {
-                "Off"
-            } else {
-                "$minutes min"
-            }
-        }
-        listOf("PrePaddingSeconds" to "Start early", "PostPaddingSeconds" to "End late").forEach { (key, label) ->
-            if (key in original.fields) {
-                val seconds = merged[key]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-                LiveOption(
-                    label,
-                    if (seconds ==
-                        0
-                    ) {
-                        "Off"
-                    } else if (seconds % 60 == 0) {
-                        "${seconds / 60} min"
-                    } else {
-                        "$seconds seconds"
-                    },
-                    padding,
-                    tv,
-                    enabled,
-                    Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed),
-                    readOnly = confirmed
-                ) { edits = edits + (key to it) }
-            }
-        }
-        if (series) {
-            val boolOptions = listOf(
-                Triple("RecordNewOnly", "Record", listOf(JsonPrimitive(true) to "New episodes", JsonPrimitive(false) to "All episodes")),
-                Triple("RecordAnyChannel", "Channel", listOf(JsonPrimitive(false) to "This channel", JsonPrimitive(true) to "Any channel")),
-                Triple("RecordAnyTime", "Time", listOf(JsonPrimitive(false) to "This time", JsonPrimitive(true) to "Any time")),
-                Triple(
-                    "SkipEpisodesInLibrary",
-                    "Episodes in library",
-                    listOf(
-                        JsonPrimitive(true) to "Skip",
-                        JsonPrimitive(false) to "Record"
-                    )
-                )
-            )
-            boolOptions.forEach { (key, label, choices) ->
-                if (key in original.fields) {
-                    val value = merged[key]?.jsonPrimitive?.booleanOrNull
-                    LiveOption(
-                        label,
-                        choices.firstOrNull {
-                            it.first.booleanOrNull == value
-                        }?.second ?: "Provider setting",
-                        choices,
-                        tv,
-                        enabled,
-                        readOnly = confirmed
-                    ) {
-                        edits =
-                            edits + (key to it)
-                    }
+        Column(
+            Modifier.then(
+                if (!tv && confirmed) {
+                    Modifier.background(
+                        androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
+                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                    ).padding(vertical = 8.dp).testTag("live:review-receipt")
+                } else {
+                    Modifier
+                }
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (!tv && confirmed) 0.dp else 12.dp)
+        ) {
+            val padding = listOf(0, 1, 2, 5, 10, 15).map { minutes ->
+                JsonPrimitive(minutes * 60) to if (minutes ==
+                    0
+                ) {
+                    "Off"
+                } else {
+                    "$minutes min"
                 }
             }
-            if ("KeepUpTo" in original.fields) {
-                val count = merged["KeepUpTo"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-                LiveOption(
-                    "Keep",
-                    if (count ==
-                        0
-                    ) {
-                        "All"
-                    } else {
-                        "Latest $count"
-                    },
-                    listOf(0, 1, 3, 5, 10).map {
-                        JsonPrimitive(it) to if (it ==
+            listOf("PrePaddingSeconds" to "Start early", "PostPaddingSeconds" to "End late").forEach { (key, label) ->
+                if (key in original.fields) {
+                    val seconds = merged[key]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                    LiveOption(
+                        label,
+                        if (seconds ==
+                            0
+                        ) {
+                            "Off"
+                        } else if (seconds % 60 == 0) {
+                            "${seconds / 60} min"
+                        } else {
+                            "$seconds seconds"
+                        },
+                        padding,
+                        tv,
+                        enabled,
+                        Modifier.liveFocus("editor:$key", tv && key == firstPadding && !confirmed),
+                        readOnly = confirmed,
+                        changed = original.fields[key] != merged[key]
+                    ) { edits = edits + (key to it) }
+                }
+            }
+            if (series) {
+                val boolOptions = listOf(
+                    Triple(
+                        "RecordNewOnly",
+                        "Record",
+                        listOf(JsonPrimitive(true) to "New episodes", JsonPrimitive(false) to "All episodes")
+                    ),
+                    Triple(
+                        "RecordAnyChannel",
+                        "Channel",
+                        listOf(
+                            JsonPrimitive(false) to "This channel",
+                            JsonPrimitive(true) to "Any channel"
+                        )
+                    ),
+                    Triple("RecordAnyTime", "Time", listOf(JsonPrimitive(false) to "This time", JsonPrimitive(true) to "Any time")),
+                    Triple(
+                        "SkipEpisodesInLibrary",
+                        "Episodes in library",
+                        listOf(
+                            JsonPrimitive(true) to "Skip",
+                            JsonPrimitive(false) to "Record"
+                        )
+                    )
+                )
+                boolOptions.forEach { (key, label, choices) ->
+                    if (key in original.fields) {
+                        val value = merged[key]?.jsonPrimitive?.booleanOrNull
+                        LiveOption(
+                            label,
+                            choices.firstOrNull {
+                                it.first.booleanOrNull == value
+                            }?.second ?: "Provider setting",
+                            choices,
+                            tv,
+                            enabled,
+                            readOnly = confirmed,
+                            changed = original.fields[key] != merged[key]
+                        ) {
+                            edits =
+                                edits + (key to it)
+                        }
+                    }
+                }
+                if ("KeepUpTo" in original.fields) {
+                    val count = merged["KeepUpTo"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                    LiveOption(
+                        "Keep",
+                        if (count ==
                             0
                         ) {
                             "All"
                         } else {
-                            "Latest $it"
-                        }
-                    },
-                    tv,
-                    enabled,
-                    readOnly = confirmed
-                ) { edits = edits + ("KeepUpTo" to it) }
-            }
-            if ("KeepUntil" in original.fields) {
-                val current = merged["KeepUntil"]?.jsonPrimitive?.contentOrNull
-                val choices = listOf(JsonPrimitive("UntilDeleted") to "Never", JsonPrimitive("UntilSpaceNeeded") to "When space is needed")
-                val label = when (current) {
-                    "UntilDeleted" -> "Never"
-                    "UntilSpaceNeeded" -> "When space is needed"
-                    "UntilWatched" -> "After watching"
-                    "UntilDate" -> "On the scheduled date"
-                    else -> "Provider setting"
+                            "Latest $count"
+                        },
+                        listOf(0, 1, 3, 5, 10).map {
+                            JsonPrimitive(it) to if (it ==
+                                0
+                            ) {
+                                "All"
+                            } else {
+                                "Latest $it"
+                            }
+                        },
+                        tv,
+                        enabled,
+                        readOnly = confirmed,
+                        changed = original.fields["KeepUpTo"] != merged["KeepUpTo"]
+                    ) { edits = edits + ("KeepUpTo" to it) }
                 }
-                LiveOption("Delete", label, choices, tv, enabled, readOnly = confirmed) { edits = edits + ("KeepUntil" to it) }
-            }
-            if ("Days" in original.fields) {
-                val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
-                if (confirmed) {
-                    LiveOptionSummary("Days", liveRecordingDaysLabel(days), tv)
-                } else {
-                    LiveText("Days", tv, textInset, small = true)
-                    FlowRow(
-                        textInset,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        liveRecordingWeekdays.forEach { day ->
-                            LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled = enabled) {
-                                val next = if (day in days) days - day else days + day
-                                edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
+                if ("KeepUntil" in original.fields) {
+                    val current = merged["KeepUntil"]?.jsonPrimitive?.contentOrNull
+                    val choices = listOf(
+                        JsonPrimitive("UntilDeleted") to "Never",
+                        JsonPrimitive("UntilSpaceNeeded") to "When space is needed"
+                    )
+                    val label = when (current) {
+                        "UntilDeleted" -> "Never"
+                        "UntilSpaceNeeded" -> "When space is needed"
+                        "UntilWatched" -> "After watching"
+                        "UntilDate" -> "On the scheduled date"
+                        else -> "Provider setting"
+                    }
+                    LiveOption(
+                        "Delete",
+                        label,
+                        choices,
+                        tv,
+                        enabled,
+                        readOnly = confirmed,
+                        changed =
+                        original.fields["KeepUntil"] != merged["KeepUntil"]
+                    ) { edits = edits + ("KeepUntil" to it) }
+                }
+                if ("Days" in original.fields) {
+                    val days = (merged["Days"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet().orEmpty()
+                    if (confirmed) {
+                        LiveOptionSummary("Days", liveRecordingDaysLabel(days), tv, original.fields["Days"] != merged["Days"])
+                    } else {
+                        LiveText("Days", tv, textInset, small = true)
+                        FlowRow(
+                            textInset,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            liveRecordingWeekdays.forEach { day ->
+                                LiveChip("$day: ${if (day in days) "On" else "Off"}", day in days, tv, enabled = enabled) {
+                                    val next = if (day in days) days - day else days + day
+                                    edits = edits + ("Days" to JsonArray(next.map(::JsonPrimitive)))
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        if ("Priority" in original.fields) {
-            if (!confirmed) LiveOptionsDisclosure(more, tv, enabled) { more = !more }
-            if (more || confirmed) {
-                LiveOption(
-                    "Priority",
-                    liveRecordingPriorityLabel(merged["Priority"]?.jsonPrimitive?.contentOrNull),
-                    (-2..2).map { JsonPrimitive(it) to liveRecordingPriorityLabel(it.toString()) },
-                    tv,
-                    enabled,
-                    readOnly = confirmed
-                ) {
-                    edits =
-                        edits + ("Priority" to it)
+            if ("Priority" in original.fields) {
+                if (!confirmed) LiveOptionsDisclosure(more, tv, enabled) { more = !more }
+                if (more || confirmed) {
+                    LiveOption(
+                        "Priority",
+                        liveRecordingPriorityLabel(merged["Priority"]?.jsonPrimitive?.contentOrNull),
+                        (-2..2).map { JsonPrimitive(it) to liveRecordingPriorityLabel(it.toString()) },
+                        tv,
+                        enabled,
+                        readOnly = confirmed,
+                        changed = original.fields["Priority"] != merged["Priority"]
+                    ) {
+                        edits =
+                            edits + ("Priority" to it)
+                    }
                 }
             }
         }
@@ -244,11 +291,12 @@ private fun LiveOption(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
+    changed: Boolean = false,
     onSelect: (JsonPrimitive) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
     if (readOnly) {
-        LiveOptionSummary(title, value, tv)
+        LiveOptionSummary(title, value, tv, changed)
     } else if (tv) {
         androidx.tv.material3.ListItem(
             selected = false,
@@ -261,7 +309,16 @@ private fun LiveOption(
             colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         )
     } else {
-        BoxOption(modifier) { TouchValueRow(title, value, modifier = Modifier, enabled = enabled) { open = true } }
+        BoxOption(modifier) {
+            TouchValueRow(title, value, modifier = Modifier, enabled = enabled, trailing = {
+                androidx.compose.material3.Icon(
+                    touchActionIcon("chevron-right"),
+                    null,
+                    Modifier.size(20.dp),
+                    tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }) { open = true }
+        }
     }
     if (open) {
         LiveMenu(
@@ -273,7 +330,8 @@ private fun LiveOption(
                     open = false
                     onSelect(key)
                 }
-            }
+            },
+            selectedIndex = choices.indexOfFirst { it.second == value }
         )
     }
 }
@@ -298,7 +356,7 @@ internal fun liveRecordingPriorityLabel(value: String?): String = when (value) {
 }
 
 @Composable
-private fun LiveOptionSummary(title: String, value: String, tv: Boolean) {
+private fun LiveOptionSummary(title: String, value: String, tv: Boolean, changed: Boolean = false) {
     val modifier = Modifier.testTag("live:summary:$title").semantics(mergeDescendants = true) {}
     if (tv) {
         Row(
@@ -310,7 +368,7 @@ private fun LiveOptionSummary(title: String, value: String, tv: Boolean) {
             LiveText(value, true)
         }
     } else {
-        TouchValueSummary(title, value, modifier)
+        TouchValueSummary(title, value, modifier, changed)
     }
 }
 
@@ -354,3 +412,16 @@ private fun LiveOptionsDisclosure(expanded: Boolean, tv: Boolean, enabled: Boole
         }
     }
 }
+
+internal fun liveScheduleHasChanges(original: LiveSchedule, edits: Map<String, JsonElement>): Boolean =
+    edits.any { (key, value) -> original.fields[key] != value }
+
+internal fun liveScheduleReviewLabel(existing: Boolean, changed: Boolean): String = if (!existing) {
+    "Review recording"
+} else if (changed) {
+    "Review changes"
+} else {
+    "Review schedule"
+}
+
+internal fun liveScheduleCanConfirm(existing: Boolean, changed: Boolean, busy: Boolean): Boolean = !busy && (!existing || changed)

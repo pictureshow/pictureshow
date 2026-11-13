@@ -199,11 +199,22 @@ internal fun TouchValueRow(
     }
 }
 
-/** Read-only values retain the same keyline and text colour as editable values. */
+/** A recording receipt aligns labels and values horizontally, distinct from editable stacked rows. */
 @Composable
-internal fun TouchValueSummary(title: String, value: String, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp)) {
-        TouchRowText(title, value, true)
+internal fun TouchValueSummary(title: String, value: String, modifier: Modifier = Modifier, changed: Boolean = false) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            value,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            color = if (changed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

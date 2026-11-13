@@ -2925,6 +2925,174 @@
         "Measured buffer",
         "Live edge unavailable"
       ]
+    },
+    {
+      "id": "schedule-effective-changes-empty",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {}
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-effective-changes-same",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {
+          "PrePaddingSeconds": 60
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-effective-changes-different",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {
+          "PrePaddingSeconds": 300
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-effective-changes-mixed",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60,
+          "Priority": 0
+        },
+        "edits": {
+          "PrePaddingSeconds": 60,
+          "Priority": 1
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-review-label-false-false",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": false,
+        "changed": false
+      },
+      "expected": "Review recording"
+    },
+    {
+      "id": "schedule-confirm-guard-false-false-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-false-false-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-false-true",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": false,
+        "changed": true
+      },
+      "expected": "Review recording"
+    },
+    {
+      "id": "schedule-confirm-guard-false-true-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": true,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-false-true-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": true,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-true-false",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": true,
+        "changed": false
+      },
+      "expected": "Review schedule"
+    },
+    {
+      "id": "schedule-confirm-guard-true-false-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": false,
+        "busy": false
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-confirm-guard-true-false-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": false,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-true-true",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": true,
+        "changed": true
+      },
+      "expected": "Review changes"
+    },
+    {
+      "id": "schedule-confirm-guard-true-true-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-true-true-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": true
+      },
+      "expected": false
     }
   ]
 }

@@ -55,8 +55,9 @@ internal fun LazyListScope.liveRecordingShelves(
     state.recordings.groupBy { it.seriesName?.takeIf(String::isNotBlank) ?: "Recordings" }.forEach { (group, recordings) ->
         item("recording-shelf:$group") {
             Column(
-                Modifier.onGloballyPositioned { focus?.onShelfPositioned(group, it) }.testTag("live:recording-shelf:$group"),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                Modifier.onGloballyPositioned { focus?.onShelfPositioned(group, it) }
+                    .padding(bottom = if (tv) 0.dp else 12.dp).testTag("live:recording-shelf:$group"),
+                verticalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 8.dp)
             ) {
                 Box(Modifier.onSizeChanged { focus?.onHeadingSize(group, it.height) }.testTag("live:recording-heading:$group")) {
                     LiveListText(group, tv, heading = true)
@@ -64,7 +65,7 @@ internal fun LazyListScope.liveRecordingShelves(
                 val row: @Composable () -> Unit = {
                     // Native card scaling stays within the shelf, and horizontal scrolling keeps the platform policy.
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = if (tv) 20.dp else 0.dp),
                         horizontalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         itemsIndexed(recordings, key = { _, item -> item.id }) { index, item ->
@@ -151,7 +152,7 @@ private fun LiveRecordingCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.weight(1f)) { if (label != null) LiveStatus(label, false, status) }
-                    if (canDelete) LiveIcon("more", "Recording options for ${liveRecordingTitle(item)}", false, onClick = onOptions)
+                    if (canDelete) LiveTouchRecordingMenu(item.id, liveRecordingTitle(item), onOptions)
                 }
             }
         }

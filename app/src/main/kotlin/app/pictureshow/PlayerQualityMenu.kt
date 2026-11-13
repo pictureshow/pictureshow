@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -68,25 +70,45 @@ internal fun PlayerQualityMenu(
                 ) {
                     Column(
                         Modifier.fillMaxWidth().heightIn(max = 640.dp)
-                            .padding(horizontal = 24.dp, vertical = if (compact) 12.dp else 24.dp)
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                top = if (compact) 20.dp else 24.dp,
+                                bottom = if (compact) 12.dp else 24.dp
+                            )
                     ) {
+                        val scroll = rememberScrollState()
                         Text(
                             "Quality",
                             Modifier.semantics { heading() }.padding(bottom = if (compact) 8.dp else 12.dp),
                             style = MaterialTheme.typography.headlineSmall
                         )
+                        if (scroll.canScrollBackward) {
+                            HorizontalDivider(
+                                Modifier.testTag("player:quality-more-above").clearAndSetSemantics {},
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
                         Box(Modifier.weight(1f, fill = false)) {
                             Column(
-                                Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                                Modifier.fillMaxWidth().verticalScroll(scroll)
                                     .selectableGroup().testTag("player:quality-menu")
-                                    .semantics { if (compact) stateDescription = "Scroll for more options" }
+                                    .semantics {
+                                        if (scroll.canScrollBackward ||
+                                            scroll.canScrollForward
+                                        ) {
+                                            stateDescription = "Scroll for more options"
+                                        }
+                                    }
                             ) {
                                 PlaybackQualityPresentation.choices.forEach { choice ->
                                     val note = supporting(choice)
                                     TouchRadioRow(
                                         selected = value == choice,
                                         modifier = Modifier.heightIn(min = 56.dp)
-                                            .testTag("player:quality-choice:${choice ?: "auto"}").padding(vertical = 4.dp),
+                                            .testTag(
+                                                "player:quality-choice:${choice ?: "auto"}"
+                                            ).padding(vertical = if (compact) 0.dp else 4.dp),
                                         onClick = {
                                             onSelect(choice)
                                             onClose()
@@ -124,6 +146,12 @@ internal fun PlayerQualityMenu(
                                     }
                                 }
                             }
+                        }
+                        if (scroll.canScrollForward) {
+                            HorizontalDivider(
+                                Modifier.testTag("player:quality-more-below").clearAndSetSemantics {},
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }

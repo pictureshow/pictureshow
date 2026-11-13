@@ -109,16 +109,16 @@ internal fun LiveGuideWarning(message: String, tv: Boolean, refreshEnabled: Bool
     val colors = androidx.compose.material3.MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp)
-            .background(colors.errorContainer, RoundedCornerShape(8.dp)).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+            .background(colors.tertiaryContainer, RoundedCornerShape(8.dp)).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
             .testTag("live:guide-warning"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        androidx.compose.material3.Icon(touchActionIcon("info"), null, tint = colors.onErrorContainer)
+        androidx.compose.material3.Icon(liveGuideWarningIcon(), null, tint = colors.onTertiaryContainer)
         androidx.compose.material3.Text(
             message,
             Modifier.weight(1f),
-            color = colors.onErrorContainer,
+            color = colors.onTertiaryContainer,
             style = androidx.compose.material3.MaterialTheme.typography.bodySmall
         )
         if (!tv) {
@@ -127,8 +127,10 @@ internal fun LiveGuideWarning(message: String, tv: Boolean, refreshEnabled: Bool
                 enabled = refreshEnabled,
                 modifier = Modifier.semantics { contentDescription = "Refresh" }
             ) {
-                androidx.compose.material3.Text("Refresh", color = colors.onErrorContainer)
+                androidx.compose.material3.Text("Refresh", color = colors.onTertiaryContainer)
             }
         }
     }
 }
+
+internal fun liveGuideWarningIcon(): androidx.compose.ui.graphics.vector.ImageVector = liveIcon("warning")

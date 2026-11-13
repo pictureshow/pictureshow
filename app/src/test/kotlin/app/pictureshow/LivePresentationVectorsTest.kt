@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(224, cases.size)
+        assertEquals(240, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -435,6 +435,28 @@ class LivePresentationVectorsTest {
                         id
                     )
                 }
+                "schedule-effective-changes" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveScheduleHasChanges(
+                        app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
+                        c.getValue("edits").jsonObject
+                    ),
+                    id
+                )
+                "schedule-review-label" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScheduleReviewLabel(c.getValue("existing").jsonPrimitive.boolean, c.getValue("changed").jsonPrimitive.boolean),
+                    id
+                )
+                "schedule-confirm-guard" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveScheduleCanConfirm(
+                        c.getValue("existing").jsonPrimitive.boolean,
+                        c.getValue("changed").jsonPrimitive.boolean,
+                        c.getValue("busy").jsonPrimitive.boolean
+                    ),
+                    id
+                )
                 "program-recording-label" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveProgramRecordingLabel(value("status")),

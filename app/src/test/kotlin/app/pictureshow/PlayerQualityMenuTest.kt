@@ -226,6 +226,12 @@ class PlayerQualityMenuTest {
             supportFullyVisible,
             "The full Auto limit and reduction explanation must be visible before scrolling: $supportBounds / $viewport"
         )
+        compose.onNodeWithTag("player:quality-more-below", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-more-above", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("player:quality-choice:4").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-menu").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10_000f) }
+        compose.onNodeWithTag("player:quality-more-above", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-more-below", useUnmergedTree = true).assertDoesNotExist()
         val requested = input.getValue("selectMbps").jsonPrimitive.int
         compose.onNodeWithTag("player:quality-choice:$requested").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {

@@ -81,7 +81,7 @@ class TouchLivePositionReadTest {
             assertEquals("Live playback status", description.contentDescription?.toString())
             val range = requireNotNull(position.rangeInfo)
             assertEquals(0f, range.min)
-            assertEquals(262_000f, range.max)
+            assertEquals(252_000f, range.max, "Native range ends at the measured live target, excluding the later duration tail")
             assertEquals(201_000f, range.current)
             assertTrue(
                 provider.performAction(

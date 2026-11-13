@@ -672,7 +672,7 @@ internal fun LiveTvScreen(
                                     now,
                                     ::focused,
                                     onRecording,
-                                    onOptions = { recordingMenu = it },
+                                    onOptions = { if (tv) recordingMenu = it else deleteRecording = it },
                                     focus = recordingFocus.takeIf { tv }
                                 )
                             }

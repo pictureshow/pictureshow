@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -139,11 +140,15 @@ internal fun LiveChannelRow(
     } else {
         androidx.compose.material3.ListItem(
             headlineContent = { LiveText(channel.name, false, maxLines = 1) },
-            modifier = modifier.fillMaxWidth().clickable(enabled = tuneEnabled, onClick = onTune),
+            modifier = modifier.fillMaxWidth().alpha(if (tuneEnabled) 1f else .38f).clickable(enabled = tuneEnabled, onClick = onTune),
             leadingContent = { LiveChannelMark(channel, account, false) },
             supportingContent = support,
             trailingContent = if (canFavorite) {
-                { LiveFavorite(channel.userData.isFavorite, onFavorite, favoriteEnabled) }
+                {
+                    Box(Modifier.alpha(if (tuneEnabled && !favoriteEnabled) .38f else 1f)) {
+                        LiveFavorite(channel.userData.isFavorite, onFavorite, favoriteEnabled)
+                    }
+                }
             } else {
                 null
             },
@@ -293,8 +298,13 @@ internal fun LiveMenu(
     tv: Boolean,
     onDismiss: () -> Unit,
     actions: List<Pair<String, () -> Unit>>,
-    destructiveLabels: Set<String> = emptySet()
+    destructiveLabels: Set<String> = emptySet(),
+    selectedIndex: Int? = null
 ) {
+    if (!tv) {
+        LiveTouchChoiceMenu(title, onDismiss, actions, destructiveLabels, selectedIndex)
+        return
+    }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.heightIn(max = if (tv) 460.dp else 640.dp).clip(RoundedCornerShape(12.dp)).background(LiveBackground)
@@ -304,68 +314,41 @@ internal fun LiveMenu(
             LiveText(title, tv, heading = true)
             actions.forEachIndexed { index, action ->
                 val destructive = action.first in destructiveLabels
-                if (tv) {
-                    androidx.tv.material3.ListItem(
-                        selected = false,
-                        onClick = action.second,
-                        headlineContent = {
-                            androidx.tv.material3.Text(
-                                action.first,
-                                color = if (destructive) {
-                                    androidx.tv.material3.MaterialTheme.colorScheme.error
-                                } else {
-                                    androidx.tv.material3.LocalContentColor.current
-                                }
-                            )
-                        },
-                        leadingContent = if (destructive) {
-                            {
-                                androidx.tv.material3.Icon(
-                                    liveIcon("trash"),
-                                    null,
-                                    tint = androidx.tv.material3.MaterialTheme.colorScheme.error
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier.fillMaxWidth().liveFocus("menu:$index", index == 0),
-                        colors = androidx.tv.material3.ListItemDefaults.colors(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            focusedContainerColor = if (destructive) {
-                                androidx.tv.material3.MaterialTheme.colorScheme.errorContainer
+                androidx.tv.material3.ListItem(
+                    selected = false,
+                    onClick = action.second,
+                    headlineContent = {
+                        androidx.tv.material3.Text(
+                            action.first,
+                            color = if (destructive) {
+                                androidx.tv.material3.MaterialTheme.colorScheme.error
                             } else {
-                                androidx.tv.material3.MaterialTheme.colorScheme.inverseSurface
+                                androidx.tv.material3.LocalContentColor.current
                             }
-                        ),
-                        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
-                    )
-                } else {
-                    androidx.compose.material3.ListItem(
-                        headlineContent = {
-                            androidx.compose.material3.Text(
-                                action.first,
-                                color = if (destructive) {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.error
-                                } else {
-                                    androidx.compose.material3.LocalContentColor.current
-                                }
+                        )
+                    },
+                    leadingContent = if (destructive) {
+                        {
+                            androidx.tv.material3.Icon(
+                                liveIcon("trash"),
+                                null,
+                                tint = androidx.tv.material3.MaterialTheme.colorScheme.error
                             )
-                        },
-                        leadingContent = if (destructive) {
-                            {
-                                androidx.compose.material3.Icon(
-                                    liveIcon("trash"),
-                                    null,
-                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.error
-                                )
-                            }
+                        }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.fillMaxWidth().liveFocus("menu:$index", index == 0),
+                    colors = androidx.tv.material3.ListItemDefaults.colors(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedContainerColor = if (destructive) {
+                            androidx.tv.material3.MaterialTheme.colorScheme.errorContainer
                         } else {
-                            null
-                        },
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = action.second)
-                    )
-                }
+                            androidx.tv.material3.MaterialTheme.colorScheme.inverseSurface
+                        }
+                    ),
+                    scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
+                )
             }
             LiveQuietAction("Close", tv, onClick = onDismiss)
         }
