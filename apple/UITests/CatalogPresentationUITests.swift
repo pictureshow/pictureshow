@@ -3,6 +3,9 @@
 import XCTest
 import Network
 import UIKit
+#if os(tvOS)
+import Vision
+#endif
 
 /// Run this finite native flow on an owned fresh clone. All catalog data is
 /// synthetic and served over ordinary Jellyfin HTTP requests on loopback.
@@ -690,11 +693,42 @@ final class CatalogPresentationUITests: XCTestCase {
         let scaleY = CGFloat(source.height) / app.frame.height
         let frame: CGRect
         if let text {
-            let label = element.staticTexts.matching(NSPredicate(format: "label == %@", text)).firstMatch
-            XCTAssertTrue(label.exists, "Measure the actual text glyph bounds independently from its checkmark/icon", file: file, line: line)
-            guard label.exists else { return }
-            frame = label.frame
-            XCTAssertTrue(element.frame.contains(frame), "The measured text belongs to this control", file: file, line: line)
+            // SwiftUI can omit child Text nodes or give one the whole button's
+            // frame. Recognize the expected words inside this button's pixels
+            // so an icon/checkmark cannot conceal low-contrast label ink.
+            let control = CGRect(x: (element.frame.minX - app.frame.minX) * scaleX,
+                                 y: (element.frame.minY - app.frame.minY) * scaleY,
+                                 width: element.frame.width * scaleX, height: element.frame.height * scaleY).integral
+            guard let buttonPixels = source.cropping(to: control) else {
+                XCTFail("No visible control pixels: \(style)", file: file, line: line); return
+            }
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = ["en-US"]
+            request.usesLanguageCorrection = false
+            do { try VNImageRequestHandler(cgImage: buttonPixels, options: [:]).perform([request]) }
+            catch { XCTFail("Could not locate actual label glyphs: \(error)", file: file, line: line); return }
+            let matches: [CGRect] = (request.results ?? []).compactMap { observation in
+                for candidate in observation.topCandidates(3) {
+                    if let range = candidate.string.range(of: text, options: .caseInsensitive),
+                       let box = try? candidate.boundingBox(for: range) { return box.boundingBox }
+                }
+                return nil
+            }
+            XCTAssertEqual(matches.count, 1, "Locate exactly the expected text independently from its icon/checkmark: \(text)", file: file, line: line)
+            guard matches.count == 1, let glyphs = matches.first else { return }
+            // Vision uses a bottom-left origin; CGImage crops use top-left.
+            let local = CGRect(x: glyphs.minX * CGFloat(buttonPixels.width),
+                               y: (1 - glyphs.maxY) * CGFloat(buttonPixels.height),
+                               width: glyphs.width * CGFloat(buttonPixels.width),
+                               height: glyphs.height * CGFloat(buttonPixels.height)).insetBy(dx: -1, dy: -1).integral
+            let glyphPixels = local.intersection(CGRect(x: 0, y: 0, width: buttonPixels.width, height: buttonPixels.height))
+            XCTAssertGreaterThan(glyphPixels.width, 0, file: file, line: line)
+            XCTAssertGreaterThan(glyphPixels.height, 0, file: file, line: line)
+            frame = CGRect(x: app.frame.minX + (control.minX + glyphPixels.minX) / scaleX,
+                           y: app.frame.minY + (control.minY + glyphPixels.minY) / scaleY,
+                           width: glyphPixels.width / scaleX, height: glyphPixels.height / scaleY)
+            print("LEG132_PIXEL_TEXT_ROI style=\(style) text=\(text) control=\(control) glyphPixels=\(glyphPixels)")
         } else {
             frame = element.frame.insetBy(dx: element.frame.width * 0.12, dy: element.frame.height * 0.27)
         }

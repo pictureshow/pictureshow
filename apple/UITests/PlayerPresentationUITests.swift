@@ -617,7 +617,7 @@ final class PlayerPresentationUITests: XCTestCase {
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
         XCTAssertTrue(waitForRemoteUI(timeout: 5) {
-            trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
+            self.trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
         }, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
         XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
         XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
