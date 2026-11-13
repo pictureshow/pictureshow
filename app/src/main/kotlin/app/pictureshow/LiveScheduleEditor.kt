@@ -90,12 +90,7 @@ internal fun LiveScheduleEditor(
             )
             if (confirmed) {
                 LiveText(
-                    if (existing) {
-                        "Save changes to this ${if (series) "series rule" else "recording schedule"}. Completed recordings are kept."
-                    } else {
-                        "${if (series) "Record the series" else "Record this broadcast"}: ${original.name}. " +
-                            "Completed recordings are retained if you cancel the schedule."
-                    },
+                    liveScheduleReviewSummary(LiveSchedule(merged), series, existing, time),
                     tv,
                     textInset
                 )
@@ -512,4 +507,26 @@ internal fun liveScheduleCanConfirm(existing: Boolean, changed: Boolean, busy: B
 internal fun liveScheduleFieldChanged(original: LiveSchedule, key: String, value: JsonElement?): Boolean {
     val before = original.fields[key]
     return if (key == "Days" && before is JsonArray && value is JsonArray) before.toSet() != value.toSet() else before != value
+}
+
+/** Review describes the selected options without claiming an omitted server default. */
+internal fun liveScheduleReviewSummary(schedule: LiveSchedule, series: Boolean, existing: Boolean, time: LiveTime): String {
+    if (existing) return "Applies these options to this ${if (series) "series rule" else "recording schedule"}."
+    if (!series) {
+        return "Records ${schedule.name} on ${schedule.channelName ?: "this channel"}, ${time.range(
+            schedule.startDate,
+            schedule.endDate
+        )}."
+    }
+    val episodes = when ((schedule.fields["RecordNewOnly"] as? JsonPrimitive)?.booleanOrNull) {
+        true -> "new episodes"
+        false -> "all episodes"
+        null -> "episodes"
+    }
+    val channels = when ((schedule.fields["RecordAnyChannel"] as? JsonPrimitive)?.booleanOrNull) {
+        true -> " on any channel"
+        false -> " on this channel"
+        null -> " using the options below"
+    }
+    return "Records $episodes$channels. Recordings you already have stay if you cancel."
 }

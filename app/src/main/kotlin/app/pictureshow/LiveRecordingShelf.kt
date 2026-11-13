@@ -51,7 +51,6 @@ internal fun LazyListScope.liveRecordingShelves(
     onOptions: (MediaItem) -> Unit,
     focus: LiveRecordingFocus? = null
 ) {
-    if (!state.loading && state.recordings.isEmpty()) item { LiveListText("No recordings available.", tv) }
     state.recordings.groupBy { it.seriesName?.takeIf(String::isNotBlank) ?: "Recordings" }.forEach { (group, recordings) ->
         item("recording-shelf:$group") {
             Column(

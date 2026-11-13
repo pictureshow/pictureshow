@@ -42,7 +42,6 @@ internal fun LiveProgramDetail(
     val time = liveTime()
     val channel = state.channels.firstOrNull { it.id == program.channelId }
     val current = canTune(program, now)
-    val ended = liveProgramEnded(program.endDate, now)
     val creationAvailable = liveProgramCreationAvailable(program.endDate, now)
     val timer = state.timers.firstOrNull { it.programId == program.id || it.id == program.timerId }
     val seriesRule = state.series.firstOrNull { it.id == program.seriesTimerId && it.id.isNotBlank() }
@@ -63,13 +62,15 @@ internal fun LiveProgramDetail(
     val information: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             LiveText(program.name, tv, heading = true)
-            liveProgramMetadataLines(
-                channel?.let { "Ch ${it.number.orEmpty()} ${it.name}" },
-                time.range(program.startDate, program.endDate),
-                program.seasonNumber?.let { season -> program.episodeNumber?.let { "S$season E$it" } },
-                program.episodeTitle,
-                tv
-            ).forEach { line -> LiveText(line, tv, small = true) }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                liveProgramMetadataLines(
+                    channel?.let { "Ch ${it.number.orEmpty()} ${it.name}" },
+                    liveProgramTimeLabel(time.range(program.startDate, program.endDate), program.startDate, program.endDate, now),
+                    liveProgramEpisodeLabel(program),
+                    program.episodeTitle,
+                    tv
+                ).forEach { line -> LiveText(line, tv, small = true) }
+            }
             timer?.let { scheduled ->
                 Row(
                     Modifier.testTag("live:program-recording-status"),
@@ -79,11 +80,6 @@ internal fun LiveProgramDetail(
                     if (scheduled.status == "New") LiveRecordingDot()
                     LiveStatus(liveProgramRecordingLabel(scheduled.status), tv, scheduled.status)
                 }
-            }
-            if (ended) {
-                LiveText("Ended at ${time.clock(program.endDate)}", tv, small = true)
-            } else if (!current && liveInstant(program.startDate) > now) {
-                LiveText("Starts at ${time.clock(program.startDate)}", tv, small = true)
             }
             program.overview?.takeIf { it.isNotBlank() }?.let { LiveText(it, tv) }
             LiveProgramActions(
@@ -201,3 +197,24 @@ internal fun liveProgramEnded(endDate: String?, now: Long): Boolean = liveInstan
 
 /** Creating a recording requires a known end still ahead of the current clock. */
 internal fun liveProgramCreationAvailable(endDate: String?, now: Long): Boolean = liveInstant(endDate) > now
+
+/** Match recordings and catalog metadata, including specials and a missing season or episode. */
+internal fun liveProgramEpisodeLabel(program: LiveProgram): String? = if (program.seasonNumber == null && program.episodeNumber == null) {
+    null
+} else {
+    app.pictureshow.core.episodeLabel(
+        MediaItem(program.id, program.name, parentIndexNumber = program.seasonNumber, indexNumber = program.episodeNumber)
+    )
+}
+
+/** Relative state shares the range line, without repeating either clock time. */
+internal fun liveProgramTimeLabel(range: String, startDate: String?, endDate: String?, now: Long): String {
+    val start = liveInstant(startDate)
+    val end = liveInstant(endDate)
+    return when {
+        end != Long.MIN_VALUE && end <= now -> "Ended · $range"
+        start > now && start - now <= 3_600_000 -> "Starts in ${(start - now + 59_999) / 60_000} min · $range"
+        start > now -> "Upcoming · $range"
+        else -> range
+    }
+}

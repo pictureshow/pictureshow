@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
@@ -39,6 +40,8 @@ internal const val LIVE_DISABLED_FOCUS_BORDER_DP = 2
 internal val LiveBackground = Color(0xFF10131C)
 internal val LiveMuted = Color(0xFFC3C9D8)
 internal val LiveAccent = Color(0xFFB8C4FF)
+internal val LiveWarning = Color(0xFFFFCCB8)
+internal val LiveWarningContainer = LiveWarning.copy(alpha = .18f).compositeOver(LiveBackground)
 
 @Composable
 internal fun LiveText(
@@ -180,9 +183,20 @@ internal fun LiveChip(
             }
         }
     } else {
-        androidx.compose.material3.FilterChip(selected, onClick, label = {
-            androidx.compose.material3.Text(label)
-        }, modifier = target, enabled = enabled)
+        androidx.compose.material3.FilterChip(
+            selected,
+            onClick,
+            label = {
+                androidx.compose.material3.Text(label)
+            },
+            modifier = target,
+            enabled = enabled,
+            leadingIcon = if (selected) {
+                { androidx.compose.material3.Icon(liveIcon("check"), null, Modifier.size(18.dp).testTag("live:filter-check")) }
+            } else {
+                null
+            }
+        )
     }
 }
 
@@ -212,6 +226,34 @@ internal fun liveIcon(kind: String): ImageVector {
                     lineTo(if (right) 6f else 18f, 18f)
                     lineTo(if (right) 12f else 12f, 12f)
                     lineTo(if (right) 6f else 18f, 6f)
+                    close()
+                }
+
+                "check" -> {
+                    moveTo(3f, 12f)
+                    lineTo(9f, 18f)
+                    lineTo(21f, 6f)
+                    lineTo(19f, 4f)
+                    lineTo(9f, 14f)
+                    lineTo(5f, 10f)
+                    close()
+                }
+
+                "tv" -> {
+                    moveTo(2f, 4f)
+                    lineTo(22f, 4f)
+                    lineTo(22f, 19f)
+                    lineTo(2f, 19f)
+                    close()
+                    moveTo(4f, 6f)
+                    lineTo(4f, 17f)
+                    lineTo(20f, 17f)
+                    lineTo(20f, 6f)
+                    close()
+                    moveTo(8f, 21f)
+                    lineTo(16f, 21f)
+                    lineTo(16f, 23f)
+                    lineTo(8f, 23f)
                     close()
                 }
 

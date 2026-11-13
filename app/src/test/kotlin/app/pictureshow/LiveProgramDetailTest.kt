@@ -58,7 +58,7 @@ class LiveProgramDetailTest {
 
     @Test fun anEndedAiringRetainsItsActualTimerManagement() {
         render(timer = "t")
-        compose.onNode(hasText("Ended at ", substring = true)).assertIsDisplayed()
+        compose.onNode(hasText("Ended · ", substring = true)).assertIsDisplayed()
         compose.onNodeWithText("Record once…").assertDoesNotExist()
         compose.onNodeWithText("Record series…").assertDoesNotExist()
         compose.onNodeWithText("Cancel recording…").assertIsEnabled().performClick()
@@ -67,7 +67,7 @@ class LiveProgramDetailTest {
 
     @Test fun anEndedAiringRetainsItsActualSeriesRuleManagement() {
         render(series = "s1")
-        compose.onNode(hasText("Ended at ", substring = true)).assertIsDisplayed()
+        compose.onNode(hasText("Ended · ", substring = true)).assertIsDisplayed()
         compose.onNodeWithText("Record once…").assertDoesNotExist()
         compose.onNodeWithText("Record series…").assertDoesNotExist()
         compose.onNodeWithText("Manage series…").assertIsEnabled().performClick()
@@ -76,7 +76,7 @@ class LiveProgramDetailTest {
 
     @Test fun missingProgrammeDatesNeverInventAnEndedTime() {
         render(start = null, end = null)
-        compose.onNode(hasText("Ended at ", substring = true)).assertDoesNotExist()
+        compose.onNode(hasText("Ended · ", substring = true)).assertDoesNotExist()
         compose.onNodeWithText("Record once…").assertDoesNotExist()
         compose.onNodeWithText("Record series…").assertDoesNotExist()
     }
@@ -86,20 +86,20 @@ class LiveProgramDetailTest {
         compose.onNodeWithText("Watch now").assertIsEnabled()
         compose.onNodeWithText("Record once…").assertIsEnabled()
         compose.onNodeWithText("Record series…").assertIsEnabled()
-        compose.onNode(hasText("Ended at ", substring = true)).assertDoesNotExist()
+        compose.onNode(hasText("Ended · ", substring = true)).assertDoesNotExist()
     }
 
     @Test fun futureProgrammeKeepsTheStartExplanationAndRecordingChoices() {
         render(start = "2026-11-13T02:00:00Z", end = "2026-11-13T03:00:00Z")
         compose.onNodeWithText("Watch now").assertDoesNotExist()
-        compose.onNode(hasText("Starts at ", substring = true)).assertIsDisplayed()
+        compose.onNode(hasText("Starts in ", substring = true)).assertIsDisplayed()
         compose.onNodeWithText("Record once…").assertIsEnabled()
         compose.onNodeWithText("Record series…").assertIsEnabled()
-        compose.onNode(hasText("Ended at ", substring = true)).assertDoesNotExist()
+        compose.onNode(hasText("Ended · ", substring = true)).assertDoesNotExist()
     }
 
     private fun assertEndedWithoutCreation() {
-        compose.onNode(hasText("Ended at ", substring = true)).assertIsDisplayed()
+        compose.onNode(hasText("Ended · ", substring = true)).assertIsDisplayed()
         compose.onNodeWithText("Watch now").assertDoesNotExist()
         compose.onNodeWithText("Record once…").assertDoesNotExist()
         compose.onNodeWithText("Record series…").assertDoesNotExist()

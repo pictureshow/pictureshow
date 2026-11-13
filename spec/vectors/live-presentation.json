@@ -1306,7 +1306,7 @@
         },
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Scheduled"
+      "expected": "Recording now"
     },
     {
       "id": "live-presentation.schedule-missing",
@@ -1320,7 +1320,7 @@
         },
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Scheduled"
+      "expected": "Other schedules"
     },
     {
       "id": "live-presentation.schedule-invalid",
@@ -1334,7 +1334,7 @@
         },
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Scheduled"
+      "expected": "Other schedules"
     },
     {
       "id": "live-presentation.schedule-invalid-future",
@@ -1348,7 +1348,7 @@
         },
         "now": "2026-11-10T18:00:00Z"
       },
-      "expected": "Scheduled"
+      "expected": "Other schedules"
     },
     {
       "id": "live-presentation.schedule-focus-False",
@@ -1522,7 +1522,7 @@
       "input": {
         "unavailable": false
       },
-      "expected": "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard \u2192 Live TV."
+      "expected": "No guide data"
     },
     {
       "id": "live-presentation.guide-successful-empty",
@@ -4133,6 +4133,549 @@
         "fullHeadingVisible": true,
         "writes": 0
       }
+    },
+    {
+      "id": "round3-recording-now-start",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "recording-now-start",
+          "Status": "New",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "round3-recording-in-progress",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "recording-in-progress",
+          "Status": "InProgress",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "round3-failed-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "failed-current",
+          "Status": "Error",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-cancelled-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "cancelled-current",
+          "Status": "Cancelled",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-unknown-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "unknown-current",
+          "Status": "UnknownStatus",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-ended-error",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "ended-error",
+          "Status": "Error",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:00:00Z"
+        }
+      },
+      "expected": "Past"
+    },
+    {
+      "id": "round3-schedule-section-order",
+      "operation": "schedule-order",
+      "input": {},
+      "expected": [
+        "Recording now",
+        "Upcoming",
+        "Series rules",
+        "Other schedules",
+        "Past"
+      ]
+    },
+    {
+      "id": "round3-denied",
+      "operation": "empty-state",
+      "input": {
+        "access": false,
+        "offline": true,
+        "loading": true,
+        "tab": "Guide",
+        "favorites": true
+      },
+      "expected": [
+        "Live TV isn't available on this account",
+        "Back"
+      ]
+    },
+    {
+      "id": "round3-initial-loading",
+      "operation": "empty-state",
+      "input": {
+        "loading": true
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-no-tuner",
+      "operation": "empty-state",
+      "input": {
+        "tuner": false
+      },
+      "expected": [
+        "No tuner configured",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-no-channels",
+      "operation": "empty-state",
+      "input": {},
+      "expected": [
+        "No channels available",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-no-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "tab": "Guide"
+      },
+      "expected": [
+        "No guide data",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-tune-without-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-empty-favorites",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true
+      },
+      "expected": [
+        "No favourite channels yet",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-search-and-favorites",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true,
+        "search": "missing"
+      },
+      "expected": [
+        "No matching channels",
+        "Clear filters"
+      ]
+    },
+    {
+      "id": "round3-guide-favorites-before-empty-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true,
+        "tab": "Guide"
+      },
+      "expected": [
+        "No favourite channels yet",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-cold-read-error",
+      "operation": "empty-state",
+      "input": {
+        "offline": true
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-guide-read-error-without-programs",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "offline": true,
+        "tab": "Guide"
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-cached-channels",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "offline": true
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-cached-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "programs": 1,
+        "offline": true,
+        "tab": "Guide"
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-empty-recordings",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Recordings"
+      },
+      "expected": [
+        "No recordings yet",
+        "Browse guide"
+      ]
+    },
+    {
+      "id": "round3-empty-schedules",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules"
+      },
+      "expected": [
+        "No scheduled recordings",
+        "Browse guide"
+      ]
+    },
+    {
+      "id": "round3-schedule-permission",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-episode-1-14",
+      "operation": "program-episode",
+      "input": {
+        "season": 1,
+        "episode": 14
+      },
+      "expected": "S1:E14"
+    },
+    {
+      "id": "round3-episode-0-2",
+      "operation": "program-episode",
+      "input": {
+        "season": 0,
+        "episode": 2
+      },
+      "expected": "Special E2"
+    },
+    {
+      "id": "round3-episode-0-None",
+      "operation": "program-episode",
+      "input": {
+        "season": 0,
+        "episode": null
+      },
+      "expected": "Special"
+    },
+    {
+      "id": "round3-episode-3-None",
+      "operation": "program-episode",
+      "input": {
+        "season": 3,
+        "episode": null
+      },
+      "expected": "S3"
+    },
+    {
+      "id": "round3-episode-None-4",
+      "operation": "program-episode",
+      "input": {
+        "season": null,
+        "episode": 4
+      },
+      "expected": "E4"
+    },
+    {
+      "id": "round3-episode-None-None",
+      "operation": "program-episode",
+      "input": {
+        "season": null,
+        "episode": null
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-time-ended",
+      "operation": "program-relative-time",
+      "input": {
+        "start": null,
+        "end": "2026-11-13T12:00:00Z",
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 \u2013 8:07 AM"
+      },
+      "expected": "Ended \u00b7 7:39 \u2013 8:07 AM"
+    },
+    {
+      "id": "round3-time-starts",
+      "operation": "program-relative-time",
+      "input": {
+        "start": "2026-11-13T12:12:00Z",
+        "end": null,
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 \u2013 8:07 AM"
+      },
+      "expected": "Starts in 12 min \u00b7 7:39 \u2013 8:07 AM"
+    },
+    {
+      "id": "round3-time-unknown",
+      "operation": "program-relative-time",
+      "input": {
+        "start": null,
+        "end": null,
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 \u2013 8:07 AM"
+      },
+      "expected": "7:39 \u2013 8:07 AM"
+    },
+    {
+      "id": "round3-touch-live-parent",
+      "operation": "touch-parent",
+      "input": {
+        "route": "live-tv"
+      },
+      "expected": "libraries"
+    },
+    {
+      "id": "round3-transport-code-hidden",
+      "operation": "visible-error",
+      "input": {
+        "message": "Request failed (503)."
+      },
+      "expected": "Couldn't complete this change. Check your connection and try again."
+    },
+    {
+      "id": "round3-validation-retained",
+      "operation": "visible-error",
+      "input": {
+        "message": "Favorites are disabled for this viewer."
+      },
+      "expected": "Favorites are disabled for this viewer."
+    },
+    {
+      "id": "round3-review-once",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "Name": "Blue Hour",
+          "ChannelName": "Aurora Sessions",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:30:00Z"
+        },
+        "series": false,
+        "existing": false
+      },
+      "expected": "Records Blue Hour on Aurora Sessions, 12:00 \u2013 12:30."
+    },
+    {
+      "id": "round3-review-new-channel",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records new episodes on this channel. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-all-any",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": false,
+          "RecordAnyChannel": true
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records all episodes on any channel. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-omitted-defaults",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {},
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records episodes using the options below. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-unknown-defaults",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": {},
+          "RecordAnyChannel": []
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records episodes using the options below. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-existing",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {},
+        "series": false,
+        "existing": true
+      },
+      "expected": "Applies these options to this recording schedule."
+    },
+    {
+      "id": "round3-schedule-permission-before-read-failure",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false,
+        "offline": true
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-schedule-policy-unknown-after-read-failure",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "policyKnown": false,
+        "offline": true
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-reversed-ended-interval",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "bad",
+          "Status": "Cancelled",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T11:58:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-channel-column-phone",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 839,
+        "fontScale": 1.0
+      },
+      "expected": 80
+    },
+    {
+      "id": "round3-channel-column-tablet-boundary",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 840,
+        "fontScale": 1.0
+      },
+      "expected": 200
+    },
+    {
+      "id": "round3-channel-column-tablet-font",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 1280,
+        "fontScale": 1.3
+      },
+      "expected": 260
+    },
+    {
+      "id": "round3-channel-column-tv",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": true,
+        "windowDp": 960,
+        "fontScale": 1.0
+      },
+      "expected": 200
     }
   ]
 }

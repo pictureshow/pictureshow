@@ -50,7 +50,11 @@ internal fun liveInstant(value: String?): Long = runCatching { Instant.parse(val
 @Composable
 internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean, compact: Boolean = false, showNumber: Boolean = true) {
     val art = imageUrl(account.server, channel.mediaItem(), 96)
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(
+        Modifier.testTag("live:channel-mark:${channel.id}"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
         Box(
             Modifier.size(
                 if (compact) {
@@ -127,7 +131,7 @@ internal fun LiveChannelRow(
             selected = false, onClick = onTune, headlineContent = { LiveText(channel.name, true, maxLines = 1) },
             modifier = modifier.fillMaxWidth(),
             enabled = tuneEnabled,
-            leadingContent = { LiveChannelMark(channel, account, true) }, supportingContent = support,
+            leadingContent = { Box(Modifier.padding(end = 8.dp)) { LiveChannelMark(channel, account, true) } }, supportingContent = support,
             trailingContent = { if (channel.userData.isFavorite) LiveText("★", true) },
             onLongClick = if (canFavorite && favoriteEnabled) {
                 { menu = true }
@@ -181,7 +185,11 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
         )
     }
     val badge: @Composable () -> Unit = {
-        LiveStatus(liveScheduleStatus(schedule, seriesRule), tv, schedule.fields["Status"]?.jsonPrimitive?.contentOrNull)
+        if (!seriesRule ||
+            !schedule.string("Status").isNullOrBlank()
+        ) {
+            LiveStatus(liveScheduleStatus(schedule, seriesRule), tv, schedule.fields["Status"]?.jsonPrimitive?.contentOrNull)
+        }
     }
     if (tv) {
         androidx.tv.material3.ListItem(
@@ -357,9 +365,9 @@ internal fun LiveMenu(
 
 /** Missing current coverage is not the same as an absent guide. */
 internal fun liveChannelIdleLabel(hasPrograms: Boolean, unavailable: Boolean = false): String = when {
-    unavailable -> "Guide unavailable"
+    unavailable -> liveGuideEmptyMessage(true)
     hasPrograms -> "Nothing on now"
-    else -> "No guide data"
+    else -> liveGuideEmptyMessage(false)
 }
 
 /** Only a successful empty guide establishes missing guide data; a failed read cannot diagnose server configuration. */

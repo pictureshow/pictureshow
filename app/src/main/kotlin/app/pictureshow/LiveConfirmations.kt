@@ -51,7 +51,12 @@ internal fun LiveRecordingDeleteDialog(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     androidx.compose.material3.Text(body)
-                    error?.let { androidx.compose.material3.Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
+                    error?.let {
+                        androidx.compose.material3.Text(
+                            liveVisibleError(it),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             },
             dismissButton = {
@@ -76,7 +81,9 @@ internal fun LiveRecordingDeleteDialog(
                 androidx.tv.material3.Text("Delete this recording?", style = androidx.tv.material3.MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))
                 androidx.tv.material3.Text(body)
-                error?.let { androidx.tv.material3.Text(it, color = androidx.tv.material3.MaterialTheme.colorScheme.error) }
+                error?.let {
+                    androidx.tv.material3.Text(liveVisibleError(it), color = androidx.tv.material3.MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                     androidx.tv.material3.Button(
@@ -105,29 +112,48 @@ internal fun LiveRecordingDeleteDialog(
 }
 
 @Composable
-internal fun LiveGuideWarning(message: String, tv: Boolean, refreshEnabled: Boolean, onRefresh: () -> Unit) {
+internal fun LiveGuideWarning(
+    message: String,
+    tv: Boolean,
+    refreshEnabled: Boolean,
+    actionLabel: String = "Refresh",
+    onRefresh: () -> Unit
+) {
     val colors = androidx.compose.material3.MaterialTheme.colorScheme
+    val foreground = if (tv) LiveWarning else colors.onTertiaryContainer
+    val container = if (tv) LiveWarningContainer else colors.tertiaryContainer
     Row(
         Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp)
-            .background(colors.tertiaryContainer, RoundedCornerShape(8.dp)).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+            .background(container, RoundedCornerShape(8.dp)).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
             .testTag("live:guide-warning"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        androidx.compose.material3.Icon(liveGuideWarningIcon(), null, tint = colors.onTertiaryContainer)
+        androidx.compose.material3.Icon(liveGuideWarningIcon(), null, tint = foreground)
         androidx.compose.material3.Text(
             message,
             Modifier.weight(1f),
-            color = colors.onTertiaryContainer,
+            color = foreground,
             style = androidx.compose.material3.MaterialTheme.typography.bodySmall
         )
-        if (!tv) {
+        if (tv && actionLabel == "Retry") {
+            LiveAction(
+                actionLabel,
+                true,
+                Modifier.semantics {
+                    contentDescription = actionLabel
+                },
+                enabled = refreshEnabled,
+                primary = false,
+                onClick = onRefresh
+            )
+        } else if (!tv) {
             androidx.compose.material3.TextButton(
                 onRefresh,
                 enabled = refreshEnabled,
-                modifier = Modifier.semantics { contentDescription = "Refresh" }
+                modifier = Modifier.semantics { contentDescription = actionLabel }
             ) {
-                androidx.compose.material3.Text("Refresh", color = colors.onTertiaryContainer)
+                androidx.compose.material3.Text(actionLabel, color = foreground)
             }
         }
     }

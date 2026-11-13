@@ -249,7 +249,8 @@ internal fun LiveTvScreen(
         program != null -> "Program details"
         else -> "Live TV"
     }
-    val guideHeader = tv && !detail && tab in listOf("Channels", "Guide")
+    val accessDenied = state.policy?.access == false
+    val guideHeader = tv && !detail && !accessDenied && tab in listOf("Channels", "Guide")
     val focusedChannel = state.channels.firstOrNull { "c:${it.id}" == returnFocus }
     val preview = if (focusedChannel != null) {
         state.programs.firstOrNull { it.channelId == focusedChannel.id && app.pictureshow.core.livetv.canTune(it, now) }
@@ -264,6 +265,14 @@ internal fun LiveTvScreen(
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
             (search.isBlank() || it.name.contains(search, true) || it.number.orEmpty().contains(search, true))
+    }
+    fun selectTab(next: String) {
+        tab = next
+        returnFocus = null
+        restoreFocus = false
+        nowFocusJob?.cancel()
+        nowFocusPending = false
+        nowFocusTarget = null
     }
     Column(
         Modifier.fillMaxSize().then(
@@ -305,7 +314,7 @@ internal fun LiveTvScreen(
                             LiveText(
                                 "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +
                                     time.range(show.startDate, show.endDate) +
-                                    show.seasonNumber?.let { season -> show.episodeNumber?.let { " · S$season E$it" } }.orEmpty() +
+                                    liveProgramEpisodeLabel(show)?.let { " · $it" }.orEmpty() +
                                     show.episodeTitle?.let { " · $it" }.orEmpty(),
                                 true,
                                 small = true,
@@ -324,13 +333,11 @@ internal fun LiveTvScreen(
                         maxLines = 1
                     )
                 }
-                if (!detail) {
+                if (!detail && !accessDenied) {
                     liveGuideFreshness(state.fetchedAt, state.offline, time)?.let { LiveText(it, true, small = true) }
                     if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", true) { showSearch = !showSearch }
                 }
-                if (!detail ||
-                    state.guideReferenceNotice(now) != null
-                ) {
+                if (!accessDenied && (!detail || state.guideReferenceNotice(now) != null)) {
                     // A reload must not remove the focused header control from traversal.
                     LiveIcon("refresh", "Refresh", true) { refreshGuide(vm.state.value.windowStart) }
                 }
@@ -368,10 +375,11 @@ internal fun LiveTvScreen(
                 },
                 navigationIcon = { LiveIcon("back", "Back", false) { if (detail) closeDetail() else onBack() } },
                 actions = {
-                    if (!detail) {
+                    if (!detail && !accessDenied) {
                         if (tab in listOf("Channels", "Guide")) LiveIcon("search", "Search channels", false) { showSearch = !showSearch }
                     }
                     if (!detail &&
+                        !accessDenied &&
                         state.guideReferenceNotice(now) == null
                     ) {
                         LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
@@ -382,14 +390,6 @@ internal fun LiveTvScreen(
         }
         if (!detail) {
             val tabs = listOf("Channels", "Guide", "Recordings", "Schedules")
-            fun select(next: String) {
-                tab = next
-                returnFocus = null
-                restoreFocus = false
-                nowFocusJob?.cancel()
-                nowFocusPending = false
-                nowFocusTarget = null
-            }
             val navigation: @Composable () -> Unit = {
                 if (tv) {
                     androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
@@ -399,7 +399,7 @@ internal fun LiveTvScreen(
                                 onFocus = {
                                 },
                                 onClick = {
-                                    select(next)
+                                    selectTab(next)
                                 },
                                 modifier = Modifier.height(
                                     (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
@@ -422,7 +422,7 @@ internal fun LiveTvScreen(
                             androidx.compose.material3.Tab(
                                 selected = tab == next,
                                 unselectedContentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                onClick = { select(next) },
+                                onClick = { selectTab(next) },
                                 modifier = Modifier.height(48.dp).testTag("live:tab:$next")
                             ) {
                                 androidx.compose.material3.Text(
@@ -443,7 +443,7 @@ internal fun LiveTvScreen(
                     }
                 }
             }
-            if (showSearch && tab in listOf("Channels", "Guide")) {
+            if (!accessDenied && showSearch && tab in listOf("Channels", "Guide")) {
                 if (tv) {
                     RemoteField("Search channels", search, {
                         search = it
@@ -459,7 +459,7 @@ internal fun LiveTvScreen(
                 }
             }
             val filters: @Composable () -> Unit = {
-                if (tab in listOf("Channels", "Guide")) {
+                if (!accessDenied && tab in listOf("Channels", "Guide")) {
                     Row(
                         Modifier.testTag(
                             "live:filters"
@@ -504,15 +504,68 @@ internal fun LiveTvScreen(
         if (refreshPresentation.headerLoading) {
             androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp).testTag("live:header-loading"))
         }
-        state.error?.let {
-            LiveText(it, tv, Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp), warning = true, small = true)
+        val empty = if (detail) null else liveEmptyPresentation(state, tab, channels.size, favorites, search)
+        if (!accessDenied && !state.offline) {
+            state.error?.let {
+                LiveText(
+                    liveVisibleError(it),
+                    tv,
+                    Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = 4.dp),
+                    warning = true,
+                    small = true
+                )
+            }
         }
         state.notice?.let { LiveText(it, tv, Modifier.padding(8.dp), small = true) }
-        state.guideReferenceNotice(now)?.let { notice ->
-            LiveGuideWarning(notice, tv, !state.loading && !state.writing, vm::refresh)
+        if (!accessDenied && empty == null) {
+            if (state.offline) {
+                val saved = state.fetchedAt?.let { " Showing the guide from ${time.clock(it)}." }.orEmpty()
+                LiveGuideWarning("Couldn't reach the server.$saved", tv, !state.loading && !state.writing, "Retry", vm::refresh)
+            } else {
+                state.guideReferenceNotice(now)?.let { notice ->
+                    LiveGuideWarning(notice, tv, !state.loading && !state.writing, onRefresh = vm::refresh)
+                }
+            }
         }
         val body: @Composable () -> Unit = {
-            if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
+            if (empty != null) {
+                Column(Modifier.fillMaxSize()) {
+                    if (empty.showGuideNavigation) {
+                        Box(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
+                            LiveGuideDateBar(
+                                state.windowStart,
+                                now,
+                                tv,
+                                !state.loading,
+                                viewportAtNow =
+                                state.windowStart == liveGuideWindowStart(now),
+                                onNow = ::resetGuideNow,
+                                onChange = ::refreshGuide
+                            )
+                        }
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        LiveEmptyState(empty, tv) {
+                            returnFocus = null
+                            restoreFocus = false
+                            when (empty.action) {
+                                LiveEmptyAction.Back -> onBack()
+                                LiveEmptyAction.Retry -> vm.refresh()
+                                LiveEmptyAction.Channels -> {
+                                    selectTab("Channels")
+                                    favorites = false
+                                    search = ""
+                                }
+                                LiveEmptyAction.Guide -> selectTab("Guide")
+                                LiveEmptyAction.ClearFilters -> {
+                                    favorites = false
+                                    search = ""
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
                     if (!tv) {
                         LiveGuideDateBar(
@@ -526,7 +579,6 @@ internal fun LiveTvScreen(
                             onChange = ::refreshGuide
                         )
                     }
-                    if (state.programs.isEmpty() && !state.loading) LiveText(liveGuideEmptyMessage(guideUnavailable), tv, small = true)
                     LiveGuide(
                         channels, state.programs, account, tv, state.windowStart, now, guideScroll, guideList,
                         returnFocus, restoreFocus, ::focused,
@@ -690,29 +742,6 @@ internal fun LiveTvScreen(
                             state.policy?.access == false -> Unit
 
                             tab in listOf("Channels", "Guide") -> {
-                                if (!state.loading && state.channels.isEmpty() && state.error == null) {
-                                    item {
-                                        LiveListText(
-                                            if (state.tunerEnabled ==
-                                                false
-                                            ) {
-                                                "No tuner configured. Ask your server administrator to add an M3U or HDHomeRun tuner " +
-                                                    "in Jellyfin Dashboard → Live TV."
-                                            } else {
-                                                "No channels available. Ask your server administrator to configure a tuner " +
-                                                    "in Jellyfin Dashboard → Live TV. " +
-                                                    "No tuner hardware is needed on this device."
-                                            },
-                                            tv
-                                        )
-                                    }
-                                }
-                                if (!state.loading &&
-                                    state.channels.isNotEmpty() &&
-                                    state.programs.isEmpty()
-                                ) {
-                                    item { LiveListText(liveGuideEmptyMessage(guideUnavailable), tv) }
-                                }
                                 itemsIndexed(channels, key = { _, channel -> "channel:${channel.id}" }) { index, channel ->
                                     val key = "c:${channel.id}"
                                     if (tab ==
@@ -760,12 +789,6 @@ internal fun LiveTvScreen(
                                         }
                                     }
                                 }
-                                if (!state.loading &&
-                                    state.channels.isNotEmpty() &&
-                                    channels.isEmpty()
-                                ) {
-                                    item { LiveListText("No matching channels.", tv) }
-                                }
                             }
 
                             tab == "Recordings" -> {
@@ -784,22 +807,7 @@ internal fun LiveTvScreen(
                             }
 
                             tab == "Schedules" -> {
-                                if (state.policy?.manage !=
-                                    true
-                                ) {
-                                    item {
-                                        LiveListText(
-                                            "Recording schedules require Live TV management permission. Ask your server administrator.",
-                                            tv
-                                        )
-                                    }
-                                } else {
-                                    if (!state.loading &&
-                                        state.timers.isEmpty() &&
-                                        state.series.isEmpty()
-                                    ) {
-                                        item { LiveListText("No scheduled recordings.", tv) }
-                                    }
+                                if (state.policy?.manage == true) {
                                     val groups = liveScheduleGroups(state.series, state.timers, now)
                                     val firstSchedule = groups.firstOrNull { it.schedules.isNotEmpty() }?.let { group ->
                                         liveScheduleFocusKey(group.schedules.first(), group.seriesRule)
@@ -874,6 +882,10 @@ internal fun LiveTvScreen(
             tv,
             { recordingMenu = null },
             listOf(
+                "Play" to {
+                    recordingMenu = null
+                    onPlay(item)
+                },
                 "Delete recorded file…" to {
                     recordingMenu = null
                     deleteRecording = item
@@ -884,5 +896,4 @@ internal fun LiveTvScreen(
     }
 }
 
-internal const val NO_LIVE_GUIDE = "No guide data for this time. Channels can still be tuned. " +
-    "An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
+internal const val NO_LIVE_GUIDE = "No guide data"

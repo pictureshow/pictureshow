@@ -17,9 +17,9 @@ class LiveSchedulePresentationTest {
 
     @Test fun endedCancelledRowsArePastAndActiveRowsAreNotCalledUpcoming() {
         assertEquals("Past", liveScheduleGroup(schedule("past", now - 120_000, now, "Cancelled"), now))
-        assertEquals("Scheduled", liveScheduleGroup(schedule("active", now - 60_000, now + 60_000, "InProgress"), now))
+        assertEquals("Recording now", liveScheduleGroup(schedule("active", now - 60_000, now + 60_000, "InProgress"), now))
         assertEquals("Upcoming", liveScheduleGroup(schedule("future", now + 1, now + 60_000), now))
-        assertEquals("Scheduled", liveScheduleGroup(schedule("starts-now", now, now + 60_000), now))
+        assertEquals("Recording now", liveScheduleGroup(schedule("starts-now", now, now + 60_000), now))
     }
 
     @Test fun missingOrMalformedBoundsCannotEstablishAnUpcomingAiring() {
@@ -33,7 +33,7 @@ class LiveSchedulePresentationTest {
                     put("EndDate", "bad")
                 }
             )
-        ).forEach { assertEquals("Scheduled", liveScheduleGroup(it, now)) }
+        ).forEach { assertEquals("Other schedules", liveScheduleGroup(it, now)) }
     }
 
     @Test fun groupingPreservesEveryRowAndRuleIdentityWhileAiringsChangeSection() {
@@ -42,11 +42,11 @@ class LiveSchedulePresentationTest {
         val unknown = schedule("unknown")
         val secondPast = schedule("past2", now - 120_000, now - 2, "Error")
         val groups = liveScheduleGroups(listOf(schedule("future")), listOf(past, upcoming, unknown, secondPast), now)
-        assertEquals(listOf("Series rules", "Scheduled", "Upcoming", "Past"), groups.map { it.title })
+        assertEquals(listOf("Recording now", "Upcoming", "Series rules", "Other schedules", "Past"), groups.map { it.title })
         assertEquals(listOf("past", "past2"), groups.last().schedules.map { it.id })
         assertEquals(5, groups.sumOf { it.schedules.size })
-        assertTrue(groups.first().seriesRule)
-        assertTrue(groups.drop(1).none { it.seriesRule })
+        assertTrue(groups[2].seriesRule)
+        assertTrue(groups.filterIndexed { index, _ -> index != 2 }.none { it.seriesRule })
         val key = liveScheduleFocusKey(upcoming, false)
         assertEquals("Upcoming", liveScheduleGroup(upcoming, now))
         assertEquals("Past", liveScheduleGroup(upcoming, now + 60_000))

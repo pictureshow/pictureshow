@@ -77,9 +77,10 @@ class LiveTvScreensTest {
         val vm = LiveTvViewModel(account, fake)
         compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, {}, {}, {}) } }
         compose.onNodeWithText("Schedules").performClick()
-        compose.onNodeWithText(
-            "Recording schedules require Live TV management permission. Ask your server administrator."
-        ).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Recording schedules aren't available").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ask your server administrator to allow recording management.").assertIsDisplayed()
+        compose.onNodeWithTag("live:empty-action").performClick()
+        compose.onNodeWithTag("live:c:c").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, fake.created) }
     }
 
@@ -89,9 +90,8 @@ class LiveTvScreensTest {
         compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, { tuned++ }, {}, {}) } }
         compose.onNodeWithText("Guide").performClick()
         // The fake's broadcast is in 1970: a new guide window has no current broadcast.
-        compose.onNodeWithText(
-            "No guide data for this time. Channels can still be tuned. An administrator can add an XMLTV guide in Jellyfin Dashboard → Live TV."
-        ).assertIsDisplayed()
+        compose.onNodeWithText("No guide data").assertIsDisplayed()
+        compose.onNodeWithTag("live:empty-action").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, tuned) }
     }
 
@@ -258,7 +258,8 @@ class LiveTvScreensTest {
             vm.refresh()
         }
         compose.onNodeWithTag("live:c:c").assertIsNotEnabled()
-        compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't reach the server.", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Retry").assertIsDisplayed()
     }
 
     @Test
@@ -367,8 +368,8 @@ class LiveTvScreensTest {
     }
 
     @Test
-    fun liveTvKeepsItsHomeNavigationParentSelected() {
-        assertEquals("home", touchTabFor("live-tv"))
+    fun liveTvKeepsItsLibrariesNavigationParentSelected() {
+        assertEquals("libraries", touchTabFor("live-tv"))
         assertEquals("search", touchTabFor("search?query={query}&keyboard={keyboard}"))
         assertEquals("settings", touchTabFor("settings"))
     }

@@ -12,17 +12,20 @@ internal data class LiveScheduleGroup(val title: String, val seriesRule: Boolean
 internal fun liveScheduleGroup(schedule: LiveSchedule, now: Long): String {
     val start = runCatching { Instant.parse(schedule.startDate).toEpochMilli() }.getOrNull()
     val end = runCatching { Instant.parse(schedule.endDate).toEpochMilli() }.getOrNull()
+    val valid = start != null && end != null && end > start
     return when {
-        end != null && end <= now -> "Past"
+        valid && end != null && end <= now -> "Past"
         start != null && end != null && end > start && start > now -> "Upcoming"
-        else -> "Scheduled"
+        start != null && end != null && end > start && start <= now && schedule.status in listOf("New", "InProgress") -> "Recording now"
+        else -> "Other schedules"
     }
 }
 
 /** Preserve every server row and its relative order, including ended cancelled/error rows. Rules remain a separate section. */
 internal fun liveScheduleGroups(series: List<LiveSchedule>, timers: List<LiveSchedule>, now: Long): List<LiveScheduleGroup> =
-    listOf(LiveScheduleGroup("Series rules", true, series)) + listOf("Scheduled", "Upcoming", "Past").map { title ->
-        LiveScheduleGroup(title, false, timers.filter { liveScheduleGroup(it, now) == title })
+    listOf("Recording now", "Upcoming", "Series rules", "Other schedules", "Past").map { title ->
+        val rule = title == "Series rules"
+        LiveScheduleGroup(title, rule, if (rule) series else timers.filter { liveScheduleGroup(it, now) == title })
     }
 
 /** Time-dependent section labels never become part of a row's input or lazy-list identity. */

@@ -81,7 +81,7 @@ class LivePhoneDirectorTest {
         compose.setContent { TouchTheme { LazyColumn { item { LiveScheduleEditor(original, true, false, false, true) { writes++ } } } } }
         compose.onNodeWithText("Review schedule").performClick()
         compose.onNodeWithText("Save changes").assertIsNotEnabled()
-        compose.onNodeWithText("Save changes to this series rule. Completed recordings are kept.").assertIsDisplayed()
+        compose.onNodeWithText("Applies these options to this series rule.").assertIsDisplayed()
         compose.onNodeWithTag("live:review-receipt").assertIsDisplayed()
         val title = compose.onNodeWithText("Start early", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val value = compose.onNodeWithText("1 min", useUnmergedTree = true).getUnclippedBoundsInRoot()

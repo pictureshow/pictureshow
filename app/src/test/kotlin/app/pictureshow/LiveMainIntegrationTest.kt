@@ -47,6 +47,7 @@ class LiveMainIntegrationTest {
                     {},
                     {},
                     {},
+                    librariesOnly = libraries.value,
                     onLiveTv = { live++ },
                     onCustomize = { custom++ }
                 )
@@ -68,9 +69,10 @@ class LiveMainIntegrationTest {
 
     @Test
     @Config(qualifiers = "w400dp-h900dp-port-mdpi")
-    fun phoneHomeKeepsLiveTvAlongsideItsIndependentCustomizationMenu() {
+    fun phoneHomeCustomizationAndLibrariesLiveTvKeepIndependentCallbacks() {
         var live = 0
         var custom = 0
+        val libraries = androidx.compose.runtime.mutableStateOf(false)
         compose.setContent {
             TouchTheme {
                 TouchCatalogHome(
@@ -78,18 +80,21 @@ class LiveMainIntegrationTest {
                     account,
                     {},
                     {},
+                    librariesOnly = libraries.value,
                     onLiveTv = { live++ },
                     onCustomize = { custom++ }
                 )
             }
         }
-        compose.onNodeWithTag("home:live-tv").performScrollTo().assertIsDisplayed().performClick()
-        compose.runOnIdle {
-            assertEquals(1, live)
-            assertEquals(0, custom)
-        }
+        compose.onNodeWithTag("home:live-tv").assertDoesNotExist()
         compose.onNodeWithTag("touch:home-menu").performScrollTo().performClick()
         compose.onNodeWithTag("touch:customize").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertEquals(0, live)
+            assertEquals(1, custom)
+            libraries.value = true
+        }
+        compose.onNodeWithTag("touch:card:destination:live-tv").assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, live)
             assertEquals(1, custom)

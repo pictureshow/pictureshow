@@ -126,7 +126,7 @@ internal fun TouchCatalogHome(
     val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     if (librariesOnly) {
-        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry)
+        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry, onLiveTv)
         return
     }
     LazyColumn(
@@ -163,7 +163,6 @@ internal fun TouchCatalogHome(
                         }
                     }
                 }
-                TextButton(onClick = onLiveTv, modifier = Modifier.heightIn(min = 48.dp).testTag("home:live-tv")) { Text("Live TV") }
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
                 if (onWatchDownloads != null) {
@@ -190,7 +189,8 @@ private fun TouchLibrariesGrid(
     libraries: List<MediaItem>,
     account: Account,
     onOpen: (MediaItem) -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onLiveTv: () -> Unit
 ) {
     val shortWindow = isShortTouchWindow()
     LazyVerticalGrid(
@@ -211,6 +211,16 @@ private fun TouchLibrariesGrid(
                     TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
                 }
             }
+        }
+        item(key = "destination:live-tv") {
+            TouchCatalogCard(
+                MediaItem("destination:live-tv", "Live TV", type = "CollectionFolder"),
+                account,
+                true,
+                onLiveTv,
+                Modifier.fillMaxWidth(),
+                reserveLines = false
+            )
         }
         items(libraries, key = MediaItem::id) { library ->
             TouchCatalogCard(library, account, true, { onOpen(library) }, Modifier.fillMaxWidth(), reserveLines = false)

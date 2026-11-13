@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.runtime.Composable
@@ -74,7 +75,7 @@ internal fun LiveGuideDateBar(
     var days by remember { mutableStateOf(false) }
     val atNow = viewportAtNow ?: (start == liveGuideWindowStart(now))
     Row(
-        Modifier.fillMaxWidth().height(
+        Modifier.widthIn(max = 400.dp).fillMaxWidth().height(
             if (tv) liveGuideRulerHeight(true, androidx.compose.ui.platform.LocalDensity.current.fontScale).dp else 48.dp
         ).testTag("live:guide-time"),
         verticalAlignment = Alignment.CenterVertically,

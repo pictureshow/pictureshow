@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(302, cases.size)
+        assertEquals(350, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -163,6 +163,102 @@ class LivePresentationVectorsTest {
                     id
                 )
 
+                "empty-state" -> {
+                    fun number(key: String, fallback: Int = 0) = c[key]?.jsonPrimitive?.int ?: fallback
+                    val channels = number("channels")
+                    val state = LiveTvState(
+                        loading = c["loading"]?.jsonPrimitive?.boolean ?: false,
+                        policy = if (c["policyKnown"]?.jsonPrimitive?.boolean == false) {
+                            null
+                        } else {
+                            app.pictureshow.core.livetv.LivePolicy(
+                                c["access"]?.jsonPrimitive?.boolean ?: true,
+                                c["manage"]?.jsonPrimitive?.boolean ?: true,
+                                true,
+                                true
+                            )
+                        },
+                        tunerEnabled = c["tuner"]?.jsonPrimitive?.boolean,
+                        offline = c["offline"]?.jsonPrimitive?.boolean ?: false,
+                        channels = List(channels) { app.pictureshow.core.livetv.LiveChannel("c$it", "Channel $it", "$it") },
+                        programs = List(number("programs")) { app.pictureshow.core.livetv.LiveProgram("p$it", "Programme", "c0") }
+                    )
+                    val result = liveEmptyPresentation(
+                        state,
+                        c["tab"]?.jsonPrimitive?.content ?: "Channels",
+                        number("filtered", channels),
+                        c["favorites"]?.jsonPrimitive?.boolean ?: false,
+                        c["search"]?.jsonPrimitive?.content ?: ""
+                    )
+                    val expected = envelope.getValue("expected")
+                    assertEquals(
+                        if (expected ==
+                            kotlinx.serialization.json.JsonNull
+                        ) {
+                            null
+                        } else {
+                            expected.jsonArray.map { it.jsonPrimitive.content }
+                        },
+                        result?.let { listOf(it.title, it.action.label) },
+                        id
+                    )
+                }
+                "program-episode" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                    liveProgramEpisodeLabel(
+                        app.pictureshow.core.livetv.LiveProgram(
+                            "p",
+                            "Programme",
+                            "c",
+                            seasonNumber = c["season"]?.jsonPrimitive?.contentOrNull?.toInt(),
+                            episodeNumber = c["episode"]?.jsonPrimitive?.contentOrNull?.toInt()
+                        )
+                    ),
+                    id
+                )
+                "program-relative-time" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveProgramTimeLabel(
+                        value("range"),
+                        c["start"]?.jsonPrimitive?.contentOrNull,
+                        c["end"]?.jsonPrimitive?.contentOrNull,
+                        Instant.parse(value("now")).toEpochMilli()
+                    ),
+                    id
+                )
+                "schedule-review-summary" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScheduleReviewSummary(
+                        app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
+                        c.getValue("series").jsonPrimitive.boolean,
+                        c.getValue("existing").jsonPrimitive.boolean,
+                        LiveTime(true, Locale.US, ZoneId.of("UTC"), Instant.parse("2026-11-13T12:00:00Z").toEpochMilli())
+                    ),
+                    id
+                )
+                "guide-channel-column" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveGuideChannelWidth(
+                        c.getValue("tv").jsonPrimitive.boolean,
+                        c.getValue("fontScale").jsonPrimitive.float,
+                        c.getValue("windowDp").jsonPrimitive.int
+                    ),
+                    .001f,
+                    id
+                )
+                "schedule-order" -> assertEquals(
+                    envelope.getValue("expected").jsonArray.map {
+                        it.jsonPrimitive.content
+                    },
+                    liveScheduleGroups(emptyList(), emptyList(), 0).map { it.title },
+                    id
+                )
+                "touch-parent" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                    touchTabFor(c["route"]?.jsonPrimitive?.contentOrNull),
+                    id
+                )
+                "visible-error" -> assertEquals(envelope.getValue("expected").jsonPrimitive.content, liveVisibleError(value("message")), id)
                 "schedule-group" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     liveScheduleGroup(

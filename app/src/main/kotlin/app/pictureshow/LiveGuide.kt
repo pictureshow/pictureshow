@@ -37,6 +37,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -50,6 +51,9 @@ import kotlinx.coroutines.flow.collectLatest
 
 internal const val LIVE_GUIDE_WIDTH = 1080f
 internal const val LIVE_GUIDE_TEXT_MIN = 72f
+internal fun liveGuideWideChannels(tv: Boolean, windowDp: Int): Boolean = tv || windowDp >= 840
+internal fun liveGuideChannelWidth(tv: Boolean, fontScale: Float, windowDp: Int): Float =
+    if (liveGuideWideChannels(tv, windowDp)) 200 * fontScale.coerceAtLeast(1f) else 80f
 internal fun liveGuideTickX(tick: Int): Float = tick * (LIVE_GUIDE_WIDTH / 6)
 internal fun liveGuideShowsText(width: Float): Boolean = width >= LIVE_GUIDE_TEXT_MIN
 internal fun liveGuideLaneHeight(tv: Boolean, fontScale: Float): Float = (if (tv) 56 else 60) * fontScale.coerceAtLeast(1f)
@@ -76,7 +80,9 @@ internal fun LiveGuideContent(
     val time = liveTime()
     val rowHeight = liveGuideLaneHeight(tv, LocalDensity.current.fontScale).dp
     val density = LocalDensity.current
-    val channelWidth = if (tv) (200 * density.fontScale.coerceAtLeast(1f)).dp else 80.dp
+    val windowDp = with(density) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }
+    val wideChannels = liveGuideWideChannels(tv, windowDp)
+    val channelWidth = liveGuideChannelWidth(tv, density.fontScale, windowDp).dp
     val inset = if (tv) 8f else 0f
     val canvasWidth = LIVE_GUIDE_WIDTH + 2 * inset
     var viewportWidth by remember { mutableFloatStateOf(0f) }
@@ -151,15 +157,17 @@ internal fun LiveGuideContent(
             val initial = liveGuideInitialFocus(cells, now)
             Row(Modifier.fillMaxWidth().height(rowHeight * lanes).testTag("live:guide-row:${channel.id}")) {
                 Row(
-                    Modifier.width(channelWidth).height(rowHeight).padding(end = if (tv) 0.dp else 4.dp),
+                    Modifier.width(
+                        channelWidth
+                    ).height(rowHeight).padding(end = if (wideChannels) 0.dp else 4.dp).testTag("live:guide-channel:${channel.id}"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (tv) {
-                        LiveChannelMark(channel, account, true, compact = true)
+                    if (wideChannels) {
+                        LiveChannelMark(channel, account, tv, compact = true)
                         Column(Modifier.weight(1f)) {
-                            LiveText(channel.name, true, maxLines = 1)
-                            if (channel.userData.isFavorite) LiveText("★ Favorite", true, small = true)
+                            LiveText(channel.name, tv, maxLines = 1)
+                            if (channel.userData.isFavorite) LiveText("★ Favorite", tv, small = true)
                         }
                     } else {
                         Column(

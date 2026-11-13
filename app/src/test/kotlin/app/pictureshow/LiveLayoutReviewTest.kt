@@ -130,11 +130,14 @@ class LiveLayoutReviewTest {
         assertTrue(compose.onAllNodesWithText("Guide unavailable", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
-        assertTrue(compose.onAllNodesWithText("Guide unavailable", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText("Couldn't load Live TV").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't reach the server. Check your connection and try again.").assertIsDisplayed()
+        compose.onNodeWithTag("live:empty-action").assertIsDisplayed()
+        compose.onNodeWithTag("live:guide-rows").assertDoesNotExist()
         compose.onNodeWithText("List").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithText(NO_LIVE_GUIDE).assertDoesNotExist()
-        compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
-        compose.onNodeWithText("Guide unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't load Live TV").assertIsDisplayed()
+        compose.onNodeWithTag("live:empty-action").assertIsDisplayed()
     }
 
     @Test fun failedFavoriteWriteRetainsSuccessfullyLoadedEmptyGuideAndTuneAction() {
@@ -153,7 +156,7 @@ class LiveLayoutReviewTest {
         compose.onNodeWithText("Guide unavailable").assertDoesNotExist()
         compose.onNodeWithTag("live:c:c").assertIsEnabled()
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText(NO_LIVE_GUIDE).assertIsDisplayed()
+        compose.onNodeWithText("No guide data").assertIsDisplayed()
         compose.onNodeWithText("Guide unavailable").assertDoesNotExist()
     }
 
