@@ -4103,6 +4103,36 @@
         "firstActionRowFocused": true
       },
       "expected": true
+    },
+    {
+      "id": "review-header-switch-edit-to-confirm",
+      "operation": "review-header-navigation",
+      "input": {
+        "tv": true,
+        "from": "edit",
+        "to": "confirm",
+        "direction": "left"
+      },
+      "expected": {
+        "focusedAction": "confirm",
+        "fullHeadingVisible": true,
+        "writes": 0
+      }
+    },
+    {
+      "id": "review-header-switch-confirm-to-edit",
+      "operation": "review-header-navigation",
+      "input": {
+        "tv": true,
+        "from": "confirm",
+        "to": "edit",
+        "direction": "right"
+      },
+      "expected": {
+        "focusedAction": "edit",
+        "fullHeadingVisible": true,
+        "writes": 0
+      }
     }
   ]
 }

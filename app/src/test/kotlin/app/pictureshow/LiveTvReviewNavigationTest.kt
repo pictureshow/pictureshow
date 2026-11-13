@@ -6,6 +6,8 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,11 +38,18 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.livetv.LiveSchedule
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Rule
 import org.junit.Test
@@ -73,9 +82,16 @@ class LiveTvReviewNavigationTest {
         }
     )
 
-    @Test fun remoteReadsTheCompleteLargeFontReviewAndReturnsWithoutWriting() {
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+    @Test
+    fun remoteReadsTheCompleteLargeFontReviewAndReturnsWithoutWriting() {
+        // Foundation chooses the real 30% TV pivot from this feature, not from our tv Boolean.
+        org.robolectric.Shadows.shadowOf(compose.activity.packageManager)
+            .setSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK, true)
+        var platformSpec: BringIntoViewSpec? = null
         var writes = 0
         compose.setContent {
+            platformSpec = LocalBringIntoViewSpec.current
             CompositionLocalProvider(LocalDensity provides Density(1f, 1.3f)) {
                 PictureshowTheme {
                     Box(Modifier.fillMaxSize().background(LiveBackground).padding(top = 104.dp)) {
@@ -85,6 +101,9 @@ class LiveTvReviewNavigationTest {
                     }
                 }
             }
+        }
+        compose.runOnIdle {
+            assertEquals(69.2f, platformSpec!!.calculateScrollDistance(200f, 48f, 436f), .01f, "Exercise the actual TV 30% pivot")
         }
         compose.onNodeWithText("Review recording").performScrollTo()
             .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
@@ -121,8 +140,43 @@ class LiveTvReviewNavigationTest {
             editHeading.top >= actionViewport.top,
             "Up naturally returns to Edit options; the complete heading must already be visible without an extra Left: $editHeading / $actionViewport"
         )
+        val vectorFile = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first {
+            it.isFile
+        }
+        val transitions = Json.parseToJsonElement(vectorFile.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.filter { it.getValue("operation").jsonPrimitive.content == "review-header-navigation" }
+        assertEquals(2, transitions.size)
+        fun action(key: String) = if (key ==
+            "edit"
+        ) {
+            compose.onNodeWithText("Edit options")
+        } else {
+            compose.onNodeWithTag("live:editor:confirm")
+        }
+        transitions.forEach { vector ->
+            val input = vector.getValue("input").jsonObject
+            val expected = vector.getValue("expected").jsonObject
+            action(input.getValue("from").jsonPrimitive.content).assertIsFocused()
+            val key = when (input.getValue("direction").jsonPrimitive.content) {
+                "left" -> Key.DirectionLeft
+                "right" -> Key.DirectionRight
+                else -> error("Unsupported native header navigation")
+            }
+            compose.onRoot().performKeyInput { pressKey(key) }
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            action(expected.getValue("focusedAction").jsonPrimitive.content).assertIsFocused()
+            val bounds = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertEquals(
+                expected.getValue("fullHeadingVisible").jsonPrimitive.boolean,
+                bounds.top >= actionViewport.top,
+                "Every first-row focus recipient must reveal the full heading under the real TV pivot: ${vector.getValue("id")} / $bounds"
+            )
+            compose.runOnIdle { assertEquals(expected.getValue("writes").jsonPrimitive.int, writes) }
+        }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
         compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
         compose.onNodeWithTag("live:editor:confirm").assertIsDisplayed().assertIsFocused()
         val viewport = compose.onNodeWithTag("review:viewport").getBoundsInRoot()
         val heading = compose.onNodeWithText(original.name, useUnmergedTree = true).getUnclippedBoundsInRoot()

@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(300, cases.size)
+        assertEquals(302, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -75,6 +75,14 @@ class LivePresentationVectorsTest {
                     assertEquals(expected.getValue("minimumRowHeightDp").jsonPrimitive.int, LIVE_REVIEW_SUMMARY_MIN_HEIGHT_DP, id)
                     assertEquals(expected.getValue("disabledFocusBorderDp").jsonPrimitive.int, LIVE_DISABLED_FOCUS_BORDER_DP, id)
                     // LiveTvReviewClosureTest also runs these font/wrapping/contrast cases against the real native surfaces.
+                }
+                "review-header-navigation" -> {
+                    // LiveTvReviewNavigationTest drives these exact Left/Right events under Foundation's real TV pivot.
+                    assertEquals(
+                        envelope.getValue("expected").jsonObject.getValue("fullHeadingVisible").jsonPrimitive.boolean,
+                        liveEditorShouldRevealHeader(c.getValue("tv").jsonPrimitive.boolean, true),
+                        id
+                    )
                 }
                 "review-header-reveal" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.boolean,
