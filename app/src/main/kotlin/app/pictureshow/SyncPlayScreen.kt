@@ -71,6 +71,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -116,6 +121,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
     val compactIme = compactHeight && WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var name by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
     val first = remember { FocusRequester() }
+    val createFocus = remember { FocusRequester() }
     val waitFocus = remember { FocusRequester() }
     val queueFocus = remember(state.server, state.viewer, state.groupId) { mutableMapOf<String, FocusRequester>() }
     val joined = state.groupId != null
@@ -156,7 +162,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             androidx.tv.material3.Button(
                 onClick = { action("create", name.trim()) },
                 enabled = !state.busy && name.isNotBlank(),
-                modifier = modifier.testTag("sync:create"),
+                modifier = modifier.focusRequester(createFocus).testTag("sync:create"),
                 scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
                     containerColor = TvMaterialTheme.colorScheme.primary,
@@ -257,7 +263,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
         } else if (uncertain) {
             if (notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED) SyncText(stringResource(R.string.sync_leave_unconfirmed), tv)
         } else {
-            SyncGroups(state, action, tv, first, name, { name = it.take(200) }, compactIme, create)
+            SyncGroups(state, action, tv, first, createFocus, name, { name = it.take(200) }, compactIme, create)
         }
     }
     if (tv) {
@@ -356,6 +362,7 @@ private fun SyncGroups(
     action: (String, String?) -> Unit,
     tv: Boolean,
     first: FocusRequester,
+    createFocus: FocusRequester,
     name: String,
     onName: (String) -> Unit,
     compactEditing: Boolean,
@@ -468,7 +475,22 @@ private fun SyncGroups(
                 enabled = !state.busy,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
-                modifier = Modifier.weight(1f).testTag("sync:name").then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+                modifier = Modifier.weight(1f).testTag("sync:name")
+                    .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+                    .onPreviewKeyEvent { event ->
+                        // Give remote users a direct path from single-line editing to the enabled pinned action.
+                        if (tv &&
+                            !state.busy &&
+                            name.isNotBlank() &&
+                            event.type == KeyEventType.KeyDown &&
+                            event.key == Key.DirectionDown
+                        ) {
+                            createFocus.requestFocus()
+                            true
+                        } else {
+                            false
+                        }
+                    }
             )
             if (compactEditing) create(Modifier)
         }
