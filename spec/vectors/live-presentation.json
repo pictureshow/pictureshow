@@ -4841,6 +4841,38 @@
         "Go to channels",
         "Channels"
       ]
+    },
+    {
+      "id": "live-presentation.channel-logo-missing",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "missing"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-loading",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "loading"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-error",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "error"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-success",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "success"
+      },
+      "expected": false
     }
   ]
 }

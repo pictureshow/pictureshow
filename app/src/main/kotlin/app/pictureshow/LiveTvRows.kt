@@ -47,9 +47,12 @@ internal fun LiveProgram.hasRecordingTimer(): Boolean = !timerId.isNullOrBlank()
 
 internal fun liveInstant(value: String?): Long = runCatching { Instant.parse(value).toEpochMilli() }.getOrDefault(Long.MIN_VALUE)
 
+internal fun liveChannelMonogramVisible(imageLoaded: Boolean): Boolean = !imageLoaded
+
 @Composable
 internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean, compact: Boolean = false, showNumber: Boolean = true) {
     val art = imageUrl(account.server, channel.mediaItem(), 96)
+    var artLoaded by remember(art) { mutableStateOf(false) }
     Column(
         Modifier.testTag("live:channel-mark:${channel.id}"),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -65,6 +68,7 @@ internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean
             ).clip(RoundedCornerShape(6.dp)).background(LiveAccent.copy(alpha = .12f)),
             Alignment.Center
         ) {
+            if (liveChannelMonogramVisible(artLoaded)) LiveText(channel.name.take(1).uppercase(), tv)
             if (art != null) {
                 AsyncImage(
                     art,
@@ -75,10 +79,11 @@ internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean
                         } else {
                             44.dp
                         }
-                    )
+                    ),
+                    onLoading = { artLoaded = false },
+                    onSuccess = { artLoaded = true },
+                    onError = { artLoaded = false }
                 )
-            } else {
-                LiveText(channel.name.take(1).uppercase(), tv)
             }
         }
         if (showNumber) LiveText(channel.number.orEmpty(), tv, small = true, maxLines = 1)

@@ -32,7 +32,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(362, cases.size)
+        assertEquals(366, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -49,6 +49,11 @@ class LivePresentationVectorsTest {
                 )
             }
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "channel-monogram" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveChannelMonogramVisible(value("imageState") == "success"),
+                    id
+                )
                 "guide-text-window" -> {
                     val actual = liveGuideTextWindow(
                         c.getValue("cellX").jsonPrimitive.float,
