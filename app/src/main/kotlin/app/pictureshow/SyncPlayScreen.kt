@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,8 +28,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -81,10 +86,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -101,6 +108,8 @@ import androidx.tv.material3.MaterialTheme as TvMaterialTheme
 import app.pictureshow.core.sync.SyncAccessNotice
 import app.pictureshow.core.sync.SyncPhase
 import app.pictureshow.core.sync.SyncQuality
+import app.pictureshow.core.sync.syncChipShowsQuality
+import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
 import app.pictureshow.core.sync.syncTransportAvailable
@@ -118,9 +127,10 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
 internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit, fixtureLabel: String?) {
     val tv = usesTvInterface(LocalContext.current)
     val pane = stringResource(R.string.sync_title)
-    val compactHeight = !tv && isShortTouchWindow()
-    val compactIme = compactHeight && WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    var name by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
+    var touchName by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
+    val tvName = key(state.server, state.viewer) { rememberTextFieldState() }
+    val name = if (tv) tvName.text.toString() else touchName
+    var tvKeyboardRequested by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     val createFocus = remember { FocusRequester() }
     val waitFocus = remember { FocusRequester() }
@@ -216,7 +226,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             }
         }
     }
-    val footer: @Composable () -> Unit = {
+    val footer: @Composable (Boolean) -> Unit = { compactHeight ->
         if (joined || uncertain) {
             if (compactHeight) {
                 Row(
@@ -241,38 +251,71 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             create(Modifier.fillMaxWidth())
         }
     }
-    val body: @Composable ColumnScope.() -> Unit = {
-        if (!compactHeight) {
+    val scope = stringResource(
+        R.string.sync_scope,
+        state.server.ifBlank { stringResource(R.string.sync_this_server) },
+        state.viewer.ifBlank { stringResource(R.string.sync_signed_in) }
+    )
+    val body: @Composable ColumnScope.(Boolean, Boolean) -> Unit = { compactHeight, compactIme ->
+        if (!tv && !compactHeight) {
             fixtureLabel?.let {
-                SyncText(stringResource(R.string.sync_fixture, it), tv, Modifier.testTag("sync:fixture"), small = true)
+                SyncText(stringResource(R.string.sync_fixture, it), false, Modifier.testTag("sync:fixture"), small = true)
             }
         }
-        if (!compactIme) {
-            SyncText(
-                stringResource(
-                    R.string.sync_scope,
-                    state.server.ifBlank { stringResource(R.string.sync_this_server) },
-                    state.viewer.ifBlank { stringResource(R.string.sync_signed_in) }
-                ),
-                tv,
-                small = true
-            )
-            notice?.let { SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null) }
-        }
+        if (!tv && !compactIme) SyncText(scope, false, small = true)
+        if (!compactIme) notice?.let { SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null) }
         if (joined) {
-            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, notice?.action != null, notice, compactHeight)
+            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight)
         } else if (uncertain) {
             if (notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED) SyncText(stringResource(R.string.sync_leave_unconfirmed), tv)
         } else {
-            SyncGroups(state, action, tv, first, createFocus, name, { name = it.take(200) }, compactIme, create)
+            SyncGroups(state, action, tv, first, name, { touchName = it.take(200) }, compactHeight, compactIme, create)
         }
     }
     if (tv) {
         app.pictureshow.ui.PictureshowTheme {
             TvSettingsPanel(
-                stringResource(R.string.sync_title), onDismiss, first, modifier = Modifier.testTag("sync:panel"),
-                footer = if (joined || uncertain || canCreate) footer else null, contentFocusKey = focusKey, panelWidth = 560.dp,
-                footerHorizontalPadding = 12.dp, minimalFocusScroll = true, repairLostContentFocus = true, content = body
+                stringResource(R.string.sync_title),
+                { if (tvKeyboardRequested) tvKeyboardRequested = false else onDismiss() },
+                first, modifier = Modifier.testTag("sync:panel"),
+                preview = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        fixtureLabel?.let {
+                            androidx.tv.material3.Text(
+                                stringResource(R.string.sync_fixture, it),
+                                Modifier.testTag("sync:fixture"),
+                                style = TvMaterialTheme.typography.bodySmall,
+                                color = TvMaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.tv.material3.Text(
+                            scope,
+                            style = TvMaterialTheme.typography.bodyMedium,
+                            color = TvMaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                pinnedEditor = if (canCreate) {
+                    (
+                        {
+                            SyncTvNameField(
+                                state,
+                                tvName,
+                                first,
+                                createFocus,
+                                tvKeyboardRequested,
+                                { tvKeyboardRequested = it },
+                                action
+                            )
+                        }
+                        )
+                } else {
+                    null
+                },
+                footer = if (joined || uncertain || (canCreate && !tvKeyboardRequested)) ({ footer(false) }) else null,
+                contentFocusKey = focusKey, panelWidth = 560.dp, footerHorizontalPadding = 12.dp,
+                footerBottomPadding = 28.dp, edgeToEdge = true,
+                minimalFocusScroll = true, repairLostContentFocus = true, content = { body(false, false) }
             )
         }
     } else {
@@ -281,11 +324,18 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             app.pictureshow.ui.PictureshowTheme {
-                val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-                // Compact phones stay fullscreen. Wide windows bound the complete body and footer to600dp.
+                // Resolve window size and IME inside this Dialog, where its insets are delivered.
+                val compactHeight = isShortTouchWindow()
+                val compactIme = compactHeight && WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                val scrollBehavior = if (compactHeight) {
+                    TopAppBarDefaults.enterAlwaysScrollBehavior()
+                } else {
+                    TopAppBarDefaults.pinnedScrollBehavior()
+                }
+                // Backings fill the window; only readable body/footer content is bounded to600dp.
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Scaffold(
-                        modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().imePadding()
+                        modifier = Modifier.fillMaxSize().imePadding()
                             .nestedScroll(scrollBehavior.nestedScrollConnection).testTag("sync:panel").semantics { paneTitle = pane },
                         topBar = {
                             TopAppBar(title = {
@@ -309,21 +359,27 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
                             }, expandedHeight = if (compactHeight) 48.dp else 64.dp, scrollBehavior = scrollBehavior)
                         },
                         bottomBar = {
-                            if (!compactIme && (joined || uncertain || canCreate)) {
+                            if (!compactIme && (joined || uncertain || (canCreate && !compactHeight))) {
                                 Surface(
                                     tonalElevation = 3.dp,
                                     modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
                                 ) {
-                                    Box(
-                                        Modifier.fillMaxWidth().windowInsetsPadding(
-                                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
-                                        )
-                                            .padding(horizontal = 16.dp, vertical = if (compactHeight) 4.dp else 12.dp)
-                                    ) { footer() }
+                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        Box(
+                                            Modifier.widthIn(max = 600.dp).fillMaxWidth().windowInsetsPadding(
+                                                WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
+                                            )
+                                                .padding(horizontal = 16.dp, vertical = if (compactHeight) 4.dp else 12.dp)
+                                        ) { footer(compactHeight) }
+                                    }
                                 }
                             }
                         }
-                    ) { insets -> SyncTouchBody(Modifier.padding(insets), compactHeight, body) }
+                    ) { insets ->
+                        Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.TopCenter) {
+                            SyncTouchBody(Modifier.widthIn(max = 600.dp), compactHeight) { body(compactHeight, compactIme) }
+                        }
+                    }
                 }
             }
         }
@@ -360,20 +416,125 @@ private fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Com
     }
 }
 
+/** A focused TV field is a navigation target until Select explicitly requests editing. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SyncTvNameField(
+    state: SyncPlayPresentation,
+    name: TextFieldState,
+    first: FocusRequester,
+    createFocus: FocusRequester,
+    keyboardRequested: Boolean,
+    requestKeyboard: (Boolean) -> Unit,
+    action: (String, String?) -> Unit
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val select = remember { RemoteFieldNavigation(setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) }
+    val namePrimary = state.groups.isEmpty() && !state.busy
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    var imeWasVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) {
+            imeWasVisible = true
+            requestKeyboard(true)
+        } else if (imeWasVisible) {
+            imeWasVisible = false
+            requestKeyboard(false)
+        }
+    }
+    LaunchedEffect(keyboardRequested) {
+        if (keyboardRequested) {
+            withFrameNanos { }
+            keyboard?.show()
+        } else {
+            keyboard?.hide()
+        }
+    }
+    BackHandler(enabled = keyboardRequested) {
+        keyboard?.hide()
+        requestKeyboard(false)
+    }
+    OutlinedTextField(
+        state = name,
+        label = { Text(stringResource(R.string.sync_group_name)) },
+        enabled = !state.busy,
+        lineLimits = TextFieldLineLimits.SingleLine,
+        inputTransformation = { if (length > 200) delete(200, length) },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Words,
+            imeAction = ImeAction.Go,
+            showKeyboardOnFocus = keyboardRequested
+        ),
+        onKeyboardAction = {
+            if (!state.busy && name.text.isNotBlank()) action("create", name.text.toString().trim())
+            keyboard?.hide()
+            requestKeyboard(false)
+        },
+        modifier = Modifier.fillMaxWidth().testTag("sync:name")
+            .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+            .onFocusChanged {
+                if (!it.isFocused) {
+                    select.clear()
+                    requestKeyboard(false)
+                }
+            }
+            .onPreviewKeyEvent { event ->
+                if (select.handle(event) { requestKeyboard(true) }) {
+                    true
+                } else if (!keyboardRequested &&
+                    !state.busy &&
+                    name.text.isNotBlank() &&
+                    event.type == KeyEventType.KeyDown &&
+                    event.key == Key.DirectionDown
+                ) {
+                    createFocus.requestFocus()
+                    true
+                } else {
+                    false
+                }
+            }
+    )
+}
+
 @Composable
 private fun SyncGroups(
     state: SyncPlayPresentation,
     action: (String, String?) -> Unit,
     tv: Boolean,
     first: FocusRequester,
-    createFocus: FocusRequester,
     name: String,
     onName: (String) -> Unit,
+    compactHeight: Boolean,
     compactEditing: Boolean,
     create: @Composable (Modifier) -> Unit
 ) {
+    val canCreate = state.accessAllowed && state.policy == "CreateAndJoinGroups"
     val primaryGroup = state.groups.firstOrNull()?.id.takeIf { state.accessAllowed && !state.busy }
-    val namePrimary = primaryGroup == null && state.accessAllowed && !state.busy && state.policy == "CreateAndJoinGroups"
+    val namePrimary = primaryGroup == null && state.accessAllowed && !state.busy && canCreate
+    val form: @Composable () -> Unit = {
+        SyncHeading(stringResource(R.string.sync_create), false)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                name,
+                onName,
+                label = { Text(stringResource(R.string.sync_group_name)) },
+                singleLine = true,
+                enabled = !state.busy,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
+                modifier = Modifier.weight(1f).testTag("sync:name").then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
+            )
+            if (compactHeight) create(Modifier)
+        }
+    }
+    // A compact chooser always has its action beside the editor, even before IME insets arrive.
+    // Empty choosers lead with creation at every touch height. Never reparent on keyboard changes.
+    val formFirst = !tv && canCreate && state.groups.isEmpty()
+    if (formFirst) form()
     if (!compactEditing) {
         if (state.accessAllowed) SyncText(stringResource(R.string.sync_privacy), tv, small = true)
         val accessNotice = when (state.access.notice) {
@@ -398,6 +559,7 @@ private fun SyncGroups(
             }
             if (tv) Spacer(Modifier.height(8.dp))
         }
+        if (state.accessAllowed && state.policy == "JoinGroups") SyncText(stringResource(R.string.sync_join_only), tv, small = true)
         if (state.accessAllowed) SyncHeading(stringResource(R.string.sync_groups), tv)
         if (tv || !state.busy) {
             SyncSecondaryAction(
@@ -425,13 +587,7 @@ private fun SyncGroups(
                 state.groups.forEach { group ->
                     val count = pluralStringResource(R.plurals.sync_people_watching, group.members, syncNumber(group.members))
                     val modifier = Modifier.testTag("sync:join:${group.id}").then(
-                        if (primaryGroup ==
-                            group.id
-                        ) {
-                            Modifier.focusRequester(first)
-                        } else {
-                            Modifier
-                        }
+                        if (primaryGroup == group.id) Modifier.focusRequester(first) else Modifier
                     )
                     if (tv) {
                         TvSettingsRow(
@@ -439,10 +595,13 @@ private fun SyncGroups(
                             count,
                             modifier,
                             enabled = !state.busy,
-                            onClick = {
-                                action("join", group.id)
-                            },
-                            trailing = { androidx.tv.material3.Text(stringResource(R.string.sync_join)) }
+                            onClick = { action("join", group.id) },
+                            trailing = {
+                                androidx.tv.material3.Text(
+                                    stringResource(R.string.sync_join),
+                                    style = TvMaterialTheme.typography.labelLarge
+                                )
+                            }
                         )
                     } else {
                         ListItem(
@@ -450,9 +609,9 @@ private fun SyncGroups(
                             supportingContent = { Text(count) },
                             modifier = modifier,
                             trailingContent = {
-                                FilledTonalButton(onClick = {
-                                    action("join", group.id)
-                                }, enabled = !state.busy) { Text(stringResource(R.string.sync_join)) }
+                                FilledTonalButton(onClick = { action("join", group.id) }, enabled = !state.busy) {
+                                    Text(stringResource(R.string.sync_join))
+                                }
                             }
                         )
                     }
@@ -460,53 +619,13 @@ private fun SyncGroups(
             }
         }
     }
-    if (state.accessAllowed && state.policy == "CreateAndJoinGroups") {
-        if (!compactEditing) SyncHeading(stringResource(R.string.sync_create), tv)
-        // Keep the field in the same composition when the IME appears; moving it to
-        // another branch would discard focus and close the keyboard mid-edit.
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                name,
-                onName,
-                label = {
-                    Text(stringResource(R.string.sync_group_name))
-                },
-                singleLine = true,
-                enabled = !state.busy,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
-                modifier = Modifier.weight(1f).testTag("sync:name")
-                    .then(if (namePrimary) Modifier.focusRequester(first) else Modifier)
-                    .onPreviewKeyEvent { event ->
-                        // Give remote users a direct path from single-line editing to the enabled pinned action.
-                        if (tv &&
-                            !state.busy &&
-                            name.isNotBlank() &&
-                            event.type == KeyEventType.KeyDown &&
-                            event.key == Key.DirectionDown
-                        ) {
-                            createFocus.requestFocus()
-                            true
-                        } else {
-                            false
-                        }
-                    }
-            )
-            if (compactEditing) create(Modifier)
-        }
-    } else if (!compactEditing && state.accessAllowed && state.policy == "JoinGroups") {
-        SyncText(stringResource(R.string.sync_join_only), tv, small = true)
-    } else if (tv && state.busy) {
-        // Neutral placeholders retain a useful layout without implying account permission.
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    if (!tv && canCreate && !formFirst) form()
+    if (tv && state.busy && !state.accessAllowed) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             repeat(2) {
                 Spacer(
                     Modifier.fillMaxWidth().height(
-                        48.dp
+                        56.dp
                     ).background(TvMaterialTheme.colorScheme.surfaceVariant, TvMaterialTheme.shapes.medium)
                 )
             }
@@ -556,9 +675,50 @@ private fun SyncJoined(
             overflow = TextOverflow.Ellipsis
         )
     }
-    if (notice == null || state.phase !in setOf("Error", "Reconnecting")) {
+    val current = state.queue.firstOrNull { it.current }
+    val currentTitle = if (state.queue.isEmpty()) {
+        stringResource(R.string.sync_nothing_playing)
+    } else if (current == null) {
+        stringResource(R.string.sync_title_unavailable)
+    } else {
+        syncQueueTitle(current)
+    }
+    val titleModifier = Modifier.padding(horizontal = 16.dp).testTag("sync:now-playing")
+    if (tv) {
+        androidx.tv.material3.Text(
+            currentTitle,
+            titleModifier,
+            style = TvMaterialTheme.typography.titleMedium,
+            color = if (current?.titleUnavailable ==
+                true
+            ) {
+                TvMaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                TvMaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    } else {
+        Text(
+            currentTitle,
+            titleModifier,
+            style = if (compactHeight) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
+            color = if (current?.titleUnavailable ==
+                true
+            ) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = if (compactHeight) 1 else 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    val panelQuality = syncPanelQuality(state.quality, hasRecovery)
+    if ((notice == null || state.phase !in setOf("Error", "Reconnecting")) && syncPhase(state.phase, state.waitReason) != SyncPhase.EMPTY) {
         val phase = syncPhaseText(state)
-        val status = if (state.quality == SyncQuality.UNKNOWN) phase else "$phase\u00a0·\u00a0${syncQualityText(state.quality)}"
+        val status = if (panelQuality == SyncQuality.UNKNOWN) phase else "$phase\u00a0·\u00a0${syncQualityText(panelQuality)}"
         SyncText(status, tv, Modifier.testTag("sync:phase").semantics { liveRegion = LiveRegionMode.Polite }, small = compactHeight)
     }
     val local = stringResource(
@@ -580,7 +740,11 @@ private fun SyncJoined(
     ) {
         SyncText(stringResource(R.string.sync_estimate_explanation), tv, small = true)
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         SyncTransport("previous", stringResource(R.string.sync_previous), {
             action("previous", null)
         }, tv, Modifier.testTag("sync:previous"), transport)
@@ -609,140 +773,178 @@ private fun SyncJoined(
     ) {
         SyncText(stringResource(R.string.sync_estimate_explanation), tv, small = true)
     }
-    SyncToggle(
-        stringResource(R.string.sync_wait_for_me),
-        stringResource(R.string.sync_wait_explanation),
-        !state.ignoreWait,
-        { action("ignore-wait", (!state.ignoreWait).toString()) },
-        tv,
-        Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).then(
-            if (usable &&
-                !transport &&
-                !hasRecovery
-            ) {
-                Modifier.focusRequester(first)
-            } else {
-                Modifier
-            }
-        ),
-        usable
-    )
-    SyncText(stringResource(R.string.sync_personal), tv, small = true)
-    SyncHeading(stringResource(R.string.sync_repeat), tv)
-    val repeats = listOf(
-        "RepeatNone" to R.string.sync_repeat_off,
-        "RepeatOne" to R.string.sync_repeat_one,
-        "RepeatAll" to R.string.sync_repeat_all
-    )
-    if (tv) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeats.forEach { (value, label) ->
-                androidx.tv.material3.FilterChip(
-                    selected = state.repeat == value,
-                    onClick = { action("repeat", value) },
-                    enabled = usable,
-                    modifier = Modifier.testTag("sync:repeat:$value"),
-                    leadingIcon = if (state.repeat ==
-                        value
-                    ) {
-                        ({ androidx.tv.material3.Icon(touchActionIcon("check"), null, Modifier.size(18.dp)) })
-                    } else {
-                        null
-                    }
+    val waitSetting: @Composable () -> Unit = {
+        SyncToggle(
+            stringResource(R.string.sync_wait_for_me),
+            stringResource(if (usable) R.string.sync_wait_explanation else R.string.sync_wait_unavailable),
+            !state.ignoreWait,
+            { action("ignore-wait", (!state.ignoreWait).toString()) },
+            tv,
+            Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).then(
+                if (usable &&
+                    !transport &&
+                    !hasRecovery
                 ) {
-                    androidx.tv.material3.Text(stringResource(label))
-                }
-            }
-        }
-    } else {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            repeats.forEachIndexed { index, (value, label) ->
-                SegmentedButton(
-                    selected = state.repeat == value,
-                    onClick = { action("repeat", value) },
-                    enabled = usable,
-                    shape = SegmentedButtonDefaults.itemShape(index, repeats.size),
-                    modifier = Modifier.testTag("sync:repeat:$value")
-                ) {
-                    Text(stringResource(label))
-                }
-            }
-        }
-    }
-    SyncToggle(
-        stringResource(R.string.sync_shuffle),
-        null,
-        state.shuffle == "Shuffle",
-        { action("shuffle", if (state.shuffle == "Shuffle") "Sorted" else "Shuffle") },
-        tv,
-        Modifier.testTag("sync:shuffle"),
-        usable
-    )
-    SyncHeading(stringResource(R.string.sync_queue), tv)
-    if (state.queue.isEmpty()) SyncText(stringResource(R.string.sync_queue_empty), tv)
-    Column {
-        state.queue.forEach { entry ->
-            key(entry.id) {
-                val title =
-                    entry.title ?: stringResource(if (entry.titleUnavailable) R.string.sync_title_unavailable else R.string.sync_loading)
-                val current = if (entry.current) stringResource(R.string.sync_now_playing) else null
-                val remove = stringResource(R.string.sync_remove_title, title)
-                if (tv) {
-                    val entryFocus = remember { FocusRequester() }
-                    SideEffect { queueFocus[entry.id] = entryFocus }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TvSettingsRow(
-                            title,
-                            current,
-                            Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(entryFocus),
-                            enabled = usable,
-                            selected = entry.current,
-                            titleMaxLines = 2,
-                            onClick = { action("select-entry", entry.id) }
-                        )
-                        SyncTransport("remove", remove, {
-                            action("remove-entry", entry.id)
-                        }, true, Modifier.testTag("sync:remove:${entry.id}"), usable)
-                    }
+                    Modifier.focusRequester(first)
                 } else {
-                    val rowColor = if (entry.current) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-                    ListItem(
-                        headlineContent = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = current?.let { { Text(it) } },
-                        colors = ListItemDefaults.colors(containerColor = rowColor),
-                        trailingContent = {
-                            IconButton(onClick = {
+                    Modifier
+                }
+            ),
+            usable
+        )
+        SyncText(stringResource(R.string.sync_personal), tv, small = true)
+    }
+    val playbackSettings: @Composable () -> Unit = {
+        SyncHeading(stringResource(R.string.sync_repeat), tv, compact = !tv)
+        val repeats = listOf(
+            "RepeatNone" to R.string.sync_repeat_off,
+            "RepeatOne" to R.string.sync_repeat_one,
+            "RepeatAll" to R.string.sync_repeat_all
+        )
+        if (tv) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeats.forEach { (value, label) ->
+                    androidx.tv.material3.FilterChip(
+                        selected = state.repeat == value,
+                        onClick = { action("repeat", value) },
+                        enabled = usable,
+                        modifier = Modifier.testTag("sync:repeat:$value"),
+                        leadingIcon = if (state.repeat ==
+                            value
+                        ) {
+                            (
+                                {
+                                    androidx.tv.material3.Icon(touchActionIcon("check"), null, Modifier.size(18.dp))
+                                }
+                                )
+                        } else {
+                            null
+                        }
+                    ) {
+                        androidx.tv.material3.Text(stringResource(label))
+                    }
+                }
+            }
+        } else {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                repeats.forEachIndexed { index, (value, label) ->
+                    SegmentedButton(
+                        selected = state.repeat == value,
+                        onClick = { action("repeat", value) },
+                        enabled = usable,
+                        shape = SegmentedButtonDefaults.itemShape(index, repeats.size),
+                        modifier = Modifier.testTag("sync:repeat:$value")
+                    ) {
+                        Text(stringResource(label))
+                    }
+                }
+            }
+        }
+        SyncToggle(
+            stringResource(R.string.sync_shuffle),
+            null,
+            state.shuffle == "Shuffle",
+            { action("shuffle", if (state.shuffle == "Shuffle") "Sorted" else "Shuffle") },
+            tv,
+            Modifier.testTag("sync:shuffle"),
+            usable
+        )
+    }
+    val queue: @Composable () -> Unit = {
+        SyncHeading(stringResource(R.string.sync_queue), tv)
+        if (state.queue.isEmpty()) SyncText(stringResource(R.string.sync_queue_empty), tv)
+        Column {
+            state.queue.forEach { entry ->
+                key(entry.id) {
+                    val title = syncQueueTitle(entry)
+                    val current = if (entry.current) stringResource(R.string.sync_now_playing) else null
+                    val remove = stringResource(R.string.sync_remove_title, title)
+                    if (tv) {
+                        val entryFocus = remember { FocusRequester() }
+                        SideEffect { queueFocus[entry.id] = entryFocus }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            TvSettingsRow(
+                                title,
+                                current,
+                                Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(entryFocus),
+                                enabled = usable,
+                                selected = entry.current,
+                                titleMaxLines = 2,
+                                onClick = { action("select-entry", entry.id) }
+                            )
+                            SyncTransport("remove", remove, {
                                 action("remove-entry", entry.id)
-                            }, enabled = usable, modifier = Modifier.testTag("sync:remove:${entry.id}")) {
-                                Icon(syncIcon("remove"), remove)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).testTag("sync:entry:${entry.id}")
-                            .clickable(enabled = usable) { action("select-entry", entry.id) }
-                    )
+                            }, true, Modifier.testTag("sync:remove:${entry.id}"), usable)
+                        }
+                    } else {
+                        val rowColor = if (entry.current) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        }
+                        ListItem(
+                            headlineContent = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = current?.let { { Text(it) } },
+                            colors = ListItemDefaults.colors(containerColor = rowColor),
+                            trailingContent = {
+                                IconButton(onClick = {
+                                    action("remove-entry", entry.id)
+                                }, enabled = usable, modifier = Modifier.testTag("sync:remove:${entry.id}")) {
+                                    Icon(syncIcon("remove"), remove)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("sync:entry:${entry.id}")
+                                .clickable(enabled = usable) { action("select-entry", entry.id) }
+                        )
+                    }
                 }
             }
         }
     }
-    SyncHeading(stringResource(R.string.sync_people), tv)
-    SyncText(stringResource(R.string.sync_readiness_unknown), tv, small = true)
-    val people = syncPeople(state.participants)
-    Column {
-        people.names.forEachIndexed { index, person ->
-            if (tv) {
-                TvSettingsRow(person, null, Modifier.testTag("sync:participant:$index"), readOnly = true, titleMaxLines = 1, onClick = {})
-            } else {
-                ListItem(headlineContent = {
-                    Text(person, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }, modifier = Modifier.testTag("sync:participant:$index"))
+    val roster: @Composable () -> Unit = {
+        SyncHeading(stringResource(R.string.sync_people), tv)
+        SyncText(stringResource(R.string.sync_readiness_unknown), tv, small = true)
+        val people = syncPeople(state.participants)
+        Column {
+            people.names.forEachIndexed { index, person ->
+                if (tv) {
+                    TvSettingsRow(person, null, Modifier.testTag("sync:participant:$index"), readOnly = true, titleMaxLines = 1, onClick = {
+                    })
+                } else {
+                    ListItem(headlineContent = {
+                        Text(person, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }, modifier = Modifier.testTag("sync:participant:$index"))
+                }
+            }
+            val remaining = people.remaining
+            if (remaining > 0) {
+                val more = pluralStringResource(R.plurals.sync_more_people, remaining, syncNumber(remaining))
+                if (tv) TvSettingsRow(more, null, readOnly = true, onClick = {}) else SyncText(more, false, small = true)
             }
         }
-        val remaining = people.remaining
-        if (remaining > 0) {
-            val more = pluralStringResource(R.plurals.sync_more_people, remaining, syncNumber(remaining))
-            if (tv) TvSettingsRow(more, null, readOnly = true, onClick = {}) else SyncText(more, false)
-        }
     }
+    if (tv) {
+        // Keep the established remote path: Play → Wait → Repeat → Shuffle.
+        waitSetting()
+        playbackSettings()
+        queue()
+        roster()
+    } else {
+        // Shared media leads; a large personal row must not imply the end of this scrollable page.
+        queue()
+        playbackSettings()
+        roster()
+        SyncHeading(stringResource(R.string.sync_your_settings), false)
+        waitSetting()
+    }
+}
+
+/** Both panel and queue use account-filtered metadata; unavailable always wins over a stale title. */
+@Composable
+private fun syncQueueTitle(entry: SyncPlayQueueRow): String = when {
+    entry.titleUnavailable -> stringResource(R.string.sync_title_unavailable)
+    !entry.title.isNullOrBlank() -> entry.title
+    else -> stringResource(R.string.sync_loading)
 }
 
 @Composable
@@ -758,12 +960,22 @@ private fun SyncToggle(
     if (tv) {
         TvSettingsToggleRow(title, checked, modifier, supporting, enabled) { onToggle() }
     } else {
-        ListItem(
-            headlineContent = { Text(title) },
-            supportingContent = supporting?.let { { Text(it) } },
-            trailingContent = { Switch(checked, onCheckedChange = { onToggle() }, enabled = enabled) },
-            modifier = modifier
-        )
+        val headlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .38f)
+        val supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .38f)
+        Box(modifier) {
+            ListItem(
+                headlineContent = { Text(title) },
+                supportingContent = supporting?.let { { Text(it) } },
+                colors = ListItemDefaults.colors(
+                    headlineColor = headlineColor,
+                    supportingColor = supportingColor
+                ),
+                trailingContent = {
+                    Switch(checked, onCheckedChange = null, enabled = enabled, modifier = Modifier.clearAndSetSemantics {})
+                },
+                modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { onToggle() }
+            )
+        }
     }
 }
 
@@ -782,6 +994,7 @@ private fun SyncTransport(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.size(if (primary) 56.dp else 48.dp),
+            scale = androidx.tv.material3.IconButtonDefaults.scale(focusedScale = 1f),
             colors = if (kind == "remove") {
                 androidx.tv.material3.IconButtonDefaults.colors(
                     containerColor = Color.Transparent,
@@ -836,7 +1049,7 @@ private fun SyncSecondaryAction(
 }
 
 @Composable
-private fun SyncHeading(text: String, tv: Boolean, modifier: Modifier = Modifier) {
+private fun SyncHeading(text: String, tv: Boolean, modifier: Modifier = Modifier, compact: Boolean = false) {
     if (tv) {
         TvSettingsSectionHeader(text, modifier)
     } else {
@@ -845,7 +1058,7 @@ private fun SyncHeading(text: String, tv: Boolean, modifier: Modifier = Modifier
             modifier.padding(horizontal = 16.dp).padding(top = 12.dp).semantics {
                 heading()
             },
-            style = MaterialTheme.typography.titleLarge
+            style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleLarge
         )
     }
 }
@@ -919,7 +1132,7 @@ private fun SyncNoticeBanner(
         when (notice.kind) {
             SyncNoticeKind.ACCESS_FAILED -> R.string.sync_access_failed
             SyncNoticeKind.GROUPS_FAILED -> R.string.sync_groups_failed
-            SyncNoticeKind.REJOIN -> R.string.sync_lost
+            SyncNoticeKind.REJOIN -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
             SyncNoticeKind.PREPARING -> R.string.sync_local_preparing
             SyncNoticeKind.LIBRARY_DENIED -> R.string.sync_library_denied
             SyncNoticeKind.CONNECTION -> R.string.sync_connection
@@ -931,7 +1144,7 @@ private fun SyncNoticeBanner(
             SyncNoticeKind.LEFT -> R.string.sync_left
             SyncNoticeKind.LEAVE_UNCONFIRMED -> R.string.sync_leave_unconfirmed
             SyncNoticeKind.SPEED -> R.string.sync_speed
-            SyncNoticeKind.CLOCK -> R.string.sync_lost
+            SyncNoticeKind.CLOCK -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
             SyncNoticeKind.QUEUE_PENDING -> R.string.sync_queue_pending
             SyncNoticeKind.GROUP_UNAVAILABLE -> R.string.sync_group_unavailable
             SyncNoticeKind.PLAYBACK_FAILED -> R.string.sync_playback_error
@@ -953,8 +1166,10 @@ private fun SyncNoticeBanner(
         MaterialTheme.colorScheme.onSurface
     }
     Row(
-        Modifier.padding(horizontal = if (tv) 0.dp else 16.dp).fillMaxWidth()
-            .clip(if (tv) TvMaterialTheme.shapes.medium else MaterialTheme.shapes.medium).background(background).padding(12.dp)
+        Modifier.padding(horizontal = if (tv) 0.dp else 16.dp, vertical = if (tv) 8.dp else 0.dp).fillMaxWidth()
+            .clip(
+                if (tv) TvMaterialTheme.shapes.medium else MaterialTheme.shapes.medium
+            ).background(background).padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("sync:status").semantics { liveRegion = LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1025,9 +1240,15 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
     }
     val quality = syncQualityText(state.quality)
     // Nonbreaking glue keeps a separator with its words if a large-font status needs two lines.
-    val status = if (state.phase in setOf("Playing", "Paused")) "$phase\u00a0·\u00a0$quality" else phase
+    val status = if (state.phase in setOf("Playing", "Paused") &&
+        syncChipShowsQuality(state.quality)
+    ) {
+        "$phase\u00a0·\u00a0$quality"
+    } else {
+        phase
+    }
     val content: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (tv) {
                 androidx.tv.material3.Icon(syncIcon("group"), null, Modifier.size(20.dp).testTag("sync:chip-icon"))
             } else {
@@ -1037,7 +1258,7 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
                 if (tv) {
                     androidx.tv.material3.Text(
                         status,
-                        style = TvMaterialTheme.typography.bodyMedium,
+                        style = TvMaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("sync:chip-status")
@@ -1045,7 +1266,7 @@ internal fun SyncPlayerStatusChip(state: SyncPlayPresentation, onOpen: () -> Uni
                 } else {
                     Text(
                         status,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(lineBreak = LineBreak.Heading),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,

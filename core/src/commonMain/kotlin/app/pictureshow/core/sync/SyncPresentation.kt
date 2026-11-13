@@ -45,3 +45,9 @@ fun syncPeople(names: List<String>): SyncPeople = SyncPeople(names.take(4), (nam
 
 /** An empty authoritative group queue has no transport target, even while settings remain usable. */
 fun syncTransportAvailable(usable: Boolean, queueEntries: Int): Boolean = usable && queueEntries > 0
+
+/** A recovery banner owns its estimate/action; the panel phase must not duplicate its chip hint. */
+fun syncPanelQuality(quality: SyncQuality, recoveryOffered: Boolean): SyncQuality = if (recoveryOffered) SyncQuality.UNKNOWN else quality
+
+/** A glanceable chip omits an unknown estimate rather than reporting a non-fact. */
+fun syncChipShowsQuality(quality: SyncQuality): Boolean = quality != SyncQuality.UNKNOWN

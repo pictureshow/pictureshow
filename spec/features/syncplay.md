@@ -122,7 +122,7 @@ A fresh emission of the same already-applied Unpause restores its permitted play
 A future Unpause accepted for a paused, READY source already aligned within80ms of its base records that preparation separately from an already-applied timeline. At When, timer lateness alone must not introduce a positional seek into that prepared source: apply its permitted play mode and retain the original advancing timeline for subsequent ordinary drift correction. Revalidate the same account/membership/entry/snapshot, renderer/token/native source, current clock generation, actual readiness/paused state and absence of a pending positional application. Clock invalidation, native positional completion, replacement or changed command/base/When discards the preparation. A command already late on receipt, or a genuinely misaligned source, retains catch-up positioning. Waiting still holds output; an unready source cannot borrow preparation. This rule does not widen drift thresholds or establish rendered convergence. The13 `sync-clock` preparation cases and Android late-wake/source-replacement regressions define the distinction.
 ## Android presentation and portable projections
 
-`sync-presentation` supplies 31 cases for semantic group phase, local sync estimates, title-response ownership and the names-only roster. Every title row retains both ItemId and PlaylistItemId; duplicate entries remain separate. Authenticated metadata lookups are cached within an account and membership generation. Replies are accepted only for the requesting account/token, membership generation, queue revision and still-present requested playlist entries. Loading and unavailable titles have separate localized fallbacks; synthetic Item N titles are not shown.
+`sync-presentation` supplies 41 cases for semantic group phase, local sync estimates, title-response ownership and the names-only roster. Every title row retains both ItemId and PlaylistItemId; duplicate entries remain separate. Authenticated metadata lookups are cached within an account and membership generation. Replies are accepted only for the requesting account/token, membership generation, queue revision and still-present requested playlist entries. Loading and unavailable titles have separate localized fallbacks; synthetic Item N titles are not shown.
 
 The player retains a compact group chip outside the ordinary controls overlay. Its semantic phase/quality changes are polite announcements; numerical timing diagnostics never become UI state or live-region text. In sync is explicitly an estimate of this device, available only with a current usable bounded-uncertainty clock, matching ready renderer, applied current timeline and bounded error. Stale clocks, future/held commands, pending position application, missing readiness and disconnected memberships cannot assert it. This estimate is independent of SYN-06 native renderer/physical output qualification.
 
@@ -174,11 +174,14 @@ visible independently of focus. The SyncPlay TV panel opts into minimal scrollin
 for already visible targets,12dp footer surface edges and scale1 full-width footer
 buttons; other shared settings callers retain their prior defaults.
 
-Touch compact portrait remains full-screen. Wide windows bound both body and footer
-to a centered600dp maximum. Compact height uses a48dp collapsing app bar, compact
+Touch compact portrait remains full-screen. Wide windows keep the Scaffold, app bar and footer backing full-bleed; only their
+readable body/footer content is centered at a600dp maximum. Compact height uses a48dp collapsing app bar, compact
 status and a one-row footer so useful transport is initially visible at640×360dp.
-While its IME is visible the compact footer is absent; the existing focused field
-and inline Create remain together, and IME Go submits a nonblank name. Regular
+A compact chooser never pins Create to a footer: its field and inline Create remain
+together before and during IME display. Empty touch choosers put this form first at
+every height. IME Go submits a nonblank trimmed name. Compactness and IME insets
+are read inside the Dialog window; its caller’s inset state is not evidence of
+keyboard occlusion. While a compact IME is visible the footer is absent. Regular
 portrait retains pinned Create above the IME. Native system/cutout/IME insets remain
 in force; bottom fades do not cover a field when only terminal padding remains.
 Plain text, fields and footer use the same16dp column as native list items. Empty
@@ -205,5 +208,74 @@ labels, compact IME/landscape initial transport, large font/tablet and chip stre
 read-only roster/neighbor/recovery focus, intermediate motion and honest missing
 states. A whole-screen design-director recapture verdict remains required. Web,
 Apple and desktop owe their native equivalents, UI/accessibility evidence and the
-new transport cases; Kotlin projection success does not implement those app cases.
+new portable presentation cases; Kotlin projection success does not implement those app cases.
 The existing Web pending-app-case report is a debt ledger, not implementation proof.
+
+
+### Native follow-up presentation rules
+
+The joined panel names the actual current queue title directly under the group
+headline and above the phase/local facts, on both TV and touch. Only the entry
+marked current supplies this line; do not substitute the first future entry.
+Unavailable metadata takes precedence over a stale title and reads “Title
+unavailable”; pending metadata reads “Loading…”. Empty queues say “Nothing playing
+yet” once. Item IDs, URLs and debug identifiers never substitute for a title.
+Current metadata does not supply episode or series facts, so none are inferred.
+The touch current-row selection is a full-width rectangle with native16dp text
+padding; all queue titles retain one shared column and independent48dp remove
+controls. Unavailable library copy describes leaving to watch on one’s own rather
+than promising control of the shared queue.
+
+The panel phase does not repeat a quality recovery hint already owned by its
+banner. `syncPanelQuality(quality, recoveryOffered)` returns UNKNOWN precisely
+when a non-Leave recovery action is displayed. The warning sentence is “This
+device is out of sync with the group. Rejoin to catch up.” Error reconnection
+retains “Lost sync with the group. Rejoin to catch up.” The banner owns the one
+Rejoin action and its initial focus; only the pinned footer owns Leave. Generic
+playback failure offers an actionable Leave-and-join-again instruction, without
+inventing a different recovery protocol. TV notice surfaces use16dp horizontal
+and12dp vertical inner padding and12dp actual separation from adjacent content.
+Their action shares the message column and uses the correct theme foreground.
+
+The chip independently applies `syncChipShowsQuality`: UNKNOWN has no quality
+suffix, while known IN_SYNC, CATCHING_UP and OUT_OF_SYNC estimates remain visible
+with Playing/Paused. Waiting and reconnecting keep their own phase. A balanced,
+at-most-two-line status, a centered decorative20dp icon, natural measured width,
+non-orphaning separators, actual group name and localized count all remain part of
+the contract. Unknown omission does not assert that playback is synchronized.
+The41 portable vectors include six recovery-banner cases and four chip-quality
+cases; app behavior and each other platform’s native equivalent still need their
+own implementation and evidence.
+
+The TV chooser separates remote focus from text editing. Initial name focus is
+allowed with no automatic IME. A paired Select/Enter explicitly starts editing;
+Go submits once, and Back dismisses the keyboard before dismissing the panel.
+The saved, single-line,200-character editor stays mounted under the fixed title
+and server/viewer context rather than moving when the keyboard opens. Only the
+scrolling content below it consumes IME space; a floating keyboard must not pan
+the context away. The chooser hides its pinned Create during explicit editing.
+Busy placeholders are neutral, noninteractive56dp surfaces matching the body
+width. Join-only permission copy precedes its group list.
+
+SyncPlay opts into shared TV panel inset, pinned-editor and focus-scroll options;
+other settings callers retain their defaults. The effective focus viewport excludes
+active32dp top and40dp bottom fades plus8dp breathing room. Fully visible targets
+do not move, violated edges move minimally, oversized targets remain stable and
+terminal48dp padding lets the last read-only roster fact clear the bottom fade.
+The Play→Wait→Repeat→Shuffle remote order remains unchanged. Transport controls
+have12dp gaps and scale1 on focus; the pinned footer keeps12dp body surface edges,
+scale1 and at least24dp bottom title-safe clearance (28dp content padding).
+
+Touch orders shared queue content immediately after transport, before Repeat,
+Shuffle, People and Your settings. This removes the personal-settings false
+bottom without changing TV traversal. Wait remains server-confirmed IgnoreWait’s
+inverse; when disconnected or playback is unusable the entire row is visibly
+disabled with “Available when connected and playback is ready.” No optimistic
+local queue/replay is implied. Its passive switch and whole-row action expose one
+accessible switch. Portrait keeps a pinned app bar; compact height may collapse it
+and must still show all transport above Leave on arrival at640×360dp/font1.3.
+
+These source contracts require fresh native keyboard, fade, safe-area, wide/compact,
+large-font and whole-screen director evidence. They do not diagnose the unrelated
+fixture ANR, alter a clock or establish peer output timing. Web, Apple and desktop
+native UI and app-case parity remain pending even when Kotlin vectors pass.

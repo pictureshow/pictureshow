@@ -3,6 +3,8 @@
  */
 package app.pictureshow
 
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -16,22 +18,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +61,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -73,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.LocalContentColor
@@ -436,6 +449,9 @@ internal fun TvSettingsPanel(
     footerHorizontalPadding: androidx.compose.ui.unit.Dp = 28.dp,
     minimalFocusScroll: Boolean = false,
     repairLostContentFocus: Boolean = false,
+    pinnedEditor: (@Composable () -> Unit)? = null,
+    footerBottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    edgeToEdge: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var contentHasFocus by remember { mutableStateOf(false) }
@@ -449,8 +465,39 @@ internal fun TvSettingsPanel(
         Modifier
     }
     BackHandler(onBack = onClose)
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, windowTitle = title)) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            windowTitle = title,
+            decorFitsSystemWindows = !edgeToEdge
+        )
+    ) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        // Compose chooses ADJUST_NOTHING for edge-to-edge dialogs on31+. Match it on older TV
+        // windows so the fixed title/editor are not resized or panned behind a floating keyboard.
+        val legacyFixedEditor = edgeToEdge && Build.VERSION.SDK_INT <= 30
+        DisposableEffect(window, legacyFixedEditor) {
+            val original = window?.attributes?.softInputMode
+            onDispose { if (legacyFixedEditor && original != null) window?.setSoftInputMode(original) }
+        }
+        SideEffect {
+            if (legacyFixedEditor && window?.attributes?.softInputMode != WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING) {
+                window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+            }
+        }
+        Box(
+            Modifier.fillMaxSize().then(
+                if (edgeToEdge) {
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
+            contentAlignment = Alignment.CenterEnd
+        ) {
             Column(
                 modifier.then(focusRepair).widthIn(max = panelWidth).fillMaxWidth().fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
@@ -467,43 +514,49 @@ internal fun TvSettingsPanel(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
-                if (scrollContent) {
-                    val platformScroll = LocalBringIntoViewSpec.current
-                    val minimalScroll = remember {
-                        object : BringIntoViewSpec {
-                            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
-                                // An oversized focus region already covering the viewport needs no scroll.
-                                size > containerSize && offset <= 0f && offset + size >= containerSize -> 0f
-                                offset < 0f -> offset
-                                offset + size > containerSize -> offset + size - containerSize
-                                else -> 0f
+                pinnedEditor?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) { it() } }
+                Column(
+                    Modifier.weight(1f).then(
+                        if (edgeToEdge) {
+                            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding()
+                        } else {
+                            Modifier
+                        }
+                    )
+                ) {
+                    if (scrollContent) {
+                        TvSettingsList(Modifier.weight(1f), minimalFocusScroll = minimalFocusScroll, content = content)
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            Column(Modifier.fillMaxSize(), content = content)
+                            val surface = MaterialTheme.colorScheme.surface
+                            if (lazyState?.canScrollBackward == true) {
+                                Box(
+                                    Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter)
+                                        .testTag("tv-settings:fade-top")
+                                        .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                                )
+                            }
+                            if (lazyState?.canScrollForward == true) {
+                                Box(
+                                    Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter)
+                                        .testTag("tv-settings:fade-bottom")
+                                        .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                                )
                             }
                         }
                     }
-                    CompositionLocalProvider(LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll) {
-                        TvSettingsList(Modifier.weight(1f), content)
-                    }
-                } else {
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        Column(Modifier.fillMaxSize(), content = content)
-                        val surface = MaterialTheme.colorScheme.surface
-                        if (lazyState?.canScrollBackward == true) {
-                            Box(
-                                Modifier.fillMaxWidth().height(16.dp).align(Alignment.TopCenter)
-                                    .testTag("tv-settings:fade-top")
-                                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                    footer?.let {
+                        Box(
+                            Modifier.fillMaxWidth().padding(
+                                start = footerHorizontalPadding,
+                                end = footerHorizontalPadding,
+                                top = 12.dp,
+                                bottom = footerBottomPadding
                             )
-                        }
-                        if (lazyState?.canScrollForward == true) {
-                            Box(
-                                Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter)
-                                    .testTag("tv-settings:fade-bottom")
-                                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface)))
-                            )
-                        }
+                        ) { it() }
                     }
                 }
-                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = footerHorizontalPadding, vertical = 12.dp)) { it() } }
             }
         }
         LaunchedEffect(firstFocus, contentFocusKey) {
@@ -522,16 +575,44 @@ internal fun TvSettingsPanel(
 }
 
 /** The main TV page and its panels use identical row spacing and scroll affordances. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TvSettingsList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun TvSettingsList(
+    modifier: Modifier = Modifier,
+    minimalFocusScroll: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val scroll = rememberScrollState()
     val surface = MaterialTheme.colorScheme.surface
+    val density = LocalDensity.current
+    val topClearance = with(density) { 40.dp.toPx() }
+    val bottomClearance = with(density) { 48.dp.toPx() }
+    val platformScroll = LocalBringIntoViewSpec.current
+    val minimalScroll = remember(scroll, topClearance, bottomClearance) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                // The fade masks are part of the viewport. Read their live boundary states here,
+                // where bring-into-view recalculates during scrolling, not in composition.
+                val top = (if (scroll.canScrollBackward) topClearance else 0f).coerceAtMost(containerSize / 3f)
+                val bottom = containerSize - (if (scroll.canScrollForward) bottomClearance else 0f).coerceAtMost(containerSize / 3f)
+                return when {
+                    size > bottom - top && offset <= top && offset + size >= bottom -> 0f
+                    offset < top -> offset - top
+                    offset + size > bottom -> offset + size - bottom
+                    else -> 0f
+                }
+            }
+        }
+    }
     Box(modifier.fillMaxWidth()) {
-        Column(
-            Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().verticalScroll(scroll).padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            content = content
-        )
+        CompositionLocalProvider(LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll) {
+            Column(
+                Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().verticalScroll(scroll)
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = if (minimalFocusScroll) 48.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                content = content
+            )
+        }
         if (scroll.canScrollBackward) {
             Box(
                 Modifier.fillMaxWidth().height(32.dp).align(Alignment.TopCenter).testTag("tv-settings:fade-top")
