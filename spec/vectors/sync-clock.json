@@ -869,6 +869,162 @@
         "commandAvailable": false
       },
       "expected": false
+    },
+    {
+      "id": "replay-active-fast",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 100,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1.03
+    },
+    {
+      "id": "replay-active-slow",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 0.97,
+        "started": 0,
+        "now": 100,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 0.97
+    },
+    {
+      "id": "replay-last-active-ms",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 4999,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1.03
+    },
+    {
+      "id": "replay-deadline",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 5000,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-expired",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 5001,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-different-timeline",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 100,
+        "same": false,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-held-mode",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 100,
+        "same": true,
+        "playing": false,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-lost-rate-capability",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 0,
+        "now": 100,
+        "same": true,
+        "playing": true,
+        "allowsRate": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-no-start",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": null,
+        "now": 100,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-clock-reversed",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": 100,
+        "now": 99,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-clock-overflow",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.03,
+        "started": -9223372036854775808,
+        "now": 9223372036854775807,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
+    },
+    {
+      "id": "replay-unsupported-rate",
+      "op": "unpause-replay-rate",
+      "input": {
+        "rate": 1.5,
+        "started": 0,
+        "now": 100,
+        "same": true,
+        "playing": true,
+        "allowsRate": true
+      },
+      "expected": 1
     }
   ]
 }

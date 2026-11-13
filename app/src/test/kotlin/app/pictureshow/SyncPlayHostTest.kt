@@ -92,8 +92,9 @@ class SyncPlayHostTest {
         var failAccess = false
         var failClock = false
         val epoch = 1_762_776_000_000L
-        fun wall() = epoch + scope.testScheduler.currentTime
-        val host = SyncPlayHost(scope.backgroundScope, this, ::wall, { scope.testScheduler.currentTime }, diagnostics::add)
+        var timingOffsetMs = 0L
+        fun wall() = epoch + scope.testScheduler.currentTime + timingOffsetMs
+        val host = SyncPlayHost(scope.backgroundScope, this, ::wall, { scope.testScheduler.currentTime + timingOffsetMs }, diagnostics::add)
 
         init {
             scope.backgroundScope.launch { host.opens.collect { opens += it } }
@@ -786,6 +787,42 @@ class SyncPlayHostTest {
             assertTrue(rig.renderer.value.playing, "a repeated timeline still restores its permitted playback mode")
             assertFalse(rig.operations().any { it in setOf("Seek", "Unpause") })
         }
+    }
+
+    @Test fun anEquivalentUnpausePreservesTheRateAndOriginalCorrectionDeadline() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L, id = "initial-rate-timeline"))
+        runCurrent()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 49_000_000L, rateSupported = true)
+        rig.host.tick()
+        runCurrent()
+        assertEquals(1.03, rig.renderer.applied.last().rate)
+        advanceTimeBy(100)
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 50_000_000L)
+        rig.renderer.applied.clear()
+        rig.host.receive(rig.command("Unpause", delayMs = -100, ticks = 50_000_000L, id = "ready-rate-echo"))
+        runCurrent()
+        assertTrue(rig.renderer.applied.isNotEmpty())
+        assertTrue(
+            rig.renderer.applied.all { it.position == null && it.playing == true && it.rate == 1.03 },
+            "An equivalent applied timeline must preserve the active correction without a seek"
+        )
+        // Move both clocks together without running unrelated periodic ticks. The original
+        // 5-second correction window has expired; the response cannot grant another window.
+        rig.timingOffsetMs = 5_000
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 100_000_000L)
+        rig.renderer.applied.clear()
+        rig.host.tick()
+        runCurrent()
+        assertTrue(
+            rig.renderer.applied.any { it.position != null && it.rate == 1.0 },
+            "The original correction deadline must still fall back to a bounded seek"
+        )
     }
 
     @Test fun anUnpauseEchoMustStillPositionAnUnappliedOrReplacedRenderer() = runTest {

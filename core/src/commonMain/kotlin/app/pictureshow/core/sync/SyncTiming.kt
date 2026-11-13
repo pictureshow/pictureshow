@@ -213,6 +213,20 @@ fun syncTransportApplied(state: SyncDriftState, nowMonotonicMillis: Long, positi
     rate = 1.0
 )
 
+/** An equivalent applied Unpause restores its mode without restarting an active correction window. */
+fun syncUnpauseReplayRate(
+    state: SyncDriftState,
+    sameAppliedTimeline: Boolean,
+    playing: Boolean,
+    sourceAllowsRate: Boolean,
+    nowMonotonicMillis: Long
+): Double {
+    if (!sameAppliedTimeline || !playing || !sourceAllowsRate || state.rate !in setOf(0.97, 1.03)) return 1.0
+    val started = state.rateStartedMonotonicMillis ?: return 1.0
+    val elapsed = subtract(nowMonotonicMillis, started) ?: return 1.0
+    return if (elapsed in 0 until 5_000) state.rate else 1.0
+}
+
 /** Stop/Leave discards the old viewing's correction deadlines and restores normal speed. */
 fun stopSyncDrift(): SyncDriftState = SyncDriftState()
 

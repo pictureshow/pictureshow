@@ -19,6 +19,7 @@ import app.pictureshow.core.sync.syncScheduledPosition
 import app.pictureshow.core.sync.syncTarget
 import app.pictureshow.core.sync.syncTimelinePlaying
 import app.pictureshow.core.sync.syncTransportApplied
+import app.pictureshow.core.sync.syncUnpauseReplayRate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,6 +47,26 @@ class SyncTimingVectorsTest {
         cases("sync-clock").forEach { row ->
             val expected = row.getValue("expected")
             when (row.getValue("op").jsonPrimitive.content) {
+                "unpause-replay-rate" -> {
+                    val i = row.getValue("input").jsonObject
+                    assertEquals(
+                        expected.jsonPrimitive.double,
+                        syncUnpauseReplayRate(
+                            SyncDriftState(
+                                rateStartedMonotonicMillis = i.getValue("started").takeUnless {
+                                    it is JsonNull
+                                }?.jsonPrimitive?.long,
+                                rate = i.getValue("rate").jsonPrimitive.double
+                            ),
+                            i.bool("same"),
+                            i.bool("playing"),
+                            i.bool("allowsRate"),
+                            i.long("now")
+                        ),
+                        row.toString()
+                    )
+                }
+
                 "pcm-rate-capability" -> {
                     val i = row.getValue("input").jsonObject
                     assertEquals(

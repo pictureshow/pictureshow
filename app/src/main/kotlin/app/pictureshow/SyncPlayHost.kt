@@ -1046,7 +1046,14 @@ internal class SyncPlayHost(
                 val applyingRenderer = renderer
                 val applyingToken = rendererToken
                 val applyingSource = applyingRenderer?.sourceIdentity
-                val positionChanged = applyingRenderer?.apply(position, playing) == true
+                val replayRate = app.pictureshow.core.sync.syncUnpauseReplayRate(
+                    drift,
+                    alreadyPositioned,
+                    playing,
+                    r.rateSupported,
+                    monotonic()
+                )
+                val positionChanged = applyingRenderer?.apply(position, playing, replayRate) == true
                 // A BUFFERING -> READY cycle can finish between 250 ms samples. The old
                 // acknowledgement belongs to the pre-seek position, even if both samples are READY.
                 readiness = readiness.afterPositionApplied(positionChanged)
@@ -1063,8 +1070,8 @@ internal class SyncPlayHost(
                 ) {
                     appliedUnpause = AppliedUnpause(applyingToken, applyingRenderer, requireNotNull(applyingSource), generation, command)
                 }
-                // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
-                drift = syncTransportApplied(drift, monotonic(), positionChanged)
+                // An equivalent timeline must not interrupt or extend the existing correction window.
+                if (!alreadyPositioned || positionChanged) drift = syncTransportApplied(drift, monotonic(), positionChanged)
                 outcome = "applied"
                 trace("apply-after", "source=scheduled attempt=$attempt positionChanged=$positionChanged " + stateFields())
             } finally {
