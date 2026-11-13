@@ -35,7 +35,10 @@ internal class Media3PlaybackOutput(
     private val title: String? = null,
     private val upstream: androidx.media3.datasource.DataSource.Factory? = null,
     private val renderersFactory: RenderersFactory? = null,
-    private val subtitleDelay: SubtitleDelay = SubtitleDelay()
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
+    private val sourceWrapper: (
+        (androidx.media3.exoplayer.source.MediaSource.Factory) -> androidx.media3.exoplayer.source.MediaSource.Factory
+    )? = null
 ) : PlaybackOutput {
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
@@ -54,6 +57,9 @@ internal class Media3PlaybackOutput(
     var onAudioFailure: (PlayDecision, Boolean) -> Unit = { source, _ -> onFailure(false, source) }
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
+    var onBandwidthEstimate: (Long, Long) -> Unit = { _, _ -> }
+    var matchFrameRate: Boolean = false
+    var disabledPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet()
     private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
     private var loadDiagnostics: PlaybackLoadDiagnostics? = null
@@ -214,19 +220,31 @@ internal class Media3PlaybackOutput(
         val dataSources = androidx.media3.datasource.DataSource.Factory {
             sourceData.createDataSource().also { it.addTransferListener(loads) }
         }
+        val progressive = androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
+            requireNotNull(media.localConfiguration).uri,
+            media.localConfiguration?.mimeType
+        ) == C.CONTENT_TYPE_OTHER
+        val primaryDataSources = if (progressive) {
+            progressiveBandwidthSources(dataSources, loadHandler, { current === decision && activePlayer === next }, { bitrate, bytes ->
+                onBandwidthEstimate(bitrate, bytes)
+            })
+        } else {
+            dataSources
+        }
         val extractors = if (videoClock) {
             VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
         } else {
             if (detector != null) VideoTailExtractorsFactory(videoTail) else DefaultExtractorsFactory()
         }
         val sourceFactory = DefaultMediaSourceFactory(context, extractors)
-            .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
+            .setDataSourceFactory(detector?.sourceFactory(primaryDataSources) ?: primaryDataSources)
         val baseRenderers =
-            renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions) { encoded ->
-                loadHandler.post {
-                    if (current === decision) viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+            renderersFactory
+                ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions, disabledPassthrough) { encoded ->
+                    loadHandler.post {
+                        if (current === decision) viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+                    }
                 }
-            }
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
             videoRenderers = created.filterIsInstance<EndVideoRenderer>()
@@ -253,7 +271,7 @@ internal class Media3PlaybackOutput(
             ExoPlayer.Builder(context, renderers)
                 .setPlaybackLooper(playbackThread.looper)
                 .setTrackSelector(selector)
-                .setMediaSourceFactory(sourceFactory)
+                .setMediaSourceFactory(sourceWrapper?.invoke(sourceFactory) ?: sourceFactory)
                 .setLoadControl(createPictureshowLoadControl())
                 .setSeekBackIncrementMs(10_000)
                 .setSeekForwardIncrementMs(10_000)
@@ -263,6 +281,9 @@ internal class Media3PlaybackOutput(
             playback = null
             throw failure
         }
+        next.setVideoChangeFrameRateStrategy(
+            if (matchFrameRate) C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS else C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+        )
         activePlayer = next
         subtitleServerStartMs = if (serverSeek) startMs else 0
         updateSubtitleOffset(subtitleIndex)
@@ -271,6 +292,14 @@ internal class Media3PlaybackOutput(
         next.addAnalyticsListener(loads)
         loadHandler.postDelayed(loadSummary, 10_000)
         next.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onBandwidthEstimate(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                totalLoadTimeMs: Int,
+                totalBytesLoaded: Long,
+                bitrateEstimate: Long
+            ) {
+                if (!progressive && current === decision && totalLoadTimeMs > 0) onBandwidthEstimate(bitrateEstimate, totalBytesLoaded)
+            }
             private var firstVideoDecoder = true
             override fun onVideoDecoderInitialized(
                 eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,

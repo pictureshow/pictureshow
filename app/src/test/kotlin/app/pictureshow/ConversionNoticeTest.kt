@@ -30,9 +30,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
@@ -345,10 +347,12 @@ class ConversionNoticeTest {
         assertTrue(state.local.conversionNotice, "default is on")
         assertTrue(PlaybackPreferences.decode().conversionNotice, "a missing stored value is on")
         assertEquals(false, PlaybackPreferences.decode(conversionNotice = false).conversionNotice)
-        compose.onNodeWithText("Conversion notice: On").assertExists()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this TV.").assertExists()
+        compose.onNodeWithText("Conversion notice").assertExists()
+        compose.onNodeWithText("Shows why a video or song needs conversion for this TV.").assertExists()
         val toggle = compose.onNodeWithTag("settings:conversion-notice").fetchSemanticsNode()
         assertEquals("On", toggle.config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals(Role.Switch, toggle.config.getOrNull(SemanticsProperties.Role))
+        assertEquals(ToggleableState.On, toggle.config.getOrNull(SemanticsProperties.ToggleableState))
         compose.onNodeWithTag("settings:passthrough").requestFocusNow()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         compose.waitForIdle()
@@ -356,7 +360,10 @@ class ConversionNoticeTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(false, state.local.conversionNotice) }
-        compose.onNodeWithText("Conversion notice: Off").assertExists()
+        compose.onNodeWithText("Conversion notice").assertExists()
+        val disabled = compose.onNodeWithTag("settings:conversion-notice").fetchSemanticsNode()
+        assertEquals("Off", disabled.config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals(ToggleableState.Off, disabled.config.getOrNull(SemanticsProperties.ToggleableState))
     }
 
     private fun SemanticsNodeInteraction.requestFocusNow() {

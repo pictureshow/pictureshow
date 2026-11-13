@@ -18,6 +18,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -693,8 +694,9 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun creditsCard(position: Long = 50_000) {
+    private fun creditsCard(position: Long = 50_000, earlyNext: Boolean = true) {
         compose.runOnIdle {
+            if (earlyNext) host.enableCreditsCountdown()
             host.position = position
             host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
@@ -703,6 +705,13 @@ class TouchPlayerControlsTest {
     }
 
     private fun bounds(tag: String) = compose.onNodeWithTag(tag).getBoundsInRoot()
+
+    @Test fun keepScenesCardOffersManualPlayWithoutEarlyCountdown() {
+        launch()
+        creditsCard(earlyNext = false)
+        compose.onNodeWithText("s left", substring = true).assertDoesNotExist()
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+    }
 
     // TOUCH-13: a number shows only while it is really counting.
     @Test fun nextCardCountsOnlyWhileTheCountdownRuns() {
@@ -735,6 +744,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:speed:200").performScrollTo().performClick()
         settled()
         compose.runOnIdle {
+            host.enableCreditsCountdown()
             host.position = 52_000
             host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
         }
@@ -856,6 +866,53 @@ class TouchPlayerControlsTest {
         settled()
         compose.onNodeWithText("Play").assertIsDisplayed()
         assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w320dp-h700dp-port-xhdpi")
+    @Test
+    fun qualityActionSharesTheTitleLineAndLeavesTransportAndOptionsSeparate() {
+        launch(fontScale = 1.5f)
+        decided(PlayMethod.DirectPlay)
+        settled()
+        val quality = bounds("touch:quality")
+        val title = bounds("touch:title")
+        assertTrue(title.right <= quality.left)
+        assertTrue(quality.right <= bounds("touch:panel").right)
+        assertTrue(quality.bottom <= bounds("touch:toggle").top)
+        assertTrue(quality.right - quality.left >= 48.dp)
+        val before = host.position
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.runOnIdle { assertNull(host.qualityOverrideMbps) }
+        compose.onNodeWithTag("player:quality-choice:4").performClick()
+        compose.runOnIdle {
+            assertEquals(4, host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+        compose.onNodeWithTag("touch:quality").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 Mbps")
+        )
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.onNodeWithTag("player:quality-choice:auto").performClick()
+        compose.runOnIdle {
+            assertNull(host.qualityOverrideMbps)
+            assertEquals(before, host.position)
+        }
+        compose.onNodeWithTag("touch:quality").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w1600dp-h700dp-land-xhdpi")
+    @Test
+    fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
+        launch()
+        settled()
+        val chapter = textBounds("Chapters")
+        val speed = textBounds("Speed · 1×")
+        val info = textBounds("Playback info")
+        assertEquals(chapter.top.value, speed.top.value, 1f)
+        assertEquals(speed.top.value, info.top.value, 1f)
+        assertEquals((speed.left - chapter.right).value, (info.left - speed.right).value, 1f)
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.
@@ -1044,12 +1101,83 @@ class TouchPlayerControlsTest {
         var smallestWidth by mutableStateOf(smallestWidth)
     }
 
-    @Test fun aPhonePlayerRequestsLandscapeAndGivesBackWhatWasThereOnExit() {
-        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+    @Test fun aPhonePlayerRequestsLandscapeAndLeavesNoLockOnExit() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
         compose.runOnIdle { probe.showing = false }
         compose.waitForIdle()
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    private class OverlappingPlayers {
+        var first by mutableStateOf(true)
+        var second by mutableStateOf(false)
+    }
+
+    private fun overlappingPlayers(before: Int): OverlappingPlayers {
+        compose.runOnIdle { compose.activity.requestedOrientation = before }
+        val players = OverlappingPlayers()
+        compose.setContent {
+            val base = LocalConfiguration.current
+            val phone = remember(base) { Configuration(base).apply { smallestScreenWidthDp = 360 } }
+            CompositionLocalProvider(LocalConfiguration provides phone) {
+                if (players.first) key("first") { TouchPlayerWindow() }
+                if (players.second) key("second") { TouchPlayerWindow() }
+            }
+        }
+        compose.waitForIdle()
+        return players
+    }
+
+    private fun show(change: () -> Unit) {
+        compose.runOnIdle(change)
+        compose.waitForIdle()
+    }
+
+    /** The next episode's route composes while the last one is still leaving; the phone stayed landscape until a force-stop. */
+    @Test fun theNextEpisodeTakingOverLeavesNoLockBehindOnceTheLastPlayerGoes() {
+        val players = overlappingPlayers(ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        show { players.second = true }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        // The one leaving mustn't rotate the one playing.
+        show { players.first = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        show { players.second = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    /** Android keeps the lock across a process death; the player that comes back must not take it for what was there before. */
+    @Test fun aLockLeftOverFromBeforeARestartIsNotGivenBack() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    @Test fun theViewersPortraitChoiceCarriesIntoTheNextEpisode() {
+        val players = overlappingPlayers(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        show { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT }
+        show { players.second = true }
+        show { players.first = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT, compose.activity.requestedOrientation)
+        show { players.second = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    @Test fun aHoldGivesBackOnlyWhenTheLastHolderLeaves() {
+        val hold = TouchPlayerWindowHold<String>()
+        val restored = mutableListOf<String>()
+        hold.acquire({ "before" }) {}
+        hold.acquire({ "locked" }) { error("the first holder already took it") }
+        hold.release(restored::add)
+        assertEquals(emptyList<String>(), restored)
+        hold.release(restored::add)
+        assertEquals(listOf("before"), restored)
+        hold.acquire({ "again" }) {}
+        hold.release(restored::add)
+        assertEquals(listOf("before", "again"), restored)
     }
 
     @Test fun aLargeScreenPlayerRequestsNothingOnTheWayInOrOut() {
@@ -1426,7 +1554,14 @@ class TouchPlayerControlsTest {
         return hosts
     }
 
+    private fun PlaybackHostState.enableCreditsCountdown() {
+        localPreferences = localPreferences.copy(
+            tuning = localPreferences.tuning.copy(postCredits = app.pictureshow.core.playback.PostCredits.NextEpisode)
+        )
+    }
+
     private fun PlaybackHostState.reachCredits() {
+        enableCreditsCountdown()
         position = 50_000
         segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
         nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("0123456789abcdef0123456789abcde2", "Next episode")))

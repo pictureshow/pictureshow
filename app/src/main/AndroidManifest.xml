@@ -4,8 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Music keeps playing with the screens gone (MUS-04). mediaPlayback is the only foreground type here; the Cast SDK's own services stay removed below. -->
+    <!-- Two foreground types: dataSync for downloads (OFF-03c), mediaPlayback so music keeps playing with the screens gone (MUS-04). The Cast SDK's own services stay removed below. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
@@ -65,6 +69,19 @@
                 <data android:scheme="pictureshow" android:host="play" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".OfflineTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".OfflineJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name=".OfflineRecoveryJobService"
+            tools:targetApi="34"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <service
             android:name=".MusicPlaybackService"
             android:exported="false"

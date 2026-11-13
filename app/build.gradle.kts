@@ -39,6 +39,8 @@ android {
             matchingFallbacks += "release"
         }
     }
+    // Low minSdk otherwise compresses DEX: ART must inflate it on the startup critical path.
+    packaging.dex.useLegacyPackaging = false
     buildFeatures {
         compose = true
         buildConfig = true
@@ -55,6 +57,8 @@ android {
         // Robolectric API 36 initializes ApplicationSharedMemory through the JDK file-descriptor bridge.
         unitTests.all {
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            // Robolectric keeps bitmaps on the JVM heap: at 2,022 tests the default 512 MB ran out in TrickplayCacheTest, twice in a row.
+            it.maxHeapSize = "1g"
             // Backstop for what PerTestTimeLimit can't stop: code spinning with no looper and no interrupt.
             it.timeout.set(Duration.ofMinutes(25))
         }

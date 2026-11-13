@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "suite": "frame-rate-match",
+  "cases": [
+    {
+      "id": "frame-rate-match.native-fractional",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 23.976,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60
+        },
+        "supported": [
+          {
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 60
+          },
+          {
+            "id": 2,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 119.88
+          },
+          {
+            "id": 3,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 47.952
+          },
+          {
+            "id": 4,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 23.976
+          }
+        ]
+      },
+      "expected": 4
+    },
+    {
+      "id": "frame-rate-match.lowest-multiple",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 24,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60
+        },
+        "supported": [
+          {
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 60
+          },
+          {
+            "id": 2,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 119.88
+          },
+          {
+            "id": 3,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 47.952
+          }
+        ]
+      },
+      "expected": 3
+    },
+    {
+      "id": "frame-rate-match.avoid-pulldown",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 24,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60
+        },
+        "supported": [
+          {
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 60
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "frame-rate-match.same-resolution",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 24,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60
+        },
+        "supported": [
+          {
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 60
+          },
+          {
+            "id": 2,
+            "width": 3840,
+            "height": 2160,
+            "refreshRate": 24
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "frame-rate-match.fifty-for-twenty-five",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 25,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60
+        },
+        "supported": [
+          {
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 60
+          },
+          {
+            "id": 2,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 50
+          }
+        ]
+      },
+      "expected": 2
+    },
+    {
+      "id": "frame-rate-match.preserve-hdr",
+      "operation": "frame-rate-mode",
+      "input": {
+        "receivedFrameRate": 24,
+        "current": {
+          "id": 1,
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60,
+          "hdrFormats": [
+            "HDR10",
+            "HLG"
+          ]
+        },
+        "supported": [
+          {
+            "id": 2,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 24,
+            "hdrFormats": [
+              "HDR10"
+            ]
+          },
+          {
+            "id": 3,
+            "width": 1920,
+            "height": 1080,
+            "refreshRate": 48,
+            "hdrFormats": [
+              "HDR10",
+              "HLG"
+            ]
+          }
+        ]
+      },
+      "expected": 3
+    }
+  ]
+}

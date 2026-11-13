@@ -55,6 +55,12 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    "frame-rate-match",
+    "playback-start",
+    "playback-settings",
+    "player-quality",
+    "settings-presentation",
+    "playback-settings-layout",
     "music-catalog",
     "music-queue",
     "music-session",
@@ -66,6 +72,15 @@ const pendingPortSuites = new Set([
     "remote-receive",
     "remote-reconnect",
     "remote-queue",
+    "offline-job",
+    "offline-budget",
+    "offline-resume",
+    "offline-manifest",
+    "offline-outbox",
+    "offline-plan",
+    "offline-reconnect",
+    "offline-next",
+    "offline-fmp4",
     "cast-handoff",
     "cast-capability",
     "cast-session",

@@ -74,11 +74,28 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         "remote-reconnect.json",
         "remote-queue.json"
     )
+    val offlineSuites =
+        listOf(
+            "offline-job.json",
+            "offline-budget.json",
+            "offline-resume.json",
+            "offline-manifest.json",
+            "offline-outbox.json",
+            "offline-plan.json",
+            "offline-reconnect.json",
+            "offline-next.json",
+            "offline-fmp4.json"
+        )
     from(rootProject.file("spec/vectors")) {
         exclude(controlSuites)
         exclude(remoteSuites)
+        exclude(offlineSuites)
         exclude("grid-navigation.json")
         into("parity-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
+        include(offlineSuites)
+        into("offline-vectors")
     }
     from(rootProject.file("spec/vectors")) {
         include("grid-navigation.json")

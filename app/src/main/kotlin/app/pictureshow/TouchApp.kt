@@ -39,6 +39,13 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
+/** Sign-in steps and every playing route, downloaded or streamed, own the whole screen. */
+internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = signedIn &&
+    route !in listOf("waiting", "servers") &&
+    route?.startsWith("login?") != true &&
+    route?.startsWith("quick?") != true &&
+    !isPlayerRoute(route)
+
 @Composable
 internal fun TouchPictureshow(
     session: SessionViewModel = koinViewModel(),
@@ -55,6 +62,8 @@ internal fun TouchPictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -83,12 +92,8 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = route?.startsWith("player?") == true
-    val showNavigation = signedIn &&
-        route !in listOf("waiting", "servers") &&
-        route?.startsWith("login?") != true &&
-        route?.startsWith("quick?") != true &&
-        !inPlayer
+    val inPlayer = isPlayerRoute(route)
+    val showNavigation = touchShowsNavigation(route, signedIn)
     val remote: RemoteControllerHost = koinInject()
     val remoteState by remote.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.snapshot.currentAccount) { remote.bind(state.snapshot.currentAccount) }
@@ -164,7 +169,7 @@ internal fun TouchPictureshow(
             installedExpired = expired
             installedToken = token
             accountInstalled = true
-            val destination = accountDestination(state.snapshot)
+            val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
             nav.navigate(destination) {
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
@@ -202,6 +207,7 @@ internal fun TouchPictureshow(
             consumeSearchEntry()
         }
         NavHost(navController = nav, startDestination = "waiting") {
+            offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
                 val vm: ServerViewModel = koinViewModel()
@@ -316,6 +322,7 @@ internal fun TouchPictureshow(
                         val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
+                        val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                             profileState.account.copy(server = account.server),
@@ -325,7 +332,8 @@ internal fun TouchPictureshow(
                                 vm.reload()
                             },
                             onResume = vm::resumed,
-                            librariesOnly = destination == "libraries"
+                            librariesOnly = destination == "libraries",
+                            onWatchDownloads = watchDownloads
                         )
                     }
                 }
@@ -363,12 +371,16 @@ internal fun TouchPictureshow(
                 }
             }
             composable(
-                "player?item={item}&start={start}",
+                "player?item={item}&start={start}&savedResume={savedResume}",
                 arguments = listOf(
                     navArgument("item") { type = NavType.StringType },
                     navArgument("start") {
                         type = NavType.LongType
                         defaultValue = 0L
+                    },
+                    navArgument("savedResume") {
+                        type = NavType.BoolType
+                        defaultValue = false
                     }
                 )
             ) { entry ->
@@ -379,7 +391,10 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        CompositionLocalProvider(LocalTouchPlayerCast provides TouchPlayerCast(cast, remote)) {
+                        CompositionLocalProvider(
+                            LocalTouchPlayerCast provides TouchPlayerCast(cast, remote),
+                            LocalPlaybackStartOrigin provides playbackStartOrigin(entry.arguments?.getBoolean("savedResume") == true)
+                        ) {
                             TouchPlayerScreen(
                                 account,
                                 item,
@@ -461,7 +476,7 @@ internal fun TouchPictureshow(
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, playable)),
                                         startMs = startMs,
-                                        onThisDevice = { nav.navigate(playerRoute(playable, startMs)) }
+                                        onThisDevice = { nav.navigate(playerRoute(playable, !fromStart)) }
                                     )
                                 ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
@@ -482,6 +497,9 @@ internal fun TouchPictureshow(
                             onBack = { nav.popBackStack() },
                             origin = item,
                             onPlayedRequest = vm::playedRequested,
+                            onDownload = { shown, season, seasonName ->
+                                offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                            },
                             offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
                         )
                     }
@@ -505,10 +523,12 @@ internal fun TouchPictureshow(
                     val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
                     val screen by vm.state.collectAsStateWithLifecycle()
                     var accepted by remember { mutableStateOf("Checking…") }
+                    var supportedPassthrough by remember { mutableStateOf(emptySet<app.pictureshow.core.playback.PassthroughEncoding>()) }
                     DisposableEffect(Unit) {
                         val probe = DeviceCapabilityProbe(context)
                         fun update(value: app.pictureshow.core.playback.DeviceCapabilities) {
                             accepted = passthroughEncodingLabels(value.audioOutput.passthrough)
+                            supportedPassthrough = value.audioOutput.passthrough
                         }
                         update(probe.snapshot())
                         probe.start(::update)
@@ -532,6 +552,8 @@ internal fun TouchPictureshow(
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
                         onThisDevice = { nav.navigate("this-device") },
+                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                        supportedPassthrough = supportedPassthrough,
                         castEnabled = castSwitchState(castState.capability, castStored),
                         onCastEnabled = cast::setEnabled,
                         onUpdateServices = settingsContext::openPlayServicesListing.takeIf {

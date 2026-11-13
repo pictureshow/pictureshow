@@ -94,6 +94,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.playback.PassthroughEncoding
 import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
@@ -234,10 +235,14 @@ class MainActivity : ComponentActivity() {
 
 internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
 
-internal fun playerRoute(item: MediaItem, resume: Boolean) =
-    playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
+internal fun playerRoute(item: MediaItem, resume: Boolean) = playerRoute(
+    item,
+    app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume),
+    if (resume) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
+)
 
-internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+internal fun playerRoute(item: MediaItem, positionMs: Long, startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.ExplicitPosition) =
+    "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs&savedResume=${startOrigin == PlaybackStartOrigin.SavedResume}"
 
 /** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
 internal fun remoteKeyCode(name: String): Int? = when (name) {
@@ -272,7 +277,7 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
         launchSingleTop = true
     }
     nav.navigate(itemRoute(entry.item))
-    nav.navigate(playerRoute(entry.item, entry.positionMs))
+    nav.navigate(playerRoute(entry.item, entry.positionMs, entry.startOrigin))
 }
 
 /** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
@@ -363,6 +368,8 @@ internal fun Pictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -392,7 +399,7 @@ internal fun Pictureshow(
         installedKey = key
         installedExpired = expired
         accountInstalled = true
-        val destination = accountDestination(state.snapshot)
+        val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
@@ -477,7 +484,7 @@ internal fun Pictureshow(
     val accessibleNavigation = rememberAssistiveServiceInUse()
     val musicState by music.state.collectAsStateWithLifecycle()
     val tvRoute = backStackEntry?.destination?.route
-    val musicBarShown = musicState.visible && tvRoute?.startsWith("player?") != true && tvRoute != MUSIC_NOW_ROUTE
+    val musicBarShown = tvShowsMusicBar(musicState.visible, tvRoute)
     var musicBarHeight by remember { mutableIntStateOf(0) }
     NavHost(
         navController = nav,
@@ -649,6 +656,12 @@ internal fun Pictureshow(
                                     hideFromAccessibility()
                                 }
                             )
+                            Text(
+                                "Downloads saved for it on this device are deleted.",
+                                modifier = Modifier.semantics {
+                                    hideFromAccessibility()
+                                }
+                            )
                             Message(screen.error)
                             val question = if (removingAccount != null) "Remove remembered account?" else "Remove server?"
                             Action(
@@ -657,7 +670,8 @@ internal fun Pictureshow(
                                 enabled = !screen.busy,
                                 modifier = Modifier.semantics {
                                     contentDescription =
-                                        "$question $description Other accounts stay signed in. You can add it again later."
+                                        "$question $description Other accounts stay signed in. You can add it again later. " +
+                                        "Downloads saved for it on this device are deleted."
                                 }
                             ) { cancelRemoval() }
                             Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
@@ -842,6 +856,7 @@ internal fun Pictureshow(
                 val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val profileState by profile.state.collectAsStateWithLifecycle()
+                val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                     profileState.account.copy(server = account.server),
@@ -855,10 +870,13 @@ internal fun Pictureshow(
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::resumed,
-                    onSettings = { nav.navigate("settings") }
+                    onSettings = { nav.navigate("settings") },
+                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                    onWatchDownloads = watchDownloads
                 )
             }
         }
+        offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
         aboutScreens(nav)
         supporterScreen(nav)
         composable("this-tv") {
@@ -870,10 +888,12 @@ internal fun Pictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val settingsContext = LocalContext.current
                 var accepted by remember { mutableStateOf("Checking…") }
+                var supportedPassthrough by remember { mutableStateOf(emptySet<PassthroughEncoding>()) }
                 DisposableEffect(Unit) {
                     val probe = DeviceCapabilityProbe(settingsContext)
                     fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
-                        accepted = passthroughEncodingLabels(capabilities.audioOutput.passthrough)
+                        supportedPassthrough = capabilities.audioOutput.passthrough
+                        accepted = passthroughEncodingLabels(supportedPassthrough)
                     }
                     update(probe.snapshot())
                     probe.start(::update)
@@ -888,7 +908,8 @@ internal fun Pictureshow(
                     onBack = { nav.popBackStack() },
                     onThisTv = { nav.navigate("this-tv") },
                     onAbout = { nav.navigate("about") },
-                    onSupport = { nav.navigate("supporter") }
+                    onSupport = { nav.navigate("supporter") },
+                    supportedPassthrough = supportedPassthrough
                 )
             }
         }
@@ -925,12 +946,16 @@ internal fun Pictureshow(
             }
         }
         composable(
-            "player?item={item}&start={start}",
+            "player?item={item}&start={start}&savedResume={savedResume}",
             arguments = listOf(
                 navArgument("item") { type = NavType.StringType },
                 navArgument("start") {
                     type = NavType.LongType
                     defaultValue = 0L
+                },
+                navArgument("savedResume") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { entry ->
@@ -942,7 +967,11 @@ internal fun Pictureshow(
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                 }) { onCurrentItem ->
-                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        LocalPlaybackStartOrigin provides playbackStartOrigin(entry.arguments?.getBoolean("savedResume") == true)
+                    ) {
+                        PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    }
                 }
             }
         }
@@ -1014,7 +1043,10 @@ internal fun Pictureshow(
                         onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
                         onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
                         onPlayedRequest = vm::playedRequested,
-                        origin = item
+                        origin = item,
+                        onDownload = { shown, season, seasonName ->
+                            offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                        }
                     )
                 }
             }

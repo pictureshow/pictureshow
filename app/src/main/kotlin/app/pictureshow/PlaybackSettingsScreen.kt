@@ -5,12 +5,9 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,19 +18,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
@@ -44,6 +35,7 @@ import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
 import app.pictureshow.core.UserConfiguration
 import app.pictureshow.core.UserConfigurationService
+import app.pictureshow.core.playback.PassthroughEncoding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -140,6 +132,7 @@ internal fun PlaybackSettingsScreen(
     onThisTv: () -> Unit = {},
     onAbout: () -> Unit = {},
     onSupport: () -> Unit = {},
+    supportedPassthrough: Set<PassthroughEncoding> = emptySet(),
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -147,157 +140,193 @@ internal fun PlaybackSettingsScreen(
     val thisTvFocus = remember { FocusRequester() }
     val aboutFocus = remember { FocusRequester() }
     val supportFocus = remember { FocusRequester() }
+    val advancedFocus = remember { mutableMapOf<String, FocusRequester>() }
     var restoreEntry by rememberSaveable { mutableStateOf("") }
+    var restoreAdvanced by remember { mutableStateOf<String?>(null) }
+    var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val local = state.local
     val configuration = state.configuration
-    val scroll = rememberScrollState()
-    Column(
-        Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-        Button(
-            onClick = {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(horizontal = 36.dp, vertical = 24.dp)) {
+        Text(
+            "Settings",
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.padding(horizontal = 28.dp).semantics {
+                heading()
+            }
+        )
+        TvSettingsList(Modifier.weight(1f)) {
+            TvSettingsChoiceRow(
+                "Home quality limit",
+                local.bitrateMbps,
+                PlaybackPreferences.BITRATES,
+                label = ::bitrateLabel,
+                modifier = Modifier.focusRequester(first).testTag("settings:bitrate"),
+                supportingText = "For streaming on your home network. Also in Network quality.",
+                optionSupportingText = ::bitrateOptionSupporting
+            ) { value -> onLocal { it.copy(bitrateMbps = value) } }
+            TvSettingsToggleRow(
+                "Audio passthrough",
+                local.passthrough,
+                Modifier.testTag("settings:passthrough"),
+                supportingText =
+                app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
+                    local.passthrough,
+                    supportedPassthrough,
+                    checking = acceptedAudio.startsWith("Checking"),
+                    downmix = local.tuning.downmix
+                )
+            ) { value -> onLocal { it.copy(passthrough = value) } }
+            TvSettingsToggleRow(
+                "Conversion notice",
+                local.conversionNotice,
+                Modifier.testTag("settings:conversion-notice"),
+                supportingText = "Shows why a video or song needs conversion for this TV."
+            ) { value -> onLocal { it.copy(conversionNotice = value) } }
+            TvSettingsChoiceRow(
+                "Music quality",
+                local.musicQuality,
+                musicQualityOptions.map { it.first },
+                { if (it == "auto") "Auto" else musicQualityLabel(it) },
+                Modifier.testTag("settings:music-quality"),
+                optionSupportingText = { if (it == "auto") "256 kbps on metered networks" else null }
+            ) { value -> onLocal { it.copy(musicQuality = value) } }
+            TvSettingsChoiceRow(
+                "Phone remote",
+                local.remoteReceiver,
+                listOf("same-viewer", "server-allowed", "off"),
+                label = {
+                    when (it) {
+                        "off" -> "Off"
+                        "server-allowed" -> "Server access"
+                        else -> "Only you"
+                    }
+                },
+                modifier = Modifier.testTag("settings:phone-remote"),
+                supportingText = "Who can play and control things on this TV from their phone while Pictureshow is open.",
+                optionSupportingText = { if (it == "server-allowed") "Anyone this server allows" else null }
+            ) { value -> onLocal { it.copy(remoteReceiver = value) } }
+            TvSettingsChoiceRow(
+                "Subtitle size",
+                local.subtitleSize,
+                SubtitleSize.entries,
+                ::subtitleSizeLabel,
+                Modifier.testTag("settings:size"),
+                supportingText = "Sets subtitle text size. Also in Subtitle appearance, with a live preview."
+            ) { value -> onLocal { it.copy(subtitleSize = value) } }
+            TvSettingsChoiceRow(
+                "Subtitle background",
+                local.subtitleBackground,
+                SubtitleBackground.entries,
+                ::subtitleBackgroundLabel,
+                Modifier.testTag("settings:background"),
+                supportingText = "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
+            ) { value -> onLocal { it.copy(subtitleBackground = value) } }
+            playbackGroups.forEach { group ->
+                val requester = remember(group) { FocusRequester() }
+                advancedFocus[group] = requester
+                TvSettingsActionRow(
+                    group,
+                    Modifier.focusRequester(requester).testTag("settings:advanced:$group"),
+                    navigation = true,
+                    summary = when (group) {
+                        "Network quality" -> "Home, remote and metered quality limits"
+                        "Subtitle appearance" -> "A live preview of text and image subtitles"
+                        "Subtitle conversion" -> "When the server draws subtitles into the picture"
+                        "Playback" -> "After credits and returning to a saved position"
+                        "Audio output" -> "Sound channels and connected receiver formats"
+                        else -> "Refresh rate and HDR compatibility"
+                    }
+                ) { advanced = group }
+            }
+            TvSettingsSectionHeader("Skip segments", supportingText = "Changes apply the next time you open the player.")
+            SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
+                TvSettingsChoiceRow(
+                    segmentLabel(type).replaceFirstChar { it.uppercase() },
+                    local.segmentModes[type] ?: SegmentMode.Ask,
+                    SegmentMode.entries,
+                    { if (it == SegmentMode.Automatic) "Skip automatically" else it.name },
+                    Modifier.testTag("settings:segment:$type")
+                ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
+            }
+            TvSettingsSectionHeader("Your server preferences")
+            val enabled = !state.loading && !state.saving && configuration != null
+            TvSettingsChoiceRow(
+                "Audio language",
+                configuration?.audioLanguage ?: "",
+                preferenceLanguages,
+                label = { if (configuration == null) "Loading…" else preferenceLanguageLabel(it) },
+                modifier = Modifier.testTag("settings:audio-language"),
+                enabled = enabled,
+                supportingText = "These preferences follow your account to other clients."
+            ) { value -> onServer("AudioLanguagePreference", value) }
+            TvSettingsChoiceRow(
+                "Subtitle language",
+                configuration?.subtitleLanguage ?: "",
+                preferenceLanguages,
+                label = { if (configuration == null) "Loading…" else preferenceLanguageLabel(it) },
+                modifier = Modifier.testTag("settings:subtitle-language"),
+                enabled = enabled
+            ) { value -> onServer("SubtitleLanguagePreference", value) }
+            TvSettingsChoiceRow(
+                "Subtitle mode",
+                configuration?.subtitleMode ?: "Default",
+                subtitleModes,
+                label = {
+                    if (configuration == null) {
+                        "Loading…"
+                    } else {
+                        when (it) {
+                            "OnlyForced" -> "Only forced"
+                            "None" -> "Off"
+                            else -> it
+                        }
+                    }
+                },
+                modifier = Modifier.testTag("settings:subtitle-mode"),
+                enabled = enabled
+            ) { value -> onServer("SubtitleMode", value) }
+            if (state.saving) Text("Saving server preferences…", Modifier.padding(12.dp))
+            state.error?.let { error ->
+                TvSettingsActionRow("Retry", supportingText = error, onClick = onRetry)
+            }
+            TvSettingsSectionHeader("Pictureshow")
+            TvSettingsActionRow(
+                stringResource(R.string.supporter_title),
+                Modifier.focusRequester(supportFocus).testTag("settings:supporter"),
+                navigation = true
+            ) {
                 restoreEntry = "supporter"
                 onSupport()
-            },
-            modifier = Modifier.focusRequester(supportFocus).testTag("settings:supporter")
-        ) { Text(stringResource(R.string.supporter_title)) }
-        Button(
-            onClick = {
+            }
+            TvSettingsActionRow("About Pictureshow", Modifier.focusRequester(aboutFocus).testTag("settings:about"), navigation = true) {
                 restoreEntry = "about"
                 onAbout()
-            },
-            modifier = Modifier.focusRequester(aboutFocus).testTag("settings:about")
-        ) { Text("About Pictureshow") }
-        Text("Press center to change a value. Changes are saved immediately.")
-        Button(
-            onClick = { onLocal { it.copy(bitrateMbps = nextSetting(PlaybackPreferences.BITRATES, it.bitrateMbps)) } },
-            modifier = Modifier.focusRequester(first).testTag("settings:bitrate").semantics {
-                onClick(label = "Change value", action = null)
             }
-        ) { Text("Max streaming bitrate: ${local.bitrateMbps?.let { "$it Mbps" } ?: "Auto (200 Mbps)"}") }
-        Button(
-            onClick = {
-                onLocal { it.copy(passthrough = !it.passthrough) }
-            },
-            modifier = Modifier.testTag("settings:passthrough").semantics {
-                toggleableState = ToggleableState(local.passthrough)
-                stateDescription = if (local.passthrough) "On" else "Off"
-            }
-        ) {
-            Text("Audio passthrough: ${if (local.passthrough) "On" else "Off"}")
-        }
-        Text("This TV's audio output accepts: $acceptedAudio")
-        Button(
-            onClick = { onLocal { it.copy(conversionNotice = !it.conversionNotice) } },
-            modifier = Modifier.testTag("settings:conversion-notice").semantics {
-                toggleableState = ToggleableState(local.conversionNotice)
-                stateDescription = if (local.conversionNotice) "On" else "Off"
-            }
-        ) {
-            Text("Conversion notice: ${if (local.conversionNotice) "On" else "Off"}")
-        }
-        Text("Shows a short note when the server has to convert a video or a song for this TV.")
-        Button(
-            onClick = {
-                onLocal {
-                    val order = musicQualityOptions.map { option -> option.first }
-                    it.copy(musicQuality = order[(order.indexOf(it.musicQuality) + 1) % order.size])
-                }
-            },
-            modifier = Modifier.testTag("settings:music-quality").semantics {
-                stateDescription = musicQualityLabel(local.musicQuality)
-            }
-        ) {
-            Text("Music quality: ${musicQualityLabel(local.musicQuality)}")
-        }
-        val phoneRemote = when (local.remoteReceiver) {
-            "off" -> "Off"
-            "server-allowed" -> "Anyone this server allows"
-            else -> "Only you"
-        }
-        Button(
-            onClick = {
-                onLocal {
-                    it.copy(
-                        remoteReceiver = when (it.remoteReceiver) {
-                            "same-viewer" -> "server-allowed"
-                            "server-allowed" -> "off"
-                            else -> "same-viewer"
-                        }
-                    )
-                }
-            },
-            modifier = Modifier.testTag("settings:phone-remote").semantics { stateDescription = phoneRemote }
-        ) {
-            Text("Phone remote: $phoneRemote")
-        }
-        Text("Who can play and control things on this TV from their phone while Pictureshow is open.")
-        Button(onClick = {
-            onLocal { it.copy(subtitleSize = nextSetting(SubtitleSize.entries, it.subtitleSize)) }
-        }, modifier = Modifier.testTag("settings:size").semantics { onClick(label = "Change value", action = null) }) {
-            Text("Subtitle size: ${settingLabel(local.subtitleSize.name)}")
-        }
-        Button(onClick = {
-            onLocal { it.copy(subtitleBackground = nextSetting(SubtitleBackground.entries, it.subtitleBackground)) }
-        }, modifier = Modifier.testTag("settings:background").semantics { onClick(label = "Change value", action = null) }) {
-            Text("Subtitle background: ${settingLabel(local.subtitleBackground.name)}")
-        }
-        Text(
-            "System follows Android caption settings. Bitmap subtitles keep their authored appearance. These settings apply the next time you open the player."
-        )
-        Text("Skip segments", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
-            val mode = local.segmentModes[type] ?: SegmentMode.Ask
-            Button(
-                onClick = {
-                    onLocal { it.copy(segmentModes = it.segmentModes + (type to nextSetting(SegmentMode.entries, mode))) }
-                },
-                modifier = Modifier.testTag("settings:segment:$type").semantics { onClick(label = "Change value", action = null) }
+            TvSettingsSectionHeader("Troubleshooting")
+            TvSettingsActionRow(
+                "This TV",
+                Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv"),
+                supportingText = "A technical report of the video and audio formats this TV can play.",
+                navigation = true
             ) {
-                Text(
-                    "${segmentLabel(type).replaceFirstChar {
-                        it.uppercase()
-                    }}: ${if (mode == SegmentMode.Automatic) "Skip automatically" else mode.name}"
-                )
-            }
-        }
-        Text("Ask shows a skip button. These settings apply the next time you open the player.")
-        Text("Your server preferences", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        Text("These follow your account to other clients.")
-        val enabled = !state.loading && !state.saving && configuration != null
-        Button(
-            onClick = { onServer("AudioLanguagePreference", nextSetting(preferenceLanguages, configuration!!.audioLanguage)) },
-            enabled = enabled,
-            modifier = Modifier.testTag("settings:audio-language").semantics { onClick(label = "Change value", action = null) }
-        ) { Text("Audio language: ${configuration?.audioLanguage?.let(::preferenceLanguageLabel) ?: "Loading…"}") }
-        Button(
-            onClick = { onServer("SubtitleLanguagePreference", nextSetting(preferenceLanguages, configuration!!.subtitleLanguage)) },
-            enabled = enabled,
-            modifier = Modifier.testTag("settings:subtitle-language").semantics { onClick(label = "Change value", action = null) }
-        ) { Text("Subtitle language: ${configuration?.subtitleLanguage?.let(::preferenceLanguageLabel) ?: "Loading…"}") }
-        Button(
-            onClick = { onServer("SubtitleMode", nextSetting(subtitleModes, configuration!!.subtitleMode)) },
-            enabled = enabled,
-            modifier = Modifier.testTag("settings:subtitle-mode").semantics { onClick(label = "Change value", action = null) }
-        ) { Text("Subtitle mode: ${configuration?.subtitleMode ?: "Loading…"}") }
-        if (state.saving) Text("Saving server preferences…")
-        state.error?.let {
-            Text(it)
-            Button(onClick = onRetry) { Text("Retry") }
-        }
-        // The decoder report is for troubleshooting, so it follows the viewer's own settings.
-        Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        Text("A technical report of the video and audio formats this TV can play.")
-        Button(
-            onClick = {
                 restoreEntry = "this-tv"
                 onThisTv()
-            },
-            modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
-        ) { Text("This TV") }
-        Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
+            }
+            TvSettingsActionRow("Back", Modifier.testTag("settings:back"), onClick = onBack)
+        }
+    }
+    advanced?.let { group ->
+        AdvancedPlaybackSettings(group, local, false, onLocal, onClose = {
+            advanced = null
+            restoreAdvanced = group
+        }, supportedPassthrough = supportedPassthrough)
+    }
+    LaunchedEffect(restoreAdvanced) {
+        restoreAdvanced?.let { group ->
+            androidx.compose.runtime.withFrameNanos { }
+            advancedFocus[group]?.requestFocus()
+            restoreAdvanced = null
+        }
     }
     LaunchedEffect(Unit) {
         when (restoreEntry) {
@@ -307,10 +336,4 @@ internal fun PlaybackSettingsScreen(
             else -> first.requestFocus()
         }
     }
-}
-
-private fun settingLabel(value: String): String = when (value) {
-    "System" -> "System (default)"
-    "ExtraLarge" -> "Extra large"
-    else -> value
 }

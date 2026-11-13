@@ -1,0 +1,945 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-reconnect",
+ "cases": [
+  {
+   "id": "offline-reconnect.undownloaded-audio",
+   "operation": "reconnect-tracks",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "media",
+         "role": "media",
+         "path": "media.mkv",
+         "complete": true
+        },
+        {
+         "id": "sub3",
+         "role": "subtitle",
+         "path": "s3.vtt",
+         "complete": true,
+         "required": false
+        },
+        {
+         "id": "sub5",
+         "role": "subtitle",
+         "path": "s5.vtt",
+         "complete": false,
+         "required": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng"
+        },
+        {
+         "serverIndex": 6,
+         "type": "audio",
+         "label": "Japanese",
+         "language": "jpn",
+         "available": false
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fre",
+         "available": false
+        },
+        {
+         "serverIndex": 3,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub3"
+        },
+        {
+         "serverIndex": 4,
+         "type": "subtitle",
+         "label": "Spanish",
+         "language": "spa",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "German",
+         "language": "ger",
+         "resourceId": "sub5"
+        }
+       ]
+      },
+      "type": "audio"
+     },
+     "expected": {
+      "indexes": [
+       2,
+       6
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.undownloaded-subtitles-include-an-unfinished-caption",
+   "operation": "reconnect-tracks",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "media",
+         "role": "media",
+         "path": "media.mkv",
+         "complete": true
+        },
+        {
+         "id": "sub3",
+         "role": "subtitle",
+         "path": "s3.vtt",
+         "complete": true,
+         "required": false
+        },
+        {
+         "id": "sub5",
+         "role": "subtitle",
+         "path": "s5.vtt",
+         "complete": false,
+         "required": false
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng"
+        },
+        {
+         "serverIndex": 6,
+         "type": "audio",
+         "label": "Japanese",
+         "language": "jpn",
+         "available": false
+        },
+        {
+         "serverIndex": 2,
+         "type": "audio",
+         "label": "French",
+         "language": "fre",
+         "available": false
+        },
+        {
+         "serverIndex": 3,
+         "type": "subtitle",
+         "label": "English",
+         "language": "eng",
+         "resourceId": "sub3"
+        },
+        {
+         "serverIndex": 4,
+         "type": "subtitle",
+         "label": "Spanish",
+         "language": "spa",
+         "available": false
+        },
+        {
+         "serverIndex": 5,
+         "type": "subtitle",
+         "label": "German",
+         "language": "ger",
+         "resourceId": "sub5"
+        }
+       ]
+      },
+      "type": "subtitle"
+     },
+     "expected": {
+      "indexes": [
+       4,
+       5
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.nothing-missing-lists-nothing",
+   "operation": "reconnect-tracks",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "entry": {
+       "id": "i1:original",
+       "itemId": "i1",
+       "kind": "movie",
+       "preset": "original",
+       "labels": {
+        "title": "Title"
+       },
+       "resources": [
+        {
+         "id": "media",
+         "role": "media",
+         "path": "media.mkv",
+         "complete": true
+        }
+       ],
+       "tracks": [
+        {
+         "serverIndex": 1,
+         "type": "audio",
+         "label": "English",
+         "language": "eng"
+        }
+       ]
+      },
+      "type": "audio"
+     },
+     "expected": {
+      "indexes": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.a-local-track-is-never-a-reconnect",
+   "operation": "reconnect-decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "trackSwitch": "local",
+      "network": "none"
+     },
+     "expected": {
+      "outcome": "local",
+      "metered": false
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "local",
+      "network": "metered",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "local",
+      "metered": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.no-network-says-so-before-any-request",
+   "operation": "reconnect-decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "none"
+     },
+     "expected": {
+      "outcome": "no-connection"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "none",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "no-connection"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.waiting-for-the-server",
+   "operation": "reconnect-decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered"
+     },
+     "expected": {
+      "outcome": "checking"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok"
+     },
+     "expected": {
+      "outcome": "checking"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "playbackAllowed": true
+     },
+     "expected": {
+      "outcome": "checking"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "checking"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.refusals-in-order",
+   "operation": "reconnect-decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "unreachable",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "server-unreachable"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "signed-out",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "signed-out"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "playbackAllowed": false,
+      "trackOnServer": false
+     },
+     "expected": {
+      "outcome": "not-allowed"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "playbackAllowed": false
+     },
+     "expected": {
+      "outcome": "not-allowed"
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": false
+     },
+     "expected": {
+      "outcome": "track-gone"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.offer-names-a-metered-network-and-wifi-only-is-no-input",
+   "operation": "reconnect-decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "unmetered",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "offer",
+      "metered": false
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "metered",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": true
+     },
+     "expected": {
+      "outcome": "offer",
+      "metered": true
+     }
+    },
+    {
+     "event": {
+      "trackSwitch": "reconnect",
+      "network": "metered",
+      "server": "ok",
+      "playbackAllowed": true,
+      "trackOnServer": false
+     },
+     "expected": {
+      "outcome": "track-gone",
+      "metered": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.track-on-the-downloaded-source",
+   "operation": "reconnect-track-on-server",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "serverIndex": 4,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.first-source-when-the-download-named-none",
+   "operation": "reconnect-track-on-server",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "serverIndex": 4,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.source-replaced-on-the-server",
+   "operation": "reconnect-track-on-server",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "serverIndex": 4,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sourceId": "gone",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": false
+     }
+    },
+    {
+     "event": {
+      "track": {
+       "serverIndex": 4,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sources": []
+     },
+     "expected": {
+      "found": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.same-index-must-be-the-same-track",
+   "operation": "reconnect-track-on-server",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "serverIndex": 2,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": false
+     }
+    },
+    {
+     "event": {
+      "track": {
+       "serverIndex": 2,
+       "type": "audio",
+       "label": "Spanish",
+       "language": "ita",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": false
+     }
+    },
+    {
+     "event": {
+      "track": {
+       "serverIndex": 7,
+       "type": "audio",
+       "label": "Spanish",
+       "language": "ita",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": true
+     }
+    },
+    {
+     "event": {
+      "track": {
+       "serverIndex": 2,
+       "type": "audio",
+       "label": "Unknown",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": true
+     }
+    },
+    {
+     "event": {
+      "track": {
+       "serverIndex": 8,
+       "type": "subtitle",
+       "label": "Spanish",
+       "language": "spa",
+       "available": false
+      },
+      "sourceId": "s1",
+      "sources": [
+       {
+        "id": "s1",
+        "tracks": [
+         {
+          "index": 4,
+          "type": "Subtitle",
+          "language": "spa"
+         },
+         {
+          "index": 2,
+          "type": "Audio",
+          "language": "fre"
+         },
+         {
+          "index": 7,
+          "type": "Audio"
+         }
+        ]
+       },
+       {
+        "id": "s2",
+        "tracks": [
+         {
+          "index": 9,
+          "type": "Audio"
+         }
+        ]
+       }
+      ]
+     },
+     "expected": {
+      "found": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.picked-audio-keeps-current-subtitle",
+   "operation": "handoff-selection",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "type": "audio",
+      "index": 6,
+      "currentAudio": 1,
+      "currentSubtitle": 3
+     },
+     "expected": {
+      "audio": 6,
+      "subtitle": 3
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.picked-subtitle-keeps-current-audio",
+   "operation": "handoff-selection",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "type": "subtitle",
+      "index": 4,
+      "currentAudio": 1,
+      "currentSubtitle": 3
+     },
+     "expected": {
+      "audio": 1,
+      "subtitle": 4
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.explicit-subtitles-off-is-carried",
+   "operation": "handoff-selection",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "type": "audio",
+      "index": 6,
+      "currentAudio": 1,
+      "currentSubtitle": -1
+     },
+     "expected": {
+      "audio": 6,
+      "subtitle": -1
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-reconnect.audio-off-falls-to-the-server-default",
+   "operation": "handoff-selection",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "type": "subtitle",
+      "index": 4,
+      "currentAudio": -1,
+      "currentSubtitle": -1
+     },
+     "expected": {
+      "audio": null,
+      "subtitle": 4
+     }
+    },
+    {
+     "event": {
+      "type": "subtitle",
+      "index": 4
+     },
+     "expected": {
+      "audio": null,
+      "subtitle": 4
+     }
+    },
+    {
+     "event": {
+      "type": "audio",
+      "index": 6
+     },
+     "expected": {
+      "audio": 6,
+      "subtitle": null
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -43,8 +43,15 @@ class PlaybackEntryRoutingTest {
                 composable("existing") { BasicText("Old destination") }
                 composable("item?item={item}", listOf(navArgument("item") { type = NavType.StringType })) { BasicText("Detail") }
                 composable(
-                    "player?item={item}&start={start}",
-                    listOf(navArgument("item") { type = NavType.StringType }, navArgument("start") { type = NavType.LongType })
+                    "player?item={item}&start={start}&savedResume={savedResume}",
+                    listOf(
+                        navArgument("item") { type = NavType.StringType },
+                        navArgument("start") { type = NavType.LongType },
+                        navArgument("savedResume") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
                 ) { BasicText("Player") }
             }
         }
@@ -55,8 +62,9 @@ class PlaybackEntryRoutingTest {
         }
         compose.waitForIdle()
         compose.runOnIdle {
-            assertEquals("player?item={item}&start={start}", nav.currentDestination?.route)
+            assertEquals("player?item={item}&start={start}&savedResume={savedResume}", nav.currentDestination?.route)
             assertEquals(123_456L, nav.currentBackStackEntry?.arguments?.getLong("start"))
+            assertEquals(true, nav.currentBackStackEntry?.arguments?.getBoolean("savedResume"))
             assertEquals(item, Json.decodeFromString<MediaItem>(nav.currentBackStackEntry?.arguments?.getString("item")!!))
             assertTrue(nav.popBackStack())
         }

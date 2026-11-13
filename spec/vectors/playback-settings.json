@@ -1,0 +1,1095 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-settings",
+  "cases": [
+    {
+      "id": "playback-settings.quality.home",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home"
+      },
+      "expected": 80000000
+    },
+    {
+      "id": "playback-settings.quality.remote",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Remote"
+      },
+      "expected": 20000000
+    },
+    {
+      "id": "playback-settings.quality.metered",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Metered"
+      },
+      "expected": 4000000
+    },
+    {
+      "id": "playback-settings.quality.auto-unknown-bandwidth",
+      "operation": "quality-cap",
+      "input": {
+        "network": "Home"
+      },
+      "expected": 200000000
+    },
+    {
+      "id": "playback-settings.quality.bandwidth-drop",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home",
+        "estimatedBandwidth": 9000000
+      },
+      "expected": 4000000
+    },
+    {
+      "id": "playback-settings.quality.below-lowest-preset",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home",
+        "estimatedBandwidth": 2000000
+      },
+      "expected": 1600000
+    },
+    {
+      "id": "playback-settings.quality.negative-bandwidth-ignored",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home",
+        "estimatedBandwidth": -20
+      },
+      "expected": 80000000
+    },
+    {
+      "id": "playback-settings.quality.manual-override",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home",
+        "estimatedBandwidth": 9000000,
+        "overrideMbps": 40
+      },
+      "expected": 40000000
+    },
+    {
+      "id": "playback-settings.quality.auto-disabled",
+      "operation": "quality-cap",
+      "input": {
+        "homeMbps": 80,
+        "network": "Home",
+        "estimatedBandwidth": 9000000,
+        "tuning": {
+          "autoAdjustQuality": false
+        }
+      },
+      "expected": 80000000
+    },
+    {
+      "id": "playback-settings.quality.remote-auto-explicit-cap",
+      "operation": "quality-cap",
+      "input": {
+        "network": "Remote",
+        "tuning": {
+          "remoteBitrateMbps": null
+        }
+      },
+      "expected": 200000000
+    },
+    {
+      "id": "playback-settings.quality.bad-persisted-cap-falls-back",
+      "operation": "quality-cap",
+      "input": {
+        "network": "Remote",
+        "tuning": {
+          "remoteBitrateMbps": 73
+        }
+      },
+      "expected": 20000000
+    },
+    {
+      "id": "playback-settings.network.true.true",
+      "operation": "network-classification",
+      "input": {
+        "metered": true,
+        "localEndpoint": true
+      },
+      "expected": "Metered"
+    },
+    {
+      "id": "playback-settings.network.true.false",
+      "operation": "network-classification",
+      "input": {
+        "metered": true,
+        "localEndpoint": false
+      },
+      "expected": "Metered"
+    },
+    {
+      "id": "playback-settings.network.false.true",
+      "operation": "network-classification",
+      "input": {
+        "metered": false,
+        "localEndpoint": true
+      },
+      "expected": "Home"
+    },
+    {
+      "id": "playback-settings.network.false.false",
+      "operation": "network-classification",
+      "input": {
+        "metered": false,
+        "localEndpoint": false
+      },
+      "expected": "Remote"
+    },
+    {
+      "id": "playback-settings.quality.reduction-eligible",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 40000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.reduction-single-sample",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 40000000,
+        "sampleCount": 1,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.reduction-small-sample",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 40000000,
+        "sampleCount": 2,
+        "sampleBytes": 131071,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.reduction-cooldown",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 40000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 29999
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.reduction-small-drop",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 60000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.quality.reduction-never-increase",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 120000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.reduction-invalid-cap",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 0,
+        "proposedCap": 40000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.resume.clamp-zero",
+      "operation": "resume-position",
+      "input": {
+        "savedPositionMs": 20000,
+        "tuning": {
+          "rewindSeconds": 30
+        }
+      },
+      "expected": 0
+    },
+    {
+      "id": "playback-settings.resume.ten-seconds",
+      "operation": "resume-position",
+      "input": {
+        "savedPositionMs": 100000,
+        "tuning": {
+          "rewindSeconds": 10
+        }
+      },
+      "expected": 90000
+    },
+    {
+      "id": "playback-settings.resume.invalid-pref",
+      "operation": "resume-position",
+      "input": {
+        "savedPositionMs": 100000,
+        "tuning": {
+          "rewindSeconds": 9
+        }
+      },
+      "expected": 100000
+    },
+    {
+      "id": "playback-settings.resume.negative-saved",
+      "operation": "resume-position",
+      "input": {
+        "savedPositionMs": -1,
+        "tuning": {
+          "rewindSeconds": 10
+        }
+      },
+      "expected": 0
+    },
+    {
+      "id": "playback-settings.credits.preserve-scene",
+      "operation": "early-next",
+      "input": {
+        "hasPostCreditsScene": true,
+        "tuning": {}
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.credits.explicit-next",
+      "operation": "early-next",
+      "input": {
+        "hasPostCreditsScene": true,
+        "tuning": {
+          "postCredits": "NextEpisode"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.credits.known-no-scene",
+      "operation": "early-next",
+      "input": {
+        "hasPostCreditsScene": false,
+        "tuning": {}
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.burn.automatic",
+      "operation": "subtitle-policy",
+      "input": {
+        "tuning": {
+          "subtitleBurnIn": "Automatic"
+        }
+      },
+      "expected": {
+        "textMethods": [
+          "Embed",
+          "External"
+        ],
+        "imageMethods": [
+          "Embed",
+          "Encode"
+        ]
+      }
+    },
+    {
+      "id": "playback-settings.burn.always",
+      "operation": "subtitle-policy",
+      "input": {
+        "tuning": {
+          "subtitleBurnIn": "Always"
+        }
+      },
+      "expected": {
+        "textMethods": [
+          "Encode"
+        ],
+        "imageMethods": [
+          "Encode"
+        ]
+      }
+    },
+    {
+      "id": "playback-settings.burn.imageonly",
+      "operation": "subtitle-policy",
+      "input": {
+        "tuning": {
+          "subtitleBurnIn": "ImageOnly"
+        }
+      },
+      "expected": {
+        "textMethods": [
+          "Embed",
+          "External"
+        ],
+        "imageMethods": [
+          "Encode"
+        ]
+      }
+    },
+    {
+      "id": "playback-settings.audio.passthrough-per-format",
+      "operation": "audio-output",
+      "input": {
+        "tuning": {
+          "disabledPassthrough": [
+            "TRUEHD"
+          ]
+        }
+      },
+      "expected": {
+        "passthrough": [
+          "AC3",
+          "DTS",
+          "DTS_HD",
+          "EAC3",
+          "EAC3_JOC"
+        ],
+        "pcmChannels": 8,
+        "maximumInputChannels": 8
+      }
+    },
+    {
+      "id": "playback-settings.audio.downmix",
+      "operation": "audio-output",
+      "input": {
+        "tuning": {
+          "downmix": true
+        }
+      },
+      "expected": {
+        "passthrough": [],
+        "pcmChannels": 2,
+        "maximumInputChannels": 2
+      }
+    },
+    {
+      "id": "playback-settings.audio.channel-cap",
+      "operation": "audio-output",
+      "input": {
+        "tuning": {
+          "maxAudioChannels": 6
+        }
+      },
+      "expected": {
+        "passthrough": [
+          "AC3",
+          "DTS"
+        ],
+        "pcmChannels": 6,
+        "maximumInputChannels": 6
+      }
+    },
+    {
+      "id": "playback-settings.hdr.detected",
+      "operation": "hdr-profile",
+      "input": {
+        "fixture": "streamer",
+        "tuning": {}
+      },
+      "expected": {
+        "hdr10": true,
+        "dolbyVision": true,
+        "hdr10Plus": true,
+        "detectedDolbyVision": true
+      }
+    },
+    {
+      "id": "playback-settings.hdr.disable-hdr",
+      "operation": "hdr-profile",
+      "input": {
+        "fixture": "streamer",
+        "tuning": {
+          "hdr": "Disable"
+        }
+      },
+      "expected": {
+        "hdr10": false,
+        "dolbyVision": true,
+        "hdr10Plus": false,
+        "detectedDolbyVision": true
+      }
+    },
+    {
+      "id": "playback-settings.hdr.disable-dv",
+      "operation": "hdr-profile",
+      "input": {
+        "fixture": "streamer",
+        "tuning": {
+          "dolbyVision": "Disable"
+        }
+      },
+      "expected": {
+        "hdr10": true,
+        "dolbyVision": false,
+        "hdr10Plus": true,
+        "detectedDolbyVision": true
+      }
+    },
+    {
+      "id": "playback-settings.hdr.force-dv",
+      "operation": "hdr-profile",
+      "input": {
+        "fixture": "projector",
+        "tuning": {
+          "dolbyVision": "Force"
+        }
+      },
+      "expected": {
+        "hdr10": true,
+        "dolbyVision": true,
+        "hdr10Plus": false,
+        "detectedDolbyVision": false
+      }
+    },
+    {
+      "id": "playback-settings.hdr.prefer-dv",
+      "operation": "hdr-profile",
+      "input": {
+        "fixture": "streamer",
+        "tuning": {
+          "preferDolbyVision": true
+        }
+      },
+      "expected": {
+        "hdr10": true,
+        "dolbyVision": true,
+        "hdr10Plus": false,
+        "detectedDolbyVision": true
+      }
+    },
+    {
+      "id": "playback-settings.subtitle.defaults",
+      "operation": "subtitle-style",
+      "input": {
+        "style": {}
+      },
+      "expected": {
+        "foreground": "System",
+        "edge": "System",
+        "edgeColor": "Black",
+        "backgroundColor": "Black",
+        "textOpacity": 100,
+        "backgroundOpacity": 80,
+        "position": "Authored",
+        "bold": false,
+        "italic": false,
+        "imageOpacity": 100,
+        "overrideEmbedded": false
+      }
+    },
+    {
+      "id": "playback-settings.subtitle.invalid-values",
+      "operation": "subtitle-style",
+      "input": {
+        "style": {
+          "foreground": "bad",
+          "edge": "bad",
+          "edgeColor": "System",
+          "backgroundColor": "System",
+          "textOpacity": 101,
+          "backgroundOpacity": -1,
+          "position": "bad",
+          "imageOpacity": 600
+        }
+      },
+      "expected": {
+        "foreground": "System",
+        "edge": "System",
+        "edgeColor": "Black",
+        "backgroundColor": "Black",
+        "textOpacity": 100,
+        "backgroundOpacity": 0,
+        "position": "Authored",
+        "bold": false,
+        "italic": false,
+        "imageOpacity": 100,
+        "overrideEmbedded": false
+      }
+    },
+    {
+      "id": "playback-settings.subtitle.appearance-roundtrip",
+      "operation": "subtitle-style",
+      "input": {
+        "style": {
+          "foreground": "Yellow",
+          "edge": "Outline",
+          "edgeColor": "Green",
+          "backgroundColor": "Cyan",
+          "textOpacity": 40,
+          "backgroundOpacity": 20,
+          "position": "Top",
+          "bold": true,
+          "italic": true,
+          "imageOpacity": 50,
+          "overrideEmbedded": true
+        }
+      },
+      "expected": {
+        "foreground": "Yellow",
+        "edge": "Outline",
+        "edgeColor": "Green",
+        "backgroundColor": "Cyan",
+        "textOpacity": 40,
+        "backgroundOpacity": 20,
+        "position": "Top",
+        "bold": true,
+        "italic": true,
+        "imageOpacity": 50,
+        "overrideEmbedded": true
+      }
+    },
+    {
+      "id": "playback-settings.information.burn-always",
+      "operation": "information-reason",
+      "input": {
+        "reason": "SubtitleCodecNotSupported",
+        "tuning": {
+          "subtitleBurnIn": "Always"
+        }
+      },
+      "expected": "Your subtitle burn-in setting requires conversion of the video. Set subtitle burn-in to Automatic in Playback settings, or turn subtitles off."
+    },
+    {
+      "id": "playback-settings.information.hdr-disabled",
+      "operation": "information-reason",
+      "input": {
+        "reason": "VideoRangeTypeNotSupported",
+        "tuning": {
+          "hdr": "Disable"
+        }
+      },
+      "expected": "HDR or Dolby Vision is disabled in Playback settings. Restore detected support to try original video; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-settings.information.quality-below-one-mbps",
+      "operation": "information-reason",
+      "input": {
+        "reason": "VideoBitrateNotSupported",
+        "activeBitrate": 300000
+      },
+      "expected": "Quality is capped at 300 kbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-settings.information.quality-network-cap",
+      "operation": "information-reason",
+      "input": {
+        "reason": "ContainerBitrateExceedsLimit",
+        "activeBitrate": 4000000
+      },
+      "expected": "Quality is capped at 4.00 Mbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-settings.quality.reduction-no-change",
+      "operation": "quality-reduction",
+      "input": {
+        "currentCap": 80000000,
+        "proposedCap": 80000000,
+        "sampleCount": 2,
+        "sampleBytes": 131072,
+        "elapsedSinceAdjustmentMs": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.quality.eighteen-mbps-bandwidth-under-twenty-cap",
+      "operation": "quality-cap",
+      "input": {
+        "network": "Remote",
+        "estimatedBandwidth": 18000000,
+        "tuning": {
+          "remoteBitrateMbps": 20
+        }
+      },
+      "expected": 10000000
+    },
+    {
+      "id": "playback-settings.json.tuning-preserves-independent-valid-fields",
+      "operation": "tuning-json",
+      "input": {
+        "raw": "{\"remoteBitrateMbps\":10,\"maxAudioChannels\":\"bad\",\"rewindSeconds\":15,\"subtitleBurnIn\":\"Future\"}"
+      },
+      "expected": {
+        "remoteBitrateMbps": 10,
+        "meteredBitrateMbps": 4,
+        "autoAdjustQuality": true,
+        "subtitleBurnIn": "Automatic",
+        "disabledPassthrough": [],
+        "downmix": false,
+        "hdr": "Detected",
+        "dolbyVision": "Detected",
+        "preferDolbyVision": false,
+        "rewindSeconds": 15,
+        "postCredits": "KeepScenes",
+        "matchFrameRate": false
+      }
+    },
+    {
+      "id": "playback-settings.json.style-preserves-independent-valid-fields",
+      "operation": "style-json",
+      "input": {
+        "raw": "{\"foreground\":\"Cyan\",\"imageOpacity\":\"bad\",\"position\":\"Top\"}"
+      },
+      "expected": {
+        "foreground": "Cyan",
+        "edge": "System",
+        "edgeColor": "Black",
+        "backgroundColor": "Black",
+        "textOpacity": 100,
+        "backgroundOpacity": 80,
+        "position": "Top",
+        "bold": false,
+        "italic": false,
+        "imageOpacity": 100,
+        "overrideEmbedded": false
+      }
+    },
+    {
+      "id": "playback-settings.quality.bandwidth-above-cap-does-not-reduce",
+      "operation": "quality-cap",
+      "input": {
+        "network": "Remote",
+        "estimatedBandwidth": 24900000,
+        "tuning": {
+          "remoteBitrateMbps": 20
+        }
+      },
+      "expected": 20000000
+    },
+    {
+      "id": "playback-settings.information.quality-below-one-kbps",
+      "operation": "information-reason",
+      "input": {
+        "reason": "VideoBitrateNotSupported",
+        "activeBitrate": 80
+      },
+      "expected": "Quality is capped at <1 kbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-settings.network.ipv6-fc",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          252,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.network.ipv6-fd",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          253,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.network.ipv6-public",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          32,
+          1,
+          72,
+          96,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.network.ipv4-not-ula",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          192,
+          168,
+          1,
+          2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.credits.automatic-keepscenes-false",
+      "operation": "automatic-next",
+      "input": {
+        "ended": false,
+        "tuning": {
+          "postCredits": "KeepScenes"
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.credits.automatic-keepscenes-true",
+      "operation": "automatic-next",
+      "input": {
+        "ended": true,
+        "tuning": {
+          "postCredits": "KeepScenes"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.credits.automatic-nextepisode-false",
+      "operation": "automatic-next",
+      "input": {
+        "ended": false,
+        "tuning": {
+          "postCredits": "NextEpisode"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.credits.automatic-nextepisode-true",
+      "operation": "automatic-next",
+      "input": {
+        "ended": true,
+        "tuning": {
+          "postCredits": "NextEpisode"
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.active-read.emits-before-transfer-end",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 6291456,
+          "bytes": 786432
+        },
+        {
+          "bitrate": 6291456,
+          "bytes": 786432
+        }
+      ]
+    },
+    {
+      "id": "playback-settings.active-read.outside-read-idle-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 100000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 30100000000,
+            "endedNanos": 30200000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 60200000000,
+            "endedNanos": 60300000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 90300000000,
+            "endedNanos": 90400000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 120400000000,
+            "endedNanos": 120500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 150500000000,
+            "endedNanos": 150600000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 180600000000,
+            "endedNanos": 180700000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 210700000000,
+            "endedNanos": 210800000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 240800000000,
+            "endedNanos": 240900000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 270900000000,
+            "endedNanos": 271000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 301000000000,
+            "endedNanos": 301100000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 331100000000,
+            "endedNanos": 331200000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 361200000000,
+            "endedNanos": 361300000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 391300000000,
+            "endedNanos": 391400000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 421400000000,
+            "endedNanos": 421500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 451500000000,
+            "endedNanos": 451600000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 481600000000,
+            "endedNanos": 481700000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 511700000000,
+            "endedNanos": 511800000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 541800000000,
+            "endedNanos": 541900000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 571900000000,
+            "endedNanos": 572000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 62914560,
+          "bytes": 7864320
+        },
+        {
+          "bitrate": 62914560,
+          "bytes": 7864320
+        }
+      ]
+    },
+    {
+      "id": "playback-settings.active-read.local-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": false,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.not-full-speed-excluded",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": false,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.eof-does-not-flush",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 500000000
+          },
+          {
+            "bytes": -1,
+            "beganNanos": 500000000,
+            "endedNanos": 1000000000
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.new-transfer-resets",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 786432,
+            "beganNanos": 0,
+            "endedNanos": 500000000
+          },
+          {
+            "bytes": 786432,
+            "beganNanos": 1000000000,
+            "endedNanos": 1500000000,
+            "reset": true
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-settings.active-read.requires-substantial-bytes",
+      "operation": "active-read-bandwidth",
+      "input": {
+        "network": true,
+        "fullSpeed": true,
+        "reads": [
+          {
+            "bytes": 65536,
+            "beganNanos": 0,
+            "endedNanos": 1000000000
+          },
+          {
+            "bytes": 65536,
+            "beganNanos": 1000000000,
+            "endedNanos": 2000000000
+          }
+        ]
+      },
+      "expected": [
+        {
+          "bitrate": 524288,
+          "bytes": 131072
+        }
+      ]
+    }
+  ]
+}

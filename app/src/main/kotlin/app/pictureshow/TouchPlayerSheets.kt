@@ -59,6 +59,7 @@ internal fun TouchPlayerSheetContent(
     onDismiss: () -> Unit,
     onSeek: (Long) -> Unit
 ) {
+    LocalOfflinePlayback.current?.reconnect?.let { OfflineReconnectLifetime(it) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp).testTag("touch:sheet:$sheet")) {
             // Done's own padding would leave its word short of the margin the title starts on.
@@ -119,6 +120,15 @@ private fun TouchTrackChoices(
     preparation: PlayerTrackMenuPreparation,
     onDismiss: () -> Unit
 ) {
+    val reconnect = LocalOfflinePlayback.current?.reconnect
+    if (reconnect != null && reconnect.state != OfflineReconnectState.Idle) {
+        OfflineReconnectTouchContent(reconnect.state, onStream = {
+            reconnect.accept(
+                OutputReconnectPlayer(host.output, { host.state.audioIndex to host.state.subtitleIndex }, host::closeForStream)
+            )
+        }, onClose = onDismiss)
+        return
+    }
     val decision = host.state.decision
     val menu = preparation.menus?.takeIf { decision != null }?.get(type)
     if (menu == null) {
@@ -131,8 +141,12 @@ private fun TouchTrackChoices(
     LazyColumn(Modifier.selectableGroup(), state = rememberLazyListState(initialFirstVisibleItemIndex = first)) {
         itemsIndexed(menu.choices, key = { _, choice -> choice.first }) { _, choice ->
             TouchChoiceRow(choice.second, choice.first == selectedIndex, "touch:track:${choice.first}") {
-                host.controller?.select(type, choice.first)
-                onDismiss()
+                if (choice.first in menu.needsConnection && reconnect != null) {
+                    reconnect.pick(type, choice.first)
+                } else {
+                    host.controller?.select(type, choice.first)
+                    onDismiss()
+                }
             }
         }
         if (type == MediaStreamType.Subtitle) {
@@ -220,8 +234,10 @@ private fun TouchPlaybackInformation(host: PlaybackHostState) {
             decision,
             host.state.audioIndex,
             host.state.subtitleIndex,
-            host.localPreferences.bitrateMbps,
-            tracks
+            host.effectiveSettings.maxStreamingBitrate / 1_000_000,
+            tracks,
+            host.localPreferences.tuning,
+            host.effectiveSettings.maxStreamingBitrate
         ).forEach { section ->
             Text(
                 section.title,

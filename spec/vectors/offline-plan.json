@@ -1,0 +1,2337 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-plan",
+ "cases": [
+  {
+   "id": "offline-plan.presets-downloads-off",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": false,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "sizeBytes": 5
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-playback-off",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": false,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "sizeBytes": 5
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-item-cannot-download",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "sizeBytes": 5,
+       "canDownload": false
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-denied-beats-live",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": false,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "isInfinite": true
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "denied",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-infinite-is-live",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "isInfinite": true,
+       "sizeBytes": 5
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-live-type-TvChannel",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "TvChannel"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-live-type-LiveTvChannel",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "LiveTvChannel"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-live-type-LiveTvProgram",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "LiveTvProgram"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-live-type-Program",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Program"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-live-type-TvProgram",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "TvProgram"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "live",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-movie-all-rights",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "sizeBytes": 5000,
+       "runtimeTicks": 72000000000
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 5000,
+        "exactSize": true
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 3715200000,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 7315200000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-can-download-true-is-allowed",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "sizeBytes": 5000,
+       "runtimeTicks": 72000000000,
+       "canDownload": true
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 5000,
+        "exactSize": true
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 3715200000,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 7315200000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-episode-size-unknown",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Episode"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-plain-video-type",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": false,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Video"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "no-conversion-right",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "no-conversion-right",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-video-not-qualified",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "runtimeTicks": 72000000000
+      },
+      "qualified": [
+       "video1080"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "not-qualified",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 7315200000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-audio-rights",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Audio",
+       "sizeBytes": 9,
+       "runtimeTicks": 72000000000
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 9,
+        "exactSize": true
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 115200000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 230400000,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-audio-no-right",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": false
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Audio"
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "no-conversion-right",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "no-conversion-right",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-audio-not-qualified",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Audio"
+      },
+      "qualified": [
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "not-qualified",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-video-right-does-not-cover-audio",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": false
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "runtimeTicks": 72000000000
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 3715200000,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 7315200000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-estimate-floors",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "runtimeTicks": 1
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 0,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 0,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.presets-estimate-no-overflow-on-long-runtime",
+   "operation": "presets",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "policy": {
+       "enableDownloads": true,
+       "enablePlayback": true,
+       "videoTranscoding": true,
+       "audioTranscoding": true
+      },
+      "candidate": {
+       "itemId": "i",
+       "type": "Movie",
+       "runtimeTicks": 2000000000000
+      },
+      "qualified": [
+       "video720",
+       "video1080",
+       "audio128",
+       "audio256"
+      ]
+     },
+     "expected": {
+      "choices": [
+       {
+        "preset": "original",
+        "available": true,
+        "reason": null,
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "video720",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 103200000000,
+        "exactSize": false
+       },
+       {
+        "preset": "video1080",
+        "available": true,
+        "reason": null,
+        "estimateBytes": 203200000000,
+        "exactSize": false
+       },
+       {
+        "preset": "audio128",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       },
+       {
+        "preset": "audio256",
+        "available": false,
+        "reason": "wrong-media",
+        "estimateBytes": null,
+        "exactSize": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-exact-sizes-keep-order",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "b",
+        "type": "Movie",
+        "sizeBytes": 2
+       },
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       }
+      ],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [
+       "b",
+       "a"
+      ],
+      "skipped": [],
+      "knownBytes": 5,
+      "estimated": false,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-duplicates-keep-first-position",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       },
+       {
+        "itemId": "b",
+        "type": "Movie",
+        "sizeBytes": 2
+       },
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 99
+       }
+      ],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [
+       "a",
+       "b"
+      ],
+      "skipped": [],
+      "knownBytes": 5,
+      "estimated": false,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-live-and-denied-are-skipped",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       },
+       {
+        "itemId": "l",
+        "type": "Movie",
+        "isInfinite": true,
+        "sizeBytes": 9
+       },
+       {
+        "itemId": "c",
+        "type": "TvChannel"
+       },
+       {
+        "itemId": "d",
+        "type": "Movie",
+        "canDownload": false,
+        "sizeBytes": 9
+       }
+      ],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [
+       "a"
+      ],
+      "skipped": [
+       "l",
+       "c",
+       "d"
+      ],
+      "knownBytes": 3,
+      "estimated": false,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-original-unknown-size-from-bitrate-is-estimated",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       },
+       {
+        "itemId": "b",
+        "type": "Movie",
+        "bitrate": 8000,
+        "runtimeTicks": 20000000
+       }
+      ],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [
+       "a",
+       "b"
+      ],
+      "skipped": [],
+      "knownBytes": 2003,
+      "estimated": true,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-original-neither-is-unknown",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       },
+       {
+        "itemId": "b",
+        "type": "Movie",
+        "bitrate": 8000
+       },
+       {
+        "itemId": "c",
+        "type": "Movie",
+        "runtimeTicks": 5
+       }
+      ],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [
+       "a",
+       "b",
+       "c"
+      ],
+      "skipped": [],
+      "knownBytes": 3,
+      "estimated": true,
+      "unknownCount": 2
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-conversion-is-always-estimated",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3,
+        "runtimeTicks": 10000000
+       }
+      ],
+      "preset": "video720"
+     },
+     "expected": {
+      "itemIds": [
+       "a"
+      ],
+      "skipped": [],
+      "knownBytes": 516000,
+      "estimated": true,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-conversion-without-runtime-is-unknown",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Movie",
+        "sizeBytes": 3
+       }
+      ],
+      "preset": "video1080"
+     },
+     "expected": {
+      "itemIds": [
+       "a"
+      ],
+      "skipped": [],
+      "knownBytes": 0,
+      "estimated": true,
+      "unknownCount": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-video-preset-skips-audio",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Audio",
+        "runtimeTicks": 1
+       },
+       {
+        "itemId": "b",
+        "type": "Episode",
+        "runtimeTicks": 10000000
+       }
+      ],
+      "preset": "video1080"
+     },
+     "expected": {
+      "itemIds": [
+       "b"
+      ],
+      "skipped": [
+       "a"
+      ],
+      "knownBytes": 1016000,
+      "estimated": true,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-audio-preset-skips-video",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Audio",
+        "runtimeTicks": 10000000
+       },
+       {
+        "itemId": "b",
+        "type": "Episode",
+        "runtimeTicks": 10000000
+       }
+      ],
+      "preset": "audio128"
+     },
+     "expected": {
+      "itemIds": [
+       "a"
+      ],
+      "skipped": [
+       "b"
+      ],
+      "knownBytes": 16000,
+      "estimated": true,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-audio-256-rate",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [
+       {
+        "itemId": "a",
+        "type": "Audio",
+        "runtimeTicks": 10000000
+       }
+      ],
+      "preset": "audio256"
+     },
+     "expected": {
+      "itemIds": [
+       "a"
+      ],
+      "skipped": [],
+      "knownBytes": 32000,
+      "estimated": true,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.select-empty",
+   "operation": "select",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "items": [],
+      "preset": "original"
+     },
+     "expected": {
+      "itemIds": [],
+      "skipped": [],
+      "knownBytes": 0,
+      "estimated": false,
+      "unknownCount": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-original",
+   "operation": "original-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i"
+     },
+     "expected": {
+      "path": "/Items/i/Download",
+      "query": [],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-video-720-with-audio",
+   "operation": "video-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "video720",
+      "audioStreamIndex": 2,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Videos/i/stream.mp4",
+      "query": [
+       [
+        "mediaSourceId",
+        "src"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "videoCodec",
+        "h264"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "maxHeight",
+        "720"
+       ],
+       [
+        "videoBitRate",
+        "4000000"
+       ],
+       [
+        "audioBitRate",
+        "128000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "audioStreamIndex",
+        "2"
+       ],
+       [
+        "subtitleMethod",
+        "Drop"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "enableAutoStreamCopy",
+        "false"
+       ],
+       [
+        "allowVideoStreamCopy",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ],
+       [
+        "container",
+        "mp4"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-video-1080-default-audio",
+   "operation": "video-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "video1080",
+      "audioStreamIndex": null,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Videos/i/stream.mp4",
+      "query": [
+       [
+        "mediaSourceId",
+        "src"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "videoCodec",
+        "h264"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "maxHeight",
+        "1080"
+       ],
+       [
+        "videoBitRate",
+        "8000000"
+       ],
+       [
+        "audioBitRate",
+        "128000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "subtitleMethod",
+        "Drop"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "enableAutoStreamCopy",
+        "false"
+       ],
+       [
+        "allowVideoStreamCopy",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ],
+       [
+        "container",
+        "mp4"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-video-audio-index-zero-is-sent",
+   "operation": "video-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "video720",
+      "audioStreamIndex": 0,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Videos/i/stream.mp4",
+      "query": [
+       [
+        "mediaSourceId",
+        "src"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "videoCodec",
+        "h264"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "maxHeight",
+        "720"
+       ],
+       [
+        "videoBitRate",
+        "4000000"
+       ],
+       [
+        "audioBitRate",
+        "128000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "audioStreamIndex",
+        "0"
+       ],
+       [
+        "subtitleMethod",
+        "Drop"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "enableAutoStreamCopy",
+        "false"
+       ],
+       [
+        "allowVideoStreamCopy",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ],
+       [
+        "container",
+        "mp4"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-sidecar",
+   "operation": "sidecar-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "video720",
+      "audioStreamIndex": 3,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Audio/i/stream.m4a",
+      "query": [
+       [
+        "mediaSourceId",
+        "src"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "audioBitRate",
+        "128000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "audioStreamIndex",
+        "3"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-audio-128-with-source",
+   "operation": "audio-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "audio128",
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Audio/i/stream.m4a",
+      "query": [
+       [
+        "mediaSourceId",
+        "src"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "audioBitRate",
+        "128000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-audio-256-no-source",
+   "operation": "audio-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": null,
+      "preset": "audio256",
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Audio/i/stream.m4a",
+      "query": [
+       [
+        "playSessionId",
+        "ps"
+       ],
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "audioCodec",
+        "aac"
+       ],
+       [
+        "audioBitRate",
+        "256000"
+       ],
+       [
+        "maxAudioChannels",
+        "2"
+       ],
+       [
+        "static",
+        "false"
+       ],
+       [
+        "allowAudioStreamCopy",
+        "false"
+       ]
+      ],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-subtitle",
+   "operation": "subtitle-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "streamIndex": 4
+     },
+     "expected": {
+      "path": "/Videos/i/src/Subtitles/4/0/Stream.vtt",
+      "query": [],
+      "method": "GET"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-cleanup",
+   "operation": "cleanup-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "path": "/Videos/ActiveEncodings",
+      "query": [
+       [
+        "deviceId",
+        "dev"
+       ],
+       [
+        "playSessionId",
+        "ps"
+       ]
+      ],
+      "method": "DELETE"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-refused-video-wrong-preset",
+   "operation": "video-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "audio128",
+      "audioStreamIndex": null,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-refused-video-original",
+   "operation": "video-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "original",
+      "audioStreamIndex": null,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-refused-sidecar-wrong-preset",
+   "operation": "sidecar-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": "src",
+      "preset": "audio256",
+      "audioStreamIndex": 1,
+      "deviceId": "dev",
+      "playSessionId": "ps"
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-plan.request-refused-audio-wrong-preset",
+   "operation": "audio-request",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "itemId": "i",
+      "sourceId": null,
+      "preset": "video720",
+      "deviceId": "d",
+      "playSessionId": "p"
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  }
+ ]
+}

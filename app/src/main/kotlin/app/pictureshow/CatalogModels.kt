@@ -278,8 +278,13 @@ data class CatalogHomeState(
     val rows: List<HomeRow> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    /** The load failed because the server couldn't be reached, as opposed to the server saying no. */
+    val unreachable: Boolean = false
 )
+
+internal fun catalogUnreachable(results: List<ClientResult<*>>): Boolean =
+    results.any { it is ClientResult.Failure && it.error.kind == app.pictureshow.core.ErrorKind.NETWORK }
 
 class CatalogHomeViewModel(private val account: Account, private val session: CatalogSession) : ViewModel() {
     private val mutableState = MutableStateFlow(CatalogHomeState())
@@ -305,7 +310,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
     fun reload() {
         job?.cancel()
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null) }
+            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false) }
             coroutineScope {
                 val resume = async { session.call(account) { resume(account) } }
                 val next = async { session.call(account) { nextUp(account) } }
@@ -327,7 +332,8 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                             (upcoming as? ClientResult.Success)?.value?.items.orEmpty(),
                             latest.mapValues { (_, result) -> (result as? ClientResult.Success)?.value.orEmpty() }
                         ),
-                        error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message
+                        error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
+                        unreachable = catalogUnreachable(failures)
                     )
                 }
             }
