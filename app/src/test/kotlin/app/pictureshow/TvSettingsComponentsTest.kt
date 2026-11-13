@@ -76,7 +76,7 @@ class TvSettingsComponentsTest {
                 val first = remember { FocusRequester() }
                 TvSettingsPanel("Roles", {}, first) {
                     TvSettingsRow("Join group", "Two people watching", Modifier.focusRequester(first).testTag("command"), onClick = {})
-                    TvSettingsRow("Repeat off", selected = false, modifier = Modifier.testTag("choice"), onClick = {})
+                    TvSettingsRow("Repeat off", null, selected = false, modifier = Modifier.testTag("choice"), onClick = {})
                 }
             }
         }

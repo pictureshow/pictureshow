@@ -244,7 +244,7 @@ internal fun <T> TvSettingsChoicePicker(
 @Composable
 internal fun TvSettingsRow(
     title: String,
-    supportingText: String? = null,
+    supportingText: String?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean? = null,
