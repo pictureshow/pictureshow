@@ -144,9 +144,14 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertFalse(app.buttons["openSearch"].exists, "The duplicate Home toolbar must be removed")
         XCTAssertFalse(app.buttons["openSettings"].exists)
         record("Round3 Home initial focus real artwork")
+        #if os(tvOS)
+        XCTAssertTrue(nativeDestinationIsVisible("Home"), "Actual launch must restore Home content before navigation input")
+        _ = try nativeTab("Home")
+        #else
         let homeStates = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Home")).allElementsBoundByIndex
             .filter { ($0.elementType == .button || $0.elementType == .cell) && $0.isSelected }
         XCTAssertFalse(homeStates.isEmpty, "Actual launch must restore the selected native Home destination before navigation input")
+        #endif
         #if os(tvOS)
         let launchFocus = try XCTUnwrap(app.descendants(matching: .any).allElementsBoundByIndex.first(where: \.hasFocus))
         XCTAssertTrue(launchFocus.frame.intersects(app.frame))
@@ -161,7 +166,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
             record("Round3 native TV tab " + name + " focused whole label")
             try assertRenderedWords(name, in: tab)
             XCUIRemote.shared.press(.select)
-            XCTAssertTrue(wait(10) { tab.isSelected })
+            let changed = wait(10) { self.nativeDestinationIsVisible(name) }
+            if !changed { record("Round3 native TV tab " + name + " failed destination actual state") }
+            print("ROUND3_NATIVE_TAB_DESTINATION name=\(name) selectedFlag=\(tab.isSelected) actualDestination=\(changed)")
+            XCTAssertTrue(changed, "Real remote Select must show the exact native destination")
+            leaveNativeTabBarForContent()
         }
         #endif
         try selectTab("Libraries")
@@ -220,6 +229,10 @@ final class RoundThreeCaptureUITests: XCTestCase {
     #if os(tvOS)
     @MainActor func testTVSettingsHeaderAndFooterActualPixelsMeetAA() throws {
         try launchPilot(); try signInPilot(); try selectTab("Settings")
+        let bitrate = node("maxBitrate")
+        focusOnly(bitrate)
+        record("Round3 Settings content focus before AA")
+        XCTAssertTrue(ownsFocus(bitrate), "Measure undimmed Settings after native focus actually leaves the tab bar")
         let header = app.staticTexts["playbackSectionHeader"]
         let footer = app.staticTexts["audioOutputExplanation"]
         XCTAssertTrue(header.waitForExistence(timeout: 10) && footer.exists)
@@ -384,10 +397,50 @@ final class RoundThreeCaptureUITests: XCTestCase {
         revealNativeTabBar()
         let tab = try nativeTab(name)
         activate(tab)
+        #if os(tvOS)
+        let changed = wait(10) { self.nativeDestinationIsVisible(name) }
+        if !changed { record("Round3 native TV tab " + name + " failed destination actual state") }
+        print("ROUND3_NATIVE_TAB_DESTINATION name=\(name) selectedFlag=\(tab.isSelected) actualDestination=\(changed)")
+        XCTAssertTrue(changed, "Real remote Select must show the exact native destination")
+        leaveNativeTabBarForContent()
+        #else
         XCTAssertTrue(wait(10) { tab.isSelected }, "Native selected state must match actual destination")
+        #endif
         if name == "Settings" { XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10)) }
         if name == "Home" { XCTAssertTrue(app.staticTexts["Continue watching"].waitForExistence(timeout: 20)) }
     }
+    #if os(tvOS)
+    @MainActor private func leaveNativeTabBarForContent() {
+        func deepest(_ node: XCUIElementSnapshot) -> XCUIElementSnapshot? { node.children.compactMap(deepest).first ?? (node.hasFocus ? node : nil) }
+        func contentOwnsFocus() -> Bool {
+            guard let owner = (try? app.snapshot()).flatMap(deepest), !owner.frame.isEmpty,
+                  app.windows.firstMatch.frame.contains(owner.frame) else { return false }
+            return !app.tabBars.allElementsBoundByIndex.contains(where: { !$0.frame.isEmpty && $0.frame.contains(owner.frame) })
+        }
+        for _ in 0..<8 {
+            if contentOwnsFocus() { return }
+            XCUIRemote.shared.press(.down)
+        }
+        record("Round3 failed native tab to content focus actual state")
+        XCTAssertTrue(contentOwnsFocus(), "A real Down input must transfer focus out of the native tab bar before undimmed content proof")
+    }
+    private func nativeDestinationIsVisible(_ name: String) -> Bool {
+        let window = app.windows.firstMatch.frame
+        func visible(_ element: XCUIElement) -> Bool { element.exists && !element.frame.isEmpty && window.contains(element.frame) }
+        switch name {
+        case "Home":
+            guard let id = config["resumeID"] else { return false }
+            return visible(app.staticTexts["Continue watching"]) && app.buttons["item-" + id].firstMatch.exists
+        case "Libraries":
+            guard let ids = config["libraryIDs"]?.split(separator: ","), ids.count >= 3 else { return false }
+            let heading = app.staticTexts["Libraries"].allElementsBoundByIndex.contains(where: { visible($0) && $0.frame.minY > (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.maxY : 0) })
+            return heading && !app.staticTexts["Continue watching"].exists && ids.allSatisfy { app.buttons["item-" + $0].firstMatch.exists }
+        case "Search": return visible(app.textFields["searchField"])
+        case "Settings": return visible(node("settingsTitle")) && node("maxBitrate").exists
+        default: return false
+        }
+    }
+    #endif
     private func ownsFocus(_ element: XCUIElement) -> Bool {
         func contains(_ node: XCUIElementSnapshot) -> Bool { node.hasFocus || node.children.contains(where: contains) }
         return element.hasFocus || (try? element.snapshot()).map(contains) == true

@@ -1061,6 +1061,12 @@ final class CatalogPresentationUITests: XCTestCase {
         #if os(tvOS)
         XCTAssertTrue(ownedVisibleNativeTab(settings), "The remote Settings target must belong to the actual visible native tab bar")
         activate(settings, app: app)
+        let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 15), "Real remote Select must reach Settings content")
+        XCUIRemote.shared.press(.down)
+        focus(bitrate, app: app)
+        capture("132 native Settings content focus before AA", app: app)
+        XCTAssertTrue(ownsNativeFocus(bitrate, app: app), "Measure Settings only after real focus leaves the dimming native tab bar")
         #else
         XCTAssertTrue(settings.isHittable && !settings.frame.isEmpty && window.contains(settings.frame), "The actual Settings control must be hittable and fully inside the app window")
         settings.tap()
