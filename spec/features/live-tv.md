@@ -98,7 +98,7 @@ invents an unknown enum. Explicit known statuses keep their standard labels and 
 
 EPG navigation keeps Favorites and the native Grid/List choice together. Time travel has a separate compact date control:
 TV uses the pinned channel-column ruler header; touch has a date bar above the ruler. Earlier, day selection, and Later are
-visible together at360dp. Now retains a permanent slot and is disabled at the default current local half-hour and horizontal origin; activating it restores that window and horizontal origin. The day opens a
+visible together at360dp. Now retains a permanent slot. Touch disables it at the default current local half-hour and horizontal origin; TV keeps it available as an explicit focus action. Activating it restores that window and horizontal origin and, on TV, focuses the selected channel’s on-air programme after refresh. The day opens a
 seven-day picker. TV tab/preview height is stable across destinations and grows with font scale; phone channel labels use
 two lines without the redundant channel-number prefix while their complete accessible label keeps both number and name.
 

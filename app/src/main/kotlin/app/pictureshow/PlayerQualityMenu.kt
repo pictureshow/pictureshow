@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,8 +92,12 @@ internal fun PlayerQualityMenu(
                         val scroll = rememberScrollState()
                         val selected = remember { BringIntoViewRequester() }
                         val density = LocalDensity.current
-                        val cues = with(density) {
-                            qualityScrollCues(scroll.value.toDp().value, (scroll.maxValue - scroll.value).toDp().value)
+                        val cues by remember(scroll, density) {
+                            derivedStateOf {
+                                with(density) {
+                                    qualityScrollCues(scroll.value.toDp().value, (scroll.maxValue - scroll.value).toDp().value)
+                                }
+                            }
                         }
                         LaunchedEffect(value, scroll.maxValue) {
                             if (scroll.maxValue > 0) selected.bringIntoView()
