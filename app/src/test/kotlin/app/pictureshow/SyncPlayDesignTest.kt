@@ -70,7 +70,7 @@ class SyncPlayTvDesignTest {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java)).setCurrentModeType(Configuration.UI_MODE_TYPE_TELEVISION)
     }
 
-    @Test fun modeAndDataTransitionsFocusTheirOwnPrimaryRatherThanClose() {
+    @Test fun modeTransitionsHaveUsefulFocusAndCompletedChecksPreserveChooserFocus() {
         var state by mutableStateOf(SyncPlayPresentation(policyKnown = false, busy = true))
         compose.setContent { PictureshowTheme { SyncPlayPanel(state, { _, _ -> }, {}) } }
         compose.onNodeWithTag("sync:refresh").assertIsFocused()
@@ -82,11 +82,21 @@ class SyncPlayTvDesignTest {
                 groups = listOf(SyncPlayGroupRow("g", "Film night", 2))
             )
         }
-        compose.onNodeWithTag("sync:join:g").assertIsFocused()
+        // Refresh still exists: async access completion must not move a resting OK onto Join.
+        compose.onNodeWithTag("sync:refresh").assertIsFocused()
         compose.runOnIdle { state = state.copy(groupId = "g", groupName = "Film night", phase = "Paused", queue = listOf(SyncPlayQueueRow("e", "Film", true))) }
         compose.onNodeWithTag("sync:play").assertIsFocused()
         compose.runOnIdle { state = state.copy(groupId = null, groupName = null, phase = "Idle", groups = emptyList()) }
         compose.onNodeWithTag("sync:name").assertIsFocused()
+    }
+
+    @Test fun initiallyLoadedChooserStillStartsOnItsFirstJoin() {
+        val state = SyncPlayPresentation(
+            policyKnown = true, policy = "CreateAndJoinGroups",
+            groups = listOf(SyncPlayGroupRow("g", "Film night", 2))
+        )
+        compose.setContent { PictureshowTheme { SyncPlayPanel(state, { _, _ -> }, {}) } }
+        compose.onNodeWithTag("sync:join:g").assertIsFocused()
     }
 
     @Test fun leaveStaysPinnedAndNamesRemainSeparateUnknownFacts() {
