@@ -365,6 +365,72 @@
       "usable": true,
       "queueEntries": -1,
       "expected": false
+    },
+    {
+      "id": "panel-warning-banner-owns-recovery",
+      "op": "panel-quality",
+      "quality": "OUT_OF_SYNC",
+      "recoveryOffered": true,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "panel-recovery-hides-catchup",
+      "op": "panel-quality",
+      "quality": "CATCHING_UP",
+      "recoveryOffered": true,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "panel-recovery-hides-healthy-estimate",
+      "op": "panel-quality",
+      "quality": "IN_SYNC",
+      "recoveryOffered": true,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "panel-unknown-stays-unknown",
+      "op": "panel-quality",
+      "quality": "UNKNOWN",
+      "recoveryOffered": true,
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "panel-no-recovery-keeps-warning",
+      "op": "panel-quality",
+      "quality": "OUT_OF_SYNC",
+      "recoveryOffered": false,
+      "expected": "OUT_OF_SYNC"
+    },
+    {
+      "id": "panel-no-recovery-keeps-healthy",
+      "op": "panel-quality",
+      "quality": "IN_SYNC",
+      "recoveryOffered": false,
+      "expected": "IN_SYNC"
+    },
+    {
+      "id": "chip-quality-unknown",
+      "op": "chip-quality",
+      "quality": "UNKNOWN",
+      "expected": false
+    },
+    {
+      "id": "chip-quality-in-sync",
+      "op": "chip-quality",
+      "quality": "IN_SYNC",
+      "expected": true
+    },
+    {
+      "id": "chip-quality-catching-up",
+      "op": "chip-quality",
+      "quality": "CATCHING_UP",
+      "expected": true
+    },
+    {
+      "id": "chip-quality-out-of-sync",
+      "op": "chip-quality",
+      "quality": "OUT_OF_SYNC",
+      "expected": true
     }
   ]
 }

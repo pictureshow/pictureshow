@@ -3,6 +3,9 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.sync.SyncQuality
+import app.pictureshow.core.sync.syncChipShowsQuality
+import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.SyncTitleScope
 import app.pictureshow.core.sync.syncAcceptTitle
 import app.pictureshow.core.sync.syncPeople
@@ -25,7 +28,7 @@ class SyncPresentationVectorsTest {
     @Test fun allPresentationRules() {
         val resource = requireNotNull(javaClass.classLoader.getResource("sync-vectors/sync-presentation.json"))
         val cases = Json.parseToJsonElement(resource.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(31, cases.size)
+        assertEquals(41, cases.size)
         cases.forEach { element ->
             val c = element.jsonObject
             val id = c.getValue("id").jsonPrimitive.content
@@ -38,6 +41,12 @@ class SyncPresentationVectorsTest {
                 return SyncTitleScope(a[0].jsonPrimitive.content, a[1].jsonPrimitive.long, a[2].jsonPrimitive.long)
             }
             when (text("op")) {
+                "chip-quality" -> assertEquals(bool("expected"), syncChipShowsQuality(SyncQuality.valueOf(text("quality"))), id)
+                "panel-quality" -> assertEquals(
+                    text("expected"),
+                    syncPanelQuality(SyncQuality.valueOf(text("quality")), bool("recoveryOffered")).name,
+                    id
+                )
                 "quality" -> assertEquals(
                     text("expected"),
                     syncQuality(bool("usableClock"), bool("ready"), bool("applied"), number("errorTicks"), number("uncertaintyTicks")).name,
