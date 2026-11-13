@@ -20,6 +20,8 @@ jobs:
           New-Item -ItemType Directory -Force desktop/build | Out-Null
           cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen.exe
           if ($LASTEXITCODE -ne 0) { throw 'Display helper compile failed' }
+          cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen-test.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Display helper controls compile failed' }
       - name: Save mode, provision exact full frame, and restore with native diagnostics
         shell: pwsh
         run: |
@@ -56,6 +58,19 @@ jobs:
               throw 'Saved display mode is missing'
             }
           }
+      - name: Verify already-original bypass and malformed receipt controls
+        shell: pwsh
+        run: |
+          $output = @(& desktop/build/windows-smoke-screen.exe --restore desktop/build/smoke-display-mode.bin 2> desktop-evidence/display/already-original-stages.jsonl)
+          $code = $LASTEXITCODE
+          Set-Content -Path desktop-evidence/display/already-original.json -Value ($output -join [Environment]::NewLine)
+          $receipt = ($output -join [Environment]::NewLine) | ConvertFrom-Json
+          if ($code -ne 0 -or !$receipt.restored -or !$receipt.alreadyOriginal -or $receipt.changeAttempted) { throw 'Already-original restore bypass failed' }
+          $output = @(& desktop/build/windows-smoke-screen-test.exe desktop/build/smoke-display-mode.bin desktop/build/invalid-mode 2> desktop-evidence/display/header-controls-stages.jsonl)
+          $code = $LASTEXITCODE
+          Set-Content -Path desktop-evidence/display/header-controls.jsonl -Value ($output -join [Environment]::NewLine)
+          [ordered]@{nativeExitCode=$code; stdoutLines=$output.Count} | ConvertTo-Json -Compress | Set-Content desktop-evidence/display/header-controls-exit.json
+          if ($code -ne 0) { throw "Malformed saved-mode controls failed (native exit $code)" }
       - uses: actions/upload-artifact@v7
         if: always()
         with:
