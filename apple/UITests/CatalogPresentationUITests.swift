@@ -427,7 +427,9 @@ final class CatalogPresentationUITests: XCTestCase {
         let secondFrame = second.frame
         let columns = firstCards.filter { $0.exists }.filter {
             let frame = $0.frame
-            return abs(frame.minY - secondFrame.minY) < max(8, max(frame.height, secondFrame.height) * 0.025)
+            // Native poster lift grows around its centre, moving only the
+            // focused card's top. Row centres remain aligned during that lift.
+            return abs(frame.midY - secondFrame.midY) < max(8, max(frame.height, secondFrame.height) * 0.025)
         }.count
         XCTAssertGreaterThan(columns, 0)
         if projectedLargeType {
@@ -658,24 +660,26 @@ final class CatalogPresentationUITests: XCTestCase {
         func shows(_ picker: XCUIElement, _ value: String) -> Bool {
             picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
         }
-        func choose(_ picker: XCUIElement, _ value: String, choices: [String]) {
+        func choose(_ picker: XCUIElement, _ value: String, current: String, choices: [String]) {
             activate(picker, app: app)
             for choice in choices {
-                XCTAssertTrue(app.buttons[choice].waitForExistence(timeout: 5), "The native picker must expose its real choice: \(choice)")
+                XCTAssertTrue(app.otherElements.matching(NSPredicate(format: "label == %@", choice)).firstMatch.waitForExistence(timeout: 5), "The native picker must expose its real choice: \(choice)")
             }
+            let selected = app.otherElements.matching(NSPredicate(format: "label == %@", current)).firstMatch
+            XCTAssertTrue(selected.isSelected, "The native checkmark must identify the actual saved selection")
             capture("132 native Settings picker choices \(value)", app: app)
-            activate(app.buttons[value].firstMatch, app: app)
+            activate(app.otherElements.matching(NSPredicate(format: "label == %@", value)).firstMatch, app: app)
             XCTAssertTrue(waitUntil { shows(picker, value) }, "Selecting a choice must save it and return to Settings")
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
-        choose(bitrate, "40 Mbps", choices: rates)
-        choose(bitrate, "Auto (200 Mbps)", choices: rates)
+        choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates)
+        choose(bitrate, "Auto (200 Mbps)", current: "40 Mbps", choices: rates)
         XCTAssertTrue(subtitle.exists && shows(subtitle, "System"))
         let sizes = ["System", "Small", "Normal", "Large", "ExtraLarge"]
-        choose(subtitle, "Large", choices: sizes)
-        choose(subtitle, "System", choices: sizes)
+        choose(subtitle, "Large", current: "System", choices: sizes)
+        choose(subtitle, "System", current: "Large", choices: sizes)
         capture("132 native Settings selections restored", app: app)
     }
 

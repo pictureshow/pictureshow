@@ -188,25 +188,27 @@ final class RoundTwoCaptureUITests: XCTestCase {
         func shows(_ picker: XCUIElement, _ value: String) -> Bool {
             picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
         }
-        func choose(_ picker: XCUIElement, _ value: String, choices: [String], name: String) {
+        func choose(_ picker: XCUIElement, _ value: String, current: String, choices: [String], name: String) {
             activate(picker)
             for choice in choices {
-                XCTAssertTrue(app.buttons[choice].waitForExistence(timeout: 5), "The actual native picker must expose its choice: \(choice)")
+                XCTAssertTrue(app.otherElements.matching(NSPredicate(format: "label == %@", choice)).firstMatch.waitForExistence(timeout: 5), "The actual native picker must expose its choice: \(choice)")
             }
+            let selected = app.otherElements.matching(NSPredicate(format: "label == %@", current)).firstMatch
+            XCTAssertTrue(selected.isSelected, "The native checkmark must identify the actual saved selection")
             record(name)
-            activate(app.buttons[value].firstMatch)
+            activate(app.otherElements.matching(NSPredicate(format: "label == %@", value)).firstMatch)
             XCTAssertTrue(wait(10) { shows(picker, value) }, "The native selection must save and return to Settings")
             record(name + " saved selection " + value)
         }
         XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
-        choose(bitrate, "40 Mbps", choices: rates, name: "Round2 Settings bitrate native picker")
-        choose(bitrate, "Auto (200 Mbps)", choices: rates, name: "Round2 Settings bitrate reopened with saved value")
+        choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates, name: "Round2 Settings bitrate native picker")
+        choose(bitrate, "Auto (200 Mbps)", current: "40 Mbps", choices: rates, name: "Round2 Settings bitrate reopened with saved value")
         XCTAssertTrue(subtitle.exists && shows(subtitle, "System"))
         let sizes = ["System", "Small", "Normal", "Large", "ExtraLarge"]
-        choose(subtitle, "Large", choices: sizes, name: "Round2 Settings subtitle size native picker")
-        choose(subtitle, "System", choices: sizes, name: "Round2 Settings subtitle size reopened with saved value")
+        choose(subtitle, "Large", current: "System", choices: sizes, name: "Round2 Settings subtitle size native picker")
+        choose(subtitle, "System", current: "Large", choices: sizes, name: "Round2 Settings subtitle size reopened with saved value")
     }
     #endif
 

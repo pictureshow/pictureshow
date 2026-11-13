@@ -121,6 +121,26 @@ final class PlayerPresentationUITests: XCTestCase {
         let playbackTab = identifiedTab.exists ? identifiedTab : app.cells.containing(.staticText, identifier: "Playback").firstMatch
         XCTAssertTrue(playbackTab.waitForExistence(timeout: 10), "AVKit must expose the actual Playback sibling of Info and Chapters")
         XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Begin outside the separate Playback info modal")
+        // The native transport, scrubber, and lower tab row are separate
+        // focus environments. Cross them with Down before horizontal routing;
+        // the general transport helper intentionally routes a surface Up.
+        activate(nativeAction(id: "playerSpeed", prefix: "Speed:"), select: false)
+        let tabRow = playbackTab.frame
+        XCTAssertFalse(tabRow.isEmpty)
+        var reachedTabRow = false
+        for step in 1...2 {
+            XCUIRemote.shared.press(.down)
+            let focused = try focusedSnapshot(timeout: 1)
+            print("LEG132_NATIVE_TAB_DOWN step=\(step) focus=\(focused.frame) label=\(focused.label)")
+            record("132 TV native Playback route Down \(step)")
+            if focused.frame.height < tabRow.height * 3,
+               abs(focused.frame.midY - tabRow.midY) < tabRow.height {
+                reachedTabRow = true
+                break
+            }
+        }
+        XCTAssertTrue(reachedTabRow, "Two native Down inputs must reach the actual Info/Playback tab row through the scrubber")
+        guard reachedTabRow else { return }
         activate(playbackTab)
         let reason = app.descendants(matching: .any).matching(identifier: "conversionReason-0").firstMatch
         XCTAssertTrue(reason.waitForExistence(timeout: 10))
@@ -549,7 +569,8 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertFalse(playNext.label.contains("("), "Paused continuation keeps the named Play next action but has no countdown number")
         activate(playNext, select: false)
         record("132 paused next episode Play next focused label")
-        activate(nativeAction(id: "cancelNextTransport", prefix: "Cancel"), select: false)
+        let cancelNextTransport = nativeAction(id: "cancelNextTransport", prefix: "Cancel")
+        activate(cancelNextTransport, select: false)
         record("132 paused next episode Cancel focused label")
         #else
         let playNext = app.buttons["playNext"]
@@ -563,6 +584,11 @@ final class PlayerPresentationUITests: XCTestCase {
             assertPhoneOrientation(landscape: true, landmark: "landscape next episode")
             try assertNextCardGeometry(landmark: "paused landscape")
         }
+        #endif
+        #if os(tvOS)
+        // AVKit may retain hidden transport AX nodes. Save the actual compact
+        // transport geometry before idle so they cannot satisfy contextual proof.
+        let continuationTransportFrames = [playNext.frame, cancelNextTransport.frame]
         #endif
         record("132 next episode paused manual card")
         #if os(iOS)
@@ -593,9 +619,10 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertLessThanOrEqual(value, 10, "The credits budget remains ten wall seconds")
         #if os(tvOS)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        record("132 TV running contextual state before assertions")
         XCTAssertEqual(nativePlayer.value as? String, "Controls hidden", "Running contextual proof requires the actual hidden HUD after the existing idle bound")
-        let contextualPlay = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", "playNext", "Play next: Following synthetic episode")).firstMatch
-        let contextualCancel = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "cancelNext", "Cancel")).firstMatch
+        var contextualPlay = try nativeContextualAction(in: nativePlayer, id: "playNext", title: "Play next: Following synthetic episode", transportFrames: continuationTransportFrames)
+        var contextualCancel = try nativeContextualAction(in: nativePlayer, id: "cancelNext", title: "Cancel", transportFrames: continuationTransportFrames)
         XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
         XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
         XCTAssertTrue(contextualPlay.label.hasPrefix("Play next: Following synthetic episode"))
@@ -616,10 +643,14 @@ final class PlayerPresentationUITests: XCTestCase {
         record("132 next episode running at half speed")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
-        XCTAssertTrue(waitForRemoteUI(timeout: 5) {
+        let pausedContextSettled = waitForRemoteUI(timeout: 5) {
             self.trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
-        }, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
+        }
+        record("132 TV paused contextual state before assertions")
+        XCTAssertTrue(pausedContextSettled, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
         XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
+        contextualPlay = try nativeContextualAction(in: nativePlayer, id: "playNext", title: "Play next: Following synthetic episode", transportFrames: continuationTransportFrames)
+        contextualCancel = try nativeContextualAction(in: nativePlayer, id: "cancelNext", title: "Cancel", transportFrames: continuationTransportFrames)
         XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
         XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
         XCTAssertEqual(contextualPlay.label, "Play next: Following synthetic episode")
@@ -630,7 +661,7 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(contextualCancel.frame.width, runningContextCancelFrame.width, accuracy: 1, "Pausing cannot resize contextual Cancel")
         XCTAssertEqual(contextualCancel.frame.height, runningContextCancelFrame.height, accuracy: 1, "Pausing cannot resize contextual Cancel")
         XCTAssertEqual(fixture.snapshot.startCount, 1)
-        record("132 TV HUD hidden paused contextual full episode and Cancel text")
+        record("132 TV HUD hidden paused contextual episode identity and Cancel text")
         let cancel = nativeAction(id: "cancelNextTransport", prefix: "Cancel")
         activate(cancel)
         #else
@@ -885,6 +916,29 @@ final class PlayerPresentationUITests: XCTestCase {
             if let value = focused(try app.snapshot()) { return value }
         } while ProcessInfo.processInfo.systemUptime < deadline
         throw NSError(domain: "PictureshowFocus", code: 1, userInfo: [NSLocalizedDescriptionKey: "No focused accessibility node was observed"])
+    }
+    @MainActor private func nativeContextualAction(in player: XCUIElement, id: String, title: String, transportFrames: [CGRect]) throws -> XCUIElement {
+        XCTAssertEqual(player.value as? String, "Controls hidden", "Contextual proof requires the native transport to remain hidden")
+        XCTAssertTrue(transportFrames.allSatisfy { !$0.isEmpty }, "Record both real transport controls before idle")
+        // UIAction identifiers do not consistently propagate to native AX. Match
+        // the exact semantic title (with only its running count suffix allowed),
+        // then distinguish the actual wide contextual control from retained bar
+        // cells. A generic text descendant or the first label match cannot pass.
+        let query = player.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ OR label == %@ OR label BEGINSWITH %@", id, title, title + " ("))
+        let widestTransport = transportFrames.map(\.width).max() ?? 0
+        let matches = query.allElementsBoundByIndex.filter { element in
+            guard [.button, .cell, .other].contains(element.elementType),
+                  element.identifier != "playNextTransport", element.identifier != "cancelNextTransport",
+                  element.isEnabled, element.isHittable else { return false }
+            let frame = element.frame
+            guard !frame.isEmpty, player.frame.contains(frame), frame.width > widestTransport + 1 else { return false }
+            return !transportFrames.contains { transport in
+                abs(frame.minX - transport.minX) <= 1 && abs(frame.minY - transport.minY) <= 1
+                    && abs(frame.width - transport.width) <= 1 && abs(frame.height - transport.height) <= 1
+            }
+        }
+        XCTAssertEqual(matches.count, 1, "Expected exactly one enabled, hittable native contextual \(id) outside the retained transport geometry; capture precedes this query")
+        return try XCTUnwrap(matches.count == 1 ? matches.first : nil)
     }
     @MainActor private func nativeAction(id: String, prefix: String) -> XCUIElement {
         let result = app.cells.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", id, prefix)).firstMatch
