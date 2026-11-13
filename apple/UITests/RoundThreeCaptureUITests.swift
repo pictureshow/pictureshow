@@ -391,16 +391,20 @@ final class RoundThreeCaptureUITests: XCTestCase {
             let viewport = try peopleUsableViewport()
             let target = card.frame.union(nameText.frame).union(roleText.frame)
             if !target.isEmpty && viewport.contains(target) { break }
-            // A vertical pan exposes the complete lockup without confusing a
-            // hittable avatar or a partly covered role with visible metadata.
-            let delta: CGFloat
-            if target.maxY > viewport.maxY { delta = min(target.maxY - viewport.maxY + 8, viewport.height * 0.4) }
-            else if target.minY < viewport.minY { delta = -min(viewport.minY - target.minY + 8, viewport.height * 0.4) }
-            else { break } // Horizontal clipping is an actual failure, not a vertical-scroll excuse.
+            // Reveal the actual complete lockup with native pans. A full
+            // horizontal swipe can overshoot a narrow tile; correct that real
+            // offset instead of accepting a clipped name or changing its frame.
+            let translation: CGVector
+            if target.maxY > viewport.maxY { translation = CGVector(dx: 0, dy: -min(target.maxY - viewport.maxY + 8, viewport.height * 0.4)) }
+            else if target.minY < viewport.minY { translation = CGVector(dx: 0, dy: min(viewport.minY - target.minY + 8, viewport.height * 0.4)) }
+            else if target.minX < viewport.minX { translation = CGVector(dx: min(viewport.minX - target.minX + 8, viewport.width * 0.4), dy: 0) }
+            else if target.maxX > viewport.maxX { translation = CGVector(dx: -min(target.maxX - viewport.maxX + 8, viewport.width * 0.4), dy: 0) }
+            else { break }
             let window = app.windows.firstMatch
             let origin = window.coordinate(withNormalizedOffset: .zero)
-            let start = origin.withOffset(CGVector(dx: viewport.midX - window.frame.minX, dy: viewport.midY - window.frame.minY))
-            let end = start.withOffset(CGVector(dx: 0, dy: -delta))
+            let startY = translation.dx == 0 ? viewport.midY : min(max(target.midY, viewport.minY + 16), viewport.maxY - 16)
+            let start = origin.withOffset(CGVector(dx: viewport.midX - window.frame.minX, dy: startY - window.frame.minY))
+            let end = start.withOffset(translation)
             start.press(forDuration: 0.05, thenDragTo: end)
         }
         let viewport = try peopleUsableViewport()

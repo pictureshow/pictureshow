@@ -1060,9 +1060,9 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertTrue(settings.elementType == .button || settings.elementType == .cell)
         #if os(tvOS)
         XCTAssertTrue(ownedVisibleNativeTab(settings), "The remote Settings target must belong to the actual visible native tab bar")
-        activate(settings, app: app)
+        focus(settings, app: app)
         let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
-        XCTAssertTrue(bitrate.waitForExistence(timeout: 15), "Real remote Select must reach Settings content")
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 15), "Real native remote focus must reach Settings content")
         XCUIRemote.shared.press(.down)
         focus(bitrate, app: app)
         capture("132 native Settings content focus before AA", app: app)
