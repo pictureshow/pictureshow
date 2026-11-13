@@ -55,7 +55,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -77,7 +79,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -117,7 +118,7 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
 internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit, fixtureLabel: String?) {
     val tv = usesTvInterface(LocalContext.current)
     val pane = stringResource(R.string.sync_title)
-    val compactHeight = !tv && LocalConfiguration.current.screenHeightDp < 480
+    val compactHeight = !tv && isShortTouchWindow()
     val compactIme = compactHeight && WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var name by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
     val first = remember { FocusRequester() }
@@ -335,6 +336,9 @@ private fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Com
     val scroll = rememberScrollState()
     val surface = MaterialTheme.colorScheme.surface
     val paddingPx = with(LocalDensity.current) { 20.dp.toPx() }
+    val showBottomFade by remember(scroll, paddingPx) {
+        derivedStateOf { scroll.maxValue - scroll.value > paddingPx }
+    }
     Box(modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().verticalScroll(scroll).padding(vertical = if (compactHeight) 4.dp else 12.dp),
@@ -347,7 +351,7 @@ private fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Com
                     .background(Brush.verticalGradient(listOf(surface, Color.Transparent))).testTag("sync:fade-top")
             )
         }
-        if (scroll.maxValue - scroll.value > paddingPx) {
+        if (showBottomFade) {
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
                     .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
@@ -684,15 +688,13 @@ private fun SyncJoined(
                 val current = if (entry.current) stringResource(R.string.sync_now_playing) else null
                 val remove = stringResource(R.string.sync_remove_title, title)
                 if (tv) {
+                    val entryFocus = remember { FocusRequester() }
+                    SideEffect { queueFocus[entry.id] = entryFocus }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         TvSettingsRow(
                             title,
                             current,
-                            Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(
-                                queueFocus.getOrPut(entry.id) {
-                                    FocusRequester()
-                                }
-                            ),
+                            Modifier.weight(1f).testTag("sync:entry:${entry.id}").focusRequester(entryFocus),
                             enabled = usable,
                             selected = entry.current,
                             titleMaxLines = 2,
