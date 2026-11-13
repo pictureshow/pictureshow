@@ -192,7 +192,7 @@ internal fun TouchValueRow(
 internal fun TouchValueSummary(title: String, value: String, modifier: Modifier = Modifier, changed: Boolean = false) {
     Row(
         modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)

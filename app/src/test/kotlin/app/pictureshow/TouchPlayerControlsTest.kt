@@ -2104,6 +2104,21 @@ class TouchPlayerControlsTest {
         }
     }
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun liveSecondaryControlsUseTheWholeContentColumn() {
+        launch(live = true)
+        settled()
+        val row = bounds("touch:secondary")
+        assertEquals(row.left, bounds("touch:open:Audio").left)
+        assertEquals(row.right, bounds("touch:more").right)
+        assertEquals(row.left, bounds("touch:title").left)
+        assertEquals(row.right, bounds("touch:quality").right)
+        val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(2, marks.size)
+    }
+
     private fun launch(
         paused: Boolean = false,
         live: Boolean = false,

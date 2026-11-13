@@ -569,6 +569,9 @@ internal fun LiveTvScreen(
                         .distinct().lastOrNull()
                     val recordingBottomPadding = if (recordingShelf) {
                         with(density) { recordingFocus.trailingSpace(lastRecordingGroup).toDp() }
+                    } else if (!tv && detail) {
+                        // Clear the native 80dp destination bar with a 16dp content gap.
+                        96.dp
                     } else {
                         12.dp
                     }

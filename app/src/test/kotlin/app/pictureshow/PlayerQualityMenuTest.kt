@@ -242,6 +242,24 @@ class PlayerQualityMenuTest {
         assertEquals(0, compose.onAllNodesWithTag("player:quality-menu").fetchSemanticsNodes().size, "Selecting a cap closes the menu")
     }
 
+    @Test
+    @Config(qualifiers = "w720dp-h360dp-land-mdpi")
+    fun openingOnTheLastCapRevealsItsWholeRowWithoutChangingTheChoice() {
+        var changes = 0
+        compose.setContent {
+            TouchTheme { PlayerQualityMenu(4, "Up to 20 Mbps", null, true, { changes++ }, {}) }
+        }
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag("player:quality-menu").getBoundsInRoot()
+        val selected = compose.onNodeWithTag("player:quality-choice:4").assertIsSelected().assertIsDisplayed().getBoundsInRoot()
+        assertEquals(true, selected.top >= viewport.top && selected.bottom <= viewport.bottom, "Current cap is fully revealed on entry")
+        compose.onNodeWithTag("player:quality-more-above", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-more-below", useUnmergedTree = true).assertDoesNotExist()
+        val fade = compose.onNodeWithTag("player:quality-more-above", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals(24f, (fade.bottom - fade.top).value, .01f, "A real edge fade replaces the decorative hairline")
+        assertEquals(0, changes)
+    }
+
     @Test fun tvOpensFocusedOnCurrentRadioAndSelectingAutoIsExplicit() {
         var selected: Int? = 40
         var closed = 0

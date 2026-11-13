@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -464,7 +465,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 val canSeek = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
-                PlayerIconButton("back10", "Back 10 seconds", Modifier.testTag("touch:back10"), enabled = canSeek) {
+                PlayerIconButton("back10", "Back 10 seconds", Modifier.testTag("touch:back10"), enabled = canSeek, liveSeek = host.isLive) {
                     host.seek(-TOUCH_SEEK_STEP_MS)
                 }
                 FilledIconButton(
@@ -474,10 +475,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         ui.interact()
                     },
                     enabled = !host.isLive || host.liveCanTimeShift,
-                    modifier = Modifier.size(64.dp).testTag("touch:toggle").semantics {
-                        contentDescription = if (playback.showPlayButton) "Play" else "Pause"
-                        stateDescription = playbackToggleState(paused, playback.showPlayButton)
-                    }
+                    modifier = Modifier.size(64.dp)
+                        .then(if (host.isLive) Modifier.background(Color.Black.copy(alpha = .4f), CircleShape) else Modifier)
+                        .testTag("touch:toggle").semantics {
+                            contentDescription = if (playback.showPlayButton) "Play" else "Pause"
+                            stateDescription = playbackToggleState(paused, playback.showPlayButton)
+                        }
                 ) {
                     Icon(playerActionIcon(if (playback.showPlayButton) "play" else "pause"), null, Modifier.size(32.dp))
                 }
@@ -485,7 +488,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     "forward10",
                     "Forward 10 seconds",
                     Modifier.testTag("touch:forward10"),
-                    enabled = canSeek && liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)
+                    enabled = canSeek && liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired),
+                    liveSeek = host.isLive
                 ) {
                     host.seek(TOUCH_SEEK_STEP_MS)
                 }
@@ -521,7 +525,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
                             stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
                         },
-                        enabled = !offlineQuality && !host.state.preparing && host.state.decision != null
+                        enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
+                        contentPadding = PaddingValues(horizontal = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET, vertical = 8.dp)
                     ) {
                         Text(
                             "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
@@ -576,7 +581,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 }
                 Row(
                     Modifier.fillMaxWidth().testTag("touch:secondary"),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = if (host.isLive) Arrangement.SpaceBetween else Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf(TouchPlayerSheet.Audio, TouchPlayerSheet.Subtitles, TouchPlayerSheet.Speed).forEach { sheet ->
@@ -957,12 +962,18 @@ internal fun TouchPlayerScrubber(
  * replaces `TextButton`'s wider one, which centred a short word and took its text off the line it starts from.
  */
 @Composable
-private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable () -> Unit) {
+private fun TouchBarButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp),
+    content: @Composable () -> Unit
+) {
     TextButton(
         onClick,
         modifier.widthIn(min = 48.dp),
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)
+        contentPadding = contentPadding
     ) {
         content()
     }

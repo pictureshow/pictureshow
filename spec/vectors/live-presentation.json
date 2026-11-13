@@ -3652,6 +3652,210 @@
       "operation": "recording-mutation-slot",
       "input": {},
       "expected": 48
+    },
+    {
+      "id": "live-presentation.recording-days-every-day",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      "expected": "Every day"
+    },
+    {
+      "id": "live-presentation.recording-days-weekdays",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday"
+        ]
+      },
+      "expected": "Weekdays"
+    },
+    {
+      "id": "live-presentation.recording-days-weekends",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      "expected": "Weekends"
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-0",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 0,
+        "remainingDp": 100
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-1",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 1,
+        "remainingDp": 100
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-2",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 8,
+        "remainingDp": 8
+      },
+      "expected": [
+        false,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-3",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 9,
+        "remainingDp": 100
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-4",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 4
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-5",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 0
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.program-metadata-touch",
+      "operation": "program-metadata-lines",
+      "input": {
+        "channel": "Ch 4 Open Sky",
+        "range": "4:19 – 4:46 AM",
+        "episode": "S1 E15",
+        "title": "Generated episode 15",
+        "tv": false
+      },
+      "expected": [
+        "Ch 4 Open Sky · 4:19 – 4:46 AM",
+        "S1 E15 · Generated episode 15"
+      ]
+    },
+    {
+      "id": "live-presentation.program-metadata-tv",
+      "operation": "program-metadata-lines",
+      "input": {
+        "channel": "Ch 4 Open Sky",
+        "range": "4:19 – 4:46 AM",
+        "episode": "S1 E15",
+        "title": "Generated episode 15",
+        "tv": true
+      },
+      "expected": [
+        "Ch 4 Open Sky · 4:19 – 4:46 AM · S1 E15 · Generated episode 15"
+      ]
+    },
+    {
+      "id": "live-presentation.touch-live-slider-0",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.touch-live-slider-1",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.touch-live-slider-2",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.touch-live-slider-3",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 0,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.live-seek-discernible-on-video",
+      "operation": "live-seek-presentation",
+      "input": {},
+      "expected": {
+        "glyphDp": 32,
+        "disabledAlpha": 0.38,
+        "scrimAlpha": 0.4
+      }
     }
   ]
 }

@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(262, cases.size)
+        assertEquals(278, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -59,6 +59,34 @@ class LivePresentationVectorsTest {
                     assertEquals(expected.getValue("inset").jsonPrimitive.float, actual.inset, 0.001f, id)
                     assertEquals(expected.getValue("width").jsonPrimitive.float, actual.width, 0.001f, id)
                 }
+                "touch-live-slider" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    touchLiveSliderAvailable(liveWindow(c["window"]), c.getValue("expired").jsonPrimitive.boolean),
+                    id
+                )
+                "live-seek-presentation" -> {
+                    val expected = envelope.getValue("expected").jsonObject
+                    assertEquals(expected.getValue("glyphDp").jsonPrimitive.int, LIVE_SEEK_MARK_DP, id)
+                    assertEquals(expected.getValue("disabledAlpha").jsonPrimitive.float, LIVE_SEEK_DISABLED_ALPHA, .001f, id)
+                    assertEquals(expected.getValue("scrimAlpha").jsonPrimitive.float, LIVE_SEEK_SCRIM_ALPHA, .001f, id)
+                }
+                "quality-scroll-cues" -> assertEquals(
+                    envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.boolean },
+                    qualityScrollCues(c.getValue("offsetDp").jsonPrimitive.float, c.getValue("remainingDp").jsonPrimitive.float)
+                        .let { listOf(it.first, it.second) },
+                    id
+                )
+                "program-metadata-lines" -> assertEquals(
+                    envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.content },
+                    liveProgramMetadataLines(
+                        c["channel"]?.jsonPrimitive?.contentOrNull,
+                        c.getValue("range").jsonPrimitive.content,
+                        c["episode"]?.jsonPrimitive?.contentOrNull,
+                        c["title"]?.jsonPrimitive?.contentOrNull,
+                        c.getValue("tv").jsonPrimitive.boolean
+                    ),
+                    id
+                )
                 "recording-mutation-slot" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.int,
                     RECORDING_DETAIL_MUTATION_SIZE_DP,

@@ -348,8 +348,12 @@ private fun BoxOption(modifier: Modifier, content: @Composable () -> Unit) {
 
 internal val liveRecordingWeekdays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
-internal fun liveRecordingDaysLabel(days: Set<String>): String =
-    liveRecordingWeekdays.filter { it in days }.joinToString().ifEmpty { "No days selected" }
+internal fun liveRecordingDaysLabel(days: Set<String>): String = when (days) {
+    liveRecordingWeekdays.toSet() -> "Every day"
+    liveRecordingWeekdays.take(5).toSet() -> "Weekdays"
+    liveRecordingWeekdays.takeLast(2).toSet() -> "Weekends"
+    else -> liveRecordingWeekdays.filter { it in days }.joinToString().ifEmpty { "No days selected" }
+}
 
 internal fun liveRecordingPriorityLabel(value: String?): String = when (value) {
     "-2" -> "Lowest"
@@ -366,7 +370,7 @@ private fun LiveOptionSummary(title: String, value: String, tv: Boolean, changed
     if (tv) {
         Row(
             modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             LiveText(title, true, Modifier.weight(1f))

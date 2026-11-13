@@ -150,6 +150,21 @@ class TouchLivePositionReadTest {
         assertEquals(slotBounds, slot.getBoundsInRoot())
     }
 
+    @Test fun nonseekablePositiveDurationDoesNotDrawADraggableThumb() {
+        launch(ObservedLiveWindow(100_000, 214_000, 204_000, false))
+        compose.onNodeWithTag("touch:scrubber").assertDoesNotExist()
+        compose.onNodeWithTag("touch:live-status").assertExists()
+    }
+
+    @Test fun expirationRemovesTheThumbWithoutRemovingTheStatus() {
+        launch(ObservedLiveWindow(100_000, 214_000, 204_000, true))
+        compose.onNodeWithTag("touch:scrubber").assertExists()
+        compose.runOnIdle { host.liveBufferExpired = true }
+        compose.mainClock.advanceTimeBy(32)
+        compose.onNodeWithTag("touch:scrubber").assertDoesNotExist()
+        compose.onNodeWithTag("touch:live-status").assertExists()
+    }
+
     private fun launch(window: ObservedLiveWindow?, paused: MutableState<Boolean> = mutableStateOf(true)) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, Server("server", "Server", "https://example.test", "12"))

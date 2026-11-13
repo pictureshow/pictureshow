@@ -61,16 +61,13 @@ internal fun LiveProgramDetail(
     val information: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             LiveText(program.name, tv, heading = true)
-            LiveText(
-                listOfNotNull(
-                    channel?.let { "Ch ${it.number.orEmpty()} ${it.name}" },
-                    time.range(program.startDate, program.endDate),
-                    program.seasonNumber?.let { season -> program.episodeNumber?.let { "S$season E$it" } },
-                    program.episodeTitle
-                ).joinToString(" · "),
-                tv,
-                small = true
-            )
+            liveProgramMetadataLines(
+                channel?.let { "Ch ${it.number.orEmpty()} ${it.name}" },
+                time.range(program.startDate, program.endDate),
+                program.seasonNumber?.let { season -> program.episodeNumber?.let { "S$season E$it" } },
+                program.episodeTitle,
+                tv
+            ).forEach { line -> LiveText(line, tv, small = true) }
             timer?.let { scheduled ->
                 Row(
                     Modifier.testTag("live:program-recording-status"),
@@ -183,3 +180,12 @@ internal fun liveProgramContentInset(tv: Boolean): Int = if (tv) 16 else 0
 
 /** Keep an explicit recording fact separate from its action, preserving every non-scheduled server status. */
 internal fun liveProgramRecordingLabel(status: String): String = if (status == "New") "Recording scheduled" else recordingStatus(status)
+
+/** Keep touch airing metadata separate from the episode's name and number. */
+internal fun liveProgramMetadataLines(channel: String?, range: String, episode: String?, title: String?, tv: Boolean): List<String> =
+    if (tv) {
+        listOf(listOfNotNull(channel, range, episode, title).joinToString(" · "))
+    } else {
+        listOf(listOfNotNull(channel, range).joinToString(" · "), listOfNotNull(episode, title).joinToString(" · "))
+            .filter(String::isNotBlank)
+    }

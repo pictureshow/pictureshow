@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
@@ -48,6 +49,32 @@ class RecordingDetailActionSpacingTest {
     @Test fun normalTextKeepsEqualControlGapsWithFocusCaptions() = verify(1f)
 
     @Test fun largeTextKeepsEqualControlGapsWithFocusCaptions() = verify(1.3f)
+
+    @Test fun liveSeekMarksHaveLargerGlyphsAndDifferentDisabledInkWithoutChangingOrdinaryControls() {
+        compose.setContent {
+            TouchTheme {
+                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                    Row {
+                        PlayerIconButton("back10", "Back", Modifier.testTag("enabled"), liveSeek = true) {}
+                        PlayerIconButton("forward10", "Forward", Modifier.testTag("disabled"), enabled = false, liveSeek = true) {}
+                        PlayerIconButton("back10", "Ordinary", Modifier.testTag("ordinary")) {}
+                    }
+                }
+            }
+        }
+        val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(2, marks.size, "Ordinary playback keeps its existing icon")
+        marks.forEach { assertEquals(32, it.layoutInfo.coordinates.size.width) }
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        fun brightest(tag: String): Float {
+            val box = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+            return (box.left.value.toInt() until box.right.value.toInt()).maxOf { x ->
+                (box.top.value.toInt() until box.bottom.value.toInt()).maxOf { y -> pixels[x, y].red }
+            }
+        }
+        assertTrue(brightest("enabled") > .9f)
+        assertTrue(brightest("disabled") in .25f...5f, "Disabled ink stays visibly distinct over video")
+    }
 
     private fun verify(fontScale: Float) {
         compose.setContent {
@@ -78,12 +105,19 @@ class RecordingDetailActionSpacingTest {
         val preceding = bounds("preceding")
         val played = bounds("played-slot")
         val favorite = bounds("favorite-slot")
-        assertEquals(48.dp, played.width, "A hidden or focus-visible caption must not reserve horizontal space")
-        assertEquals(48.dp, favorite.width)
+        assertEquals(48.dp, (played.right - played.left), "A hidden or focus-visible caption must not reserve horizontal space")
+        assertEquals(48.dp, (favorite.right - favorite.left))
         assertEquals(16.dp, played.left - preceding.right)
         assertEquals(16.dp, favorite.left - played.right)
         assertEquals(played.top, favorite.top)
         val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val captionInk = ((played.left.value - 32).toInt() until played.left.value.toInt()).any { x ->
+            ((played.top.value + 56).toInt() until (played.top.value + 84).toInt()).any { y ->
+                val pixel = pixels[x, y]
+                pixel.red > .5f && pixel.green > .5f && pixel.blue > .5f
+            }
+        }
+        assertTrue(captionInk, "A long focus caption paints beyond the 48dp slot instead of clipping or ellipsizing")
         val rest = pixels[(favorite.left.value + 24).toInt(), (favorite.top.value + 8).toInt()]
         assertTrue(rest.red > LiveBackground.red + .025f, "An unselected action keeps a quiet visible circular container: $rest")
         compose.onNodeWithTag("played").performSemanticsAction(SemanticsActions.RequestFocus) { it() }

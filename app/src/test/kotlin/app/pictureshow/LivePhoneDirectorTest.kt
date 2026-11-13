@@ -67,6 +67,15 @@ class LivePhoneDirectorTest {
         assertEquals("warning", liveGuideWarningIcon().name)
     }
 
+    @Test fun multilineReceiptLabelsStartBesideTheFirstValueLine() {
+        val value = "Monday, Wednesday, Friday, Sunday, another supplied provider day"
+        compose.setContent { TouchTheme { TouchValueSummary("Days", value) } }
+        val label = compose.onNodeWithText("Days").getUnclippedBoundsInRoot()
+        val supplied = compose.onNodeWithText(value).getUnclippedBoundsInRoot()
+        assertTrue(supplied.bottom - supplied.top > label.bottom - label.top, "The fixture must actually wrap")
+        assertTrue(kotlin.math.abs(label.top.value - supplied.top.value) <= 1f, "A wrapped receipt value top-aligns its label")
+    }
+
     @Test fun unchangedScheduleCanBeInspectedButCannotWriteThenChangedReviewSavesOnce() {
         var writes = 0
         compose.setContent { TouchTheme { LazyColumn { item { LiveScheduleEditor(original, true, false, false, true) { writes++ } } } } }

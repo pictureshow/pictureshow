@@ -3,6 +3,8 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -22,7 +26,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -30,6 +40,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+internal fun touchLiveSliderAvailable(window: app.pictureshow.core.playback.ObservedLiveWindow?, expired: Boolean): Boolean =
+    window != null && window.canTimeShift && !expired
+
+internal const val LIVE_SEEK_MARK_DP = 32
+internal const val LIVE_SEEK_DISABLED_ALPHA = .38f
+internal const val LIVE_SEEK_SCRIM_ALPHA = .4f
 
 @Composable
 internal fun PlayerIconButton(
@@ -38,16 +56,61 @@ internal fun PlayerIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     state: String? = null,
+    liveSeek: Boolean = false,
     onClick: () -> Unit
 ) {
     IconButton(
         onClick,
-        modifier.size(48.dp).semantics {
-            contentDescription = label
-            state?.let { stateDescription = it }
-        },
-        enabled = enabled
-    ) { Icon(playerActionIcon(icon), null, Modifier.size(24.dp)) }
+        modifier.size(48.dp)
+            .then(if (liveSeek) Modifier.background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape) else Modifier)
+            .semantics {
+                contentDescription = label
+                state?.let { stateDescription = it }
+            },
+        enabled = enabled,
+        colors = if (liveSeek) {
+            IconButtonDefaults.iconButtonColors(
+                contentColor = Color.White,
+                disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
+            )
+        } else {
+            IconButtonDefaults.iconButtonColors()
+        }
+    ) {
+        if (liveSeek) LiveSeekMark(forward = icon == "forward10") else Icon(playerActionIcon(icon), null, Modifier.size(24.dp))
+    }
+}
+
+/** A circular replay/forward mark with an actual numeral; the button owns its speech and disabled tint. */
+@Composable
+private fun LiveSeekMark(forward: Boolean) {
+    val tint = androidx.compose.material3.LocalContentColor.current
+    Box(Modifier.size(LIVE_SEEK_MARK_DP.dp).testTag("touch:live-seek-mark").clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(32.dp)) {
+            val unit = size.width / 32f
+            scale(if (forward) -1f else 1f, 1f) {
+                drawArc(
+                    tint,
+                    -70f,
+                    290f,
+                    false,
+                    topLeft = Offset(5f * unit, 6f * unit),
+                    size = Size(22f * unit, 22f * unit),
+                    style = Stroke(2f * unit, cap = StrokeCap.Round)
+                )
+                drawPath(
+                    Path().apply {
+                        moveTo(5f * unit, 6f * unit)
+                        lineTo(12f * unit, 6f * unit)
+                        lineTo(5f * unit, 13f * unit)
+                        close()
+                    },
+                    tint
+                )
+            }
+        }
+        Text("10", color = tint, fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+    }
 }
 
 /** The live action/status has one reserved slot beside the measured position range. */
@@ -86,7 +149,7 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (window != null && window.durationMs > 0) {
+            if (window != null && touchLiveSliderAvailable(window, host.liveBufferExpired)) {
                 Slider(
                     value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
                     valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
@@ -106,11 +169,19 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
                     }
                 )
             } else {
-                LivePlayerTrack(null, 0, accent, Modifier.weight(1f))
+                LivePlayerTrack(window, position, accent, Modifier.weight(1f), expired = host.liveBufferExpired)
             }
             Box(Modifier.width(liveControlWidth()).heightIn(min = 48.dp).testTag("touch:live-slot"), contentAlignment = Alignment.Center) {
                 if (atEdge && !paused) {
-                    LiveEdgeBadge(tv = false, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live"))
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
+                            .semantics(mergeDescendants = true) { contentDescription = "Live" },
+                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Canvas(Modifier.size(6.dp).clearAndSetSemantics {}) { drawCircle(Color(0xFFFF6B6B)) }
+                        Text("Live", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
+                    }
                 } else {
                     OutlinedButton(
                         onClick = {
