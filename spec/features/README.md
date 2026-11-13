@@ -59,3 +59,7 @@ Hosted Apple reader qualification records which tested 27+ unit devices supplied
 the separate reader and catalog sandboxes. Allocate those sandboxes only after the unit and required cold-repeat
 checks pass. Match each result bundle to its owned simulator ID and retain every disposal outcome. This setup
 provenance does not replace actual speech or establish why an earlier reader service failed.
+
+For PLAY-06, a hidden-player seek fixture waits for an observable host position change before reopening the
+controls. Advancing only the UI frame clock is not proof that the native position sampler has completed. Keep
+the original exact spoken-position assertion after reopening; synchronization cannot substitute for its result.

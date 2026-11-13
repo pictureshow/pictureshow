@@ -229,6 +229,16 @@ final class CatalogPresentationUITests: XCTestCase {
             // yet have a focused element and currentSpeech can throw noSpeech.
             attachSpeech("132 VoiceOver enabled actual system state before first speech")
             #if os(iOS)
+            if !hasAcceptedReaderUtterance {
+                // A real scene activation gives a newly enabled reader its
+                // normal app-entry focus event without activating an app control.
+                // Preserve the current navigation stack and require its target back.
+                XCUIDevice.shared.press(.home)
+                app.activate()
+                XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+                XCTAssertTrue(anchor.waitForExistence(timeout: 10) && anchor.isHittable)
+                attachSpeech("132 VoiceOver initial native foreground restored before speech")
+            }
             // Keep the requested native target visible, but establish reader
             // focus through the service itself. Enabled state alone does not
             // prove a coordinate tap will route as exploration rather than

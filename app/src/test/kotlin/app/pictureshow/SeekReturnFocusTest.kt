@@ -543,10 +543,21 @@ class SeekReturnFocusTest {
         }
         assertTrue(spokenPosition().startsWith("0:00"), spokenPosition())
         hideControls()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("skip:Intro").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("skip:Intro").assertExists()
         // A jump the screen didn't ask for, which is what time passing looks like to it.
         compose.runOnIdle { output.player.value!!.seekTo(45_000) }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
+        // The host samples the native position across an IO/Main boundary. Advancing
+        // only Compose's clock does not prove that sampling completed. The same
+        // real position removes this fixture's 0..20s intro while controls stay hidden.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("skip:Intro").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithContentDescription("Playback position").assertDoesNotExist()
         compose.onNodeWithTag("player:surface").performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.OnClick
         ) { check(it()) }
