@@ -5,14 +5,35 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 const media = join(tmpdir(), "pictureshow-web-media");
 const user = { Id: "viewer", Name: "Viewer" };
+// Expected chooser names follow the shared Android-derived labels, not Jellyfin DisplayTitle.
+export const trackNames = {
+    englishAudio: "English · AAC stereo",
+    spanishAudio: "Spanish · AAC stereo",
+    englishCaptions: "English · SRT",
+} as const;
 const streams = [
     { Type: "Video", Index: 0, Codec: "h264" },
-    { Type: "Audio", Index: 1, Codec: "aac", DisplayTitle: "English stereo" },
-    { Type: "Audio", Index: 2, Codec: "aac", DisplayTitle: "Spanish stereo" },
+    {
+        Type: "Audio",
+        Index: 1,
+        Codec: "aac",
+        Language: "eng",
+        Channels: 2,
+        DisplayTitle: "English stereo",
+    },
+    {
+        Type: "Audio",
+        Index: 2,
+        Codec: "aac",
+        Language: "spa",
+        Channels: 2,
+        DisplayTitle: "Spanish stereo",
+    },
     {
         Type: "Subtitle",
         Index: 3,
         Codec: "subrip",
+        Language: "eng",
         IsTextSubtitleStream: true,
         DisplayTitle: "English captions",
     },

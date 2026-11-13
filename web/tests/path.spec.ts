@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { test, expect } from "@playwright/test";
-import { fixture, signIn } from "./fixtures";
+import { fixture, signIn, trackNames } from "./fixtures";
 test("keyboard path: password, resume, real video, reports, tracks, Back restores focus", async ({
     page,
 }) => {
@@ -92,7 +92,9 @@ test("keyboard path: password, resume, real video, reports, tracks, Back restore
     await expect(page.getByLabel("Audio", { exact: true })).toBeEnabled();
     await page.getByLabel("Audio", { exact: true }).focus();
     await page.keyboard.press("Enter");
-    await page.getByRole("radio", { name: /Spanish stereo/ }).focus();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .focus();
     await page.keyboard.press("Enter");
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect
@@ -110,7 +112,9 @@ test("keyboard path: password, resume, real video, reports, tracks, Back restore
     const beforeLocalCaptions = f.negotiations.length;
     await page.getByLabel("Subtitles", { exact: true }).focus();
     await page.keyboard.press("Enter");
-    await page.getByRole("radio", { name: /English captions/ }).focus();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .focus();
     await page.keyboard.press("Enter");
     await expect.poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex).toBe(3);
     expect(f.reports.at(-1)?.body.AudioStreamIndex).toBe(2);

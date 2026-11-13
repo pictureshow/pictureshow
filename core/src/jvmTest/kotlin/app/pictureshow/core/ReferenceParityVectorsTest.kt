@@ -99,7 +99,6 @@ class ReferenceParityVectorsTest {
                         "playback-start"
                     )
             ) {
-
                 "Unhandled suite $suite in ${file.name}"
             }
             val cases = document.getValue("cases").jsonArray

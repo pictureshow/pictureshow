@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { test, expect, type Page } from "@playwright/test";
-import { fixture, signIn, movie } from "./fixtures";
+import { fixture, signIn, movie, trackNames } from "./fixtures";
 const jsonHeaders = {
     "access-control-allow-origin": "*",
     "content-type": "application/json",
@@ -83,7 +83,9 @@ test("player overlay, panel Back priority, audio Off and one viewing across trac
         await page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
     ).toBe(true);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect(
         page.getByRole("button", { name: "Play", exact: true }),
@@ -123,7 +125,9 @@ test("caption timing changes real cues, sheets trap D-pad focus, and explicit Of
     await openMovie(page);
     await pause(page);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect
         .poll(() =>
             page
@@ -160,7 +164,10 @@ test("caption timing changes real cues, sheets trap D-pad focus, and explicit Of
     await page.getByRole("radio", { name: "Off", exact: true }).focus();
     await page.keyboard.press("ArrowDown");
     await expect(
-        page.getByRole("radio", { name: /English captions/ }),
+        page.getByRole("radio", {
+            name: trackNames.englishCaptions,
+            exact: true,
+        }),
     ).toBeFocused();
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Enter");
@@ -619,7 +626,9 @@ test("accepted Stop is not resent when only encoding cleanup fails", async ({
 }) => {
     const f = await creditsEpisode(page, false);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect
         .poll(
@@ -698,7 +707,9 @@ test("paused replacement composes pending Right Right Left as exactly ten second
     );
     try {
         await page.getByRole("button", { name: "Audio", exact: true }).click();
-        await page.getByRole("radio", { name: /Spanish/ }).click();
+        await page
+            .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+            .click();
         await started;
         await page.locator("video").focus();
         await page.keyboard.press("ArrowRight");
@@ -752,7 +763,9 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
     await openMovie(page);
     await pause(page);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect.poll(() => f.mediaRequests.includes("manifest")).toBe(true);
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
@@ -979,7 +992,9 @@ test("rc26 same active track preserves stream and reports only viewer choices", 
         .locator("video")
         .evaluate((v: HTMLVideoElement) => v.currentSrc);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishAudio, exact: true })
+        .click();
     await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(1);
     expect(f.reports.at(-1)?.body).not.toHaveProperty("SubtitleStreamIndex");
     expect(f.negotiations).toHaveLength(negotiations);
@@ -1028,7 +1043,9 @@ test("rc26 selected external text retries independently, caches Off on, and keep
     expect(attempts).toBe(0);
     const negotiations = f.negotiations.length;
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect(page.getByRole("status")).toContainText(
         "Playback can continue",
     );
@@ -1043,7 +1060,9 @@ test("rc26 selected external text retries independently, caches Off on, and keep
         });
     // A same selected pick must preserve the original retry rather than restart its loader.
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect.poll(() => attempts).toBe(2);
     await expect
         .poll(() =>
@@ -1066,7 +1085,9 @@ test("rc26 selected external text retries independently, caches Off on, and keep
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await page.getByRole("radio", { name: "Off", exact: true }).click();
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect
         .poll(() =>
             page
@@ -1078,7 +1099,9 @@ test("rc26 selected external text retries independently, caches Off on, and keep
         .toBe(1);
     expect(attempts).toBe(2);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
         "",
@@ -1121,7 +1144,9 @@ test("rc26 malformed selected captions retry and Off cancels optional loading wi
     });
     await openMovie(page);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect(page.getByRole("status")).toContainText(
         "Playback can continue",
     );
@@ -1166,7 +1191,9 @@ test("rc26 report diagnostics bind actual status and independent origins without
         )
         .toBe(true);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishAudio, exact: true })
+        .click();
     await expect
         .poll(() =>
             lines.some(
@@ -1265,13 +1292,17 @@ test("rc26 pending menu is cancelled by Back and selected entry never pulls late
     // A complete current menu opens only after this new explicit request.
     await page.getByRole("button", { name: "Audio", exact: true }).click();
     await expect(
-        page.getByRole("radio", { name: /English stereo/ }),
+        page.getByRole("radio", { name: trackNames.englishAudio, exact: true }),
     ).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("radio", { name: /Spanish/ })).toBeFocused();
+    await expect(
+        page.getByRole("radio", { name: trackNames.spanishAudio, exact: true }),
+    ).toBeFocused();
     await page.clock.install();
     await page.clock.runFor(8000);
-    await expect(page.getByRole("radio", { name: /Spanish/ })).toBeFocused();
+    await expect(
+        page.getByRole("radio", { name: trackNames.spanishAudio, exact: true }),
+    ).toBeFocused();
     expect(await page.evaluate(() => (window as any).__trackMenuMessages)).toBe(
         1,
     );
@@ -1286,7 +1317,9 @@ test("rc26 relative steps retain target after negotiation until replacement READ
     await openMovie(page);
     await pause(page);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
         "",
@@ -1437,7 +1470,10 @@ test("rc28 automatic captions retain the server text default with source binding
     expect(start).not.toHaveProperty("SubtitleStreamIndex");
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await expect(
-        page.getByRole("radio", { name: /English · SUBRIP/ }),
+        page.getByRole("radio", {
+            name: trackNames.englishCaptions,
+            exact: true,
+        }),
     ).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Stop and go back" }).click();
@@ -1486,7 +1522,9 @@ test("rc26 text-codec Encode transitions renegotiate and Audio Off remains expli
     await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(-1);
     const before = f.negotiations.length;
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.getByRole("radio", { name: /English captions/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.englishCaptions, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.length).toBe(before + 1);
     expect(f.negotiations.at(-1).EnableDirectPlay).toBe(false);
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
@@ -1526,7 +1564,12 @@ test("rc26 delayed optional subtitle HTTP outlives the A/V deadline without bloc
         await page
             .getByRole("button", { name: "Subtitles", exact: true })
             .click();
-        await page.getByRole("radio", { name: /English captions/ }).click();
+        await page
+            .getByRole("radio", {
+                name: trackNames.englishCaptions,
+                exact: true,
+            })
+            .click();
         await requested;
         const before = await page
             .locator("video")

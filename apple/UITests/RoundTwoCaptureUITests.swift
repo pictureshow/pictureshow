@@ -48,8 +48,7 @@ final class RoundTwoCaptureUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["quickCode"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.buttons["signIn"].exists)
         record("Round2 Quick Connect cancelled password restored")
-        activate(app.buttons["signIn"])
-        XCTAssertTrue(wait(30) { self.authenticated })
+        submitSignIn()
         home()
         record("Round2 signed-in initial Home focus")
     }
@@ -201,25 +200,55 @@ final class RoundTwoCaptureUITests: XCTestCase {
         return node("librarySort")
         #endif
     }
-    private var authenticated: Bool { app.buttons["openSearch"].exists || app.buttons["Home"].exists || app.buttons["openSettings"].exists }
+    // Native tvOS toolbar buttons preserve their visible label while SwiftUI
+    // can omit the NavigationLink identifier from the exposed button snapshot.
+    private var homeControlsVisible: Bool {
+        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSearch", "Search")).firstMatch.exists &&
+            app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "openSettings", "Settings")).firstMatch.exists
+    }
+    private var authenticated: Bool { homeControlsVisible || app.buttons["Home"].exists }
     @MainActor private func signIn() throws {
         if authenticated { return }
         if app.buttons["addServer"].waitForExistence(timeout: 2) { activate(app.buttons["addServer"]) }
         if app.buttons["connect"].waitForExistence(timeout: 3) { activate(app.buttons["connect"]) }
         XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 25))
         dismissKeyboard()
+        submitSignIn()
+    }
+    @MainActor private func submitSignIn() {
+        #if os(iOS)
+        let username = app.textFields["username"]
+        XCTAssertEqual(username.value as? String, config["username"], "Submit the actual prepared pilot username")
+        let password = app.secureTextFields["password"]
+        XCTAssertTrue(password.exists && !(password.value as? String ?? "").isEmpty, "Prepared password must remain present")
+        // Sign-in options and Quick Connect cancellation can establish focus after
+        // the form first exists. Establish and dismiss that real keyboard before
+        // submitting so a native keyboard overlay cannot receive the button tap.
+        username.tap()
+        let done = app.buttons["dismissSignInKeyboard"]
+        XCTAssertTrue(wait(5) {
+            self.app.keyboards.firstMatch.exists && done.exists && !done.frame.isEmpty &&
+                done.frame.intersects(self.app.frame) && done.isHittable
+        }, "The focused native field must expose its visible keyboard dismissal control")
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Dismiss the native keyboard before submitting")
+        #else
+        dismissKeyboard()
+        #endif
         activate(app.buttons["signIn"])
-        XCTAssertTrue(wait(30) { self.authenticated })
+        let signedIn = wait(30) { self.authenticated }
+        if !signedIn { record("Round2 sign-in failure native state") }
+        XCTAssertTrue(signedIn, "Actual password submission must reach the authenticated native app")
     }
     @MainActor private func home() {
         #if os(iOS)
         if app.buttons["Home"].exists { activate(app.buttons["Home"]) }
         #endif
         for _ in 0..<10 {
-            if app.buttons["openSearch"].exists || app.buttons["openSettings"].exists { return }
+            if homeControlsVisible { return }
             back()
         }
-        XCTAssertTrue(app.buttons["openSearch"].exists || app.buttons["openSettings"].exists)
+        XCTAssertTrue(homeControlsVisible)
     }
     @MainActor private func libraries() throws {
         home()
@@ -295,7 +324,7 @@ final class RoundTwoCaptureUITests: XCTestCase {
         return condition()
     }
     @MainActor private func record(_ name: String) {
-        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
         let text = XCTAttachment(string: app.debugDescription); text.name = name + " accessibility"; text.lifetime = .keepAlways; add(text)
         print("ROUND2_CAPTURE name=\(name) window=\(app.windows.firstMatch.frame)")
     }

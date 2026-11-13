@@ -667,7 +667,11 @@ for (const selected of [-1, 4, 5]) {
             .getByRole("dialog", { name: "Subtitles", exact: true })
             .getByRole("radio", { checked: true });
         await expect(active).toHaveAccessibleName(
-            selected === -1 ? "Off" : selected === 4 ? /Arabic/ : /PGSSUB/,
+            selected === -1
+                ? "Off"
+                : selected === 4
+                  ? "Arabic · SRT"
+                  : "English · PGS",
         );
         await page.keyboard.press("Escape");
         await page

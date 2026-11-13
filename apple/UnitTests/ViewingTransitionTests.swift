@@ -100,7 +100,7 @@ private final class InertViewingPlayer: AVPlayer {
         try await setupViewing()
         #if os(tvOS)
         let next = try XCTUnwrap(session.nextItem)
-        XCTAssertGreaterThan(next.name.count, 16, "The real next-episode lookup must supply a title too long for a contextual pill")
+        XCTAssertGreaterThan(next.name.count, 16, "The real next-episode lookup must supply a long title for both native actions")
         let coordinator = NativePlayer.Coordinator(session: session, close: {})
         coordinator.updateContinuation(next, countdown: 10)
         let contextNext = try XCTUnwrap(coordinator.continuationContextActions.first { $0.identifier.rawValue == "playNext" })
@@ -115,12 +115,12 @@ private final class InertViewingPlayer: AVPlayer {
             XCTAssertTrue(contextCancel === coordinator.continuationContextActions.first { $0.identifier.rawValue == "cancelNext" }, "Countdown updates must retain the Cancel action")
             XCTAssertTrue(transportNext === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "playNextTransport" })
             XCTAssertTrue(transportCancel === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "cancelNextTransport" })
-            XCTAssertLessThanOrEqual(contextNext.title.count, 16, "Native contextual pills must not inherit the long episode title")
-            XCTAssertEqual(contextNext.title, "Next (\(countdown))", "The compact pill must expose the current countdown")
-            XCTAssertFalse(contextNext.title.contains(next.name))
+            XCTAssertGreaterThan(contextNext.title.count, next.name.count, "The contextual action must include the episode identity and action")
+            XCTAssertEqual(contextNext.title, "Play next: \(next.name) (\(countdown))", "The contextual action must expose the episode and current countdown")
+            XCTAssertTrue(contextNext.title.contains(next.name))
             XCTAssertEqual(contextCancel.title, "Cancel", "Cancel must remain a short stable label across countdown ticks")
             XCTAssertEqual(transportNext.title, "Play next: \(next.name) (\(countdown))", "Transport metadata must retain the complete next-episode title")
-            XCTAssertEqual(transportCancel.title, "Cancel next episode")
+            XCTAssertEqual(transportCancel.title, "Cancel", "Paused transport must retain a visible text action")
         }
         var following = next
         following.id = "following"

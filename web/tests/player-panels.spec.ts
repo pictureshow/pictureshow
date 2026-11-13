@@ -3,7 +3,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { fixture, signIn, movie } from "./fixtures";
+import { fixture, signIn, movie, trackNames } from "./fixtures";
 
 const jsonHeaders = {
     "access-control-allow-origin": "*",
@@ -532,7 +532,9 @@ test("speed panel opens on the current rate, applies with pitch preserved, survi
     // Another audio track renegotiates and replaces the decoder; the speed stays.
     const before = f.negotiations.length;
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
     await expect.poll(() => f.negotiations.length).toBeGreaterThan(before);
     await expect
         .poll(
@@ -606,7 +608,9 @@ function gate() {
 
 async function chooseSpanish(page: Page) {
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await page
+        .getByRole("radio", { name: trackNames.spanishAudio, exact: true })
+        .click();
 }
 
 async function ready(page: Page) {
