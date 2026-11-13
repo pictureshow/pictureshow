@@ -519,11 +519,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
                     add { placement ->
-                        TextButton(onClick = {
+                        TouchBarButton({
                             host.sync?.show()
                             ui.interact()
-                        }, modifier = placement.testTag("touch:syncplay")) {
-                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
+                        }, placement.testTag("touch:syncplay")) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title), maxLines = 1)
                         }
                     }
                     TouchPlayerSheet.entries.forEach { sheet ->

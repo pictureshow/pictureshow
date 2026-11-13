@@ -5,7 +5,11 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -288,6 +293,8 @@ internal fun TvSettingsRow(
     valueLabel: String? = null,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
+    readOnly: Boolean = false,
+    titleMaxLines: Int = Int.MAX_VALUE,
     leading: (@Composable () -> Unit)? = null
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -301,14 +308,16 @@ internal fun TvSettingsRow(
     val accessibilityModifier = Modifier.clearAndSetSemantics {
         this[SemanticsProperties.Text] = listOfNotNull(title, valueLabel, supportingText).map { AnnotatedString(it) }
         focused = isFocused
-        role = if (checked != null) Role.Switch else Role.Button
-        if (checked != null) {
+        if (!readOnly) role = if (checked != null) Role.Switch else Role.Button
+        if (!readOnly && checked != null) {
             toggleableState = ToggleableState(checked)
             stateDescription = if (checked) "On" else "Off"
-        } else if (valueLabel != null) {
+        } else if (!readOnly && valueLabel != null) {
             stateDescription = valueLabel
         }
-        if (enabled) {
+        if (readOnly) {
+            // A remote may focus and read this fact; Select is intentionally not an action.
+        } else if (enabled) {
             semanticClick {
                 onClick()
                 true
@@ -330,7 +339,7 @@ internal fun TvSettingsRow(
             TvSettingsNativeRow(
                 title, supportingText,
                 Modifier.focusRequester(rowFocus).then(nativeFocus),
-                enabled, false, supportingColor, interaction, onClick, trailing, leading
+                enabled, false, supportingColor, interaction, if (readOnly) ({}) else onClick, trailing, leading, titleMaxLines
             )
         }
     } else {
@@ -339,7 +348,7 @@ internal fun TvSettingsRow(
             modifier.then(
                 nativeFocus
             ),
-            enabled, selected, supportingColor, interaction, onClick, trailing, leading
+            enabled, selected, supportingColor, interaction, onClick, trailing, leading, titleMaxLines
         )
     }
 }
@@ -355,7 +364,8 @@ private fun TvSettingsNativeRow(
     interaction: MutableInteractionSource,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)?,
-    leading: (@Composable () -> Unit)?
+    leading: (@Composable () -> Unit)?,
+    titleMaxLines: Int
 ) {
     ListItem(
         selected, onClick,
@@ -364,7 +374,13 @@ private fun TvSettingsNativeRow(
         // shorter than its nominal line height, without top-aligning the text.
         headlineContent = {
             Box(Modifier.heightIn(min = if (supportingText == null) 32.dp else 0.dp), contentAlignment = Alignment.Center) {
-                Text(title, Modifier.testTag("tv-settings:label:$title"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    title,
+                    Modifier.testTag("tv-settings:label:$title"),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = titleMaxLines,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         },
         supportingContent = supportingText?.let { text ->
@@ -404,6 +420,7 @@ private fun TvSettingsChevron() {
 }
 
 /** Full-height TV panel: fixed title/preview, with every explanation scrolling inside its setting row. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun TvSettingsPanel(
     title: String,
@@ -416,13 +433,26 @@ internal fun TvSettingsPanel(
     lazyState: LazyListState? = null,
     contentFocusKey: Any? = Unit,
     panelWidth: androidx.compose.ui.unit.Dp = 420.dp,
+    footerHorizontalPadding: androidx.compose.ui.unit.Dp = 28.dp,
+    minimalFocusScroll: Boolean = false,
+    repairLostContentFocus: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    var contentHasFocus by remember { mutableStateOf(false) }
+    var hadContentFocus by remember { mutableStateOf(false) }
+    val focusRepair = if (repairLostContentFocus) {
+        Modifier.onFocusChanged {
+            contentHasFocus = it.hasFocus
+            if (it.hasFocus) hadContentFocus = true
+        }.focusGroup()
+    } else {
+        Modifier
+    }
     BackHandler(onBack = onClose)
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, windowTitle = title)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
             Column(
-                modifier.widthIn(max = panelWidth).fillMaxWidth().fillMaxHeight()
+                modifier.then(focusRepair).widthIn(max = panelWidth).fillMaxWidth().fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                     .testTag("tv-settings:panel").semantics {
                         paneTitle = title
@@ -438,7 +468,21 @@ internal fun TvSettingsPanel(
                 )
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
                 if (scrollContent) {
-                    TvSettingsList(Modifier.weight(1f), content)
+                    val platformScroll = LocalBringIntoViewSpec.current
+                    val minimalScroll = remember {
+                        object : BringIntoViewSpec {
+                            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
+                                // An oversized focus region already covering the viewport needs no scroll.
+                                size > containerSize && offset <= 0f && offset + size >= containerSize -> 0f
+                                offset < 0f -> offset
+                                offset + size > containerSize -> offset + size - containerSize
+                                else -> 0f
+                            }
+                        }
+                    }
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll) {
+                        TvSettingsList(Modifier.weight(1f), content)
+                    }
                 } else {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         Column(Modifier.fillMaxSize(), content = content)
@@ -459,12 +503,20 @@ internal fun TvSettingsPanel(
                         }
                     }
                 }
-                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp)) { it() } }
+                footer?.let { Box(Modifier.fillMaxWidth().padding(horizontal = footerHorizontalPadding, vertical = 12.dp)) { it() } }
             }
         }
         LaunchedEffect(firstFocus, contentFocusKey) {
             withFrameNanos { }
             firstFocus.requestFocus()
+        }
+        LaunchedEffect(contentHasFocus) {
+            if (repairLostContentFocus && hadContentFocus && !contentHasFocus) {
+                // Allow an explicit queue-removal neighbour request to settle first.
+                withFrameNanos { }
+                withFrameNanos { }
+                if (!contentHasFocus) firstFocus.requestFocus()
+            }
         }
     }
 }

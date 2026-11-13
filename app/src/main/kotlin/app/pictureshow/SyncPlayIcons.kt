@@ -66,6 +66,16 @@ internal fun syncIcon(kind: String): ImageVector = ImageVector.Builder(kind, 24.
                 lineTo(3f, 5f)
                 close()
             }
+            "refresh" -> {
+                moveTo(20f, 4f)
+                lineTo(20f, 10f)
+                lineTo(14f, 10f)
+                lineTo(16.4f, 7.6f)
+                arcTo(6f, 6f, 0f, true, false, 18f, 14f)
+                lineTo(20f, 14f)
+                arcTo(8f, 8f, 0f, true, true, 17.8f, 6.2f)
+                close()
+            }
             "warning" -> {
                 moveTo(12f, 2f)
                 lineTo(23f, 22f)

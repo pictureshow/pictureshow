@@ -122,11 +122,11 @@ A fresh emission of the same already-applied Unpause restores its permitted play
 A future Unpause accepted for a paused, READY source already aligned within80ms of its base records that preparation separately from an already-applied timeline. At When, timer lateness alone must not introduce a positional seek into that prepared source: apply its permitted play mode and retain the original advancing timeline for subsequent ordinary drift correction. Revalidate the same account/membership/entry/snapshot, renderer/token/native source, current clock generation, actual readiness/paused state and absence of a pending positional application. Clock invalidation, native positional completion, replacement or changed command/base/When discards the preparation. A command already late on receipt, or a genuinely misaligned source, retains catch-up positioning. Waiting still holds output; an unready source cannot borrow preparation. This rule does not widen drift thresholds or establish rendered convergence. The13 `sync-clock` preparation cases and Android late-wake/source-replacement regressions define the distinction.
 ## Android presentation and portable projections
 
-`sync-presentation` supplies 24 additional cases for semantic group phase, local sync estimates, title-response ownership and the names-only roster. Every title row retains both ItemId and PlaylistItemId; duplicate entries remain separate. Authenticated metadata lookups are cached within an account and membership generation. Replies are accepted only for the requesting account/token, membership generation, queue revision and still-present requested playlist entries. Loading and unavailable titles have separate localized fallbacks; synthetic Item N titles are not shown.
+`sync-presentation` supplies 31 cases for semantic group phase, local sync estimates, title-response ownership and the names-only roster. Every title row retains both ItemId and PlaylistItemId; duplicate entries remain separate. Authenticated metadata lookups are cached within an account and membership generation. Replies are accepted only for the requesting account/token, membership generation, queue revision and still-present requested playlist entries. Loading and unavailable titles have separate localized fallbacks; synthetic Item N titles are not shown.
 
 The player retains a compact group chip outside the ordinary controls overlay. Its semantic phase/quality changes are polite announcements; numerical timing diagnostics never become UI state or live-region text. In sync is explicitly an estimate of this device, available only with a current usable bounded-uncertainty clock, matching ready renderer, applied current timeline and bounded error. Stale clocks, future/held commands, pending position application, missing readiness and disconnected memberships cannot assert it. This estimate is independent of SYN-06 native renderer/physical output qualification.
 
-Jellyfin GroupInfoDto Participants is a names-only list. Display actual names as separate rows, capped at four with a localized remaining count, and display group-wide waiting. Do not infer which name is buffering, individual readiness or “you” from a name match. Local renderer facts appear only under This device. A Waiting/Ready state is still waiting; it never means all people are ready. State-update wait reasons clear on membership replacement/reconnect rather than leaking to another group.
+Jellyfin GroupInfoDto Participants is a names-only list. Display actual names as separate rows, capped at four with a localized remaining count, and display group-wide waiting. Do not infer which name is buffering, individual readiness or “you” from a name match. Local renderer facts appear beside group phase with an explicit This device label. A Waiting/Ready state is still waiting; it never means all people are ready. State-update wait reasons clear on membership replacement/reconnect rather than leaking to another group.
 
 TV uses native list, switch, selected repeat chip and icon transport roles with content/data-ready initial focus, a scrolling body with fades/position cue and pinned error-colour Leave. Touch uses a full-screen Scaffold with close icon, scroll body, system/IME insets, a fixed transport row, full-width segmented repeat and pinned footer. Wait for me is the inverse of server-confirmed IgnoreWait. Requests do not optimistically change it, repeat, shuffle or queue. Errors carry typed recovery actions and survive transient information; all viewer copy and counts use string/plural resources and locale number formatting.
 
@@ -148,3 +148,62 @@ safe drawing insets. The opener remains focusable and announces state politely.
 
 Android TV safe-area source, checked2026-11-13:
 https://developer.android.com/training/tv/playback/compose/layouts .
+
+
+### Native UI recovery, layout and capture contract
+
+Transport is available only when the current group controls are usable and its
+**authoritative queue has a positive entry count**. An empty queue disables Previous,
+Play/Pause and Next, explains how to start the queue, and starts TV focus on the
+useful Wait control. The pure Kotlin `syncTransportAvailable(usable, queueEntries)`
+projection implements the six portable `op=transport` boundary cases. This does not
+change group transport authorization, readiness, playback clocks or source policy.
+
+TV keeps local playback facts next to group phase in the first viewport. The
+names-only limitation is stated once; up to four actual names (including duplicate
+names) and localized +N are separate, remote-focusable **read-only facts**, with no
+button/click/disabled/selected/switch semantics. The local fact does not identify a
+remote bufferer or infer “you”. Personal playback options are explained beside Wait.
+Recovery actions take initial focus when offered; Leave appears only in the pinned
+footer. A completed asynchronous access check preserves an attached Refresh focus,
+while a newly opened loaded chooser starts on its first Join. Actual mode changes
+and removed focus targets recover useful focus. Removing a queue entry focuses the
+entry now at its old index, else the previous entry, else enabled Wait. Queue rows
+share one title column and quiet remove actions; the selected current entry remains
+visible independently of focus. The SyncPlay TV panel opts into minimal scrolling
+for already visible targets,12dp footer surface edges and scale1 full-width footer
+buttons; other shared settings callers retain their prior defaults.
+
+Touch compact portrait remains full-screen. Wide windows bound both body and footer
+to a centered600dp maximum. Compact height uses a48dp collapsing app bar, compact
+status and a one-row footer so useful transport is initially visible at640×360dp.
+While its IME is visible the compact footer is absent; the existing focused field
+and inline Create remain together, and IME Go submits a nonblank name. Regular
+portrait retains pinned Create above the IME. Native system/cutout/IME insets remain
+in force; bottom fades do not cover a field when only terminal padding remains.
+Plain text, fields and footer use the same16dp column as native list items. Empty
+footer surfaces are omitted. A long unbroken group token ellipsizes on one line;
+ordinary multiword names balance across at most two lines.
+
+Typed notices are projected once for display and focus. Rounded banners keep their
+explicit outlined recovery action in the message column with theme content colors.
+The pinned footer owns Leave; a failure banner suppresses a duplicate error phase.
+A local sync estimate is not peer timing qualification. The persistent chip retains
+its independent status/context rows, count visibility, native safe insets, natural
+width cap and non-orphaning status separators, including under font stress.
+
+Debug-only immutable fixtures additionally expose all four local states, empty and
+unavailable/long-title queues, warning/information notices, and a separate labeled
+chip stress area. These use actual UI components without a host/gateway/account;
+local fixture transitions prove layout and focus only. They never establish actual
+protocol, membership, casting, timing, physical output or playback behavior.
+
+A source/test build is not the visual acceptance gate. Handoff requires new exact
+source/APK/installed-hash receipts, native XML/geometry and full-size deliverables
+plus reduced model images, all accepted TV/phone/stress findings, real versus fixture
+labels, compact IME/landscape initial transport, large font/tablet and chip stress,
+read-only roster/neighbor/recovery focus, intermediate motion and honest missing
+states. A whole-screen design-director recapture verdict remains required. Web,
+Apple and desktop owe their native equivalents, UI/accessibility evidence and the
+new transport cases; Kotlin projection success does not implement those app cases.
+The existing Web pending-app-case report is a debt ledger, not implementation proof.

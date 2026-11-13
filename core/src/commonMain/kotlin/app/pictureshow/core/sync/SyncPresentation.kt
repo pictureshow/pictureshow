@@ -42,3 +42,6 @@ fun syncPhase(phase: String, reason: String?): SyncPhase = when (phase.lowercase
 
 data class SyncPeople(val names: List<String>, val remaining: Int)
 fun syncPeople(names: List<String>): SyncPeople = SyncPeople(names.take(4), (names.size - 4).coerceAtLeast(0))
+
+/** An empty authoritative group queue has no transport target, even while settings remain usable. */
+fun syncTransportAvailable(usable: Boolean, queueEntries: Int): Boolean = usable && queueEntries > 0
