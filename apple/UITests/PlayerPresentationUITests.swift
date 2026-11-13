@@ -975,16 +975,40 @@ final class PlayerPresentationUITests: XCTestCase {
         let cancelGlyphs = try recognized.compactMap { candidate -> CGRect? in
             guard let range = candidate.string.range(of: #"\bCancel\b"#, options: .regularExpression),
                   let glyph = try candidate.boundingBox(for: range) else { return nil }
-            let bounds = glyph.boundingBox
-            return CGRect(x: app.frame.minX + bounds.minX * app.frame.width,
-                          y: app.frame.minY + (1 - bounds.maxY) * app.frame.height,
-                          width: bounds.width * app.frame.width, height: bounds.height * app.frame.height)
+            return contextualGlyphFrame(glyph.boundingBox, region: request.regionOfInterest, viewport: app.frame)
         }
         XCTAssertEqual(cancelGlyphs.count, 1, "The actual contextual Cancel word must be visible exactly once in the bottom lane; OCR=\(text)")
         let cancel = try XCTUnwrap(cancelGlyphs.count == 1 ? cancelGlyphs.first : nil)
         XCTAssertFalse(cancel.isEmpty)
         XCTAssertGreaterThan(cancel.minY, app.frame.minY + app.frame.height * 0.82)
         return ContextualPixelProof(countdown: count, cancelGlyphFrame: cancel)
+    }
+    private func contextualGlyphFrame(_ box: CGRect, region: CGRect, viewport: CGRect) -> CGRect {
+        // Recognition boxes are normalized within the requested ROI. First map
+        // to the full image, then convert Vision's bottom-left to screen origin.
+        let imageBox = CGRect(x: region.minX + box.minX * region.width,
+                              y: region.minY + box.minY * region.height,
+                              width: box.width * region.width, height: box.height * region.height)
+        return CGRect(x: viewport.minX + imageBox.minX * viewport.width,
+                      y: viewport.minY + (1 - imageBox.maxY) * viewport.height,
+                      width: imageBox.width * viewport.width, height: imageBox.height * viewport.height)
+    }
+    func testContextualOCRCoordinatesUseTheRequestedImageRegion() {
+        let viewport = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let region = CGRect(x: 0.4, y: 0, width: 0.6, height: 0.18)
+        // Actual native12 Cancel recognition box (AB5CD432 OCR attachment).
+        // The old full-image projection incorrectly placed this word at y519.
+        let cancel = contextualGlyphFrame(CGRect(x: 0.78017, y: 0.37975, width: 0.08836, height: 0.13924), region: region, viewport: viewport)
+        XCTAssertEqual(cancel.minX, 1666.75584, accuracy: 0.001)
+        XCTAssertEqual(cancel.minY, 979.108344, accuracy: 0.001)
+        XCTAssertEqual(cancel.width, 101.79072, accuracy: 0.001)
+        XCTAssertEqual(cancel.height, 27.068256, accuracy: 0.001)
+        // The unit box must cover exactly the physical requested image region.
+        let wholeRegion = contextualGlyphFrame(CGRect(x: 0, y: 0, width: 1, height: 1), region: region, viewport: viewport)
+        XCTAssertEqual(wholeRegion.minX, 768, accuracy: 0.001)
+        XCTAssertEqual(wholeRegion.minY, 885.6, accuracy: 0.001)
+        XCTAssertEqual(wholeRegion.width, 1152, accuracy: 0.001)
+        XCTAssertEqual(wholeRegion.height, 194.4, accuracy: 0.001)
     }
     @MainActor private func focusedPlatterLuminance(_ screenshot: XCUIScreenshot, glyphFrame: CGRect) throws -> Double {
         let source = try XCTUnwrap(screenshot.image.cgImage)

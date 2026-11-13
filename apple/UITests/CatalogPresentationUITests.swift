@@ -559,17 +559,23 @@ final class CatalogPresentationUITests: XCTestCase {
         focus(app.buttons["play"], app: app)
         assertNativeButtonPixels(app.buttons["play"], app: app, style: "focused primary", focused: true)
         capture("132 round2 TV Play focused single system focus", app: app)
-        assertNativeButtonPixels(seasonOne, app: app, style: "selected season choice", text: "Season 1")
-        assertNativeButtonPixels(app.buttons["favorite"], app: app, style: "detail secondary action", text: "Add favorite")
-        assertNativeButtonPixels(app.buttons["playOnDevice"], app: app, style: "native Menu secondary action", text: "Play on TV")
         focus(app.buttons["watched"], app: app)
         assertNativeButtonPixels(app.buttons["watched"], app: app, style: "focused secondary", focused: true)
         capture("132 round2 TV secondary focused Play resting accent", app: app)
         let primaryFill = try XCTUnwrap(focusedFillSamples["focused primary"])
         let secondaryFill = try XCTUnwrap(focusedFillSamples["focused secondary"])
+        // Capture both actual roles before testing either fill. A failing sample
+        // must preserve its native comparison rather than hide it behind a stop.
+        for channels in [primaryFill, secondaryFill] {
+            XCTAssertGreaterThanOrEqual(channels.min() ?? 0, 0.75, "Native focused fill must remain pale")
+            XCTAssertLessThanOrEqual((channels.max() ?? 1) - (channels.min() ?? 0), 0.04, "Every role must use neutral system focus, never lavender")
+        }
         for (primaryChannel, secondaryChannel) in zip(primaryFill, secondaryFill) {
             XCTAssertEqual(primaryChannel, secondaryChannel, accuracy: 0.04, "Primary and secondary use one native neutral focus fill")
         }
+        assertNativeButtonPixels(seasonOne, app: app, style: "selected season choice", text: "Season 1")
+        assertNativeButtonPixels(app.buttons["favorite"], app: app, style: "detail secondary action", text: "Add favorite")
+        assertNativeButtonPixels(app.buttons["playOnDevice"], app: app, style: "native Menu secondary action", text: "Play on TV")
         #endif
         capture("132 series seasons and episodes", app: app)
         fixture.holdSeasonTwo(true)
@@ -795,8 +801,7 @@ final class CatalogPresentationUITests: XCTestCase {
             }
             focusedFillSamples[style] = channels
             print("LEG132_FOCUS_PLATTER style=\(style) backgroundLuminance=\(background) rgb=\(channels)")
-            XCTAssertGreaterThanOrEqual(channels.min() ?? 0, 0.75, "Native focused fill must remain pale", file: file, line: line)
-            XCTAssertLessThanOrEqual((channels.max() ?? 1) - (channels.min() ?? 0), 0.04, "Every role must use neutral system focus, never lavender", file: file, line: line)
+            // Unchanged pale/neutral thresholds are checked after both roles are captured.
             return
         }
         // Find ink by its difference from the dominant background, including
@@ -887,25 +892,32 @@ final class CatalogPresentationUITests: XCTestCase {
     }
     #if os(iOS)
     private func activateSettingsChrome(_ app: XCUIApplication) {
-        // Sidebar/tab navigation is fixed chrome, outside the content scroll
-        // viewport that reveal() intentionally requires for catalog controls.
+        // Native top/bottom tabs use Buttons; an expanded sidebar uses Cells.
+        // Same-frame parent/child AX wrappers represent one visible control.
         let query = UIDevice.current.userInterfaceIdiom == .pad
-            ? app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Settings", "openSettings"))
+            ? app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND identifier != %@", "Settings", "openSettings"))
             : app.tabBars.buttons.matching(identifier: "Settings")
-        let settings = query.firstMatch
-        let exists = settings.waitForExistence(timeout: 15)
-        XCTAssertEqual(query.count, 1, "Choose one sidebar/tab Settings control, excluding Home's toolbar action")
-        if !exists { capture("132 Settings navigation chrome missing", app: app) }
-        XCTAssertTrue(exists, "The native Settings navigation button must exist")
+        let exists = query.firstMatch.waitForExistence(timeout: 15)
         let window = app.windows.firstMatch.frame
-        let frame = settings.frame
-        let visible = settings.isHittable && !frame.isEmpty && window.contains(frame)
-        if settings.label != "Settings" || settings.elementType != .button || !visible {
-            capture("132 Settings navigation chrome unavailable", app: app)
+        let candidates = query.allElementsBoundByIndex.filter { $0.elementType == .button || $0.elementType == .cell }
+        var uniqueVisible: [XCUIElement] = []
+        for candidate in candidates {
+            let frame = candidate.frame
+            let visible = candidate.isHittable && !frame.isEmpty && window.contains(frame)
+            print("LEG132_SETTINGS_CHROME role=\(candidate.elementType.rawValue) id=\(candidate.identifier) frame=\(frame) hittable=\(candidate.isHittable) fullyVisible=\(visible)")
+            guard visible else { continue }
+            if let duplicate = uniqueVisible.firstIndex(where: {
+                $0.frame == frame && $0.identifier == candidate.identifier && $0.label == candidate.label
+            }) { uniqueVisible[duplicate] = candidate }
+            else { uniqueVisible.append(candidate) }
         }
+        capture("132 Settings navigation chrome before resolution", app: app)
+        XCTAssertTrue(exists, "The native Settings navigation control must exist")
+        XCTAssertEqual(uniqueVisible.count, 1, "Choose exactly one visible native Settings control, excluding Home toolbar and identical AX wrappers")
+        guard uniqueVisible.count == 1, let settings = uniqueVisible.first else { return }
         XCTAssertEqual(settings.label, "Settings")
-        XCTAssertEqual(settings.elementType, .button)
-        XCTAssertTrue(visible, "The actual Settings navigation button must be hittable and fully inside the app window")
+        XCTAssertTrue(settings.elementType == .button || settings.elementType == .cell)
+        XCTAssertTrue(settings.isHittable && !settings.frame.isEmpty && window.contains(settings.frame), "The actual Settings control must be hittable and fully inside the app window")
         settings.tap()
     }
     private func assertSingleLineTouchHeight(_ element: XCUIElement) {

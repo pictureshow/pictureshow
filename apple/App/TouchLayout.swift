@@ -86,30 +86,25 @@ struct TelevisionActionInk<Content: View>: View {
     var body: some View { content().foregroundStyle(focused ? Theme.background : Color.white) }
 }
 
-private struct TelevisionPrimaryFocus: PreferenceKey {
-    static let defaultValue = false
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = nextValue() || value }
-}
-
-private struct TelevisionPrimaryLabel<Content: View>: View {
+/// Use the same native bordered platter as secondary actions. The primary's
+/// resting identity is its icon, without an accent fill beneath native focus.
+private struct TelevisionPrimaryLabelStyle: LabelStyle {
     @Environment(\.isFocused) private var focused
-    @ViewBuilder var content: () -> Content
-    var body: some View { content().preference(key: TelevisionPrimaryFocus.self, value: focused) }
+    func makeBody(configuration: Configuration) -> some View {
+        Label { configuration.title } icon: {
+            configuration.icon.foregroundStyle(focused ? Theme.background : Theme.accent)
+        }.labelStyle(.titleAndIcon)
+    }
 }
 
 private struct TelevisionProminentAction: View {
     let configuration: PrimitiveButtonStyleConfiguration
-    @Environment(\.isEnabled) private var enabled
-    @State private var focused = false
     var body: some View {
         Button(role: configuration.role) { configuration.trigger() } label: {
-            TelevisionPrimaryLabel { configuration.label }
-        }
-        .buttonStyle(.bordered).tint(.white).foregroundStyle(Theme.background)
-        // Read native focus from the label without adding a competing FocusState.
-        // Remove the resting accent completely under native focus or disability.
-        .onPreferenceChange(TelevisionPrimaryFocus.self) { focused = $0 }
-        .background(enabled && !focused ? Theme.accent : Color.clear, in: Capsule())
+            TelevisionActionInk {
+                configuration.label.labelStyle(TelevisionPrimaryLabelStyle())
+            }
+        }.buttonStyle(.bordered).tint(.white)
     }
 }
 
