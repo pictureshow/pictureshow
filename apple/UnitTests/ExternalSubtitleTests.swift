@@ -1036,7 +1036,10 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertGreaterThanOrEqual(captionRequests.count, 29)
         XCTAssertFalse(captionRequests.contains { $0.path.contains("unselected") })
         XCTAssertFalse(session.waitingForVideo); XCTAssertNil(session.error); XCTAssertNil(session.reportError)
-        XCTAssertFalse(session.terminal); XCTAssertEqual(session.status, "Direct play")
+        XCTAssertFalse(session.terminal)
+        XCTAssertEqual(try XCTUnwrap(session.decision).method, .directPlay,
+                       "Optional subtitle failure must preserve the actual Direct play decision")
+        XCTAssertEqual(session.status, "", "Healthy compatible playback needs no delivery-method status")
         XCTAssertEqual(player.replacements, 1, "Optional text failure must not replace or fallback the A/V asset")
         XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
         XCTAssertFalse(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing/Stopped") || $0.path.contains("UserPlayedItems") })

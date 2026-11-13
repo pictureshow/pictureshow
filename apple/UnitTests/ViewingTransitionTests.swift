@@ -275,10 +275,14 @@ private final class InertViewingPlayer: AVPlayer {
             if ViewingProtocol.requests.contains(where: { $0.url!.path.hasSuffix("Sessions/Playing") }) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(session.status, "Direct play")
+        XCTAssertEqual(try XCTUnwrap(session.decision).method, .directPlay,
+                       "Readiness and late deadlines must preserve the negotiated Direct play decision")
+        XCTAssertEqual(session.status, "", "Ready compatible playback clears the startup hint without delivery-method copy")
         XCTAssertFalse(session.waitingForVideo)
         XCTAssertFalse(session.showStartupWaitHint(version: 0), "A late deadline must not overwrite ready playback")
-        XCTAssertEqual(session.status, "Direct play")
+        XCTAssertEqual(try XCTUnwrap(session.decision).method, .directPlay,
+                       "Readiness and late deadlines must preserve the negotiated Direct play decision")
+        XCTAssertEqual(session.status, "", "Ready compatible playback clears the startup hint without delivery-method copy")
         XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("Sessions/Playing") }.count, 1)
         await session.stop()
     }

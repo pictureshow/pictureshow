@@ -4,7 +4,7 @@ import XCTest
 
 final class CatchupPolicyTests: XCTestCase {
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
-        XCTAssertEqual(SpecCaseManifest.contracts.count, 1442)
+        XCTAssertEqual(SpecCaseManifest.contracts.count, 1500)
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: "music-session.invented",suite: "music-session",operation: "session"))
         let id = try XCTUnwrap(SpecCaseManifest.contracts.keys.first)
         XCTAssertThrowsError(try SpecCaseManifest.validate(id: id,suite: "unknown-suite",operation: "unknown-operation"))
