@@ -814,8 +814,10 @@ class SyncPlayHostTest {
         )
         // Move both clocks together without running unrelated periodic ticks. The original
         // 5-second correction window has expired; the response cannot grant another window.
-        rig.timingOffsetMs = 5_000
-        rig.renderer.value = rig.renderer.value.copy(positionTicks = 100_000_000L)
+        // 100 ms have already elapsed. At exactly the original deadline a wrongly
+        // restarted window would still have 100 ms left; keep output 100 ms behind.
+        rig.timingOffsetMs = 4_900
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 99_000_000L)
         rig.renderer.applied.clear()
         rig.host.tick()
         runCurrent()
