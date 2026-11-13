@@ -87,14 +87,14 @@ internal fun LiveGuideContent(
     }
     val firstChannel = channels.firstOrNull { rows[it.id].orEmpty().isNotEmpty() }?.id
     var activeChannel by remember { mutableStateOf<String?>(null) }
-    var activeProgram by remember { mutableStateOf<String?>(null) }
+    var focusedProgram by remember { mutableStateOf<String?>(null) }
     var viewportFocus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(rows, scroll, viewportWidth, density.density) {
-        snapshotFlow { Triple(scroll.value, scroll.isScrollInProgress, activeProgram) }.collectLatest { position ->
-            if (position.second || viewportWidth <= 0f) return@collectLatest
+        snapshotFlow { Triple(scroll.value, scroll.isScrollInProgress, focusedProgram) }.collectLatest { position ->
+            if (position.third == null || position.second || viewportWidth <= 0f) return@collectLatest
             // Let native bring-into-view and focus changes settle before reconciling a manual time scroll.
             repeat(2) { withFrameNanos { } }
-            if (scroll.isScrollInProgress || scroll.value != position.first || activeProgram != position.third) return@collectLatest
+            if (scroll.isScrollInProgress || scroll.value != position.first || focusedProgram != position.third) return@collectLatest
             val cells = activeChannel?.let(rows::get).orEmpty()
             val candidate = liveGuideViewportFocus(cells, position.third, position.first / density.density, viewportWidth, inset)
             if (candidate != null && candidate != position.third) viewportFocus = "p:$candidate"
@@ -198,14 +198,26 @@ internal fun LiveGuideContent(
                                     }
                                     translationX = with(density) { shift.dp.toPx() }
                                 }
-                                .onFocusChanged { isFocused = it.isFocused }
+                                .onFocusChanged {
+                                    isFocused = it.isFocused
+                                    if (it.isFocused) {
+                                        focusedProgram = show.id
+                                    } else if (focusedProgram == show.id) {
+                                        focusedProgram = null
+                                    }
+                                }
                                 .liveFocus(
                                     key,
                                     viewportFocus?.let { it == key }
-                                        ?: (returnFocus == key || returnFocus == null && channel.id == firstChannel && show.id == initial)
+                                        ?: (
+                                            restore &&
+                                                returnFocus == key ||
+                                                returnFocus == null &&
+                                                channel.id == firstChannel &&
+                                                show.id == initial
+                                            )
                                 ) {
                                     activeChannel = channel.id
-                                    activeProgram = show.id
                                     viewportFocus = null
                                     onFocus(key)
                                 }.semantics { contentDescription = label }

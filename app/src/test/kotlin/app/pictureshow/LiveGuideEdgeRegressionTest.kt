@@ -17,8 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -92,7 +92,7 @@ class LiveGuideEdgeRegressionTest {
         )
     }
 
-    @Test fun nowAlwaysReservesItsSlotAndOnlyItsEnabledStateChanges() {
+    @Test fun nowKeepsItsSlotAndTvCanReturnToOnAirEvenInTheCurrentWindow() {
         var atNow by mutableStateOf(true)
         var resets = 0
         compose.setContent {
@@ -105,7 +105,10 @@ class LiveGuideEdgeRegressionTest {
         val before = listOf("earlier", "day", "later", "now").map {
             compose.onNodeWithTag("live:guide-$it").getUnclippedBoundsInRoot()
         }
-        compose.onNodeWithTag("live:guide-now").assertIsNotEnabled()
+        compose.onNodeWithTag("live:guide-now").assertIsEnabled()
+        compose.onNodeWithTag("live:guide-now").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithTag("live:guide-now").performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(1, resets, "Now remains useful for returning focus to the on-air programme")
         compose.runOnIdle { atNow = false }
         val after = listOf("earlier", "day", "later", "now").map {
             compose.onNodeWithTag("live:guide-$it").getUnclippedBoundsInRoot()
@@ -113,6 +116,6 @@ class LiveGuideEdgeRegressionTest {
         assertEquals(before, after, "Clock boundaries, Back and horizontal movement cannot shift the date controls")
         compose.onNodeWithTag("live:guide-now").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("live:guide-now").performKeyInput { pressKey(Key.DirectionCenter) }
-        assertEquals(1, resets)
+        assertEquals(2, resets)
     }
 }

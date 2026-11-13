@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -34,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -52,6 +54,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -111,9 +114,87 @@ internal fun LiveTvScreen(
     val guideScope = rememberCoroutineScope()
     val guideAtStart by remember { derivedStateOf { guideScroll.value == 0 } }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var nowFocusPending by remember(account) { mutableStateOf(false) }
+    var nowFocusTarget by remember(account) { mutableStateOf<String?>(null) }
+    var nowFocusJob by remember(account) { mutableStateOf<Job?>(null) }
+    var nowFocusRequest by remember(account) { mutableLongStateOf(0) }
+    DisposableEffect(account) {
+        onDispose { nowFocusJob?.cancel() }
+    }
+    fun refreshGuide(start: Long) {
+        if (!vm.state.value.loading && !vm.state.value.writing && !nowFocusPending) vm.refresh(start)
+    }
     fun resetGuideNow() {
-        guideScope.launch { guideScroll.scrollTo(0) }
-        vm.refresh(liveGuideWindowStart(now))
+        val before = vm.state.value
+        if (before.loading || before.writing || nowFocusPending) return
+        val start = liveGuideWindowStart(now)
+        // Capture the row before fetching: the previously selected programme may be absent from the new window.
+        val selectedChannel = before.channels.firstOrNull { "c:${it.id}" == returnFocus }?.id
+            ?: before.programs.firstOrNull { "p:${it.id}" == returnFocus }?.channelId
+        val request = ++nowFocusRequest
+        nowFocusJob?.cancel()
+        nowFocusPending = tv
+        nowFocusTarget = null
+        restoreFocus = false
+        vm.refresh(start)
+        nowFocusJob = guideScope.launch {
+            try {
+                guideScroll.scrollTo(0)
+                // Read the owner's current state so even a request completed between frames is observed.
+                val refreshed = vm.state.first { !it.loading }
+                if (!tv) return@launch
+                if (tab != "Guide" ||
+                    selectedProgram != null ||
+                    refreshed.windowStart != start ||
+                    refreshed.offline ||
+                    refreshed.error != null ||
+                    refreshed.policy?.access == false
+                ) {
+                    nowFocusPending = false
+                    return@launch
+                }
+                val visibleChannels = refreshed.channels.filter {
+                    (!favorites || it.userData.isFavorite) &&
+                        (search.isBlank() || it.name.contains(search, true) || it.number.orEmpty().contains(search, true))
+                }
+                val target = liveGuideNowFocus(visibleChannels, refreshed.programs, selectedChannel?.let { "c:$it" }, start, now)
+                if (target == null) {
+                    nowFocusPending = false
+                    return@launch
+                }
+                val channelId = refreshed.programs.firstOrNull { "p:${it.id}" == target }?.channelId
+                val row = visibleChannels.indexOfFirst { it.id == channelId }
+                // First publish the fetched rows, then compose the target before its attached requester runs.
+                withFrameNanos { }
+                if (row >= 0) {
+                    if (linear) list.scrollToItem(row) else guideList.scrollToItem(row)
+                }
+                withFrameNanos { }
+                if (!nowFocusPending ||
+                    tab != "Guide" ||
+                    selectedProgram != null ||
+                    vm.state.value.loading ||
+                    vm.state.value.windowStart != start
+                ) {
+                    nowFocusPending = false
+                    return@launch
+                }
+                nowFocusTarget = target
+                returnFocus = target
+                restoreFocus = true
+                // liveFocus retries attached targets for eight frames; a removed target must not leave input guarded.
+                repeat(8) {
+                    withFrameNanos { }
+                    if (!nowFocusPending || nowFocusTarget != target) return@launch
+                }
+            } finally {
+                // An older cancelled handoff cannot release a newer request's input guard.
+                if (nowFocusRequest == request) {
+                    nowFocusPending = false
+                    nowFocusTarget = null
+                }
+            }
+        }
     }
 
     LaunchedEffect(state.fetchedAt) {
@@ -134,8 +215,19 @@ internal fun LiveTvScreen(
     fun focused(key: String) {
         returnFocus = key
         restoreFocus = false
+        if (key == nowFocusTarget) {
+            nowFocusTarget = null
+            nowFocusPending = false
+        }
     }
-    LaunchedEffect(state.policy?.access) { if (state.policy?.access == false) closeDetail() }
+    LaunchedEffect(state.policy?.access) {
+        if (state.policy?.access == false) {
+            nowFocusJob?.cancel()
+            nowFocusPending = false
+            nowFocusTarget = null
+            closeDetail()
+        }
+    }
     LaunchedEffect(state.writeVersion) { if (state.writeVersion > 0 && state.lastWriteOutcome == "ok") closeDetail() }
     LaunchedEffect(state.channels, state.policy) {
         if (selectedProgram?.channelId?.let { id -> state.channels.none { it.id == id } } == true ||
@@ -239,7 +331,8 @@ internal fun LiveTvScreen(
                 if (!detail ||
                     state.guideReferenceNotice(now) != null
                 ) {
-                    LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
+                    // A reload must not remove the focused header control from traversal.
+                    LiveIcon("refresh", "Refresh", true) { refreshGuide(vm.state.value.windowStart) }
                 }
             }
         } else if (!tv) {
@@ -293,6 +386,9 @@ internal fun LiveTvScreen(
                 tab = next
                 returnFocus = null
                 restoreFocus = false
+                nowFocusJob?.cancel()
+                nowFocusPending = false
+                nowFocusTarget = null
             }
             val navigation: @Composable () -> Unit = {
                 if (tv) {
@@ -427,7 +523,7 @@ internal fun LiveTvScreen(
                             viewportAtNow =
                             state.windowStart == liveGuideWindowStart(now) && guideAtStart,
                             onNow = ::resetGuideNow,
-                            onChange = vm::refresh
+                            onChange = ::refreshGuide
                         )
                     }
                     if (state.programs.isEmpty() && !state.loading) LiveText(liveGuideEmptyMessage(guideUnavailable), tv, small = true)
@@ -440,11 +536,11 @@ internal fun LiveTvScreen(
                                 state.windowStart,
                                 now,
                                 true,
-                                !state.loading,
+                                true,
                                 viewportAtNow =
                                 state.windowStart == liveGuideWindowStart(now) && guideAtStart,
                                 onNow = ::resetGuideNow,
-                                onChange = vm::refresh
+                                onChange = ::refreshGuide
                             )
                         }
                     ) {
@@ -461,11 +557,11 @@ internal fun LiveTvScreen(
                             state.windowStart,
                             now,
                             tv,
-                            !state.loading,
+                            tv || !state.loading,
                             viewportAtNow =
                             state.windowStart == liveGuideWindowStart(now),
                             onNow = ::resetGuideNow,
-                            onChange = vm::refresh
+                            onChange = ::refreshGuide
                         )
                     }
                     val recordingShelf = tv && !detail && tab == "Recordings"

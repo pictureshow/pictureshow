@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import app.pictureshow.core.livetv.LiveChannel
+import app.pictureshow.core.livetv.LiveProgram
 import java.time.Instant
 import java.time.ZoneId
 
@@ -82,8 +84,8 @@ internal fun LiveGuideDateBar(
         val label = if (tv) "${time.day(start)} ▾" else "${time.day(start)} · ${time.clock(start)} ▾"
         LiveQuietAction(label, tv, Modifier.weight(1f).testTag("live:guide-day"), enabled, fillWidth = true) { days = true }
         LiveQuietIcon("later", "Later", tv, enabled) { onChange(start + LiveTvViewModel.WINDOW) }
-        // A permanent native-button slot keeps the day and direction controls still on every return path.
-        LiveQuietIcon("now", "Now", tv, enabled && !atNow) {
+        // The permanent TV action also returns from an ended/future selection within the current viewport.
+        LiveQuietIcon("now", "Now", tv, liveGuideNowEnabled(tv, enabled, atNow)) {
             onNow?.invoke() ?: onChange(liveGuideWindowStart(now))
         }
     }
@@ -118,7 +120,11 @@ internal fun LiveQuietAction(
             onClick,
             modifier.height((40 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)).dp),
             enabled = enabled,
-            colors = androidx.tv.material3.ButtonDefaults.colors(containerColor = Color.Transparent),
+            colors = androidx.tv.material3.ButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = androidx.tv.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = .38f)
+            ),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp)
         ) {
             Box(
@@ -153,7 +159,11 @@ private fun LiveQuietIcon(kind: String, label: String, tv: Boolean, enabled: Boo
                 (40 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
             ).testTag("live:guide-$kind"),
             enabled = enabled,
-            colors = androidx.tv.material3.IconButtonDefaults.colors(containerColor = Color.Transparent)
+            colors = androidx.tv.material3.IconButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = androidx.tv.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = .38f)
+            )
         ) {
             if (icon == null) {
                 androidx.tv.material3.Text("Now", maxLines = 1, style = androidx.tv.material3.MaterialTheme.typography.bodySmall)
@@ -178,3 +188,24 @@ internal fun liveScrollOwner(tab: String, linear: Boolean): String = if (tab == 
 } else {
     tab
 }
+
+/** Now follows the viewer's channel, choosing on-air, then upcoming, then the latest elapsed programme. */
+internal fun liveGuideNowFocus(
+    channels: List<LiveChannel>,
+    programs: List<LiveProgram>,
+    selectedKey: String?,
+    start: Long,
+    now: Long
+): String? {
+    val selectedChannel = channels.firstOrNull { "c:${it.id}" == selectedKey }?.id
+        ?: programs.firstOrNull { "p:${it.id}" == selectedKey }?.channelId
+    val rows = programs.groupBy { it.channelId }.mapValues { (_, shows) ->
+        liveGuideCells(shows, start, start + LiveTvViewModel.WINDOW)
+    }
+    val channel = channels.firstOrNull { it.id == selectedChannel && rows[it.id].orEmpty().isNotEmpty() }
+        ?: channels.firstOrNull { rows[it.id].orEmpty().isNotEmpty() }
+    return channel?.let { liveGuideInitialFocus(rows[it.id].orEmpty(), now) }?.let { "p:$it" }
+}
+
+/** TV Now is also an explicit focus destination; touch has no remote selection to return from. */
+internal fun liveGuideNowEnabled(tv: Boolean, enabled: Boolean, atNow: Boolean): Boolean = enabled && (tv || !atNow)

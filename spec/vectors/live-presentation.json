@@ -3168,6 +3168,484 @@
         }
       },
       "expected": false
+    },
+    {
+      "id": "guide-now-focus-selected-future",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:c2-future",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-selected-past",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:c2-past",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-selected-channel",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-missing-key",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:removed",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c1-current"
+    },
+    {
+      "id": "guide-now-focus-empty-selected-channel",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c1-current"
+    },
+    {
+      "id": "guide-now-focus-first-row-empty",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-future-fallback",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-future"
+    },
+    {
+      "id": "guide-now-focus-past-fallback",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-past"
+    },
+    {
+      "id": "guide-now-focus-no-visible-channels",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-now-focus-invalid-range",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "bad",
+            "channel": "c1",
+            "start": 200,
+            "end": 100
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-now-focus-end-is-exclusive",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1"
+        ],
+        "programs": [
+          {
+            "id": "ended",
+            "channel": "c1",
+            "start": 0,
+            "end": 150
+          },
+          {
+            "id": "on-air",
+            "channel": "c1",
+            "start": 150,
+            "end": 300
+          }
+        ],
+        "selectedKey": "c:c1",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:on-air"
+    },
+    {
+      "id": "guide-now-action-tv-current",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": true,
+        "atNow": true
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-tv-away",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": true,
+        "atNow": false
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-touch-current",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": true,
+        "atNow": true
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-now-action-touch-away",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": true,
+        "atNow": false
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-tv-disabled",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": false,
+        "atNow": false
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-now-action-touch-disabled",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": false,
+        "atNow": false
+      },
+      "expected": false
     }
   ]
 }

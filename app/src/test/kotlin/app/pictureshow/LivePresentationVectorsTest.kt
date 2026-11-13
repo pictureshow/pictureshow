@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(244, cases.size)
+        assertEquals(261, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -308,6 +308,42 @@ class LivePresentationVectorsTest {
                     ),
                     id
                 )
+
+                "guide-now-enabled" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    liveGuideNowEnabled(
+                        c.getValue("tv").jsonPrimitive.boolean,
+                        c.getValue("enabled").jsonPrimitive.boolean,
+                        c.getValue("atNow").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+
+                "guide-now-focus" -> {
+                    val channels = c.getValue("channels").jsonArray.map {
+                        app.pictureshow.core.livetv.LiveChannel(it.jsonPrimitive.content)
+                    }
+                    val programs = c.getValue("programs").jsonArray.map {
+                        val p = it.jsonObject
+                        app.pictureshow.core.livetv.LiveProgram(
+                            p.getValue("id").jsonPrimitive.content,
+                            channelId = p.getValue("channel").jsonPrimitive.content,
+                            startDate = Instant.ofEpochMilli(p.getValue("start").jsonPrimitive.long).toString(),
+                            endDate = Instant.ofEpochMilli(p.getValue("end").jsonPrimitive.long).toString()
+                        )
+                    }
+                    assertEquals(
+                        envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                        liveGuideNowFocus(
+                            channels,
+                            programs,
+                            c["selectedKey"]?.jsonPrimitive?.contentOrNull,
+                            c.getValue("start").jsonPrimitive.long,
+                            c.getValue("now").jsonPrimitive.long
+                        ),
+                        id
+                    )
+                }
 
                 "initial-focus" -> {
                     val programs = c.getValue("programs").jsonArray.map {
