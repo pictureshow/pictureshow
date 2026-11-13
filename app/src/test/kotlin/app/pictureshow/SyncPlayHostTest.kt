@@ -34,6 +34,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -1632,6 +1633,17 @@ class SyncPlayHostTest {
             val creating = case.getValue("intent").jsonPrimitive.content == "create"
             val rig = Rig(this)
             rig.refresh()
+            if (case["priorMembership"]?.jsonPrimitive?.boolean == true) {
+                rig.httpStatus = case["priorHttp"]?.jsonPrimitive?.int ?: 204
+                rig.join()
+                if (rig.httpStatus == 204) rig.snapshot()
+                rig.httpStatus = 204
+                if (case["priorLeft"]?.jsonPrimitive?.boolean == true) {
+                    rig.host.receive(rig.update("GroupLeft"))
+                    runCurrent()
+                }
+                rig.sent.clear()
+            }
             rig.host.socket(false)
             val rotations = mutableListOf<Pair<Long, Boolean>>()
             rig.host.membershipSocket = { epoch, joining -> rotations += epoch to joining }
@@ -1643,10 +1655,18 @@ class SyncPlayHostTest {
             advanceTimeBy(9_999)
             runCurrent()
             assertTrue(rig.operations().isEmpty())
+            var routes = 0
             when (case.getValue("terminal").jsonPrimitive.content) {
                 "ready" -> rig.host.socket(true)
                 "leave" -> {
                     rig.host.leave()
+                    runCurrent()
+                    rig.host.socket(true)
+                    advanceTimeBy(10_001)
+                }
+                "route" -> {
+                    assertTrue(rig.host.confirmExternalRoute { routes++ })
+                    rig.host.leaveForExternalRoute()
                     runCurrent()
                     rig.host.socket(true)
                     advanceTimeBy(10_001)
@@ -1656,7 +1676,8 @@ class SyncPlayHostTest {
             }
             runCurrent()
             val expected = case.getValue("posted").jsonArray.map { it.jsonPrimitive.content }
-            assertEquals(expected, rig.operations().filter { it in listOf("New", "Join") })
+            assertEquals(expected, rig.operations(), "No server membership mutation for an unsent cancelled intent")
+            assertEquals(if (case.getValue("terminal").jsonPrimitive.content == "route") 1 else 0, routes)
             assertEquals(case.getValue("phase").jsonPrimitive.content, rig.host.membership.phase)
             assertFalse(rig.renderer.value.playing)
             rig.host.leave()

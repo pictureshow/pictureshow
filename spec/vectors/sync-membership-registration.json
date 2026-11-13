@@ -47,6 +47,59 @@
       "terminal": "timeout",
       "posted": [],
       "phase": "Reconnecting"
+    },
+    {
+      "id": "join-route",
+      "intent": "join",
+      "terminal": "route",
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "create-route",
+      "intent": "create",
+      "terminal": "route",
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "existing-membership-rejoin-cancel",
+      "intent": "join",
+      "terminal": "leave",
+      "priorMembership": true,
+      "posted": [
+        "Leave"
+      ],
+      "phase": "Idle"
+    },
+    {
+      "id": "confirmed-server-left-clears-membership",
+      "intent": "join",
+      "terminal": "leave",
+      "priorMembership": true,
+      "priorLeft": true,
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "definite-denial-clears-unsent-cancellation",
+      "intent": "join",
+      "terminal": "leave",
+      "priorMembership": true,
+      "priorHttp": 403,
+      "posted": [],
+      "phase": "Idle"
+    },
+    {
+      "id": "uncertain-post-retains-server-cleanup",
+      "intent": "join",
+      "terminal": "leave",
+      "priorMembership": true,
+      "priorHttp": 503,
+      "posted": [
+        "Leave"
+      ],
+      "phase": "Idle"
     }
   ]
 }

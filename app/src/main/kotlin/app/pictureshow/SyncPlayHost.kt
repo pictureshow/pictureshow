@@ -127,6 +127,9 @@ internal class SyncPlayHost(
     internal var membership by mutableStateOf(SyncMembership())
         private set
     private var leavePending = false
+
+    // Local Joining intent alone cannot have changed server membership. Preserve this through recovery/rejoin.
+    private var serverMembershipPossible = false
     val participating: Boolean get() = membership.active || membership.groupId != null || leavePending
     var pendingExternalRoute by mutableStateOf<(() -> Unit)?>(null)
         private set
@@ -205,6 +208,7 @@ internal class SyncPlayHost(
         operation?.cancel()
         membership = SyncMembership(generation = membership.generation + 1)
         leavePending = false
+        serverMembershipPossible = false
         resetClock("account")
         trace("membership", stateFields())
         mutable.value = SyncPlayPresentation(server = usable?.server?.name.orEmpty(), viewer = usable?.user?.name.orEmpty())
@@ -297,6 +301,8 @@ internal class SyncPlayHost(
         )
         if (after === before || after == before) return
         membership = after
+        if (event is SyncEvent.Joined) serverMembershipPossible = true
+        if (event is SyncEvent.Left) serverMembershipPossible = false
         trace("membership", stateFields())
         if (after.phase != before.phase) diagnostic("phase", "phase=${after.phase}")
         after.command?.takeIf { it.command == "Stop" }?.let { stoppedEntry = it.playlistItemId }
@@ -436,10 +442,13 @@ internal class SyncPlayHost(
                     return@launch
                 }
             }
+            val earlierMembershipPossible = serverMembershipPossible
+            serverMembershipPossible = true
             val status = tracedSend(target, request)
             if (!current(target, version)) return@launch
             if (status !in 200..299) {
                 membership = if (status in setOf(400, 401, 403, 404)) {
+                    if (!earlierMembershipPossible) serverMembershipPossible = false
                     leaveSync(membership)
                 } else {
                     membership.copy(phase = "Reconnecting")
@@ -472,7 +481,8 @@ internal class SyncPlayHost(
     fun leave() = leaveConfirmed(null)
     private fun leaveConfirmed(after: (() -> Unit)?) {
         val target = account
-        val hadMembership = participating || membership.groupId != null
+        val hadMembership = serverMembershipPossible || leavePending
+        serverMembershipPossible = false
         sequence++
         operation?.cancel()
         membership = leaveSync(membership)
@@ -499,6 +509,9 @@ internal class SyncPlayHost(
                     note("This device is paused. The server has not confirmed Leave; reconnect and leave again.")
                 }
             }
+        } else {
+            // Cancelling an unsent intent needs no server mutation or network confirmation.
+            after?.invoke()
         }
     }
 
