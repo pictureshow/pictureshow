@@ -901,7 +901,7 @@ class TouchPlayerControlsTest {
     @Config(qualifiers = "w1600dp-h700dp-land-xhdpi")
     @Test
     fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
-        launch()
+        launch(cast = null)
         settled()
         val audio = bounds("touch:open:Audio")
         val subtitles = bounds("touch:open:Subtitles")
