@@ -917,8 +917,11 @@ struct DetailView: View {
         let label = request != nil ? request! : state.requested(.play(true)) ? "Play already requested" : unavailablePlay ? DetailFeedback.unavailableActionLabel(target: "from-start") : "Play from start"
         return Button { opener = "startOver"; offer(.play(false), key: "startOver") } label: {
             Label(label, systemImage: request != nil ? "checkmark" : "backward.end.fill").modifier(DetailActionWidth())
-        }.catalogActionStyle().modifier(DetailActionWidth()).disabled(state.requested(.play(true))).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver")
-            .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play from start", pending: "Play from start when ready", actual: label, unavailable: unavailablePlay), requestStatus: request, acceptsHeldRequest: true).accessibilityFocused($accessibilityFocused, equals: "startOver")
+        }.catalogActionStyle().modifier(DetailActionWidth())
+            .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play from start", pending: "Play from start when ready", actual: label, unavailable: unavailablePlay), requestStatus: request, acceptsHeldRequest: true)
+            .disabled(state.requested(.play(true)))
+            .focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver")
+            .accessibilityFocused($accessibilityFocused, equals: "startOver")
     }
     private func semanticLabel(plain: String, pending: String, actual: String, unavailable: Bool) -> String {
         if unavailable { return actual }

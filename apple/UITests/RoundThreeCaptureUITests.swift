@@ -227,7 +227,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "No results for")).firstMatch.waitForExistence(timeout: 20))
         dismissKeyboard()
         settledCapture("Round3 Search settled no results echoes query")
-        try selectTab("Libraries")
+        try returnToLibrariesRootForEmptyState()
         activate(app.buttons["item-" + (try required("emptyLibraryID"))].firstMatch)
         XCTAssertTrue(app.staticTexts["No titles are available."].waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["Refresh"].exists)
@@ -309,6 +309,12 @@ final class RoundThreeCaptureUITests: XCTestCase {
         let item = app.buttons["item-" + (try required("artworkItemID"))].firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 20)); reveal(item); activate(item)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 20))
+        let startOver = app.buttons["startOver"]
+        let remote = app.buttons["playOnDevice"]
+        XCTAssertTrue(startOver.exists && remote.exists)
+        XCTAssertEqual(startOver.frame.height, remote.frame.minY - startOver.frame.minY - 12, accuracy: 2,
+                       "At OS XXXL, the start-over AX target must fill its actual reserved pill height, leaving only the 12pt action gap")
+        if UIDevice.current.userInterfaceIdiom == .phone { try revealActualDetailTop() }
         record(prefix + " detail actions")
         try assertPeopleShelf(prefix: prefix)
     }
@@ -320,7 +326,11 @@ final class RoundThreeCaptureUITests: XCTestCase {
         let roles = try required("personRoles").split(separator: "|").map(String.init)
         XCTAssertEqual(roles.count, 3)
         let cards = names.prefix(3).map { name in app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch }
+        #if os(iOS)
+        try revealFullPersonMetadata(cards[0], name: names[0], role: roles[0])
+        #else
         reveal(cards[0])
+        #endif
         XCTAssertTrue(cards.allSatisfy(\.exists))
         for (card, role) in zip(cards, roles) {
             XCTAssertTrue(card.label.contains(role), "Actual person action must retain its role, including an empty-role type fallback")
@@ -337,11 +347,84 @@ final class RoundThreeCaptureUITests: XCTestCase {
         XCTAssertTrue(ownsFocus(cards[2]), "Two native horizontal moves must reach the third actual person")
         #else
         shelf.swipeLeft()
+        try revealFullPersonMetadata(cards[2], name: names[2], role: roles[2])
         XCTAssertTrue(cards[2].isHittable && cards[2].frame.intersects(app.windows.firstMatch.frame))
         #endif
         XCTAssertTrue(app.staticTexts["detailTitle"].exists, "Moving the people shelf cannot activate a different route")
         record(prefix + " cast and crew native horizontal traversal")
     }
+
+    #if os(iOS)
+    @MainActor private func actualDetailScroll() throws -> XCUIElement {
+        try XCTUnwrap(app.scrollViews.allElementsBoundByIndex.first {
+            $0.staticTexts["detailTitle"].exists && $0.descendants(matching: .any).matching(identifier: "detailPeopleShelf").firstMatch.exists
+        }, "Require the actual detail scroll container, not a frame override")
+    }
+    @MainActor private func peopleUsableViewport() throws -> CGRect {
+        let window = app.windows.firstMatch.frame
+        let scroll = try actualDetailScroll()
+        let clips = scroll.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Vertical scroll bar"))
+            .allElementsBoundByIndex.filter { $0.exists && !$0.frame.isEmpty && window.contains($0.frame) }
+        // These real native scroll-indicator frames expose the content clip,
+        // including the iPad safe-area bottom that has no bottom TabBar node.
+        let clip = try XCTUnwrap(clips.first, "Require native detail viewport geometry before claiming visible metadata").frame
+        let shelf = node("detailPeopleShelf").frame
+        var viewport = window.intersection(scroll.frame)
+        let left = max(viewport.minX, shelf.minX), right = min(viewport.maxX, shelf.maxX)
+        var top = max(viewport.minY, clip.minY), bottom = min(viewport.maxY, clip.maxY)
+        for bar in app.navigationBars.allElementsBoundByIndex where bar.exists && !bar.frame.isEmpty && bar.frame.width > viewport.width * 0.5 {
+            if bar.frame.minY <= viewport.midY { top = max(top, bar.frame.maxY) }
+        }
+        for bar in app.tabBars.allElementsBoundByIndex where bar.exists && !bar.frame.isEmpty && bar.frame.width > viewport.width * 0.5 {
+            if bar.frame.minY > viewport.midY { bottom = min(bottom, bar.frame.minY) }
+            else { top = max(top, bar.frame.maxY) }
+        }
+        viewport = CGRect(x: left, y: top, width: right - left, height: bottom - top)
+        XCTAssertFalse(viewport.isEmpty, "Native chrome must leave a real people-content viewport")
+        return viewport
+    }
+    @MainActor private func revealFullPersonMetadata(_ card: XCUIElement, name: String, role: String) throws {
+        let nameText = card.staticTexts[name].firstMatch, roleText = card.staticTexts[role].firstMatch
+        XCTAssertTrue(card.exists && nameText.exists && roleText.exists, "Require the actual name and role StaticTexts, not the button's combined accessibility label")
+        for _ in 0..<24 { // Same bounded real-scroll budget as existing reveal.
+            let viewport = try peopleUsableViewport()
+            let target = card.frame.union(nameText.frame).union(roleText.frame)
+            if !target.isEmpty && viewport.contains(target) { break }
+            // A vertical pan exposes the complete lockup without confusing a
+            // hittable avatar or a partly covered role with visible metadata.
+            let delta: CGFloat
+            if target.maxY > viewport.maxY { delta = min(target.maxY - viewport.maxY + 8, viewport.height * 0.4) }
+            else if target.minY < viewport.minY { delta = -min(viewport.minY - target.minY + 8, viewport.height * 0.4) }
+            else { break } // Horizontal clipping is an actual failure, not a vertical-scroll excuse.
+            let window = app.windows.firstMatch
+            let origin = window.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: viewport.midX - window.frame.minX, dy: viewport.midY - window.frame.minY))
+            let end = start.withOffset(CGVector(dx: 0, dy: -delta))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        let viewport = try peopleUsableViewport()
+        print("ROUND3_PEOPLE_VISIBLE name=\(name) role=\(role) card=\(card.frame) nameFrame=\(nameText.frame) roleFrame=\(roleText.frame) nativeViewport=\(viewport)")
+        let fullyVisible = !card.frame.isEmpty && !nameText.frame.isEmpty && !roleText.frame.isEmpty
+            && viewport.contains(card.frame) && viewport.contains(nameText.frame) && viewport.contains(roleText.frame)
+        if !fullyVisible { record("Round3 people full metadata visibility failed actual state") }
+        XCTAssertTrue(fullyVisible, "The entire person, real name and role must fit inside the native content viewport above chrome before capture")
+    }
+    @MainActor private func revealActualDetailTop() throws {
+        let scroll = try actualDetailScroll()
+        func atTop() -> Bool {
+            scroll.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Vertical scroll bar"))
+                .allElementsBoundByIndex.contains { $0.exists && ($0.value as? String) == "0%" }
+        }
+        for _ in 0..<8 {
+            if atTop() { break }
+            scroll.swipeDown()
+        }
+        let top = wait(10) { atTop() }
+        if !top { record("Round3 actual detail top not reached") }
+        XCTAssertTrue(top, "A real native scroll must reach the actual 0% top before the phone hero capture")
+        print("ROUND3_DETAIL_TOP actualNativeScrollValue=0% titleFrame=\(app.staticTexts["detailTitle"].frame)")
+    }
+    #endif
 
     @MainActor private func launch(server: String, username: String, password: String) {
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -411,6 +494,51 @@ final class RoundThreeCaptureUITests: XCTestCase {
             XCUIRemote.shared.press(.up)
         }
         #endif
+    }
+    @MainActor private func returnToLibrariesRootForEmptyState() throws {
+        // Native tabs retain their NavigationStack. This final empty-state
+        // setup must pop the previously visited detail/library routes itself.
+        revealNativeTabBar()
+        let tab = try nativeTab("Libraries")
+        activate(tab)
+        #if os(iOS)
+        XCTAssertTrue(wait(10) { tab.isSelected }, "Return to the actual Libraries tab before popping its retained stack")
+        #endif
+        let ids = try required("libraryIDs").split(separator: ",").map(String.init)
+        XCTAssertGreaterThanOrEqual(ids.count, 3)
+        func rootHeadingVisible() -> Bool {
+            app.navigationBars.allElementsBoundByIndex.contains { bar in
+                let title = bar.staticTexts["Libraries"]
+                return bar.exists && !bar.frame.isEmpty && title.exists && !title.frame.isEmpty
+                    && app.windows.firstMatch.frame.contains(title.frame)
+            }
+        }
+        func rootVisible() -> Bool {
+            rootHeadingVisible() && !app.staticTexts["Continue watching"].exists
+                && ids.allSatisfy { app.buttons["item-" + $0].firstMatch.exists }
+        }
+        for _ in 0..<4 {
+            if rootVisible() { return }
+            if rootHeadingVisible() { break } // A root with loading content needs no Back input.
+            let backs = app.navigationBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "BackButton", "Back"))
+                .allElementsBoundByIndex.filter { $0.exists && !$0.frame.isEmpty && self.app.windows.firstMatch.frame.contains($0.frame) }
+            #if os(tvOS)
+            let retainedDetail = app.staticTexts["detailTitle"].exists && app.buttons["play"].exists
+            if backs.isEmpty && !retainedDetail { record("Round3 Libraries retained stack missing actual Back state") }
+            XCTAssertTrue(!backs.isEmpty || retainedDetail, "A real retained detail or native Back control must precede Menu")
+            guard !backs.isEmpty || retainedDetail else { return }
+            XCUIRemote.shared.press(.menu)
+            #else
+            let visibleBacks = backs.filter(\.isHittable)
+            if visibleBacks.count != 1 { record("Round3 Libraries retained stack missing actual Back state") }
+            XCTAssertEqual(visibleBacks.count, 1, "Require the actual unique native Back control before popping")
+            let back = try XCTUnwrap(visibleBacks.first)
+            back.tap()
+            #endif
+        }
+        let reached = wait(10) { rootVisible() }
+        if !reached { record("Round3 Libraries root after native Back failed actual state") }
+        XCTAssertTrue(reached, "At most four native Back/Menu inputs must restore the real Libraries heading and all three prepared library cards")
     }
     @MainActor private func selectTab(_ name: String) throws {
         revealNativeTabBar()
