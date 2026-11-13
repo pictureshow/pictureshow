@@ -86,12 +86,12 @@ internal fun LiveGuideContent(
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         Column {
-            val windowDp = maxWidth.value.toInt()
+            val windowDp = this@BoxWithConstraints.maxWidth.value.toInt()
             val wideChannels = liveGuideWideChannels(tv, windowDp)
             val channelWidth = liveGuideChannelWidth(tv, density.fontScale, windowDp).dp
             val inset = if (tv) 8f else 0f
             val canvasWidth = LIVE_GUIDE_WIDTH + 2 * inset
-            val viewportWidth = (maxWidth - channelWidth).value.coerceAtLeast(0f)
+            val viewportWidth = (this@BoxWithConstraints.maxWidth - channelWidth).value.coerceAtLeast(0f)
             val end = start + LiveTvViewModel.WINDOW
             val nowX = (now - start).toFloat() / (end - start) * LIVE_GUIDE_WIDTH
             val rows = remember(programs, start, end) {
@@ -123,7 +123,7 @@ internal fun LiveGuideContent(
             } else {
                 androidx.compose.material3.MaterialTheme.typography.bodySmall
             }
-            val rulerHeight = liveGuideRulerHeight(tv, density.fontScale, !tv && maxHeight < 480.dp).dp
+            val rulerHeight = liveGuideRulerHeight(tv, density.fontScale, !tv && this@BoxWithConstraints.maxHeight < 480.dp).dp
             Row(Modifier.fillMaxWidth().height(rulerHeight).testTag("live:guide-ruler")) {
                 Box(Modifier.width(channelWidth).height(rulerHeight), contentAlignment = Alignment.CenterStart) { if (tv) channelHeader() }
                 Box(Modifier.weight(1f)) {
