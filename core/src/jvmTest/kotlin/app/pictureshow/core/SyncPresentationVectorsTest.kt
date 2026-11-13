@@ -8,6 +8,7 @@ import app.pictureshow.core.sync.syncAcceptTitle
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
 import app.pictureshow.core.sync.syncQuality
+import app.pictureshow.core.sync.syncTransportAvailable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
@@ -24,7 +25,7 @@ class SyncPresentationVectorsTest {
     @Test fun allPresentationRules() {
         val resource = requireNotNull(javaClass.classLoader.getResource("sync-vectors/sync-presentation.json"))
         val cases = Json.parseToJsonElement(resource.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(25, cases.size)
+        assertEquals(31, cases.size)
         cases.forEach { element ->
             val c = element.jsonObject
             val id = c.getValue("id").jsonPrimitive.content
@@ -55,6 +56,11 @@ class SyncPresentationVectorsTest {
                             it is JsonNull
                         }?.jsonPrimitive?.content
                     ).name,
+                    id
+                )
+                "transport" -> assertEquals(
+                    bool("expected"),
+                    syncTransportAvailable(bool("usable"), c.getValue("queueEntries").jsonPrimitive.int),
                     id
                 )
                 "people" -> {

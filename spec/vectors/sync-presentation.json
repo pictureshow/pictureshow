@@ -323,6 +323,48 @@
         "Riley"
       ],
       "remaining": 2
+    },
+    {
+      "id": "empty-group-no-transport",
+      "op": "transport",
+      "usable": true,
+      "queueEntries": 0,
+      "expected": false
+    },
+    {
+      "id": "usable-single-entry-transport",
+      "op": "transport",
+      "usable": true,
+      "queueEntries": 1,
+      "expected": true
+    },
+    {
+      "id": "usable-many-entry-transport",
+      "op": "transport",
+      "usable": true,
+      "queueEntries": 3,
+      "expected": true
+    },
+    {
+      "id": "unusable-group-no-transport",
+      "op": "transport",
+      "usable": false,
+      "queueEntries": 3,
+      "expected": false
+    },
+    {
+      "id": "unusable-empty-no-transport",
+      "op": "transport",
+      "usable": false,
+      "queueEntries": 0,
+      "expected": false
+    },
+    {
+      "id": "invalid-negative-count-no-transport",
+      "op": "transport",
+      "usable": true,
+      "queueEntries": -1,
+      "expected": false
     }
   ]
 }
