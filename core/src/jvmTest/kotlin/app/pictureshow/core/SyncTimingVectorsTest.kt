@@ -99,7 +99,8 @@ class SyncTimingVectorsTest {
                             c.getValue("command").jsonPrimitive.content,
                             c.long("when"),
                             c.getValue("position").takeUnless { it is JsonNull }?.jsonPrimitive?.long,
-                            c.long("emitted")
+                            c.long("emitted"),
+                            whenTicks = c["whenTicks"]?.jsonPrimitive?.long
                         )
                     }
                     assertEquals(

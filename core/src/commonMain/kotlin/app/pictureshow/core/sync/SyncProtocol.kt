@@ -36,7 +36,9 @@ data class SyncCommand(
     val command: String,
     val whenMs: Long,
     val positionTicks: Long?,
-    val emittedAtTicks: Long
+    val emittedAtTicks: Long,
+    // Parsed wire commands retain 100 ns execution identity independently of millisecond scheduling.
+    val whenTicks: Long? = null
 )
 
 sealed interface SyncEvent {
@@ -131,7 +133,8 @@ fun parseSyncMessage(text: String): SyncEvent? {
                     command,
                     requireNotNull(syncTimestampMillis(data.requiredText("When"))),
                     ticks,
-                    requireNotNull(syncTimestampTicks(data.requiredText("EmittedAt")))
+                    requireNotNull(syncTimestampTicks(data.requiredText("EmittedAt"))),
+                    whenTicks = requireNotNull(syncTimestampTicks(data.requiredText("When")))
                 )
             )
         } else {

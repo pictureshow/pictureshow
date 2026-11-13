@@ -100,6 +100,7 @@ fun syncSameUnpauseTimeline(applied: SyncCommand?, received: SyncCommand): Boole
     applied.groupId == received.groupId &&
     applied.playlistItemId == received.playlistItemId &&
     applied.whenMs == received.whenMs &&
+    applied.whenTicks == received.whenTicks &&
     applied.positionTicks != null &&
     applied.positionTicks == received.positionTicks
 
