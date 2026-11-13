@@ -11,13 +11,18 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -105,6 +110,19 @@ class PausedReturnFocusTest {
 
     @Test fun nativeLivePauseMovesSurfaceFocusToPlayAndOneRightReachesGoLive() {
         launch(false, live = true)
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        // Decoder duration arrives before the host's asynchronous live-window sample.
+        // Observe the actual enabled transport, then restore the original hidden-HUD
+        // surface-focus precondition; never wait for the focus result after pausing.
+        compose.onNodeWithTag("player:surface").performTouchInput { click(center) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onAllNodes(hasText("Pause") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Pause").assertIsEnabled()
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Pause").assertDoesNotExist()
         compose.onNodeWithTag("player:surface").assertIsFocused()
         compose.runOnIdle {
             val player = requireNotNull(output.player.value)
