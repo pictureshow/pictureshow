@@ -216,7 +216,8 @@ class CatalogCustomizationTest {
                 )
             }
         }
-        compose.onNodeWithTag("home:reset-opener").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasTestTag("home:reset-opener"))
+        compose.onNodeWithTag("home:reset-opener").assertIsDisplayed()
         compose.onNodeWithTag("catalog:editor").performTouchInput { swipeUp() }
         val last = compose.onNodeWithTag("home:reset-opener").getUnclippedBoundsInRoot()
         val notice = compose.onNodeWithTag("home:save-notice").getUnclippedBoundsInRoot()

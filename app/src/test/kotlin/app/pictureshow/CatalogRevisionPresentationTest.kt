@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -93,12 +92,13 @@ class CatalogRevisionPresentationTest {
         compose.onNodeWithText("View: List").assertExists()
         for (tag in listOf("grid:sort:SortName", "grid:display")) {
             compose.onNodeWithTag(tag).assert(
-                SemanticsMatcher("Actions do not expose unchecked toggle semantics") {
-                    it.config.getOrNull(SemanticsProperties.ToggleableState) == null
+                SemanticsMatcher("Actions expose neither a selection nor a toggle state") {
+                    it.config.getOrNull(SemanticsProperties.ToggleableState) == null &&
+                        it.config.getOrNull(SemanticsProperties.Selected) == null
                 }
             )
         }
-        compose.onNodeWithTag("grid:filters").assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        compose.onNodeWithTag("grid:filters").assertIsSelected()
     }
 
     @Test fun tvSectionAndNativeRowLabelShareAnInset() = sectionInset(tv = true)
