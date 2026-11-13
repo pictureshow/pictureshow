@@ -84,16 +84,25 @@ reported bounds, positions the app there, and stops the helper after the smoke
 even on failure. Its lease is at most 900 seconds; existing HDR helper calls keep
 their 1280x720 size and 120-second maximum. Existing physical displays retain
 their mode, origin and primary status. Windows enumerates supported display
-modes, tests a mode of at least 1920x1080, applies it dynamically without registry
-writes, then verifies the actual mode and records its origin and system DPI.
-Display receipts are included in the CI artifact. These setup wrappers refuse
+modes and tests candidates until the measured usable work area fits an exact
+1920x1080 window, including space occupied by the taskbar. It applies the mode
+dynamically without registry writes, records the actual mode, work area and DPI,
+and saves the original mode privately. The workflow restores and verifies that
+original mode in a `finally` step on both smoke success and failure.
+Display and restoration receipts are included in the CI artifact. These setup wrappers refuse
 to mutate a display outside a GitHub runner.
 
 The Mac wrapper sets `PICTURESHOW_SMOKE_4K=1` for additional 3840x2160 Home,
 detail and Settings captures, clipped to the display's usable work area so the
 OS menu bar cannot cover app controls. The paint sidecar records requested and
-actual dimensions and work-area origin. A bounded paint retry rejects blank or
+actual dimensions and work-area origin. Capture uses a Robot bound to the window's display so native scaling follows that
+display on mixed-DPI desktops. A bounded five-second paint retry rejects blank or
 near-uniform app pixels below the menu/title strip even when semantics exist.
+Its sidecar records each attempt's window bounds, display bounds, transforms and
+pixel statistics. Failed paint preserves the rejected 900px JPEG and sidecar;
+the smaller recovery screenshot does not replace the failed capture. Wrapped
+failures also record a bounded cause chain with class/method/line locations,
+without exception messages, paths, server addresses or credentials.
 The normal 1280x800 and 1920x1080 screen inventory
 remains required. This checks large-window Compose layout on an owned virtual
 display; player capture, numeric HDR and pacing keep their separate sizes and

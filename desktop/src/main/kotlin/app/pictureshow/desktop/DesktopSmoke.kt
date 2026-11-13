@@ -58,6 +58,26 @@ internal fun fixtureDeliveredCue(text: String, sourceStart: Double, sourceEnd: D
     return start to end
 }
 
+/** Class/location diagnostics survive invocation wrappers without logging values. */
+internal fun fixtureFailureDiagnostics(error: Throwable): JsonObject = buildJsonObject {
+    val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+    put("causes", buildJsonArray {
+        var cause: Throwable? = error
+        while (cause != null && seen.add(cause) && seen.size <= 8) {
+            val current = cause
+            add(buildJsonObject {
+                put("type", current.javaClass.name)
+                put("frames", buildJsonArray {
+                    current.stackTrace.take(12).forEach { frame -> add(buildJsonObject {
+                        put("class", frame.className); put("method", frame.methodName); put("line", frame.lineNumber)
+                    }) }
+                })
+            })
+            cause = current.cause
+        }
+    })
+}
+
 /** Real window/control smoke. No network fixture, catalog or playback result is synthesized here. */
 fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowState,args:List<String>,close:()->Unit) {
     val (server,user,password,evidence)=args
@@ -106,6 +126,12 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             key(code)
             if(shifted) robot.keyRelease(KeyEvent.VK_SHIFT)
         }
+    }
+    fun writeCapture(image:BufferedImage, target:File) {
+        val scale=900.0/image.width.coerceAtLeast(image.height)
+        val small=BufferedImage((image.width*scale).roundToInt(),(image.height*scale).roundToInt(),BufferedImage.TYPE_INT_RGB)
+        small.createGraphics().let { g->g.drawImage(image,0,0,small.width,small.height,null);g.dispose() }
+        ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
     }
     fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null, focusTag:String? = null) {
         for((requestedWidth,requestedHeight) in sizes) {
@@ -178,22 +204,53 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 SwingUtilities.invokeAndWait { requireNotNull(DesktopUiProbe.requestFocus[tag]).requestFocus() }
                 waitFor("capture focus $tag") { DesktopUiProbe.focus[tag]==true }
             }
-            var original=robot.createScreenCapture(bounds)
+            // CRobot (JDK 21) uses the device bound at Robot construction for
+            // native pixel scaling. Bind capture to this window's device, not
+            // the default display used by the input Robot on a mixed-DPI desktop.
+            val captureConfiguration=window.graphicsConfiguration
+            val captureRobot=Robot(captureConfiguration.device)
+            val attempts=mutableListOf<JsonObject>()
+            var original=captureRobot.createScreenCapture(bounds)
             var content=fixtureCaptureContent(original)
-            val paintDeadline=System.nanoTime()+5_000_000_000L
-            while(content.first<4.0 || content.second<.002) {
-                check(System.nanoTime()<paintDeadline) { "Near-uniform app capture $name at ${w}x${h}: variance=${content.first}, nonDominant=${content.second}" }
-                SwingUtilities.invokeAndWait { window.repaint() }
-                Thread.sleep(200)
-                original=robot.createScreenCapture(bounds)
-                content=fixtureCaptureContent(original)
-            }
-            File(screens,"$name-${w}x${h}.paint.json").writeText(buildJsonObject {
+            fun paintReceipt(verified:Boolean):JsonObject = buildJsonObject {
                 put("luminanceVariance",content.first);put("nonDominantFraction",content.second)
                 put("requestedWidth",requestedWidth);put("requestedHeight",requestedHeight)
-                put("actualWidth",w);put("actualHeight",h);put("paintVerified",true)
+                put("actualWidth",w);put("actualHeight",h);put("paintVerified",verified)
+                put("captureX",bounds.x);put("captureY",bounds.y)
+                put("captureScaleX",captureConfiguration.defaultTransform.scaleX);put("captureScaleY",captureConfiguration.defaultTransform.scaleY)
                 put("workAreaX",workArea.x);put("workAreaY",workArea.y);put("workAreaWidth",workArea.width);put("workAreaHeight",workArea.height)
-            }.toString()+"\n")
+                put("attempts",JsonArray(attempts))
+            }
+            fun recordAttempt() {
+                val observed=window.bounds
+                attempts+=buildJsonObject {
+                    put("windowX",observed.x);put("windowY",observed.y);put("windowWidth",observed.width);put("windowHeight",observed.height)
+                    val configuration=window.graphicsConfiguration
+                    put("captureDeviceMatchesWindow",configuration.device===captureConfiguration.device)
+                    put("displayX",configuration.bounds.x);put("displayY",configuration.bounds.y)
+                    put("displayWidth",configuration.bounds.width);put("displayHeight",configuration.bounds.height)
+                    put("windowScaleX",configuration.defaultTransform.scaleX);put("windowScaleY",configuration.defaultTransform.scaleY)
+                    put("luminanceVariance",content.first);put("nonDominantFraction",content.second)
+                }
+                check(observed==bounds && window.graphicsConfiguration.device===captureConfiguration.device) { "Window or display moved during capture $name" }
+            }
+            recordAttempt()
+            val paintDeadline=System.nanoTime()+5_000_000_000L
+            while(content.first<4.0 || content.second<.002) {
+                if(System.nanoTime()>=paintDeadline) {
+                    // Keep the rejected pixels and geometry: the smaller recovery
+                    // screenshot cannot explain a failed large-window capture.
+                    writeCapture(original,File(screens,"$name-${w}x${h}-rejected.jpg"))
+                    File(screens,"$name-${w}x${h}.paint.json").writeText(paintReceipt(false).toString()+"\n")
+                    error("Near-uniform app capture $name at ${w}x${h}: variance=${content.first}, nonDominant=${content.second}")
+                }
+                SwingUtilities.invokeAndWait { window.repaint() }
+                Thread.sleep(200)
+                original=captureRobot.createScreenCapture(bounds)
+                content=fixtureCaptureContent(original)
+                recordAttempt()
+            }
+            File(screens,"$name-${w}x${h}.paint.json").writeText(paintReceipt(true).toString()+"\n")
             focusTag?.let { tag -> check(DesktopUiProbe.focus[tag]==true) { "Focus moved before capture completed" } }
 
             if(name=="02b-sign-in-error" && w==1920) {
@@ -224,11 +281,8 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                     put("outputWidth",cropSmall.width);put("outputHeight",cropSmall.height);put("scale",cropScale)
                 }.toString()+"\n")
             }
-            val scale=900.0/original.width.coerceAtLeast(original.height)
-            val small=BufferedImage((original.width*scale).roundToInt(),(original.height*scale).roundToInt(),BufferedImage.TYPE_INT_RGB)
-            small.createGraphics().let { g->g.drawImage(original,0,0,small.width,small.height,null);g.dispose() }
             val target=File(screens,"$name-${w}x${h}.jpg")
-            ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
+            writeCapture(original,target)
             val accessibleRows=mutableListOf<String>()
             SwingUtilities.invokeAndWait {
                 fun visit(a: javax.accessibility.Accessible?, depth:Int) {
@@ -461,6 +515,11 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
     } catch(error:Throwable) {
         successful=false
         File(out,"app-smoke-result.json").writeText("{\"pass\":false,\"checks\":{${checks.entries.joinToString(","){(k,v)->"\"$k\":$v"}}}}\n")
+        // Save this before the recovery screenshot: its own failure must not hide
+        // the original EDT exception (InvocationTargetException has no message).
+        val diagnostics = fixtureFailureDiagnostics(error)
+        File(out,"app-smoke-failure.json").writeText(diagnostics.toString()+"\n")
+        System.err.println("SMOKE failure=$diagnostics")
         runCatching { screenshot("99-failure") }
         System.err.println("SMOKE ${error.message}")
     } finally {

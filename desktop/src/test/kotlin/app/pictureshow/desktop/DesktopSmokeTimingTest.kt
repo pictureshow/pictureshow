@@ -29,6 +29,20 @@ class DesktopSmokeTimingTest {
         val painted=fixtureCaptureContent(frame)
         assertTrue(painted.first>=4.0&&painted.second>=.002)
     }
+    @Test fun wrappedEdtFailureReportsCauseAndLocationWithoutPrivateMessages() {
+        val original = IllegalStateException("password=private https://fixture.invalid /Users/private/file")
+        original.stackTrace = arrayOf(StackTraceElement("app.pictureshow.desktop.DesktopSmokeKt", "screenshot", "DesktopSmoke.kt", 123))
+        val wrapped = java.lang.reflect.InvocationTargetException(original)
+        val diagnostics = fixtureFailureDiagnostics(wrapped).toString()
+        assertTrue(diagnostics.contains("java.lang.reflect.InvocationTargetException"))
+        assertTrue(diagnostics.contains("java.lang.IllegalStateException"))
+        assertTrue(diagnostics.contains("screenshot")); assertTrue(diagnostics.contains("123"))
+        for (privateValue in listOf("password", "private", "fixture.invalid", "/Users")) assertFalse(diagnostics.contains(privateValue))
+        // Throwable permits arbitrary cause implementations; cycles stay bounded.
+        val cycle = object : Throwable() { override val cause: Throwable get() = this }
+        assertEquals(1, fixtureFailureDiagnostics(cycle)["causes"]!!.let { it as kotlinx.serialization.json.JsonArray }.size)
+    }
+
     private fun cue(start: String = "00:00:00,000", end: String = "00:03:00,000") =
         "1\n$start --> $end\nPictureshow original CC0 subtitle\n"
 
