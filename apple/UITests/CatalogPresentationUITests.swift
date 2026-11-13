@@ -390,8 +390,10 @@ final class CatalogPresentationUITests: XCTestCase {
         XCTAssertEqual(sortField.frame.width, direction.frame.width, accuracy: 2, "Both halves of sort retain stable equal-width targets")
         #endif
         #if os(tvOS)
-        // The card owns focus. Selected field and secondary direction must both
-        // retain readable resting ink; selection is not a disabled appearance.
+        // Entry focus may land on the selected sort chip. Move it to the real
+        // card before measuring both controls in their required resting state.
+        focus(seriesCard, app: app)
+        XCTAssertTrue(seriesCard.hasFocus)
         assertNativeButtonPixels(app.buttons["sort-SortName"], app: app, style: "selected choice", text: "Name")
         assertNativeButtonPixels(app.buttons["sortDirection"], app: app, style: "secondary action", text: "Ascending")
         #endif
@@ -593,6 +595,7 @@ final class CatalogPresentationUITests: XCTestCase {
         #endif
         let toggle = app.switches["conversionNoticeToggle"]
         #if os(tvOS)
+        assertSettingsPickerChanges(app)
         let conversion = app.descendants(matching: .any).matching(identifier: "conversionNoticeToggle").firstMatch
         XCTAssertTrue(conversion.waitForExistence(timeout: 15))
         let priorValue = conversion.value as? String
@@ -645,6 +648,34 @@ final class CatalogPresentationUITests: XCTestCase {
         #endif
     }
     #if os(tvOS)
+    /// Opening an empty native picker fails before any selection or save claim.
+    private func assertSettingsPickerChanges(_ app: XCUIApplication) {
+        let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        let subtitle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        func shows(_ picker: XCUIElement, _ value: String) -> Bool {
+            picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
+        }
+        func choose(_ picker: XCUIElement, _ value: String, choices: [String]) {
+            activate(picker, app: app)
+            for choice in choices {
+                XCTAssertTrue(app.buttons[choice].waitForExistence(timeout: 5), "The native picker must expose its real choice: \(choice)")
+            }
+            capture("132 native Settings picker choices \(value)", app: app)
+            activate(app.buttons[value].firstMatch, app: app)
+            XCTAssertTrue(waitUntil { shows(picker, value) }, "Selecting a choice must save it and return to Settings")
+        }
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
+        XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
+        let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
+        choose(bitrate, "40 Mbps", choices: rates)
+        choose(bitrate, "Auto (200 Mbps)", choices: rates)
+        XCTAssertTrue(subtitle.exists && shows(subtitle, "System"))
+        let sizes = ["System", "Small", "Normal", "Large", "ExtraLarge"]
+        choose(subtitle, "Large", choices: sizes)
+        choose(subtitle, "System", choices: sizes)
+        capture("132 native Settings selections restored", app: app)
+    }
+
     /// Measure actual screenshot pixels, never the declared SwiftUI colors. A
     /// central crop excludes the platter outline/shadow, so a white focus border
     /// cannot hide the previous dark-on-slate label defect. Native text has many

@@ -529,6 +529,9 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.allowsVideoFrameAnalysis = false
         #endif
          controller.videoGravity = .resizeAspect
+        #if DEBUG
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("native-player-font category=\(UIApplication.shared.preferredContentSizeCategory.rawValue, privacy: .public) bodyPointSize=\(UIFont.preferredFont(forTextStyle: .body).pointSize)")
+        #endif
         controller.allowsPictureInPicturePlayback = false
         // Identify the native video frame without changing accessibility grouping.
         // Touch tests must reveal controls inside this frame, not the app strip.
@@ -655,17 +658,20 @@ struct NativePlayer: UIViewControllerRepresentable {
             }
             if continuationID != next.id {
                 continuationID = next.id
-                func play(_ identifier: String) -> UIAction {
-                    UIAction(title: "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? ""), identifier: .init(identifier)) { [weak self] _ in
+                func play(_ identifier: String, image: UIImage? = nil) -> UIAction {
+                    UIAction(title: "Play next: \(next.name)" + (countdown.map { " (\($0))" } ?? ""), image: image, identifier: .init(identifier)) { [weak self] _ in
                         guard let self, self.session.nextItem?.id == next.id, self.session.nextCardVisible else { return }
                         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
                         Task { await self.session.advance() }
                     }
                 }
-                func cancel(_ identifier: String) -> UIAction {
-                    UIAction(title: "Cancel", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                func cancel(_ identifier: String, image: UIImage? = nil) -> UIAction {
+                    UIAction(title: "Cancel", image: image, identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
-                continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
+                // AVKit's transport renders image controls; its contextual
+                // surface renders the full episode title and Cancel as text.
+                continuationTransportActions = [play("playNextTransport", image: UIImage(systemName: "forward.end.fill")),
+                                                cancel("cancelNextTransport", image: UIImage(systemName: "xmark.circle"))]
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
                 actionSignature = "" // A different episode may have the same action identifiers.
             }
@@ -769,8 +775,10 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     private var transportTitleRefreshPending = false
     func setViewingTransportItems(_ items: [UIMenuElement]) {
         viewingTransportItems = items
-        transportTitleRefreshPending = false
-        transportBarCustomMenuItems = items
+        // A chapter/track popover can still own AVKit's menu presentation.
+        // Keep insertions dirty until the same guarded path can publish them.
+        transportTitleRefreshPending = true
+        publishTransportTitleRefreshIfReady()
     }
     func requestTransportTitleRefresh() { transportTitleRefreshPending = true }
     func publishTransportTitleRefreshIfReady() {
@@ -792,7 +800,13 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
             // presentation would make PlayerScreen.onDisappear close viewing.
             else { host.modalPresentationStyle = .overFullScreen }
             optionsHost = host
-            present(host, animated: true)
+            present(host, animated: true) {
+                #if DEBUG
+                let category = host.traitCollection.preferredContentSizeCategory.rawValue
+                let size = UIFont.preferredFont(forTextStyle: .body, compatibleWith: host.traitCollection).pointSize
+                Logger(subsystem: "app.pictureshow", category: "Playback").notice("native-options-font category=\(category, privacy: .public) bodyPointSize=\(size)")
+                #endif
+            }
         } else if let host = optionsHost {
             optionsHost = nil
             if !host.isBeingDismissed {

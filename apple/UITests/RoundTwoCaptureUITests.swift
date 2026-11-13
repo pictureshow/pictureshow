@@ -147,6 +147,9 @@ final class RoundTwoCaptureUITests: XCTestCase {
         openSection("Settings", identifier: "openSettings")
         XCTAssertTrue(node("settingsTitle").waitForExistence(timeout: 10))
         record("Round2 Settings native root")
+        #if os(tvOS)
+        try captureTelevisionSettingsChoices()
+        #else
         let bitrate = node("maxBitrate")
         #if os(iOS)
         assertPickerDefault(bitrate, expected: "Auto (200 Mbps)")
@@ -161,7 +164,7 @@ final class RoundTwoCaptureUITests: XCTestCase {
         #else
         back()
         #endif
-        let subtitle = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        let subtitle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
         #if os(iOS)
         assertPickerDefault(subtitle, expected: "System")
         #endif
@@ -175,7 +178,37 @@ final class RoundTwoCaptureUITests: XCTestCase {
         #else
         back()
         #endif
+        #endif
     }
+
+    #if os(tvOS)
+    @MainActor private func captureTelevisionSettingsChoices() throws {
+        let bitrate = node("maxBitrate")
+        let subtitle = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Subtitle size")).firstMatch
+        func shows(_ picker: XCUIElement, _ value: String) -> Bool {
+            picker.value as? String == value || picker.label.hasSuffix(value) || picker.staticTexts[value].exists
+        }
+        func choose(_ picker: XCUIElement, _ value: String, choices: [String], name: String) {
+            activate(picker)
+            for choice in choices {
+                XCTAssertTrue(app.buttons[choice].waitForExistence(timeout: 5), "The actual native picker must expose its choice: \(choice)")
+            }
+            record(name)
+            activate(app.buttons[value].firstMatch)
+            XCTAssertTrue(wait(10) { shows(picker, value) }, "The native selection must save and return to Settings")
+            record(name + " saved selection " + value)
+        }
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
+        XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
+        let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
+        choose(bitrate, "40 Mbps", choices: rates, name: "Round2 Settings bitrate native picker")
+        choose(bitrate, "Auto (200 Mbps)", choices: rates, name: "Round2 Settings bitrate reopened with saved value")
+        XCTAssertTrue(subtitle.exists && shows(subtitle, "System"))
+        let sizes = ["System", "Small", "Normal", "Large", "ExtraLarge"]
+        choose(subtitle, "Large", choices: sizes, name: "Round2 Settings subtitle size native picker")
+        choose(subtitle, "System", choices: sizes, name: "Round2 Settings subtitle size reopened with saved value")
+    }
+    #endif
 
     #if os(iOS)
     @MainActor private func assertPickerDefault(_ picker: XCUIElement, expected: String) {

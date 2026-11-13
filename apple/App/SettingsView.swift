@@ -100,6 +100,10 @@ private struct SettingsForm: View {
         }
         #if os(iOS)
         .scrollContentBackground(.hidden)
+        #else
+        // Use the native menu explicitly: the automatic picker pushes an empty
+        // list on the tested tvOS runtime, hiding every available choice.
+        .pickerStyle(.menu)
         #endif
         .background(Theme.background.ignoresSafeArea())
         .minimumTouchListRows()

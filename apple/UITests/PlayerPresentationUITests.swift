@@ -100,17 +100,65 @@ final class PlayerPresentationUITests: XCTestCase {
     }
     #endif
 
+    #if os(tvOS)
+    @MainActor func testNativePlaybackTabShowsConversionReasonsAndReceivedFormats() throws {
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120,
+            conversionReasons: ["VideoCodecNotSupported", "ContainerBitrateExceedsLimit", "unrecognized-private-reason"])
+        try fixture.start()
+        defer { fixture.stop(); app.terminate() }
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        activate(app.buttons["play"])
+        let player = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(player.waitForExistence(timeout: 20))
+        let notice = app.descendants(matching: .any).matching(identifier: "conversionNotice").firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 18))
+        XCTAssertTrue(notice.label.contains("choose the Playback tab"), "The visible notice must name the actual native destination")
+        record("132 TV conversion notice names native Playback tab")
+        let initialNegotiations = fixture.snapshot.playbackInfoCount
+        XCUIRemote.shared.press(.playPause)
+        revealNativeTransportIfHidden()
+        let identifiedTab = app.cells["Playback"]
+        let playbackTab = identifiedTab.exists ? identifiedTab : app.cells.containing(.staticText, identifier: "Playback").firstMatch
+        XCTAssertTrue(playbackTab.waitForExistence(timeout: 10), "AVKit must expose the actual Playback sibling of Info and Chapters")
+        XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Begin outside the separate Playback info modal")
+        activate(playbackTab)
+        let reason = app.descendants(matching: .any).matching(identifier: "conversionReason-0").firstMatch
+        XCTAssertTrue(reason.waitForExistence(timeout: 10))
+        XCTAssertTrue(reason.isHittable, "The native Playback tab must visibly present its conversion explanation")
+        XCTAssertTrue(reason.label.contains("cannot decode this video format"))
+        XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Native Playback must not silently route through the separate modal")
+        record("132 TV native Playback tab conversion reasons")
+        let server = app.descendants(matching: .any).matching(identifier: "playbackInfo-Server-reported source-Video codec").firstMatch
+        reveal(server)
+        XCTAssertTrue(server.exists && server.isHittable)
+        XCTAssertTrue(server.label.contains("H.264"))
+        record("132 TV native Playback tab server formats")
+        let received = app.descendants(matching: .any).matching(identifier: "playbackInfo-Received by player-Video codec").firstMatch
+        reveal(received)
+        XCTAssertTrue(received.exists && received.isHittable, "Received formats must remain visibly reachable through native tab overflow")
+        XCTAssertTrue(received.label.contains("H.264"))
+        let info = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ OR identifier BEGINSWITH %@", "playbackInfo-", "conversionReason-")).allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        for privateText in ["unrecognized-private-reason", "synthetic-native-fixture-token", "/Videos/", "http://"] {
+            XCTAssertFalse(info.contains(privateText))
+        }
+        record("132 TV native Playback tab received formats scrolled")
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, initialNegotiations, "Native information must not renegotiate the viewing")
+        XCTAssertEqual(fixture.snapshot.startCount, 1, "Native information retains the same viewing")
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 0)
+    }
+    #endif
+
     @MainActor func testPlayerSpeedInfoConversionAndAdaptiveControls() throws {
         #if os(tvOS)
         let fixtureCaption = "At the end of this synthetic episode, the final conversation continues.\nThe following episode controls must leave both subtitle lines readable."
         #else
         let fixtureCaption = "Synthetic native menu fixture caption."
         #endif
-        #if os(iOS)
         if ProcessInfo.processInfo.environment["PICTURESHOW_PLAYER_LARGE_FONT"] == "1" {
+            // This per-app UIKit launch projection is independent of whether
+            // the simulator exposes a system-wide content_size command.
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", UIContentSizeCategory.extraExtraExtraLarge.rawValue]
         }
-        #endif
         let fixture = try NativeTrackHTTPFixture(durationSeconds: 120,
             conversionReasons: ["VideoCodecNotSupported", "ContainerBitrateExceedsLimit", "unrecognized-private-reason"], episodeContinuation: true, captionText: fixtureCaption)
         try fixture.start()
@@ -544,6 +592,17 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertGreaterThan(value, 0)
         XCTAssertLessThanOrEqual(value, 10, "The credits budget remains ten wall seconds")
         #if os(tvOS)
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertEqual(nativePlayer.value as? String, "Controls hidden", "Running contextual proof requires the actual hidden HUD after the existing idle bound")
+        let contextualPlay = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", "playNext", "Play next: Following synthetic episode")).firstMatch
+        let contextualCancel = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "cancelNext", "Cancel")).firstMatch
+        XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
+        XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
+        XCTAssertTrue(contextualPlay.label.hasPrefix("Play next: Following synthetic episode"))
+        XCTAssertNotNil(trailingNumber(contextualPlay.label), "The visible contextual Play next text must carry the running number")
+        XCTAssertEqual(contextualCancel.label, "Cancel")
+        let runningContextCancelFrame = contextualCancel.frame
+        XCTAssertFalse(runningContextCancelFrame.isEmpty)
         let caption = app.staticTexts["playerSubtitle"]
         XCTAssertTrue(caption.exists)
         XCTAssertGreaterThan(caption.frame.height, 60, "The final TV acceptance cue contains two real subtitle lines")
@@ -557,9 +616,21 @@ final class PlayerPresentationUITests: XCTestCase {
         record("132 next episode running at half speed")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
-        let pausedDeadline = ProcessInfo.processInfo.systemUptime + 5
-        while trailingNumber(playNext.label) != nil && ProcessInfo.processInfo.systemUptime < pausedDeadline { }
+        XCTAssertTrue(waitForRemoteUI(timeout: 5) {
+            trailingNumber(playNext.label) == nil && nativePlayer.exists && nativePlayer.value as? String == "Controls hidden"
+        }, "The existing single Pause must remove the number and retain the actual hidden HUD within the original pause bound")
         XCTAssertNil(trailingNumber(playNext.label), "Remote pause removes the number immediately")
+        XCTAssertTrue(contextualPlay.exists && contextualPlay.isHittable)
+        XCTAssertTrue(contextualCancel.exists && contextualCancel.isHittable)
+        XCTAssertEqual(contextualPlay.label, "Play next: Following synthetic episode")
+        XCTAssertEqual(contextualCancel.label, "Cancel", "The paused contextual pill must render the Cancel word")
+        XCTAssertNil(trailingNumber(contextualPlay.label))
+        XCTAssertEqual(contextualCancel.frame.minX, runningContextCancelFrame.minX, accuracy: 1, "Pausing cannot move contextual Cancel")
+        XCTAssertEqual(contextualCancel.frame.minY, runningContextCancelFrame.minY, accuracy: 1, "Pausing cannot move contextual Cancel")
+        XCTAssertEqual(contextualCancel.frame.width, runningContextCancelFrame.width, accuracy: 1, "Pausing cannot resize contextual Cancel")
+        XCTAssertEqual(contextualCancel.frame.height, runningContextCancelFrame.height, accuracy: 1, "Pausing cannot resize contextual Cancel")
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        record("132 TV HUD hidden paused contextual full episode and Cancel text")
         let cancel = nativeAction(id: "cancelNextTransport", prefix: "Cancel")
         activate(cancel)
         #else
@@ -581,7 +652,14 @@ final class PlayerPresentationUITests: XCTestCase {
     }
 
     @MainActor private func record(_ name: String) {
-        let name = ProcessInfo.processInfo.environment["PICTURESHOW_PLAYER_LARGE_FONT"] == "1" ? name.replacingOccurrences(of: "132 ", with: "132 large font ") : name
+        #if os(tvOS)
+        // A requested UIKit launch category is not proof that tvOS enlarged it.
+        // Qualify the gallery only after comparing actual font diagnostics.
+        let largePrefix = "132 requested large font "
+        #else
+        let largePrefix = "132 large font "
+        #endif
+        let name = ProcessInfo.processInfo.environment["PICTURESHOW_PLAYER_LARGE_FONT"] == "1" ? name.replacingOccurrences(of: "132 ", with: largePrefix) : name
         let text = XCTAttachment(string: app.debugDescription); text.name = name + " accessibility"; text.lifetime = .keepAlways; add(text)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
