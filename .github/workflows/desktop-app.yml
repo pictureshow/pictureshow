@@ -112,6 +112,8 @@ jobs:
           $env:SKIKO_RENDER_API = 'SOFTWARE'
           cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen.exe
           if ($LASTEXITCODE -ne 0) { throw 'Display setup compile failed' }
+          cl /nologo /EHsc /std:c++17 desktop/tools/app-smoke/windows-screen-test.cpp /link user32.lib /OUT:desktop/build/windows-smoke-screen-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Display restoration controls compile failed' }
           New-Item -ItemType Directory -Force desktop-evidence/display | Out-Null
           try {
             $screenJson = & desktop/build/windows-smoke-screen.exe --save desktop/build/smoke-display-mode.bin
@@ -142,6 +144,8 @@ jobs:
                 Write-Host "Hosted display restore native exit=$restoreCode completed=$restoreCompleted stdoutLines=$($restoreOutput.Count)"
               }
               if ($restoreCode -ne 0) { throw "Hosted display mode restoration failed (native exit $restoreCode)" }
+              & desktop/build/windows-smoke-screen-test.exe desktop/build/smoke-display-mode.bin desktop/build/smoke-display-negative 2> desktop-evidence/display/negative-control-stages.jsonl | Set-Content desktop-evidence/display/negative-controls.jsonl
+              if ($LASTEXITCODE -ne 0) { throw 'Display restoration negative controls failed' }
             }
           }
       - uses: actions/upload-artifact@v7
