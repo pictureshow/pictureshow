@@ -413,10 +413,26 @@ final class PlayerPresentationUITests: XCTestCase {
         XCTAssertEqual(fixture.snapshot.stoppedCount, 0, "Opening and closing sheets must not close the viewing")
         try verifyNextEpisodeCard(fixture)
         #if os(tvOS)
-        // The verified native HUD is hidden and the remaining contextual Skip
-        // owns focus. Use the standard native Back input for this exit; the
-        // next viewing below separately exercises the Back to details action.
+        // Native Back first hides the remaining contextual Skip lane. Capture
+        // that mounted, hidden-control state before one further Back can exit.
+        // Both native layers share the original fifteen-second exit budget.
+        let nativeExitBegan = ProcessInfo.processInfo.systemUptime
         XCUIRemote.shared.press(.menu)
+        let firstBackExited = waitForRemoteUI(timeout: 2) { self.app.buttons["play"].exists }
+        record("132 first native Back dismisses contextual lane or returns detail")
+        if !firstBackExited {
+            guard player.exists, player.value as? String == "Controls hidden",
+                  app.staticTexts["playerSubtitle"].exists else {
+                XCTFail("A second Back requires the original mounted player, hidden controls and its real paused-video caption")
+                return
+            }
+            XCUIRemote.shared.press(.menu)
+        }
+        let nativeExitRemaining = max(0, 15 - (ProcessInfo.processInfo.systemUptime - nativeExitBegan))
+        let nativeReturnedDetail = waitForRemoteUI(timeout: nativeExitRemaining) { self.app.buttons["play"].exists }
+        record("132 native Back layered exit actual final state")
+        print("LEG132_NATIVE_BACK firstExited=\(firstBackExited) inputs=\(firstBackExited ? 1 : 2) returnedDetail=\(nativeReturnedDetail) elapsed=\(ProcessInfo.processInfo.systemUptime - nativeExitBegan)")
+        XCTAssertTrue(nativeReturnedDetail, "Native Back must dismiss its contextual layer then return to detail within the original fifteen-second total bound")
         #else
         if app.buttons["rotatePlayer"].exists {
             activate(app.buttons["rotatePlayer"])
@@ -425,9 +441,11 @@ final class PlayerPresentationUITests: XCTestCase {
         }
         activate(app.buttons["closePlayer"])
         #endif
+        #if os(iOS)
         XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 15))
+        #endif
         #if os(tvOS)
-        XCTAssertEqual(fixture.snapshot.stoppedCount, 1, "One native Back must close and report the cancelled-context viewing exactly once")
+        XCTAssertEqual(fixture.snapshot.stoppedCount, 1, "Native Back must close and report the cancelled-context viewing exactly once")
         record("132 native Back from cancelled contextual card retains detail")
         #endif
         XCTAssertEqual(fixture.snapshot.startCount, 1, "Speed and info must preserve the original viewing")
