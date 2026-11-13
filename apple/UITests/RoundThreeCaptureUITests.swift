@@ -96,9 +96,10 @@ final class RoundThreeCaptureUITests: XCTestCase {
         // navy/grey film glyph cannot pass the demo poster's chromatic coverage.
         XCTAssertTrue(wait(20) {
             guard card.exists, !card.frame.isEmpty, let image = XCUIScreen.main.screenshot().image.cgImage else { return false }
-            let window = self.app.frame
-            let rect = CGRect(x: card.frame.minX * CGFloat(image.width) / window.width,
-                              y: card.frame.minY * CGFloat(image.height) / window.height,
+            let window = self.app.windows.firstMatch.frame
+            guard window.width > 0, window.height > 0, window.contains(card.frame) else { return false }
+            let rect = CGRect(x: (card.frame.minX - window.minX) * CGFloat(image.width) / window.width,
+                              y: (card.frame.minY - window.minY) * CGFloat(image.height) / window.height,
                               width: card.frame.width * CGFloat(image.width) / window.width,
                               height: card.frame.height * 0.6 * CGFloat(image.height) / window.height)
             guard let crop = image.cropping(to: rect) else { return false }
@@ -111,6 +112,7 @@ final class RoundThreeCaptureUITests: XCTestCase {
             let colourful = stride(from: 0, to: rgba.count, by: 4).filter {
                 Int(max(rgba[$0], rgba[$0+1], rgba[$0+2])) - Int(min(rgba[$0], rgba[$0+1], rgba[$0+2])) > 50
             }.count
+            print("ROUND4_ART_PIXELS window=\(window) card=\(card.frame) crop=\(rect) colourful=\(colourful)/4096")
             return drawn && colourful > 409 // More than10% chromatic picture pixels.
         }, "Require actual coloured demo artwork pixels, not an AX-only card or film placeholder")
     }

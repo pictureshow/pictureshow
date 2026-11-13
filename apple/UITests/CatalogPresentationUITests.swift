@@ -822,6 +822,10 @@ final class CatalogPresentationUITests: XCTestCase {
             XCTAssertFalse((picker.value as? String ?? "").isEmpty, "The named native menu must retain its current value")
         }
         XCTAssertTrue(shows(bitrate, "Auto (200 Mbps)"))
+        focus(bitrate, app: app)
+        assertNativeButtonPixels(subtitle, app: app, style: "Settings unfocused value", text: "System")
+        focus(subtitle, app: app)
+        assertNativeButtonPixels(subtitle, app: app, style: "Settings focused value", focused: true, text: "System")
         let rates = ["Auto (200 Mbps)", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps"]
         choose(bitrate, "40 Mbps", current: "Auto (200 Mbps)", choices: rates)
         choose(bitrate, "Auto (200 Mbps)", current: "40 Mbps", choices: rates)
