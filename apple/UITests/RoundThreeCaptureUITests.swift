@@ -269,16 +269,23 @@ final class RoundThreeCaptureUITests: XCTestCase {
 
     @MainActor func testIPadActualOSLargeTextLibrariesAndDetail() throws {
         XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
+        try assertActualOSLargeTextLibrariesAndDetail(prefix: "Round3 iPad actual OS XXXL")
+    }
+    @MainActor func testIPhoneActualOSLargeTextLibrariesAndDetail() throws {
+        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .phone)
+        try assertActualOSLargeTextLibrariesAndDetail(prefix: "Round3 iPhone actual OS XXXL")
+    }
+    @MainActor private func assertActualOSLargeTextLibrariesAndDetail(prefix: String) throws {
         XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge,
-                       "Runner must set/read back actual owned iPad OS XXXL; a launch projection is not this evidence")
+                       "Runner must set/read back actual owned device OS XXXL; a launch projection is not this evidence")
         try launchPilot(); try signInPilot(); try selectTab("Libraries")
-        record("Round3 iPad actual OS XXXL Libraries grid")
+        record(prefix + " Libraries grid")
         activate(app.buttons["item-" + (try required("libraryID"))].firstMatch)
         let item = app.buttons["item-" + (try required("artworkItemID"))].firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 20)); reveal(item); activate(item)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 20))
-        record("Round3 iPad actual OS XXXL detail actions")
-        try assertPeopleShelf(prefix: "Round3 iPad actual OS XXXL")
+        record(prefix + " detail actions")
+        try assertPeopleShelf(prefix: prefix)
     }
     #endif
 
