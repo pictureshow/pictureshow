@@ -11,6 +11,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -20,6 +22,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
@@ -258,6 +261,49 @@ class PlayerQualityMenuTest {
         val fade = compose.onNodeWithTag("player:quality-more-above", useUnmergedTree = true).getBoundsInRoot()
         assertEquals(24f, (fade.bottom - fade.top).value, .01f, "A real edge fade replaces the decorative hairline")
         assertEquals(0, changes)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h360dp-land-mdpi")
+    fun shortQualityViewportHasDeterministicPaintedScrollEdgesAtNormalFont() {
+        assertPaintedScrollEdges(1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h360dp-land-mdpi")
+    fun shortQualityViewportHasDeterministicPaintedScrollEdgesAtLargeFont() {
+        assertPaintedScrollEdges(1.3f)
+    }
+
+    private fun assertPaintedScrollEdges(fontScale: Float) {
+        var changes = 0
+        var expected = Color.Unspecified
+        RuntimeEnvironment.setFontScale(fontScale)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
+                TouchTheme {
+                    expected = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant
+                    PlayerQualityMenu(null, "Up to 200 Mbps on your home network", null, true, { changes++ }, {})
+                }
+            }
+        }
+        fun painted(direction: String) {
+            val divider = compose.onNodeWithTag("player:quality-divider-$direction", useUnmergedTree = true).assertIsDisplayed()
+            val bounds = divider.getBoundsInRoot()
+            assertEquals(1f, (bounds.bottom - bounds.top).value, .01f, "A visible edge must not depend on a faded glyph")
+            val image = divider.captureToImage().toPixelMap()
+            val pixel = image[image.width / 2, image.height / 2]
+            assertEquals(expected.red, pixel.red, .02f, "Actual divider red")
+            assertEquals(expected.green, pixel.green, .02f, "Actual divider green")
+            assertEquals(expected.blue, pixel.blue, .02f, "Actual divider blue")
+        }
+        painted("below")
+        compose.onNodeWithTag("player:quality-divider-above", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("player:quality-choice:4").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("player:quality-menu").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10_000f) }
+        painted("above")
+        compose.onNodeWithTag("player:quality-divider-below", useUnmergedTree = true).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, changes, "Scrolling/revealing never submits a quality change") }
     }
 
     @Test fun tvOpensFocusedOnCurrentRadioAndSelectingAutoIsExplicit() {

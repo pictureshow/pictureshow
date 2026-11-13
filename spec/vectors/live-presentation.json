@@ -3911,6 +3911,117 @@
         "canSubmit": true
       },
       "expected": true
+    },
+    {
+      "id": "live-presentation.program-time-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:00.999Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-exact-end",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:01Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-not-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:01.001Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": true
+      }
+    },
+    {
+      "id": "live-presentation.program-time-missing",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": null,
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-malformed",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "unavailable",
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-offset-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T01:00:01+01:00",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-top",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 0,
+        "remainingDp": 100
+      },
+      "expected": {
+        "above": false,
+        "below": true,
+        "dividerDp": 1
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-middle",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 9,
+        "remainingDp": 9
+      },
+      "expected": {
+        "above": true,
+        "below": true,
+        "dividerDp": 1
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-bottom",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 0
+      },
+      "expected": {
+        "above": true,
+        "below": false,
+        "dividerDp": 1
+      }
     }
   ]
 }

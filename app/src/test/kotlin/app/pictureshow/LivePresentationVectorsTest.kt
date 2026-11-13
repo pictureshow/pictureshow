@@ -31,7 +31,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(284, cases.size)
+        assertEquals(293, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -69,6 +69,20 @@ class LivePresentationVectorsTest {
                     assertEquals(expected.getValue("glyphDp").jsonPrimitive.int, LIVE_SEEK_MARK_DP, id)
                     assertEquals(expected.getValue("disabledAlpha").jsonPrimitive.float, LIVE_SEEK_DISABLED_ALPHA, .001f, id)
                     assertEquals(expected.getValue("scrimAlpha").jsonPrimitive.float, LIVE_SEEK_SCRIM_ALPHA, .001f, id)
+                }
+                "program-recording-time-state" -> {
+                    val expected = envelope.getValue("expected").jsonObject
+                    val end = c["endDate"]?.jsonPrimitive?.contentOrNull
+                    val now = c.getValue("now").jsonPrimitive.long
+                    assertEquals(expected.getValue("ended").jsonPrimitive.boolean, liveProgramEnded(end, now), id)
+                    assertEquals(expected.getValue("creationAvailable").jsonPrimitive.boolean, liveProgramCreationAvailable(end, now), id)
+                }
+                "quality-overflow-affordance" -> {
+                    val expected = envelope.getValue("expected").jsonObject
+                    val cues = qualityScrollCues(c.getValue("offsetDp").jsonPrimitive.float, c.getValue("remainingDp").jsonPrimitive.float)
+                    assertEquals(expected.getValue("above").jsonPrimitive.boolean, cues.first, id)
+                    assertEquals(expected.getValue("below").jsonPrimitive.boolean, cues.second, id)
+                    assertEquals(expected.getValue("dividerDp").jsonPrimitive.int, QUALITY_SCROLL_DIVIDER_DP, id)
                 }
                 "quality-scroll-cues" -> assertEquals(
                     envelope.getValue("expected").jsonArray.map { it.jsonPrimitive.boolean },
