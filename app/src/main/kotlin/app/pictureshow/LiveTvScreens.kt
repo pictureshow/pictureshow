@@ -165,7 +165,7 @@ internal fun LiveTvScreen(
     }
     Column(
         Modifier.fillMaxSize().then(
-            if (compactHeight) Modifier.nestedScroll(appBarScroll.nestedScrollConnection) else Modifier
+            if (compactHeight && !detail) Modifier.nestedScroll(appBarScroll.nestedScrollConnection) else Modifier
         ).background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
             .testTag(if (tv) "live:tv" else "live:touch")
     ) {
@@ -274,7 +274,7 @@ internal fun LiveTvScreen(
                         LiveIcon("refresh", "Refresh", false, !state.loading && !state.writing) { vm.refresh() }
                     }
                 },
-                scrollBehavior = if (compactHeight) appBarScroll else null
+                scrollBehavior = if (compactHeight && !detail) appBarScroll else null
             )
         }
         if (!detail) {
