@@ -459,7 +459,7 @@ private fun SyncTvNameField(
         label = { Text(stringResource(R.string.sync_group_name)) },
         enabled = !state.busy,
         lineLimits = TextFieldLineLimits.SingleLine,
-        inputTransformation = { if (length > 200) delete(200, length) },
+        inputTransformation = { if (length > 200) replace(200, length, "") },
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.Words,
             imeAction = ImeAction.Go,
