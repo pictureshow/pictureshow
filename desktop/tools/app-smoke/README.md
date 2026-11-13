@@ -84,11 +84,20 @@ reported bounds, positions the app there, and stops the helper after the smoke
 even on failure. Its lease is at most 900 seconds; existing HDR helper calls keep
 their 1280x720 size and 120-second maximum. Existing physical displays retain
 their mode, origin and primary status. Windows enumerates supported display
-modes and tests candidates until the measured usable work area fits an exact
-1920x1080 window, including space occupied by the taskbar. It applies the mode
-dynamically without registry writes, records the actual mode, work area and DPI,
-and saves the original mode privately. The workflow restores and verifies that
-original mode in a `finally` step on both smoke success and failure.
+modes only if its current physical display cannot hold a 1920x1080 frame. A
+1920x1080 display with a taskbar stays at its current mode. For its exact
+1920x1080 captures the app temporarily raises its borderless window above the
+taskbar, preserving the transparent native-video overlay. The smoke verifies
+native hit-test ownership at nine points along the frame edges and center before
+accepting pixels, and restores the previous geometry, placement and topmost state
+in `finally`. The 1280x800 captures use the ordinary usable work area.
+The helper applies modes dynamically without registry writes, records the actual
+mode, work area, DPI and fullscreen requirement, and saves the original mode
+privately. Restoration first observes whether the saved mode is already active;
+it does not call an unsupported mode-change API when nothing changed. When a
+change is needed it records driver results and actual versus expected mode.
+The workflow restores and verifies the original mode in a `finally` step on both
+smoke success and failure.
 Display and restoration receipts are included in the CI artifact. These setup wrappers refuse
 to mutate a display outside a GitHub runner.
 

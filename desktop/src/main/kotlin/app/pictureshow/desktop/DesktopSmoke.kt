@@ -78,6 +78,90 @@ internal fun fixtureFailureDiagnostics(error: Throwable): JsonObject = buildJson
     })
 }
 
+/** Full-frame capture may cover the taskbar only through an owned topmost window. */
+internal fun fixtureCaptureNeedsFullscreen(display:java.awt.Rectangle, usable:java.awt.Rectangle, width:Int, height:Int, windows:Boolean):Boolean {
+    if(usable.width>=width && usable.height>=height) return false
+    require(windows && display.width==width && display.height==height) { "Requested window cannot fit its display or usable work area" }
+    return true
+}
+
+internal data class FixtureWindowPresentation(val bounds:java.awt.Rectangle,val topmost:Boolean,val placement:WindowPlacement)
+
+/** Preserve the real window's presentation even if capture or entry throws. */
+internal class FixtureFullscreenPresentation(private val read:()->FixtureWindowPresentation,private val apply:(FixtureWindowPresentation)->Unit) {
+    private var saved:FixtureWindowPresentation?=null
+    fun enter(display:java.awt.Rectangle) {
+        if(saved==null) saved=read().let { it.copy(bounds=java.awt.Rectangle(it.bounds)) }
+        apply(FixtureWindowPresentation(java.awt.Rectangle(display),true,WindowPlacement.Floating))
+    }
+    fun restore() {
+        val previous=saved ?: return
+        apply(previous)
+        saved=null
+    }
+}
+
+@com.sun.jna.Structure.FieldOrder("x","y")
+internal class FixtureScreenPoint:com.sun.jna.Structure(),com.sun.jna.Structure.ByValue {
+    @JvmField var x:Int=0
+    @JvmField var y:Int=0
+}
+@com.sun.jna.Structure.FieldOrder("left","top","right","bottom")
+internal class FixtureNativeRect:com.sun.jna.Structure() {
+    @JvmField var left:Int=0
+    @JvmField var top:Int=0
+    @JvmField var right:Int=0
+    @JvmField var bottom:Int=0
+}
+@com.sun.jna.Structure.FieldOrder("cbSize","monitor","work","flags")
+internal class FixtureNativeMonitorInfo:com.sun.jna.Structure() {
+    @JvmField var cbSize:Int=0
+    @JvmField var monitor:FixtureNativeRect=FixtureNativeRect()
+    @JvmField var work:FixtureNativeRect=FixtureNativeRect()
+    @JvmField var flags:Int=0
+    init { cbSize=size() }
+}
+private interface FixtureWindowOwnership:com.sun.jna.win32.StdCallLibrary {
+    fun MonitorFromWindow(window:com.sun.jna.Pointer,flags:Int):com.sun.jna.Pointer?
+    fun GetMonitorInfoW(monitor:com.sun.jna.Pointer,info:FixtureNativeMonitorInfo):Boolean
+    fun GetWindowRect(window:com.sun.jna.Pointer,rect:FixtureNativeRect):Boolean
+    fun WindowFromPoint(point:FixtureScreenPoint):com.sun.jna.Pointer?
+    fun GetWindowThreadProcessId(window:com.sun.jna.Pointer,pid:com.sun.jna.ptr.IntByReference):Int
+}
+
+/** Observe actual topmost coverage, including the strip normally owned by the taskbar. */
+private fun fixtureFullscreenCoverage(window:ComposeWindow,receipt:File?=null):Boolean {
+    val api=com.sun.jna.Native.load("user32",FixtureWindowOwnership::class.java)
+    val rect=FixtureNativeRect()
+    val handle=com.sun.jna.Native.getWindowPointer(window)
+    if(!api.GetWindowRect(handle,rect)) return false
+    val monitor=api.MonitorFromWindow(handle,2) ?: return false
+    val info=FixtureNativeMonitorInfo()
+    if(!api.GetMonitorInfoW(monitor,info)) return false
+    // AWT's requested geometry alone is insufficient: the actual HWND must
+    // cover its physical monitor, including the taskbar's normal strip.
+    val physical=info.monitor
+    val coversMonitor=rect.left==physical.left && rect.top==physical.top && rect.right==physical.right && rect.bottom==physical.bottom
+    if(rect.right<=rect.left || rect.bottom<=rect.top) return false
+    val pid=ProcessHandle.current().pid().toInt()
+    val ownsPoints=listOf(rect.left+1,(rect.left+rect.right)/2,rect.right-2).all { x ->
+        listOf(rect.top+1,(rect.top+rect.bottom)/2,rect.bottom-2).all yPoint@{ y ->
+            val point=FixtureScreenPoint().also { it.x=x;it.y=y }
+            val hit=api.WindowFromPoint(point) ?: return@yPoint false
+            val owner=com.sun.jna.ptr.IntByReference()
+            api.GetWindowThreadProcessId(hit,owner)
+            owner.value==pid
+        }
+    }
+    receipt?.writeText(buildJsonObject {
+        put("coversPhysicalMonitor",coversMonitor);put("ownsFramePoints",ownsPoints)
+        put("windowLeft",rect.left);put("windowTop",rect.top);put("windowRight",rect.right);put("windowBottom",rect.bottom)
+        put("monitorLeft",physical.left);put("monitorTop",physical.top);put("monitorRight",physical.right);put("monitorBottom",physical.bottom)
+        put("pass",coversMonitor && ownsPoints)
+    }.toString()+"\n")
+    return coversMonitor && ownsPoints
+}
+
 /** Real window/control smoke. No network fixture, catalog or playback result is synthesized here. */
 fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowState,args:List<String>,close:()->Unit) {
     val (server,user,password,evidence)=args
@@ -134,9 +218,28 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         ImageIO.getImageWritersByFormatName("jpeg").next().let { writer -> ImageIO.createImageOutputStream(target).use { output ->writer.output=output;val p=writer.defaultWriteParam;p.compressionMode=ImageWriteParam.MODE_EXPLICIT;p.compressionQuality=.55f;writer.write(null,IIOImage(small,null,null),p)};writer.dispose() }
     }
     fun screenshot(name:String, sizes:List<Pair<Int,Int>> = listOf(1280 to 800,1920 to 1080), hoverTag:String? = null, focusTag:String? = null) {
+        fun applyPresentation(presentation:FixtureWindowPresentation) {
+            windowState.placement=WindowPlacement.Floating
+            window.isAlwaysOnTop=presentation.topmost
+            val b=presentation.bounds
+            windowState.position=WindowPosition.Absolute(b.x.dp,b.y.dp)
+            windowState.size=DpSize(b.width.dp,b.height.dp)
+            window.setBounds(b.x,b.y,b.width,b.height)
+            windowState.placement=presentation.placement
+            window.toFront()
+        }
+        val fullscreen=FixtureFullscreenPresentation({ FixtureWindowPresentation(java.awt.Rectangle(window.bounds),window.isAlwaysOnTop,windowState.placement) },::applyPresentation)
+        var originalPresentation:FixtureWindowPresentation?=null
+        if(com.sun.jna.Platform.isWindows()) SwingUtilities.invokeAndWait {
+            originalPresentation=FixtureWindowPresentation(java.awt.Rectangle(window.bounds),window.isAlwaysOnTop,windowState.placement)
+        }
+        try {
         for((requestedWidth,requestedHeight) in sizes) {
+            SwingUtilities.invokeAndWait { fullscreen.restore() }
+            var fullFrame=false
             var w=requestedWidth;var h=requestedHeight
             var workArea=java.awt.Rectangle()
+            val fullscreenReceipt=File(screens,"$name-${requestedWidth}x${requestedHeight}.fullscreen.json")
             SwingUtilities.invokeAndWait {
                 if(com.sun.jna.Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true)
                 val wantedX=System.getenv("PICTURESHOW_SMOKE_WINDOW_X")?.toInt() ?: window.x
@@ -150,15 +253,19 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 // Optional 4K catalog captures use the actual work area so the OS
                 // menu bar cannot hide the app header. Required sizes stay exact.
                 if(w>=3200) { w=minOf(w,usable.width);h=minOf(h,usable.height) }
-                check(usable.width>=w && usable.height>=h) { "Requested window does not fit the visible work area: $usable" }
-                val targetX=usable.x+minOf(100,usable.width-w)
-                val targetY=usable.y+minOf(60,usable.height-h)
-                windowState.position=WindowPosition.Absolute(targetX.dp,targetY.dp)
-                windowState.size=DpSize(w.dp,h.dp)
-                // Drive the native resize on the EDT as a real window-manager
-                // resize does; do not rely only on declarative state propagation.
-                window.setBounds(targetX,targetY,w,h)
-                window.toFront()
+                fullFrame=fixtureCaptureNeedsFullscreen(display,usable,w,h,com.sun.jna.Platform.isWindows())
+                if(fullFrame) {
+                    // Borderless native topmost coverage preserves the transparent
+                    // native-video overlay. Java exclusive fullscreen resets alpha.
+                    fullscreen.enter(display)
+                } else {
+                    val targetX=usable.x+minOf(100,usable.width-w)
+                    val targetY=usable.y+minOf(60,usable.height-h)
+                    windowState.position=WindowPosition.Absolute(targetX.dp,targetY.dp)
+                    windowState.size=DpSize(w.dp,h.dp)
+                    window.setBounds(targetX,targetY,w,h)
+                    window.toFront()
+                }
                 window.focusTraversalPolicy.getDefaultComponent(window)?.requestFocusInWindow()
             }
             robot.mouseMove(window.x+window.width/2,window.y+window.height/2)
@@ -167,6 +274,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 observed.width==w && observed.height==h && window.graphicsConfiguration.bounds.contains(observed)
             }
             Thread.sleep(400) // Allow the final native resize and Compose layout to paint.
+            if(fullFrame) waitFor("native fullscreen owns all frame edges",5) { window.isAlwaysOnTop && fixtureFullscreenCoverage(window,fullscreenReceipt) }
             hoverTag?.let { tag ->
                 val target=DesktopUiProbe.bounds.getValue(tag)
                 val origin=window.locationOnScreen;val scale=window.graphicsConfiguration.defaultTransform.scaleX
@@ -216,6 +324,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 put("luminanceVariance",content.first);put("nonDominantFraction",content.second)
                 put("requestedWidth",requestedWidth);put("requestedHeight",requestedHeight)
                 put("actualWidth",w);put("actualHeight",h);put("paintVerified",verified)
+                put("nativeFullscreen",fullFrame);put("fullscreenCoverageVerified",fullFrame && fixtureFullscreenCoverage(window))
                 put("captureX",bounds.x);put("captureY",bounds.y)
                 put("captureScaleX",captureConfiguration.defaultTransform.scaleX);put("captureScaleY",captureConfiguration.defaultTransform.scaleY)
                 put("workAreaX",workArea.x);put("workAreaY",workArea.y);put("workAreaWidth",workArea.width);put("workAreaHeight",workArea.height)
@@ -233,6 +342,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                     put("luminanceVariance",content.first);put("nonDominantFraction",content.second)
                 }
                 check(observed==bounds && window.graphicsConfiguration.device===captureConfiguration.device) { "Window or display moved during capture $name" }
+                check(!fullFrame || (window.isAlwaysOnTop && fixtureFullscreenCoverage(window,fullscreenReceipt))) { "Native fullscreen lost frame-edge coverage during capture $name" }
             }
             recordAttempt()
             val paintDeadline=System.nanoTime()+5_000_000_000L
@@ -300,8 +410,19 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             File(screens,"$name-${w}x${h}.geometry.txt").writeText("requested=${w}x${h}\nactual=${bounds.width}x${bounds.height}\n$geometry\n")
             File(screens,"index.md").appendText("- [$name · ${w}×${h}](${target.name}) — actual window ${bounds.width}×${bounds.height}, reader off.\n")
         }
-        SwingUtilities.invokeAndWait {windowState.size=DpSize(1280.dp,800.dp);window.setSize(1280,800)}
-        waitFor("restore standard window after capture",5) { window.width==1280 && window.height==800 }
+        } finally {
+            SwingUtilities.invokeAndWait {
+                try { fullscreen.restore() } finally {
+                    originalPresentation?.let(::applyPresentation) ?: run {
+                        windowState.size=DpSize(1280.dp,800.dp);window.setSize(1280,800)
+                    }
+                }
+            }
+            waitFor("restore window presentation after capture",5) {
+                originalPresentation?.let { window.bounds==it.bounds && window.isAlwaysOnTop==it.topmost && windowState.placement==it.placement }
+                    ?: (window.width==1280 && window.height==800)
+            }
+        }
     }
     fun firstLibrary()=c.state.value.homeRows.first{it.library}.items.first{it.collectionType=="movies" || it.name.contains("Movie",true)}
     try {

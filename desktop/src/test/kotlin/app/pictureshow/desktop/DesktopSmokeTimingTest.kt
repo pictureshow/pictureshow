@@ -43,6 +43,58 @@ class DesktopSmokeTimingTest {
         assertEquals(1, fixtureFailureDiagnostics(cycle)["causes"]!!.let { it as kotlinx.serialization.json.JsonArray }.size)
     }
 
+    @Test fun nativeFullscreenProbeUsesWin32PointRectAndMonitorInfoLayouts() {
+        assertEquals(8,FixtureScreenPoint().size())
+        assertEquals(16,FixtureNativeRect().size())
+        val monitor=FixtureNativeMonitorInfo()
+        assertEquals(40,monitor.size());assertEquals(40,monitor.cbSize)
+    }
+
+    @Test fun taskbarRequiresRealFullFrameWithoutShrinkingRequiredCapture() {
+        val display=java.awt.Rectangle(0,0,1920,1080)
+        val usable=java.awt.Rectangle(0,0,1920,1032)
+        assertTrue(fixtureCaptureNeedsFullscreen(display,usable,1920,1080,true))
+        assertFalse(fixtureCaptureNeedsFullscreen(display,usable,1280,800,true))
+        assertFalse(fixtureCaptureNeedsFullscreen(display,display,1920,1080,true))
+        assertFailsWith<IllegalArgumentException> { fixtureCaptureNeedsFullscreen(display,usable,1920,1080,false) }
+        assertFailsWith<IllegalArgumentException> { fixtureCaptureNeedsFullscreen(java.awt.Rectangle(0,0,1920,1032),usable,1920,1080,true) }
+        assertFailsWith<IllegalArgumentException> { fixtureCaptureNeedsFullscreen(display,usable,3840,2160,true) }
+    }
+
+    @Test fun fullscreenRestoresGeometryTopmostAndPlacementOnCaptureAndEntryFailure() {
+        val initial=FixtureWindowPresentation(java.awt.Rectangle(100,60,1280,800),false,androidx.compose.ui.window.WindowPlacement.Maximized)
+        var actual=initial
+        var failEntry=false
+        val presentation=FixtureFullscreenPresentation({ actual },{ value ->
+            actual=value
+            if(failEntry && value.topmost) error("entry failed after native change")
+        })
+        assertFailsWith<IllegalStateException> {
+            try {
+                presentation.enter(java.awt.Rectangle(0,0,1920,1080))
+                assertEquals(java.awt.Rectangle(0,0,1920,1080),actual.bounds)
+                assertTrue(actual.topmost)
+                assertEquals(androidx.compose.ui.window.WindowPlacement.Floating,actual.placement)
+                // Reentry must retain the original restoration target.
+                presentation.enter(java.awt.Rectangle(0,0,1920,1080))
+                error("capture failed")
+            } finally { presentation.restore() }
+        }
+        assertEquals(initial,actual)
+        failEntry=true
+        assertFailsWith<IllegalStateException> {
+            try { presentation.enter(java.awt.Rectangle(0,0,1920,1080)) }
+            finally { presentation.restore() }
+        }
+        assertEquals(initial,actual)
+        presentation.restore()
+        assertEquals(initial,actual)
+        actual=initial.copy(topmost=true)
+        failEntry=false
+        presentation.enter(java.awt.Rectangle(0,0,1920,1080));presentation.restore()
+        assertTrue(actual.topmost)
+    }
+
     private fun cue(start: String = "00:00:00,000", end: String = "00:03:00,000") =
         "1\n$start --> $end\nPictureshow original CC0 subtitle\n"
 
