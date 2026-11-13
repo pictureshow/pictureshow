@@ -77,7 +77,7 @@ class LivePlayerPolishTest {
         compose.onNodeWithTag("play").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("player:go-live").assertIsFocused()
         val actions = listOf("play", "player:go-live", "audio").map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
-        actions.forEach { assertEquals(48.dp, it.height) }
+        actions.forEach { assertEquals(48.dp, it.bottom - it.top) }
         listOf("Play", "Go live", "Audio").zip(actions).forEach { (label, bounds) ->
             val text = compose.onNodeWithText(label, useUnmergedTree = true).getUnclippedBoundsInRoot()
             assertTrue(
