@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "sync-completion-reporting.current-decision",
-      "operation": "terminal-video-completion",
+      "operation": "video-completion",
       "currentDecision": true,
       "expectedMembership": false,
       "expectedWire": [
@@ -15,12 +15,74 @@
         "catalog:played"
       ],
       "expectedExits": 1,
-      "expectedLocalNext": []
+      "expectedLocalNext": [],
+      "queueCount": 1,
+      "currentIndex": 0,
+      "repeatMode": "RepeatNone"
     },
     {
       "id": "sync-completion-reporting.obsolete-decision",
-      "operation": "terminal-video-completion",
+      "operation": "video-completion",
       "currentDecision": false,
+      "expectedMembership": true,
+      "expectedWire": [],
+      "expectedReports": [],
+      "expectedExits": 0,
+      "expectedLocalNext": [],
+      "queueCount": 1,
+      "currentIndex": 0,
+      "repeatMode": "RepeatNone"
+    },
+    {
+      "id": "sync-completion-reporting.earlier-current-decision",
+      "operation": "video-completion",
+      "currentDecision": true,
+      "queueCount": 2,
+      "currentIndex": 0,
+      "repeatMode": "RepeatNone",
+      "expectedMembership": true,
+      "expectedWire": [
+        "NextItem"
+      ],
+      "expectedReports": [],
+      "expectedExits": 0,
+      "expectedLocalNext": []
+    },
+    {
+      "id": "sync-completion-reporting.earlier-obsolete-decision",
+      "operation": "video-completion",
+      "currentDecision": false,
+      "queueCount": 2,
+      "currentIndex": 0,
+      "repeatMode": "RepeatNone",
+      "expectedMembership": true,
+      "expectedWire": [],
+      "expectedReports": [],
+      "expectedExits": 0,
+      "expectedLocalNext": []
+    },
+    {
+      "id": "sync-completion-reporting.repeat-one-current-decision",
+      "operation": "video-completion",
+      "currentDecision": true,
+      "queueCount": 1,
+      "currentIndex": 0,
+      "repeatMode": "RepeatOne",
+      "expectedMembership": true,
+      "expectedWire": [
+        "SetPlaylistItem"
+      ],
+      "expectedReports": [],
+      "expectedExits": 0,
+      "expectedLocalNext": []
+    },
+    {
+      "id": "sync-completion-reporting.repeat-one-obsolete-decision",
+      "operation": "video-completion",
+      "currentDecision": false,
+      "queueCount": 1,
+      "currentIndex": 0,
+      "repeatMode": "RepeatOne",
       "expectedMembership": true,
       "expectedWire": [],
       "expectedReports": [],

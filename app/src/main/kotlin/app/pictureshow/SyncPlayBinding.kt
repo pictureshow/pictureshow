@@ -270,7 +270,7 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             host.output.applySync { host.output.pause() }
         }
         host.onSyncEnded = { source ->
-            if (active == null) {
+            if (active == null || host.controller?.acceptsCompletion(source) != true) {
                 sync.participating
             } else {
                 sync.rendererEnded(token, bridge, active, generation, entryId) { host.controller?.ended(source) == true }

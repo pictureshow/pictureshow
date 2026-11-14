@@ -556,9 +556,13 @@ internal class PlaybackSession(
             }
         }
 
+    /** Read-only admission for EOS actions that must retain this viewing, such as shared queue continuation. */
+    fun acceptsCompletion(source: PlayDecision): Boolean =
+        !closing && !ending && source === decision && mutable.value.error == null
+
     /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
     fun ended(source: PlayDecision? = decision): Boolean {
-        if (closing || ending || source == null || source !== decision || mutable.value.error != null) return false
+        if (source == null || !acceptsCompletion(source)) return false
         if (source.isLive && !allowLiveCompletion) {
             output.pauseForApp()
             mutable.value = mutable.value.copy(preparing = false, error = "The live stream ended. Return to channels and tune again.")
