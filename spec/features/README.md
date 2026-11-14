@@ -63,3 +63,5 @@ provenance does not replace actual speech or establish why an earlier reader ser
 For PLAY-06, a hidden-player seek fixture waits for an observable host position change before reopening the
 controls. Advancing only the UI frame clock is not proof that the native position sampler has completed. Keep
 the original exact spoken-position assertion after reopening; synchronization cannot substitute for its result.
+
+Settings contrast regressions sample actual current-value glyphs in both resting and focused native controls, including retained unreadable pixels as a negative control. A named AX value alone cannot establish visible ink. Authentication error evidence requires the whole error inside the current visible viewport beside the relevant field, including phone landscape; address guidance must not create a navigable example link. Artwork and tab evidence waits for the state named by the capture, and screenshot sampling normalizes orientation before translating window coordinates.
