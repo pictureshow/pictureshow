@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -478,7 +479,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
             assertTrue(changed >= c.metric("minimumCueChangedPixels"), "Visible cue must change with actual start/end position")
         }
         action(names.last()).assertIsFocused()
-        partialLabelPaint(c, names[names.lastIndex - 1], row.id)
+        partialLabelPaint(c, names.dropLast(1), row.id)
         action(names.last()).assertIsFocused()
         for (index in names.lastIndex downTo 1) {
             action(names[index]).performKeyInput { pressKey(Key.DirectionLeft) }
@@ -567,10 +568,42 @@ class TvPlayerOverflowAffordanceRegressionTest {
     }
 
     /** Same unfocused native label before/after ordinary scrolling: conservative edge paint may fade or hide it. */
-    private fun partialLabelPaint(c: Profile, label: String, rowId: Int) {
+    private fun partialLabelPaint(c: Profile, candidates: List<String>, rowId: Int) {
         val owner = compose.onNode(SemanticsMatcher("Actual action scroll owner") { it.id == rowId })
         val range = owner.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange]
         val viewport = owner.fetchSemanticsNode().boundsInRoot
+        val eligible = candidates.filter { name ->
+            val button = action(name)
+            val config = button.fetchSemanticsNode().config
+            val target = targetLayoutBounds(button)
+            val textNode = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(name), useUnmergedTree = true)
+            val ink = nativeBounds(textNode)
+            !config.contains(SemanticsProperties.Disabled) &&
+                config.getOrNull(SemanticsProperties.Focused) != true &&
+                target.left >= viewport.left - 1f &&
+                target.right <= viewport.right + 1f &&
+                target.top >= viewport.top - 1f &&
+                target.bottom <= viewport.bottom + 1f &&
+                ink.left >= viewport.left &&
+                ink.right <= viewport.right &&
+                ink.top >= viewport.top &&
+                ink.bottom <= viewport.bottom
+        }
+        assertTrue(eligible.isNotEmpty(), "Actual row must supply an enabled unfocused whole reference before the focused last action")
+        val label = eligible.last()
+        val button = action(label).assertIsEnabled().assertIsDisplayed()
+        assertTrue(button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) != true)
+        val fullButton = targetLayoutBounds(button)
+        assertTrue(
+            fullButton.left >= viewport.left - 1f &&
+                fullButton.right <= viewport.right + 1f &&
+                fullButton.top >= viewport.top - 1f &&
+                fullButton.bottom <= viewport.bottom + 1f,
+            "Reference button must be whole in the actual row viewport: $fullButton in $viewport"
+        )
+        val hit = button.fetchSemanticsNode().touchBoundsInRoot
+        assertTrue(hit.width >= c.metric("minimumTargetDp") * density - 1f && hit.height >= c.metric("minimumTargetDp") * density - 1f)
+        assertTrue(hit.left >= -1f && hit.top >= -1f && hit.right <= window.width + 1f && hit.bottom <= window.height + 1f)
         val text = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(label), useUnmergedTree = true)
         val referenceBox = nativeBounds(text)
         assertTrue(
@@ -588,13 +621,31 @@ class TvPlayerOverflowAffordanceRegressionTest {
         val left = referenceBox.left.roundToInt()
         val top = referenceBox.top.roundToInt()
         val colors = buildList { for (y in 0 until height) for (x in 0 until width) add(pixel(reference, left + x, top + y)) }
-        val foreground = colors.filter { channel(it) >= c.metric("minimumLabelCoreChannel") }
-            .groupingBy { it }.eachCount().maxBy { it.value }.key
-        val middleColumn = (width / 3 until width * 2 / 3).maxBy { x ->
+        val referenceInk = colors.filter { channel(it) >= c.metric("minimumLabelCoreChannel") }
+        if (referenceInk.isEmpty()) recordReferenceFailure(c, label, rowId, reference, origin, referenceBox)
+        assertTrue(
+            referenceInk.isNotEmpty(),
+            "Whole unfocused $label reference must paint native ink at channel >= ${c.metric("minimumLabelCoreChannel")}"
+        )
+        val foreground = referenceInk.groupingBy { it }.eachCount().maxBy { it.value }.key
+        val probe = (c.metric("partialEdgeProbeDp") * density).roundToInt()
+        val scroll = range.value()
+        val maximum = range.maxValue()
+        val feasible = (0 until width).filter { column ->
+            val candidateCut = column + probe
+            val requestedScroll = scroll + referenceBox.left + candidateCut - viewport.right
+            candidateCut > 0 && candidateCut < referenceBox.width - density && requestedScroll >= 0f && requestedScroll <= maximum
+        }
+        assertTrue(feasible.isNotEmpty(), "Actual scroll allocation must allow a genuinely partial reference glyph")
+        fun coreCount(column: Int) = (column until column + probe - 1).sumOf { x ->
             (0 until height).count { y -> pixel(reference, left + x, top + y) == foreground }
         }
-        val probe = (c.metric("partialEdgeProbeDp") * density).roundToInt()
-        val cut = middleColumn + probe
+        val chosenColumn = feasible.maxBy { coreCount(it) }
+        assertTrue(
+            coreCount(chosenColumn) >= c.metric("minimumLabelCorePixels"),
+            "A reachable edge probe must cross actual solid reference glyph core, not a gap"
+        )
+        val cut = chosenColumn + probe
         val delta = referenceBox.left + cut - viewport.right
         owner.performSemanticsAction(SemanticsActions.ScrollBy) { assertTrue(it(delta, 0f)) }
         settle()
@@ -624,6 +675,120 @@ class TvPlayerOverflowAffordanceRegressionTest {
         )
         owner.performSemanticsAction(SemanticsActions.ScrollBy) { assertTrue(it(range.maxValue() - range.value(), 0f)) }
         settle()
+    }
+
+    /** One failure-only native frame and measured regions; no paint/geometry prerequisite is skipped. */
+    private fun recordReferenceFailure(
+        c: Profile,
+        label: String,
+        rowId: Int,
+        image: android.graphics.Bitmap,
+        origin: Rect,
+        referenceBox: Rect
+    ) {
+        val directory = File(requireNotNull(System.getProperty("user.dir")), "build/reports/tv-whole-reference-diagnostic").apply {
+            mkdirs()
+        }
+        fun rectangle(b: Rect) = org.json.JSONArray(listOf(b.left, b.top, b.right, b.bottom))
+        fun sample(box: Rect): android.graphics.Bitmap? {
+            val left = (box.left - origin.left).roundToInt().coerceIn(0, image.width)
+            val top = (box.top - origin.top).roundToInt().coerceIn(0, image.height)
+            val right = (box.right - origin.left).roundToInt().coerceIn(0, image.width)
+            val bottom = (box.bottom - origin.top).roundToInt().coerceIn(0, image.height)
+            return if (right > left &&
+                bottom > top
+            ) {
+                android.graphics.Bitmap.createBitmap(image, left, top, right - left, bottom - top)
+            } else {
+                null
+            }
+        }
+        fun statistics(box: Rect): org.json.JSONObject {
+            val bitmap = sample(box)
+            val pixels = buildList {
+                if (bitmap != null) for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) add(bitmap.getPixel(x, y))
+            }
+            fun rgb(pixel: Int) = listOf((pixel ushr 16) and 255, (pixel ushr 8) and 255, pixel and 255)
+            return org.json.JSONObject().put("sampleBoundsInRoot", rectangle(box))
+                .put("widthPx", bitmap?.width ?: 0).put("heightPx", bitmap?.height ?: 0).put("pixels", pixels.size)
+                .put("nativeCorePixels", pixels.count { rgb(it).max() >= c.metric("minimumLabelCoreChannel") })
+                .put(
+                    "minimumRgbChannels",
+                    org.json.JSONArray(
+                        if (pixels.isEmpty()) {
+                            emptyList<Int>()
+                        } else {
+                            (0..2).map { channel ->
+                                pixels.minOf { rgb(it)[channel] }
+                            }
+                        }
+                    )
+                )
+                .put(
+                    "maximumRgbChannels",
+                    org.json.JSONArray(
+                        if (pixels.isEmpty()) {
+                            emptyList<Int>()
+                        } else {
+                            (0..2).map { channel ->
+                                pixels.maxOf { rgb(it)[channel] }
+                            }
+                        }
+                    )
+                )
+                .put(
+                    "argbModes",
+                    org.json.JSONArray(
+                        pixels.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(12)
+                            .map { org.json.JSONObject().put("argb", "%08x".format(it.key)).put("pixels", it.value) }
+                    )
+                )
+        }
+        val owner = compose.onNode(SemanticsMatcher("Actual action scroll owner") { it.id == rowId })
+        val range = owner.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange]
+        val target = action(label)
+        val actions = org.json.JSONArray()
+        for (name in labels(c)) {
+            val button = action(name)
+            val text = compose.onNode(hasAnyAncestor(hasTestTag("player:surface")) and hasText(name), useUnmergedTree = true)
+            actions.put(
+                org.json.JSONObject().put("label", name)
+                    .put("focused", button.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true)
+                    .put("actualDisabled", button.fetchSemanticsNode().config.contains(SemanticsProperties.Disabled))
+                    .put("buttonLayoutUnclipped", rectangle(targetLayoutBounds(button)))
+                    .put("buttonRootTransformedUnclipped", rectangle(nativeBounds(button)))
+                    .put("buttonSemanticsBoundsInRoot", rectangle(button.fetchSemanticsNode().boundsInRoot))
+                    .put("textRootTransformedUnclipped", rectangle(nativeBounds(text)))
+                    .put("textSemanticsBoundsInRoot", rectangle(text.fetchSemanticsNode().boundsInRoot))
+                    .put("textPixels", statistics(nativeBounds(text)))
+            )
+        }
+        val summary = org.json.JSONObject().put("referenceLabel", label)
+            .put("density", density).put("fontScale", c.number("fontScale"))
+            .put("windowPx", org.json.JSONArray(listOf(window.width, window.height)))
+            .put("captureBoundsInRoot", rectangle(origin)).put("captureWidthPx", image.width).put("captureHeightPx", image.height)
+            .put("viewportSemanticsBoundsInRoot", rectangle(owner.fetchSemanticsNode().boundsInRoot))
+            .put("viewportRootTransformedUnclipped", rectangle(nativeBounds(owner)))
+            .put("scrollValuePx", range.value()).put("scrollMaximumPx", range.maxValue())
+            .put("referenceTextRootTransformedUnclipped", rectangle(referenceBox))
+            .put("referenceButtonLayoutUnclipped", rectangle(targetLayoutBounds(target)))
+            .put("referenceTextPixels", statistics(referenceBox)).put("referenceButtonPixels", statistics(targetLayoutBounds(target)))
+            .put("minimumLabelCoreChannel", c.metric("minimumLabelCoreChannel")).put("actions", actions)
+        listOf(
+            "full-native-frame" to image,
+            "reference-target" to sample(targetLayoutBounds(target)),
+            "reference-text" to sample(referenceBox)
+        )
+            .forEach { (name, bitmap) ->
+                if (bitmap !=
+                    null
+                ) {
+                    File(directory, "$name.png").outputStream().use {
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                }
+            }
+        File(directory, "reference-paint.json").writeText(summary.toString(2))
     }
 
     private fun contrast(a: Int, b: Int): Double {
