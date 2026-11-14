@@ -123,7 +123,8 @@ internal class Media3PlaybackOutput(
             p.currentPosition,
             p.bufferedPosition,
             p.totalBufferedDuration,
-            p.playbackParameters.speed
+            p.playbackParameters.speed,
+            isPlaying = p.isPlaying
         )
     }
 

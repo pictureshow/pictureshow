@@ -17,7 +17,8 @@ internal fun touchTransportPlacement(
     blockers: List<Rect>,
     transportWidth: Int,
     transportHeight: Int,
-    safeArea: Rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
+    safeArea: Rect = Rect(0f, 0f, width.toFloat(), height.toFloat()),
+    clearance: Float = 0f
 ): IntOffset {
     val bottom = (height - panelHeight).coerceAtLeast(0).toFloat()
     val left = safeArea.left.coerceIn(0f, width.toFloat())
@@ -29,7 +30,8 @@ internal fun touchTransportPlacement(
     val halfHeight = transportHeight / 2f
     fun place(area: Rect): Offset? {
         var free = listOf(area)
-        for (blocker in blockers) {
+        for (bounds in blockers) {
+            val blocker = bounds.inflate(clearance.coerceAtLeast(0f))
             free = free.flatMap { room ->
                 if (!room.overlaps(blocker)) {
                     listOf(room)
@@ -47,7 +49,11 @@ internal fun touchTransportPlacement(
         return free.filter { it.width >= transportWidth && it.height >= transportHeight }.map {
             Offset(
                 preferred.x.coerceIn(it.left + halfWidth, it.right - halfWidth),
-                preferred.y.coerceIn(it.top + halfHeight, it.bottom - halfHeight)
+                if (clearance > 0f && preferred.y !in (it.top + halfHeight)..(it.bottom - halfHeight)) {
+                    it.center.y
+                } else {
+                    preferred.y.coerceIn(it.top + halfHeight, it.bottom - halfHeight)
+                }
             )
         }.minByOrNull { (it - preferred).getDistanceSquared() }
     }

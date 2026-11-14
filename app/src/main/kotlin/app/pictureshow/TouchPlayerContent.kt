@@ -205,7 +205,7 @@ private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalO
 }
 
 @Composable
-internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
+internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, videoContent: (@Composable () -> Unit)? = null) {
     val ui = remember { TouchControlsState() }
     var moreOpen by remember { mutableStateOf(false) }
     var qualityOpen by remember { mutableStateOf(false) }
@@ -345,7 +345,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
     ) {
         val presentationPlayer = remember(host.player) { host.player?.let(::ListenerCleanupPlayer) }
-        ContentFrame(presentationPlayer, Modifier.fillMaxSize())
+        if (videoContent == null) ContentFrame(presentationPlayer, Modifier.fillMaxSize()) else videoContent()
+        if (controlsVisible) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)))
         // Skip and the next card sit at the top, so only the controls panel lifts the captions.
         val overlayTop = controlsTop.takeIf { controlsVisible }
         PlayerSubtitles(
@@ -600,7 +601,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     WindowInsets.safeDrawing.getTop(density).toFloat(),
                     (constraints.maxWidth - WindowInsets.safeDrawing.getRight(density, layoutDirection)).toFloat(),
                     (constraints.maxHeight - WindowInsets.safeDrawing.getBottom(density)).toFloat()
-                )
+                ),
+                clearance = with(density) { 16.dp.toPx() }
             )
             Row(
                 Modifier.align(Alignment.TopCenter).offset { transportOffset }
@@ -684,7 +686,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
                         },
                         enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
-                        contentPadding = PaddingValues(horizontal = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET, vertical = 8.dp)
+                        contentPadding = PaddingValues(
+                            start = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET,
+                            end = 0.dp,
+                            top = 8.dp,
+                            bottom = 8.dp
+                        )
                     ) {
                         Text(
                             "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
@@ -1116,7 +1123,7 @@ internal fun TouchPlayerScrubber(
     }
     val totalClock: @Composable () -> Unit = {
         total?.let {
-            Text(it, color = Color.White, style = clockStyle, modifier = Modifier.clearAndSetSemantics {})
+            Text(it, color = Color.White, style = clockStyle, modifier = Modifier.testTag("touch:total-time").clearAndSetSemantics {})
         }
     }
     val sliderInteraction = remember { MutableInteractionSource() }

@@ -91,7 +91,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         exclude("sync-*.json")
         exclude(liveSuites)
         // Native formatter/layout vectors run in the Android presentation suite.
-        exclude("live-presentation.json", "player-overlay-layout.json")
+        exclude("live-presentation.json", "player-overlay-layout.json", "touch-player-director-clearance-paint-edges.json")
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)
@@ -107,7 +107,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         into("live-vectors")
     }
     from(rootProject.file("spec/vectors")) {
-        include("live-presentation.json", "player-overlay-layout.json")
+        include("live-presentation.json", "player-overlay-layout.json", "touch-player-director-clearance-paint-edges.json")
         into("android-native-vectors")
     }
     from(rootProject.file("spec/vectors")) {

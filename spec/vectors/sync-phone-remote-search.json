@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-phone-remote-search",
+  "cases": [
+    {
+      "id": "remote-search-submit-adjacency-and-first-viewport",
+      "profile": "search-submit-discoverability",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "statusBarDp": 24,
+        "navigationBarDp": 48,
+        "capturedPageViewportPx": [
+          0,
+          48,
+          720,
+          1024
+        ],
+        "session": "s1",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv",
+        "commands": [
+          "MoveUp",
+          "SendString"
+        ],
+        "helperText": "Works when the TV has its search screen open. Passwords can't be typed from here."
+      },
+      "expected": {
+        "helperSubmitGapMaxDp": 12,
+        "submitMinHeightDp": 48,
+        "submitMinWidthDp": 48,
+        "requests": 0
+      }
+    },
+    {
+      "id": "remote-search-reservation-stable-across-send-lifecycle",
+      "profile": "search-feedback-geometry",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "statusBarDp": 24,
+        "navigationBarDp": 48,
+        "capturedPageViewportPx": [
+          0,
+          48,
+          720,
+          1024
+        ],
+        "session": "s1",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv",
+        "commands": [
+          "MoveUp",
+          "SendString"
+        ],
+        "helperText": "Works when the TV has its search screen open. Passwords can't be typed from here.",
+        "validText": "planet",
+        "invalidLength": 300,
+        "gatewayStatus": 204
+      },
+      "expected": {
+        "requests": 1,
+        "requestMethod": "POST",
+        "requestPath": "Sessions/s1/Command",
+        "requestName": "SendString",
+        "validationText": "That can't be sent. Use up to 256 characters on one line.",
+        "validationLiveRegion": "polite"
+      }
+    },
+    {
+      "id": "remote-search-ime-send-uses-guarded-submit",
+      "profile": "deliberate-keyboard-submit",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "statusBarDp": 24,
+        "navigationBarDp": 48,
+        "capturedPageViewportPx": [
+          0,
+          48,
+          720,
+          1024
+        ],
+        "session": "s1",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv",
+        "commands": [
+          "MoveUp",
+          "SendString"
+        ],
+        "validText": "planet",
+        "invalidLength": 300
+      },
+      "expected": {
+        "requests": 1,
+        "requestMethod": "POST",
+        "requestPath": "Sessions/s1/Command",
+        "requestName": "SendString",
+        "validationText": "That can't be sent. Use up to 256 characters on one line.",
+        "validationLiveRegion": "polite",
+        "keyboardAction": "Send"
+      }
+    }
+  ]
+}

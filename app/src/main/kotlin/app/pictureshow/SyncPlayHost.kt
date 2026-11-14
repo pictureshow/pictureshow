@@ -80,7 +80,8 @@ internal data class SyncNativeRendererState(
     val positionMs: Long,
     val bufferedPositionMs: Long,
     val bufferedDurationMs: Long,
-    val playbackRate: Float = 1f
+    val playbackRate: Float = 1f,
+    val isPlaying: Boolean? = null
 )
 
 internal data class SyncRendererState(
@@ -1512,6 +1513,7 @@ internal class SyncPlayHost(
         }
         val lookupScope = app.pictureshow.core.sync.SyncTitleScope(target?.key.orEmpty(), membership.generation, titleRevision)
         titleScope = lookupScope
+        val observedFromMs = if (BuildConfig.DEBUG) monotonic() else 0L
         val snapshot = renderer?.snapshot()
         val current = q?.current
         val ownsEntry = current != null &&
@@ -1554,7 +1556,7 @@ internal class SyncPlayHost(
             )
             else -> mutable.value.notice
         }
-        mutable.value = mutable.value.copy(
+        val published = mutable.value.copy(
             phase = membership.phase, groupId = membership.groupId, groupName = membership.group?.name,
             participants = membership.group?.participants.orEmpty(), ignoreWait = ignoreWait,
             repeat = q?.repeatMode ?: "RepeatNone", shuffle = q?.shuffleMode ?: "Sorted",
@@ -1570,6 +1572,29 @@ internal class SyncPlayHost(
             quality = quality, localPlayback = local, waitReason = waitReason,
             notice = recovery, status = membership.notice ?: mutable.value.status
         )
+        mutable.value = published
+        if (BuildConfig.DEBUG) {
+            // This brackets sequential observations, not an atomic UI draw. Null must not resample a renderer.
+            val snapshotFields = if (snapshot != null) stateFields(snapshot) else "renderer=false native=false"
+            val phaseFact = when (published.phase) {
+                "Idle", "Joining", "Waiting", "Playing", "Paused", "Reconnecting", "Leaving", "Error" -> published.phase
+                else -> "other"
+            }
+            val waitFact = when (published.waitReason) {
+                null -> "none"
+                "Buffer", "Seek" -> published.waitReason
+                else -> "other"
+            }
+            val positionPending = renderer?.positionApplicationPending
+            val observedThroughMs = monotonic()
+            trace(
+                "presentation-v1",
+                "observationStartMs=$observedFromMs observationEndMs=$observedThroughMs " +
+                    "presentationPhase=$phaseFact presentationWait=$waitFact " +
+                    "presentationQuality=${published.quality.name} presentationLocal=${published.localPlayback.name} " +
+                    "positionPendingObservedAfter=$positionPending nativePlaying=${snapshot?.native?.isPlaying} " + snapshotFields
+            )
+        }
         if (target != null) {
             entries.map { it.itemId }.distinct().filter { it !in titles && titleRequests.add(it) }.forEach { item ->
                 val requestedEntries = signature.filter { it.second == item }.map { it.first }.toSet()

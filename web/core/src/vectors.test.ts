@@ -100,6 +100,8 @@ const pendingPortSuites = new Set([
     "sync-phone-quality-cue",
     // Native remote identity/chrome and structural scroll-position UI remain owed.
     "sync-phone-remote-chrome",
+    // Native search layout and deliberate keyboard-submit UI remain owed.
+    "sync-phone-remote-search",
     "sync-phone-surfaces",
     "sync-player-intent-presentation",
     "sync-rate-presentation",
@@ -118,6 +120,8 @@ const pendingPortSuites = new Set([
     "live-source",
     "live-presentation",
     "player-overlay-layout",
+    // Native player paint/geometry and clearance adapter remain owed.
+    "touch-player-director-clearance-paint-edges",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.

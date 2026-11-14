@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,12 +51,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.pictureshow.core.control.REMOTE_TEXT_LIMIT
 import app.pictureshow.core.control.RemoteNowPlaying
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.control.RemoteTrack
 import app.pictureshow.core.control.remoteTrackSelected
+import java.text.NumberFormat
 
 internal fun remoteTargetLabel(target: RemoteTarget): String = buildString {
     append(target.name)
@@ -403,36 +409,42 @@ private fun RemoteDpad(ready: Boolean, host: RemoteControllerHost) {
 private fun RemoteText(ready: Boolean, host: RemoteControllerHost) {
     var value by rememberSaveable { mutableStateOf("") }
     var failed by remember { mutableStateOf(false) }
+    val helper = stringResource(R.string.remote_search_help)
+    val error = stringResource(R.string.remote_search_error, NumberFormat.getIntegerInstance().format(REMOTE_TEXT_LIMIT))
+    val submit: () -> Unit = {
+        if (ready && value.isNotBlank()) {
+            if (host.text(value)) value = "" else failed = true
+        }
+    }
     OutlinedTextField(
         value,
         {
             value = it
             failed = false
         },
-        label = { Text("Search on the TV") },
+        label = { Text(stringResource(R.string.remote_search_label)) },
         singleLine = true,
         enabled = ready,
+        isError = failed,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+        keyboardActions = KeyboardActions(onSend = { submit() }),
+        trailingIcon = {
+            IconButton(
+                onClick = submit,
+                enabled = ready && value.isNotBlank(),
+                modifier = Modifier.size(48.dp).testTag("remote:send")
+            ) {
+                Icon(touchActionIcon("send"), stringResource(R.string.remote_search_send), Modifier.size(24.dp))
+            }
+        },
+        supportingText = {
+            // Reserve both localized wraps in the native supporting slot; only the current line is spoken.
+            Box(Modifier.fillMaxWidth()) {
+                RemoteReservedText(helper)
+                RemoteReservedText(error)
+                Text(if (failed) error else helper, Modifier.semantics { if (failed) liveRegion = LiveRegionMode.Polite })
+            }
+        },
         modifier = Modifier.fillMaxWidth().testTag("remote:text")
     )
-    Text("Works when the TV has its search screen open. Passwords can't be typed from here.")
-    Box(Modifier.fillMaxWidth()) {
-        val wording = "That can't be sent. Use up to 256 characters on one line."
-        RemoteReservedText(wording)
-        if (failed) {
-            Text(
-                wording,
-                modifier = Modifier.semantics {
-                    liveRegion =
-                        LiveRegionMode.Polite
-                }
-            )
-        }
-    }
-    Button(
-        onClick = {
-            if (host.text(value)) value = "" else failed = true
-        },
-        enabled = ready && value.isNotBlank(),
-        modifier = Modifier.heightIn(min = 48.dp).testTag("remote:send")
-    ) { Text("Send") }
 }

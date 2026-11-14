@@ -92,6 +92,8 @@ class CorpusVectorsTest {
                     "sync-phone-quality-cue",
                     // SyncPhoneRemoteChromeRegressionTest executes native identity, chrome and scroll reachability.
                     "sync-phone-remote-chrome",
+                    // RemoteSearchPresentationRegressionTest executes native search layout and deliberate submission.
+                    "sync-phone-remote-search",
                     "sync-player-intent-presentation",
                     "sync-speed-intent-origin",
                     "sync-drift",
@@ -104,7 +106,13 @@ class CorpusVectorsTest {
                 ),
             "grid-vectors" to setOf("grid-navigation", "home-browse"),
             "live-vectors" to setOf("live-guide", "live-dvr", "live-source"),
-            "android-native-vectors" to setOf("live-presentation", "player-overlay-layout")
+            "android-native-vectors" to
+                setOf(
+                    "live-presentation",
+                    "player-overlay-layout",
+                    // TouchPlayerDirectorRegressionTest and TouchTransportClearanceVectorsTest.
+                    "touch-player-director-clearance-paint-edges"
+                )
         )
         fun directory(name: String) = File(requireNotNull(javaClass.classLoader.getResource(name)) { "Missing packaged $name" }.toURI())
         val inventory = directory("vector-inventory").listFiles()!!.filter {

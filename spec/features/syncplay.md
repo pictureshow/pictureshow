@@ -179,8 +179,10 @@ Repeat is a setting within that shared section, using the native toggle-row titl
 typography and normal setting-title foreground, distinct from the quieter section
 heading. Keep its native selected chips and8dp horizontal spacing. The visible chip
 outlines have at least12dp separation before the next setting plate, greater than
-their label-to-control gap. Blank spacing is outside the measured painted block,
-so whole-control fade protection still measures actual content.
+their label-to-control gap. Whole-control fade protection checks the actual painted
+content against the cut-content mask and opaque guard. Modifier order of an
+`onGloballyPositioned` observer alone does not change the coordinates it reports;
+spacing and paint remain independently checked by the layout and native-pixel cases.
 When a minimal-focus-scroll TV panel has a pinned preview directly adjoining the
 scrolling viewport, with no intervening pinned editor or notice, leave12dp below
 the preview before the viewport and its top continuation rule. Transfer the existing
@@ -540,3 +542,40 @@ of the existing exit actions. `sync-tv-rhythm` has3 native TV profiles for pinne
 preview clearance, painted setting separation and title hierarchy. Android executes
 them in SyncPhoneRemoteChromeRegressionTest and SyncPlayTvRhythmRegressionTest;
 other platforms owe corresponding native executors and captures.
+
+
+### Touch player and remote search follow-up
+
+When phone player controls are visible, reserve at least16dp between their whole
+transport row and the group chip, notices and action cards wherever a sufficiently
+large free band exists. In an adequate band between chip and bottom panel, keep at
+least16dp clear of both and balance the free vertical space instead of attaching
+the transport to a blocker edge. Preserve the64dp primary action,48dp secondary
+targets,24dp gaps and safe-area constraints. If the available geometry cannot fit
+those clearances, retain the existing constrained-space fallback and transport
+availability; do not claim the impossible clearance. The separate
+three-profile native layout/paint suite includes the640×360 joined-player case.
+
+Phone overlay controls outside the bottom panel need picture backing over bright
+video. While the controls are visible, a30–40% black whole-picture scrim sits after
+the decoded picture and before subtitles and chrome. Hiding the controls removes
+this scrim, while the group chip remains visible. The existing bottom gradient
+continues to deepen the panel and preserve subtitle placement. Right-edge Quality
+text aligns optically with the total clock within2dp; its target remains at least
+48dp. Native white-picture paint and actual text-ink profiles check these outcomes,
+without asserting device decoder output or physical contrast qualification.
+
+Phone remote search keeps its current explanation or local validation message in
+the native outlined field's supporting-text slot. Reserve the larger localized
+wrap of those two messages so validation, sending and readiness changes do not
+move retained controls. The full48dp Send action belongs in the field and remains
+wholly discoverable in the initial360×640 phone viewport with the native system
+insets; explanation and submission have no invisible-message gap larger than12dp.
+Typing alone sends nothing. The explicit keyboard Send action and the visible Send
+action share one guarded submission: require a current ready target and nonblank
+text, retain the existing256-character single-line protocol validation, clear only
+on accepted submission, and announce local rejection politely. Detaching removes
+the search controls; a stale callback cannot send to the detached target. The
+three `sync-phone-remote-search` profiles cover native layout, retained-control
+stability and exactly-once guarded keyboard dispatch. These are UI/input rules;
+they do not change REM-04 freshness or the remote wire protocol.

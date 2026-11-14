@@ -108,10 +108,20 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
     defaultWidth = 24.dp,
     defaultHeight = 24.dp,
     viewportWidth = 24f,
-    viewportHeight = 24f
+    viewportHeight = 24f,
+    autoMirror = kind == "send"
 ).apply {
     path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
         when (kind) {
+            "send" -> {
+                moveTo(3f, 3f)
+                lineTo(21f, 12f)
+                lineTo(3f, 21f)
+                lineTo(3f, 14f)
+                lineTo(13f, 12f)
+                lineTo(3f, 10f)
+                close()
+            }
             "drag" -> {
                 for (y in listOf(8f, 14f)) {
                     moveTo(4f, y)
