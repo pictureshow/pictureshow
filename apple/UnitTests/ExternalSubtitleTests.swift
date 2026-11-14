@@ -850,10 +850,21 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual(session.decision?.subtitleIndex, 0, "Zero is a selected stream, not Off")
         let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
         XCTAssertNil(start.body["SubtitleStreamIndex"], "The automatic external index zero is playback intent, not a remembered viewer choice")
-        await session.selectTrack(type: "Subtitle", index: 0)
-        try await eventually("An explicit same-active index zero must be reported") {
-            ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Progress") && ($0.body["SubtitleStreamIndex"] as? NSNumber)?.intValue == 0 }
+        // Preserve the two-second wire deadline even if the MainActor resumes
+        // after it. A polling wake-up must not discard an already received zero.
+        let (reportedZero, didReportZero) = receipt("An explicit same-active index zero must be reported")
+        ExternalSubtitleHTTP.observeRequests {
+            if $0.path.hasSuffix("/Progress"), ($0.body["SubtitleStreamIndex"] as? NSNumber)?.intValue == 0 {
+                didReportZero()
+            }
         }
+        await session.selectTrack(type: "Subtitle", index: 0)
+        let zeroResult = await XCTWaiter.fulfillment(of: [reportedZero], timeout: 2)
+        ExternalSubtitleHTTP.observeRequests(nil)
+        XCTAssertEqual(zeroResult, .completed)
+        XCTAssertTrue(ExternalSubtitleHTTP.requests.contains {
+            $0.path.hasSuffix("/Progress") && ($0.body["SubtitleStreamIndex"] as? NSNumber)?.intValue == 0
+        })
         XCTAssertEqual(player.replacements, 1); XCTAssertNil(session.error)
         let explanation = session.subtitleTimingExplanation.lowercased()
         XCTAssertTrue(explanation.contains("pictureshow") && explanation.contains("external text") && explanation.contains("overlay"),
