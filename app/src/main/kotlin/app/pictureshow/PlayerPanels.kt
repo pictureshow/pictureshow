@@ -504,7 +504,11 @@ internal fun TrackChoices(
 }
 
 @Composable
-internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, onDismiss: () -> Unit) {
+internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, onDismiss: () -> Unit) =
+    SeekPanel(positionMs, durationMs, onSeekBy, forwardEnabled = true, onDismiss)
+
+@Composable
+internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, forwardEnabled: Boolean, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
@@ -545,6 +549,7 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
     Button(
         scale = playerButtonScale(),
         onClick = { seek(10_000) },
+        enabled = forwardEnabled,
         modifier = Modifier.testTag("seek:forward")
             .semantics { stateDescription = position }
     ) { Text("Forward 10 seconds") }

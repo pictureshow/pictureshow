@@ -148,6 +148,16 @@ internal class Media3PlaybackOutput(
     }
     private var playback: PlaybackReleaseFence.Playback? = null
     private var reopenState: ReopeningPlayer? = null
+    private var livePlayer: LivePlaybackPlayer? = null
+    val liveWindow get() = livePlayer?.window
+    val liveBufferExpired get() = livePlayer?.bufferExpired == true
+    fun observeLiveWindow() {
+        livePlayer?.observe()
+    }
+    fun goLive() {
+        livePlayer?.goLive()
+    }
+    override fun canSeek(): Boolean = livePlayer?.canTimeShift ?: (mutablePlayer.value?.isCurrentMediaItemSeekable == true)
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
@@ -269,11 +279,11 @@ internal class Media3PlaybackOutput(
         }
         val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { reason ->
             logVideo(reason)
-            captureCompletedPosition(decision)
+            if (!decision.isLive) captureCompletedPosition(decision)
             PlaybackDiagnostics.write(decision, "end", "reason=$reason positionMs=${position().milliseconds}")
             onEnded(decision)
         }
-        val detector = if (decision.method != PlayMethod.Transcode) {
+        val detector = if (!decision.isLive && decision.method != PlayMethod.Transcode) {
             PhysicalPlaybackEnd(
                 requireNotNull(media.localConfiguration).uri,
                 canEnd = endSignal::canEnd,
@@ -439,6 +449,8 @@ internal class Media3PlaybackOutput(
             TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
                 onSeek(target, decision)
             }
+        } else if (decision.isLive) {
+            LivePlaybackPlayer(managed).also { livePlayer = it }
         } else {
             managed
         }
@@ -466,6 +478,7 @@ internal class Media3PlaybackOutput(
                 if (activePlayer === next) {
                     traceNative("events", "eventCount=${events.size()}")
                     playing.set(player.isPlaying)
+                    livePlayer?.observe()
                     onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
                 }
             }
@@ -548,6 +561,12 @@ internal class Media3PlaybackOutput(
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
+                if (activePlayer !== next) return
+                if (decision.isLive && error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    livePlayer?.expired()
+                    onProgress(decision)
+                    return
+                }
                 if (activePlayer === next) {
                     traceNative("error", "code=${error.errorCode} type=${(error as? ExoPlaybackException)?.type ?: -1}")
                     detector?.invalidate()
@@ -596,7 +615,7 @@ internal class Media3PlaybackOutput(
             val hls = HlsPreparationSource.create(media, dataSources, segments, captions::loaded) { requestedUs, prepareUs ->
                 PlaybackDiagnostics.write(decision, "hls-bootstrap", "requestedUs=$requestedUs prepareUs=$prepareUs")
             }
-            next.setMediaSource(hls, positionMs)
+            next.setMediaSource(hls, if (decision.isLive) C.TIME_UNSET else positionMs)
         } else {
             val unclipped = media.buildUpon().setSubtitleConfigurations(emptyList()).build()
             val primary = sourceFactory.createMediaSource(unclipped)
@@ -607,7 +626,16 @@ internal class Media3PlaybackOutput(
             } else {
                 merged
             }
-            next.setMediaSource(source, if (serverSeek) 0 else positionMs)
+            next.setMediaSource(
+                source,
+                if (decision.isLive) {
+                    C.TIME_UNSET
+                } else if (serverSeek) {
+                    0
+                } else {
+                    positionMs
+                }
+            )
         }
         next.playWhenReady =
             app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(
@@ -750,6 +778,7 @@ internal class Media3PlaybackOutput(
         requireNotNull(playback).release(active, requireNotNull(current))
         playback = null
         reopenState = null
+        livePlayer = null
         listener = null
     }
 }

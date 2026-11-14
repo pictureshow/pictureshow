@@ -45,6 +45,7 @@ internal interface PlaybackGateway {
         progress(info).also { observe(it.reportOutcome()) }
     suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
         stopped(info).also { observe(it.reportOutcome()) }
+    suspend fun closeLiveStream(liveStreamId: String): ClientResult<Unit> = ClientResult.Success(Unit)
     suspend fun stopEncoding(sessionId: String): ClientResult<Unit>
     suspend fun played(): ClientResult<Unit> = ClientResult.Success(Unit)
 }
@@ -68,6 +69,7 @@ internal class ServerPlaybackGateway(
         // Explicit player choices, including Off, survive seeks, route changes and decoder fallback.
         if (captionLanguage == null || request.subtitleStreamIndex != null) return prepared
         val decision = ((prepared as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return prepared
+        if (decision.isLive) return prepared
         val index = captionSubtitleIndex(decision.mediaSource, captionLanguage) ?: return prepared
         if (index == decision.mediaSource.defaultSubtitleStreamIndex) return prepared
         val sourceId = decision.mediaSourceId?.takeIf(String::isNotBlank) ?: return prepared
@@ -85,6 +87,7 @@ internal class ServerPlaybackGateway(
         client.reportProgress(account, info, observe)
     override suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit) =
         client.reportStopped(account, info, observe)
+    override suspend fun closeLiveStream(liveStreamId: String) = client.closeLiveStream(account, liveStreamId)
     override suspend fun stopEncoding(sessionId: String) = client.stopEncoding(account, sessionId)
     override suspend fun played() = markPlayed()
 }
@@ -96,6 +99,7 @@ internal fun startPositionApplied(requestedMs: Long, appliedMs: Long): Boolean =
 
 internal interface PlaybackOutput {
     fun position(): PlaybackPosition
+    fun canSeek(): Boolean = false
     fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean)
 
     /** Return false if the chosen server stream cannot be switched in this media source. */
@@ -136,7 +140,9 @@ internal class PlaybackSession(
     private val onCleanupDone: () -> Unit = {},
     /** Published synchronously, before leaving the ended player can expose cached details. */
     private val onCompletionPending: () -> Unit = {},
-    private val diagnostic: (String) -> Unit = {}
+    private val diagnostic: (String) -> Unit = {},
+    /** A growing recording can finish only on decoder EOS; a channel cannot become watched. */
+    private val allowLiveCompletion: Boolean = false
 ) {
     private val mutable = MutableStateFlow(PlaybackState())
     val state = mutable.asStateFlow()
@@ -172,6 +178,7 @@ internal class PlaybackSession(
     private var pendingSeek: Long? = null
     private var seeking = false
     private val followUps = mutableListOf<Job>()
+    private val closedLiveSources = mutableSetOf<PlayDecision>()
     private val owner = scope
 
     init {
@@ -552,6 +559,12 @@ internal class PlaybackSession(
     /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
     fun ended(source: PlayDecision? = decision): Boolean {
         if (closing || ending || source == null || source !== decision || mutable.value.error != null) return false
+        if (source.isLive && !allowLiveCompletion) {
+            output.pauseForApp()
+            mutable.value = mutable.value.copy(preparing = false, error = "The live stream ended. Return to channels and tune again.")
+            enqueue { if (source === decision) finishDecision(failed = true) }
+            return false
+        }
         ending = true
         onCompletionPending()
         capture()
@@ -584,7 +597,13 @@ internal class PlaybackSession(
     /** A deliberate card advance completes only while navigation still intends to open the next item. */
     fun closeForNext(shouldAdvance: () -> Boolean, afterFinished: () -> Unit) {
         if (closing) return
-        val completing = !ending && !endReported && started && mutable.value.error == null && shouldAdvance()
+        val completing =
+            !ending &&
+                !endReported &&
+                started &&
+                (decision?.isLive != true || allowLiveCompletion) &&
+                mutable.value.error == null &&
+                shouldAdvance()
         closing = true
         // Every final report can change resume/watch state, even Back, system Stop,
         // setup failure and disposal. Arm synchronously before navigation can expose detail.
@@ -757,7 +776,8 @@ internal class PlaybackSession(
             lastPosition.milliseconds.milliseconds,
             lastPosition.paused,
             app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.audioIndex, audioChosenByViewer),
-            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.subtitleIndex, subtitleChosenByViewer)
+            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.subtitleIndex, subtitleChosenByViewer),
+            canSeek = if (decision?.isLive == true) output.canSeek() else true
         )
     }
 
@@ -770,6 +790,7 @@ internal class PlaybackSession(
         ready = false
         decision = null
         if (current?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
+        current?.let { closeLive(it) }
     }
 
     private suspend fun finishDecision(failed: Boolean = false, releaseOutput: Boolean = true): Boolean {
@@ -781,10 +802,22 @@ internal class PlaybackSession(
         val stopped = reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
         // Retired encodes already have their two scoped DELETEs scheduled.
         if (decision?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
+        closeLive(current)
         ready = false
         decision = null
         reportingDecision = null
         return stopped
+    }
+
+    private suspend fun closeLive(source: PlayDecision) {
+        val liveStreamId = source.ownedLiveStreamId ?: return
+        // A later acquisition may legitimately return the same live id. Ownership is per negotiation.
+        if (!closedLiveSources.add(source)) return
+        val result = gateway.closeLiveStream(liveStreamId)
+        if (result is ClientResult.Failure) {
+            trace("live-cleanup-failure", "kind=${result.error.kind}")
+            mutable.value = mutable.value.copy(reportError = "Could not close the live source: ${result.error.message}")
+        }
     }
 
     /**

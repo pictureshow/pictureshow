@@ -17,7 +17,9 @@ data class OfflineCandidate(
     val sizeBytes: Long? = null,
     val bitrate: Int? = null,
     val runtimeTicks: Long? = null,
-    val canDownload: Boolean? = null
+    val canDownload: Boolean? = null,
+    val isInProgress: Boolean = false,
+    val recordingStatus: String? = null
 )
 
 /** reason: "denied","no-conversion-right","not-qualified","live","wrong-media". */
@@ -47,7 +49,13 @@ private fun OfflinePreset.bytesPerSecond(): Long = when (this) {
 
 private fun OfflinePreset.estimate(runtimeTicks: Long?): Long? = runtimeTicks?.let { bytesPerSecond() * it / TICKS_PER_SECOND }
 
+/** Omitted status is normal library media; an explicit recorder state must say Completed. */
+fun offlineRecordingIncomplete(isInProgress: Boolean, recordingStatus: String?): Boolean =
+    isInProgress || (!recordingStatus.isNullOrBlank() && recordingStatus != "Completed")
+
 private fun OfflineCandidate.isLive() = isInfinite || type in LIVE_TYPES
+
+private fun OfflineCandidate.recordingIncomplete() = type == "Recording" || offlineRecordingIncomplete(isInProgress, recordingStatus)
 
 fun offlinePresets(policy: OfflinePolicy, candidate: OfflineCandidate, qualified: Set<OfflinePreset>): List<OfflinePresetChoice> =
     OfflinePreset.entries.map { preset ->
@@ -55,6 +63,7 @@ fun offlinePresets(policy: OfflinePolicy, candidate: OfflineCandidate, qualified
         when {
             !policy.enableDownloads || !policy.enablePlayback || candidate.canDownload == false -> unavailable("denied")
             candidate.isLive() -> unavailable("live")
+            candidate.recordingIncomplete() -> unavailable("recording-incomplete")
             preset == OfflinePreset.original ->
                 OfflinePresetChoice(preset, true, estimateBytes = candidate.sizeBytes, exactSize = candidate.sizeBytes != null)
             preset.isVideo && candidate.type !in VIDEO_TYPES -> unavailable("wrong-media")
@@ -82,6 +91,7 @@ data class OfflineSelection(
 fun offlineSelect(items: List<OfflineCandidate>, preset: OfflinePreset): OfflineSelection {
     val (taken, skipped) = items.distinctBy { it.itemId }.partition { item ->
         !item.isLive() &&
+            !item.recordingIncomplete() &&
             item.canDownload != false &&
             when {
                 preset.isVideo -> item.type in VIDEO_TYPES

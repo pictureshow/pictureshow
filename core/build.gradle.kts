@@ -74,6 +74,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         "remote-reconnect.json",
         "remote-queue.json"
     )
+    val liveSuites = listOf("live-guide.json", "live-dvr.json", "live-source.json")
     val offlineSuites =
         listOf(
             "offline-job.json",
@@ -88,6 +89,9 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         )
     from(rootProject.file("spec/vectors")) {
         exclude("sync-*.json")
+        exclude(liveSuites)
+        // Native formatter/layout vectors run in the Android presentation suite.
+        exclude("live-presentation.json", "player-overlay-layout.json")
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)
@@ -97,6 +101,14 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
     from(rootProject.file("spec/vectors")) {
         include("sync-*.json")
         into("sync-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
+        include(liveSuites)
+        into("live-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
+        include("live-presentation.json", "player-overlay-layout.json")
+        into("android-native-vectors")
     }
     from(rootProject.file("spec/vectors")) {
         include(offlineSuites)

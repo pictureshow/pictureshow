@@ -4,20 +4,43 @@
 package app.pictureshow.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.*
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import app.pictureshow.core.*
+import app.pictureshow.core.Account
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.episodeLabel
+import app.pictureshow.core.imageUrl
+import app.pictureshow.core.isWatched
+import app.pictureshow.core.progress
 import coil3.compose.AsyncImage
 
 @Composable
@@ -30,7 +53,10 @@ fun CatalogCard(
     artHeight: Dp? = null,
     reserveLines: Boolean = true,
     announcement: String,
-    tag: String = "touch:card:${item.id}"
+    tag: String = "touch:card:${item.id}",
+    caption: (@Composable () -> Unit)? = null,
+    artworkProgress: Float? = null,
+    showProgress: Boolean = true
 ) {
     Card(
         onClick = onClick,
@@ -53,34 +79,46 @@ fun CatalogCard(
         )
         // Always 4 dp tall, so progress on one card doesn't step it out of its row.
         Box(Modifier.fillMaxWidth().height(4.dp)) {
-            if (progress(item) > 0 && !item.isWatched) {
-                LinearProgressIndicator(progress = { progress(item) }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
+            val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
+            if (showProgress && fraction > 0 && (artworkProgress != null || !item.isWatched)) {
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
             }
         }
-        val bodyHeight = with(LocalDensity.current) { MaterialTheme.typography.titleSmall.lineHeight.toDp() * 2 + MaterialTheme.typography.bodySmall.lineHeight.toDp() } + 4.dp
-        Column(Modifier.padding(12.dp).heightIn(min = if(reserveLines) bodyHeight else 0.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Reserve the whole body height, leaving spare space below metadata.
-            // A short title stays next to its subtitle while row heights match.
-            Text(
-                item.name,
-                style = MaterialTheme.typography.titleSmall,
-                minLines = 1,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val subtitle = if (item.type == "Episode") {
-                listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
-            } else {
-                listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
-            }
-            if (reserveLines || subtitle.isNotBlank()) {
+        if (caption != null) {
+            caption()
+        } else {
+            val bodyHeight =
+                with(LocalDensity.current) {
+                    MaterialTheme.typography.titleSmall.lineHeight.toDp() * 2 + MaterialTheme.typography.bodySmall.lineHeight.toDp()
+                } + 4.dp
+            Column(
+                Modifier.padding(12.dp).heightIn(min = if (reserveLines) bodyHeight else 0.dp).clearAndSetSemantics {
+                },
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Reserve the whole body height, leaving spare space below metadata.
+                // A short title stays next to its subtitle while row heights match.
                 Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    item.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    minLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val subtitle = if (item.type == "Episode") {
+                    listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
+                } else {
+                    listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
+                }
+                if (reserveLines || subtitle.isNotBlank()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -129,4 +167,3 @@ fun CatalogHeading(title: String, modifier: Modifier = Modifier, section: Boolea
         style = if (section) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium
     )
 }
-

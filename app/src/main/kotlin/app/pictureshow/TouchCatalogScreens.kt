@@ -118,6 +118,7 @@ internal fun TouchCatalogHome(
     onRetry: () -> Unit,
     onResume: () -> Unit = {},
     librariesOnly: Boolean = false,
+    onLiveTv: () -> Unit = {},
     onCustomize: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null
 ) {
@@ -125,7 +126,7 @@ internal fun TouchCatalogHome(
     val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     if (librariesOnly) {
-        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry)
+        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry, onLiveTv)
         return
     }
     LazyColumn(
@@ -188,7 +189,8 @@ private fun TouchLibrariesGrid(
     libraries: List<MediaItem>,
     account: Account,
     onOpen: (MediaItem) -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onLiveTv: () -> Unit
 ) {
     val shortWindow = isShortTouchWindow()
     LazyVerticalGrid(
@@ -210,7 +212,17 @@ private fun TouchLibrariesGrid(
                 }
             }
         }
-        items(libraries, key = MediaItem::id) { library ->
+        item(key = "destination:live-tv") {
+            TouchCatalogCard(
+                MediaItem("destination:live-tv", "Live TV", type = "CollectionFolder"),
+                account,
+                true,
+                onLiveTv,
+                Modifier.fillMaxWidth(),
+                reserveLines = false
+            )
+        }
+        items(liveOrdinaryLibraries(libraries), key = MediaItem::id) { library ->
             TouchCatalogCard(library, account, true, { onOpen(library) }, Modifier.fillMaxWidth(), reserveLines = false)
         }
     }
@@ -536,7 +548,7 @@ internal fun TouchCatalogDetail(
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
                                         // Under the grid, so it moves none of the actions the grid holds still.
-                                        if (onDownload != null) {
+                                        if (onDownload != null && offlineOffersDownload(item)) {
                                             OutlinedButton(
                                                 onClick = {
                                                     val season = if (item.type == "Season") {
@@ -1009,8 +1021,23 @@ internal fun TouchCatalogCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     artHeight: Dp? = null,
-    reserveLines: Boolean = true
-) = app.pictureshow.ui.CatalogCard(item, account, wide, onClick, modifier, artHeight, reserveLines, catalogAnnouncement(item))
+    reserveLines: Boolean = true,
+    caption: (@Composable () -> Unit)? = null,
+    artworkProgress: Float? = null,
+    showProgress: Boolean = true
+) = app.pictureshow.ui.CatalogCard(
+    item,
+    account,
+    wide,
+    onClick,
+    modifier,
+    artHeight,
+    reserveLines,
+    catalogAnnouncement(item),
+    caption = caption,
+    artworkProgress = artworkProgress,
+    showProgress = showProgress
+)
 
 @Composable
 internal fun TouchCatalogArtwork(

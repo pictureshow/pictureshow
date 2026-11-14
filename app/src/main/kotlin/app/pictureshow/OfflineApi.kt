@@ -80,6 +80,8 @@ internal data class OfflineApiItem(
     @SerialName("Name") val name: String = "",
     @SerialName("Type") val type: String = "",
     @SerialName("CanDownload") val canDownload: Boolean? = null,
+    @SerialName("IsInProgress") val isInProgress: Boolean = false,
+    @SerialName("Status") val recordingStatus: String? = null,
     @SerialName("SeriesName") val seriesName: String? = null,
     @SerialName("SeriesId") val seriesId: String? = null,
     @SerialName("SeasonId") val seasonId: String? = null,
@@ -99,7 +101,9 @@ internal data class OfflineApiItem(
             source?.size,
             source?.bitrate,
             runtimeTicks ?: source?.runtimeTicks,
-            canDownload
+            canDownload,
+            isInProgress,
+            recordingStatus
         )
     }
 }

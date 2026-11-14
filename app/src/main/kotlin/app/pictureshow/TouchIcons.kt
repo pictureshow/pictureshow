@@ -325,7 +325,7 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
                 lineTo(14f, 20f)
                 close()
             }
-            else -> {
+            "heart", "heart-outline" -> {
                 moveTo(12f, 21f)
                 curveTo(5f, 15.5f, 2f, 12f, 2f, 8f)
                 curveTo(2f, 5f, 4.5f, 3f, 7f, 3f)
@@ -345,6 +345,7 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
                     close()
                 }
             }
+            else -> Unit
         }
     }
 }.build()

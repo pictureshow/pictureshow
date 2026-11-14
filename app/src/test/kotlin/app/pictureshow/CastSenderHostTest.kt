@@ -168,6 +168,10 @@ private class FakeGateway(private val log: MutableList<String>) : CastMediaGatew
     val items = mutableListOf<String>()
     var issue: CastSessionIssue = CastSessionIssue.Issued(ACCOUNT.copy(accessToken = SESSION_TOKEN, deviceId = SESSION_DEVICE))
     var revokes = true
+    var restoredLiveSources: List<CastViewedItem> = emptyList()
+    override suspend fun restoreLiveSources(session: Account, items: List<CastViewedItem>) {
+        restoredLiveSources = items
+    }
 
     override suspend fun sessionDevice(account: Account, route: String) = SESSION_DEVICE
 
@@ -363,6 +367,50 @@ class CastSenderHostTest {
         handoff(host, paused = paused)
         link.sink!!.onStatus(status(if (paused) "paused" else "playing", generation = host.generation()))
         runCurrent()
+    }
+
+    private fun liveDecision(): PlayDecision {
+        val base = decision(ITEM)
+        return PlayDecision(
+            base.itemId,
+            base.mediaSource.copy(liveStreamId = "owned-live", isInfiniteStream = true),
+            base.method,
+            base.url,
+            base.headers,
+            base.playSessionId,
+            ownedLiveStreamId = "owned-live"
+        )
+    }
+
+    @Test fun authoritativeLiveSourceHasNoGuideDurationAndOwnershipStaysPrivate() = runTest {
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(liveDecision()))
+        val host = host()
+        handoff(host)
+        val item = link.request!!.items.single()
+        assertTrue(item.live)
+        assertNull(item.durationMs)
+        assertFalse(item.customData.values.any { it == "owned-live" })
+        assertEquals("owned-live", environment.viewing!!.items.single().ownedLiveStreamId)
+        assertEquals("owned-live", environment.sessions.liveSources.values.single().single().ownedLiveStreamId)
+    }
+
+    @Test fun pendingLiveOwnershipSurvivesRestartUntilRevocationSucceeds() = runTest {
+        gateway.outcome = ClientResult.Success(PlayOutcome.Play(liveDecision()))
+        val host = host()
+        casting(host)
+        gateway.revokes = false
+        host.stop()
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertEquals("pending-revoke", environment.sessions.state.records.single().phase)
+        assertEquals("owned-live", environment.sessions.liveSources.values.single().single().ownedLiveStreamId)
+        // A new host sees only private storage, and restores ownership before retrying the pending credential.
+        val restartedGateway = FakeGateway(log)
+        CastSenderHost(backgroundScope, environment, restartedGateway) { currentTime }.bind(ACCOUNT)
+        runCurrent()
+        assertEquals("owned-live", restartedGateway.restoredLiveSources.single().ownedLiveStreamId)
+        assertTrue(environment.sessions.liveSources.isEmpty())
+        assertTrue(environment.sessions.secrets.isEmpty())
     }
 
     @Test fun localPauseIsAcknowledgedBeforePrepareAndLoad() = runTest {

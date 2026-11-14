@@ -182,6 +182,7 @@ internal fun offlinePresetUnavailable(reason: String?): String = when (reason) {
     "no-conversion-right" -> "Your account isn't allowed to use conversion."
     "not-qualified" -> "Conversion hasn't passed its checks on this server version."
     "live" -> "Live streams have no end to download."
+    "recording-incomplete" -> "Only finished recordings can be downloaded."
     "wrong-media" -> "Not available for this kind of media."
     else -> "Not available."
 }
@@ -197,6 +198,7 @@ private fun failureText(reason: String?): String = when (reason) {
     "network" -> "The connection kept dropping."
     "internal" -> "Something went wrong with this download. Try again."
     "gone" -> "The server no longer has this file."
+    "recording-incomplete" -> "This recording is not finished. Download it after recording completes."
     "short" -> "The server's conversion ended early. Try again, or choose another quality."
     else -> "The download stopped."
 }

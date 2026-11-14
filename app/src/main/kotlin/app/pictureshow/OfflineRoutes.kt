@@ -36,7 +36,13 @@ private const val OFFLINE_STORAGE_ROUTE = "downloads-storage"
 internal fun offlinePlayerRoute(entry: OfflineEntry) = "offline-player?entry=${Uri.encode(entry.id)}"
 
 /** Movies and episodes download as themselves; a series offers the season on screen. */
+internal fun offlineOffersDownload(item: MediaItem): Boolean = item.type != "Recording" &&
+    // A container offers episodes; its own file-download flag says nothing about those children.
+    (item.type in listOf("Series", "Season") || item.canDownload != false) &&
+    !app.pictureshow.core.offline.offlineRecordingIncomplete(item.isInProgress, item.recordingStatus)
+
 internal fun offlineDownloadRoute(item: MediaItem, seasonId: String?, seasonName: String?): String? {
+    if (!offlineOffersDownload(item)) return null
     val series = if (item.type == "Series") item.id else item.seriesId
     return when {
         item.type in listOf("Movie", "Episode", "Video") -> offlineRoute(item.id, null, null, item.name)

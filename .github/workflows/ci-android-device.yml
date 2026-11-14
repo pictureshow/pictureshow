@@ -1,6 +1,7 @@
 name: Android device CI
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - app/**

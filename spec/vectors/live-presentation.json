@@ -1,0 +1,4878 @@
+{
+  "schemaVersion": 1,
+  "suite": "live-presentation",
+  "sources": [
+    "app/src/main/kotlin/app/pictureshow/LiveGuide.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveTime.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideCell.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingShelf.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveRecordingFocus.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideNavigation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveScheduleEditor.kt",
+    "app/src/main/kotlin/app/pictureshow/LivePlayerPresentation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveSchedulePresentation.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideFreshness.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideScroll.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideTextWindow.kt",
+    "app/src/main/kotlin/app/pictureshow/RecordingDetailActions.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveConfirmations.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveProgramDetail.kt",
+    "app/src/main/kotlin/app/pictureshow/PlayerControls.kt",
+    "app/src/main/kotlin/app/pictureshow/PlayerTimeline.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideViewport.kt",
+    "app/src/main/kotlin/app/pictureshow/MainActivity.kt"
+  ],
+  "cases": [
+    {
+      "id": "live-presentation.ruler-start",
+      "operation": "tick",
+      "input": {
+        "tick": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.ruler-half-hour",
+      "operation": "tick",
+      "input": {
+        "tick": 1
+      },
+      "expected": 180
+    },
+    {
+      "id": "live-presentation.ruler-hour",
+      "operation": "tick",
+      "input": {
+        "tick": 2
+      },
+      "expected": 360
+    },
+    {
+      "id": "live-presentation.ruler-end",
+      "operation": "tick",
+      "input": {
+        "tick": 6
+      },
+      "expected": 1080
+    },
+    {
+      "id": "live-presentation.sliver-no-glyphs",
+      "operation": "text",
+      "input": {
+        "width": 2
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.short-slot-no-glyphs",
+      "operation": "text",
+      "input": {
+        "width": 48
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.text-threshold",
+      "operation": "text",
+      "input": {
+        "width": 72
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.regular-slot-title",
+      "operation": "text",
+      "input": {
+        "width": 240
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.device-twelve-hour",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-10T20:14:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "3:14 PM"
+    },
+    {
+      "id": "live-presentation.device-twenty-four-hour",
+      "operation": "clock",
+      "input": {
+        "twentyFour": true,
+        "instant": "2026-11-10T20:14:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "15:14"
+    },
+    {
+      "id": "live-presentation.dst-first-fold",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-01T05:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "1:30 AM -04:00"
+    },
+    {
+      "id": "live-presentation.dst-second-fold",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-01T06:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "1:30 AM -05:00"
+    },
+    {
+      "id": "live-presentation.after-fold-no-offset",
+      "operation": "clock",
+      "input": {
+        "twentyFour": true,
+        "instant": "2026-11-01T07:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "02:30"
+    },
+    {
+      "id": "live-presentation.same-day-concise-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": false,
+        "start": "2026-11-10T20:14:00Z",
+        "end": "2026-11-10T20:42:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "3:14 – 3:42 PM"
+    },
+    {
+      "id": "live-presentation.period-crossing-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": false,
+        "start": "2026-11-10T16:55:00Z",
+        "end": "2026-11-10T17:10:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "11:55 AM – 12:10 PM"
+    },
+    {
+      "id": "live-presentation.tomorrow-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": true,
+        "start": "2026-11-11T20:00:00Z",
+        "end": "2026-11-11T21:00:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Tomorrow · 15:00 – 16:00"
+    },
+    {
+      "id": "live-presentation.no-timer-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": null,
+        "seriesTimerId": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.blank-timer-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": "",
+        "seriesTimerId": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.series-rule-is-not-an-occurrence",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": null,
+        "seriesTimerId": "series-rule"
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.scheduled-occurrence-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": "timer",
+        "seriesTimerId": "series-rule"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.tv-standard-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1
+      },
+      "expected": 56
+    },
+    {
+      "id": "live-presentation.tv-large-text-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1.3
+      },
+      "expected": 72.8
+    },
+    {
+      "id": "live-presentation.touch-standard-lane",
+      "operation": "lane-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1
+      },
+      "expected": 60
+    },
+    {
+      "id": "live-presentation.no-shrink-small-font",
+      "operation": "lane-height",
+      "input": {
+        "tv": true,
+        "fontScale": 0.85
+      },
+      "expected": 56
+    },
+    {
+      "id": "live-presentation.ordinary-half-hour",
+      "operation": "window-start",
+      "input": {
+        "now": "2026-11-10T22:41:17Z",
+        "zone": "America/New_York"
+      },
+      "expected": "2026-11-10T22:30:00Z"
+    },
+    {
+      "id": "live-presentation.boundary-unchanged",
+      "operation": "window-start",
+      "input": {
+        "now": "2026-11-10T23:00:00Z",
+        "zone": "America/New_York"
+      },
+      "expected": "2026-11-10T23:00:00Z"
+    },
+    {
+      "id": "live-presentation.fold-first-offset",
+      "operation": "window-start",
+      "input": {
+        "now": "2026-11-01T05:47:00Z",
+        "zone": "America/New_York"
+      },
+      "expected": "2026-11-01T05:30:00Z"
+    },
+    {
+      "id": "live-presentation.fold-second-offset",
+      "operation": "window-start",
+      "input": {
+        "now": "2026-11-01T06:47:00Z",
+        "zone": "America/New_York"
+      },
+      "expected": "2026-11-01T06:30:00Z"
+    },
+    {
+      "id": "live-presentation.quarter-hour-zone",
+      "operation": "window-start",
+      "input": {
+        "now": "2026-11-10T10:10:00Z",
+        "zone": "Asia/Kathmandu"
+      },
+      "expected": "2026-11-10T09:45:00Z"
+    },
+    {
+      "id": "live-presentation.negative-epoch",
+      "operation": "window-start",
+      "input": {
+        "now": "1969-12-31T23:59:59Z",
+        "zone": "UTC"
+      },
+      "expected": "1969-12-31T23:30:00Z"
+    },
+    {
+      "id": "live-presentation.initial-current-not-elapsed",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "elapsed",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "current",
+            "start": 600000,
+            "end": 1800000
+          },
+          {
+            "id": "future",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "current"
+    },
+    {
+      "id": "live-presentation.initial-gap-next",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "elapsed",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "future",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "future"
+    },
+    {
+      "id": "live-presentation.initial-past-nearest",
+      "operation": "initial-focus",
+      "input": {
+        "now": 4000000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "old",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "last",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "last"
+    },
+    {
+      "id": "live-presentation.initial-overlap-stable",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "earlier",
+            "start": 0,
+            "end": 1800000
+          },
+          {
+            "id": "later",
+            "start": 600000,
+            "end": 1200000
+          }
+        ]
+      },
+      "expected": "earlier"
+    },
+    {
+      "id": "live-presentation.initial-empty",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": []
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.series-no-occurrence-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {}
+      },
+      "expected": "Series rule"
+    },
+    {
+      "id": "live-presentation.occurrence-no-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": false,
+        "fields": {}
+      },
+      "expected": "Status unavailable"
+    },
+    {
+      "id": "live-presentation.explicit-progress-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {
+          "Status": "InProgress"
+        }
+      },
+      "expected": "Recording"
+    },
+    {
+      "id": "live-presentation.unknown-provided-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {
+          "Status": "ProviderFuture"
+        }
+      },
+      "expected": "Unknown status (ProviderFuture)"
+    },
+    {
+      "id": "focus-paint-left-edge",
+      "operation": "focus-shift",
+      "input": {
+        "x": 8,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 9
+    },
+    {
+      "id": "focus-paint-middle",
+      "operation": "focus-shift",
+      "input": {
+        "x": 250,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 0
+    },
+    {
+      "id": "focus-paint-right-edge",
+      "operation": "focus-shift",
+      "input": {
+        "x": 510,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": -11
+    },
+    {
+      "id": "focus-paint-scrolled-left",
+      "operation": "focus-shift",
+      "input": {
+        "x": 188,
+        "width": 180,
+        "viewportLeft": 180,
+        "viewportWidth": 696
+      },
+      "expected": 9
+    },
+    {
+      "id": "focus-paint-wider-than-viewport",
+      "operation": "focus-shift",
+      "input": {
+        "x": 8,
+        "width": 900,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 45
+    },
+    {
+      "id": "recording-real-fields-zero",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "EpisodeTitle": "Painted windows",
+          "IndexNumber": 7,
+          "ParentIndexNumber": 1,
+          "CompletionPercentage": 0,
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Painted windows",
+        "metadata": "S1:E7 · Ends 6:30 PM · 2m",
+        "progress": 0.0
+      }
+    },
+    {
+      "id": "recording-episode-fallback",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "IndexNumber": 5,
+          "ParentIndexNumber": 1,
+          "Status": "Completed",
+          "PremiereDate": "2026-11-10T23:00:00Z",
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "S1:E5",
+        "metadata": "2m",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-missing-percent",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-explicit-half",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 50
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": 0.5
+      }
+    },
+    {
+      "id": "recording-out-of-range",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 150
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Ends 6:30 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-completed-not-growing",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "Completed",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T23:30:00Z",
+          "CompletionPercentage": 50
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Today · 6:00 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-missing-fields",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-ordinary-episode-name",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Actual episode",
+          "SeriesName": "Series",
+          "RunTimeTicks": 599999999
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Actual episode",
+        "metadata": "1m",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-reversed-end",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "Status": "InProgress",
+          "StartDate": "2026-11-10T23:00:00Z",
+          "EndDate": "2026-11-10T22:30:00Z"
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Recording",
+        "metadata": "Today · 6:00 PM",
+        "progress": null
+      }
+    },
+    {
+      "id": "live-presentation.ruler-height-true-1",
+      "operation": "ruler-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1
+      },
+      "expected": 48
+    },
+    {
+      "id": "live-presentation.ruler-height-true-1.3",
+      "operation": "ruler-height",
+      "input": {
+        "tv": true,
+        "fontScale": 1.3
+      },
+      "expected": 62.4
+    },
+    {
+      "id": "live-presentation.ruler-height-false-1.3",
+      "operation": "ruler-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1.3
+      },
+      "expected": 36
+    },
+    {
+      "id": "live-presentation.recording-caption-height-1",
+      "operation": "recording-caption-height",
+      "input": {
+        "fontScale": 1,
+        "titleLineHeight": 20,
+        "metadataLineHeight": 16
+      },
+      "expected": 96
+    },
+    {
+      "id": "live-presentation.recording-caption-height-1.3",
+      "operation": "recording-caption-height",
+      "input": {
+        "fontScale": 1.3,
+        "titleLineHeight": 20,
+        "metadataLineHeight": 16
+      },
+      "expected": 117.6
+    },
+    {
+      "id": "recording-special-uses-catalog-format",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Series",
+          "SeriesName": "Series",
+          "IndexNumber": 3,
+          "ParentIndexNumber": 0,
+          "Status": "Completed",
+          "PremiereDate": "2026-11-10T23:00:00Z",
+          "RunTimeTicks": 1200000000
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Special E3",
+        "metadata": "2m",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-implausible-runtime-omitted",
+      "operation": "recording-metadata",
+      "input": {
+        "item": {
+          "Id": "r",
+          "Name": "Actual episode",
+          "SeriesName": "Series",
+          "RunTimeTicks": 864000000001
+        },
+        "twentyFour": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T23:10:00Z"
+      },
+      "expected": {
+        "title": "Actual episode",
+        "metadata": "",
+        "progress": null
+      }
+    },
+    {
+      "id": "recording-shelf-pivot-with-safe-edges",
+      "operation": "recording-shelf-pivot",
+      "input": {
+        "offset": 300,
+        "size": 231,
+        "containerSize": 394,
+        "margin": 8,
+        "above": 64,
+        "heading": 32,
+        "topInset": 12,
+        "bottomInset": 11
+      },
+      "expected": 224
+    },
+    {
+      "id": "recording-shelf-large-card-keeps-heading-whole",
+      "operation": "recording-shelf-pivot",
+      "input": {
+        "offset": 300,
+        "size": 280,
+        "containerSize": 394,
+        "margin": 8,
+        "above": 72,
+        "heading": 36,
+        "topInset": 12,
+        "bottomInset": 11
+      },
+      "expected": 252
+    },
+    {
+      "id": "last-recording-shelf-can-reach-pivot",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 315,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 67
+    },
+    {
+      "id": "last-recording-shelf-unknown-reserves-viewport",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 0,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 382
+    },
+    {
+      "id": "tall-recording-shelf-keeps-content-padding",
+      "operation": "recording-shelf-tail",
+      "input": {
+        "viewportHeight": 394,
+        "shelfHeight": 500,
+        "topInset": 12,
+        "contentPadding": 12
+      },
+      "expected": 12
+    },
+    {
+      "id": "channel-gap-has-future-guide",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": true
+      },
+      "expected": "Nothing on now"
+    },
+    {
+      "id": "channel-no-programmes-in-window",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": false
+      },
+      "expected": "No guide data"
+    },
+    {
+      "id": "scroll-owner-guide-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Guide",
+        "linear": false
+      },
+      "expected": "Guide:Grid"
+    },
+    {
+      "id": "scroll-owner-guide-true",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Guide",
+        "linear": true
+      },
+      "expected": "Guide:List"
+    },
+    {
+      "id": "scroll-owner-recordings-true",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Recordings",
+        "linear": true
+      },
+      "expected": "Recordings"
+    },
+    {
+      "id": "scroll-owner-schedules-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Schedules",
+        "linear": false
+      },
+      "expected": "Schedules"
+    },
+    {
+      "id": "scroll-owner-channels-false",
+      "operation": "scroll-owner",
+      "input": {
+        "tab": "Channels",
+        "linear": false
+      },
+      "expected": "Channels"
+    },
+    {
+      "id": "live-presentation.recording-priority--2",
+      "operation": "recording-priority",
+      "input": {
+        "value": "-2"
+      },
+      "expected": "Lowest"
+    },
+    {
+      "id": "live-presentation.recording-priority--1",
+      "operation": "recording-priority",
+      "input": {
+        "value": "-1"
+      },
+      "expected": "Low"
+    },
+    {
+      "id": "live-presentation.recording-priority-0",
+      "operation": "recording-priority",
+      "input": {
+        "value": "0"
+      },
+      "expected": "Normal"
+    },
+    {
+      "id": "live-presentation.recording-priority-1",
+      "operation": "recording-priority",
+      "input": {
+        "value": "1"
+      },
+      "expected": "High"
+    },
+    {
+      "id": "live-presentation.recording-priority-2",
+      "operation": "recording-priority",
+      "input": {
+        "value": "2"
+      },
+      "expected": "Highest"
+    },
+    {
+      "id": "live-presentation.recording-priority-7",
+      "operation": "recording-priority",
+      "input": {
+        "value": "7"
+      },
+      "expected": "Provider setting"
+    },
+    {
+      "id": "live-presentation.recording-priority-None",
+      "operation": "recording-priority",
+      "input": {
+        "value": null
+      },
+      "expected": "Provider setting"
+    },
+    {
+      "id": "live-presentation.recording-days-week-order",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Friday",
+          "Monday"
+        ]
+      },
+      "expected": "Monday, Friday"
+    },
+    {
+      "id": "live-presentation.recording-days-none",
+      "operation": "recording-days",
+      "input": {
+        "days": []
+      },
+      "expected": "No days selected"
+    },
+    {
+      "id": "live-presentation.playing-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.threshold-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.paused-edge",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "paused": true,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused · At live edge",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.playing-behind",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "",
+        "clock": "−0:03"
+      }
+    },
+    {
+      "id": "live-presentation.paused-behind",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "paused": true,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused",
+        "clock": "−0:03"
+      }
+    },
+    {
+      "id": "live-presentation.unavailable",
+      "operation": "live-readout",
+      "input": {
+        "window": null,
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": false
+      },
+      "expected": {
+        "status": "Time shift unavailable",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.unknown-position",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": false,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live position unavailable",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.expired",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "paused": false,
+        "expired": true,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Paused · Buffer expired",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.forward-edge",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 27000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-behind",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "expired": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.forward-expired",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 24000,
+        "expired": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-unknown",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": null,
+        "position": 24000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.forward-ordinary",
+      "operation": "live-forward",
+      "input": {
+        "live": false,
+        "window": null,
+        "position": 24000,
+        "expired": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.fresh-reader-query-growth",
+      "operation": "live-reader-sequence",
+      "input": {
+        "position": 10000,
+        "paused": true,
+        "steps": [
+          {
+            "duration": 30000,
+            "default": 27000,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
+            "default": 47000,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
+            "default": -1,
+            "seekable": true
+          },
+          {
+            "duration": 50000,
+            "default": 47000,
+            "seekable": false
+          }
+        ]
+      },
+      "expected": [
+        "Paused · 17 sec behind live",
+        "Paused · 37 sec behind live",
+        "Live position unavailable",
+        "Live · Time shift unavailable"
+      ]
+    },
+    {
+      "id": "live-presentation.schedule-past-cancelled",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T17:00:00Z",
+          "EndDate": "2026-11-10T18:00:00Z",
+          "Status": "Cancelled"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Past"
+    },
+    {
+      "id": "live-presentation.schedule-future",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T19:00:00Z",
+          "EndDate": "2026-11-10T20:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Upcoming"
+    },
+    {
+      "id": "live-presentation.schedule-active",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T17:00:00Z",
+          "EndDate": "2026-11-10T19:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "live-presentation.schedule-missing",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": null,
+          "EndDate": null,
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "live-presentation.schedule-invalid",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "bad",
+          "EndDate": "bad",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "live-presentation.schedule-invalid-future",
+      "operation": "schedule-group",
+      "input": {
+        "fields": {
+          "Id": "timer",
+          "StartDate": "2026-11-10T20:00:00Z",
+          "EndDate": "2026-11-10T19:00:00Z",
+          "Status": "New"
+        },
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "live-presentation.schedule-focus-False",
+      "operation": "schedule-focus",
+      "input": {
+        "fields": {
+          "Id": "same"
+        },
+        "series": false
+      },
+      "expected": "s:timer:same"
+    },
+    {
+      "id": "live-presentation.schedule-focus-True",
+      "operation": "schedule-focus",
+      "input": {
+        "fields": {
+          "Id": "same"
+        },
+        "series": true
+      },
+      "expected": "s:series:same"
+    },
+    {
+      "id": "live-presentation.refresh-idle",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": false,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.refresh-initial",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-gesture",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": false,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": true,
+        "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.refresh-tv",
+      "operation": "refresh",
+      "input": {
+        "loading": true,
+        "writing": false,
+        "tv": true,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-write",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": true,
+        "tv": false,
+        "pulled": false
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": true
+      }
+    },
+    {
+      "id": "live-presentation.refresh-ended",
+      "operation": "refresh",
+      "input": {
+        "loading": false,
+        "writing": false,
+        "tv": false,
+        "pulled": true
+      },
+      "expected": {
+        "pullRefreshing": false,
+        "headerLoading": false
+      }
+    },
+    {
+      "id": "live-presentation.forward-outside-window",
+      "operation": "live-forward",
+      "input": {
+        "live": true,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.readout-outside-window",
+      "operation": "live-readout",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false,
+        "paused": true,
+        "canTimeShift": true
+      },
+      "expected": {
+        "status": "Live position unavailable",
+        "clock": ""
+      }
+    },
+    {
+      "id": "live-presentation.channel-failed-guide",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": false,
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.channel-cached-gap-failed-refresh",
+      "operation": "channel-idle-label",
+      "input": {
+        "hasPrograms": true,
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.failed-guide-message",
+      "operation": "guide-empty-message",
+      "input": {
+        "unavailable": true
+      },
+      "expected": "Guide unavailable"
+    },
+    {
+      "id": "live-presentation.successful-empty-guide-message",
+      "operation": "guide-empty-message",
+      "input": {
+        "unavailable": false
+      },
+      "expected": "No guide data"
+    },
+    {
+      "id": "live-presentation.guide-successful-empty",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": false,
+        "error": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.guide-write-error",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": false,
+        "error": "Favorites are disabled for this viewer."
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.guide-failed-read",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": true,
+        "error": "Server unavailable"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.guide-failed-read-error-cleared",
+      "operation": "guide-read-status",
+      "input": {
+        "readFailed": true,
+        "error": null
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.guide-notice-fresh",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 1001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-boundary",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301000
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-expired",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301001
+      },
+      "expected": "Guide is out of date. Refresh before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-clock-before-fetch",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": 1001,
+        "now": 1000
+      },
+      "expected": "Guide freshness is unavailable. Refresh before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-offline-cached",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": true,
+        "fetchedAt": 1000,
+        "now": 1001
+      },
+      "expected": "Saved guide is for reference. Reconnect before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-offline-cold",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": true,
+        "fetchedAt": null,
+        "now": 1001
+      },
+      "expected": "Saved guide is for reference. Reconnect before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-refreshing",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": true,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 301001
+      },
+      "expected": "Guide is out of date. Refresh before scheduling or tuning."
+    },
+    {
+      "id": "live-presentation.guide-notice-missing",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": false,
+        "offline": false,
+        "fetchedAt": null,
+        "now": 1001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-notice-refreshing-fresh",
+      "operation": "guide-reference-notice",
+      "input": {
+        "loading": true,
+        "offline": false,
+        "fetchedAt": 1000,
+        "now": 1001
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-freshness-missing",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": null,
+        "twentyFour": false,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.guide-freshness-twelve-hour",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": false,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Updated 3:14 PM"
+    },
+    {
+      "id": "live-presentation.guide-freshness-twenty-four-hour",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": true,
+        "offline": false,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Updated 15:14"
+    },
+    {
+      "id": "live-presentation.guide-freshness-offline",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-10T20:14:00Z",
+        "twentyFour": false,
+        "offline": true,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Offline · last loaded 3:14 PM"
+    },
+    {
+      "id": "live-presentation.guide-freshness-offline-fold",
+      "operation": "guide-freshness-label",
+      "input": {
+        "fetchedAt": "2026-11-01T06:30:00Z",
+        "twentyFour": false,
+        "offline": true,
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Offline · last loaded 1:30 AM -05:00"
+    },
+    {
+      "id": "live-presentation.device-japanese-twelve-hour",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-10T20:14:00Z",
+        "locale": "ja-JP",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "午後3:14"
+    },
+    {
+      "id": "live-presentation.guide-scroll-visible",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 100,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-leading",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -15,
+        "size": 40,
+        "container": 500
+      },
+      "expected": -15
+    },
+    {
+      "id": "live-presentation.guide-scroll-trailing",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 480,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 20
+    },
+    {
+      "id": "live-presentation.guide-scroll-covers",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -100,
+        "size": 800,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-oversized-leading",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 40,
+        "size": 800,
+        "container": 500
+      },
+      "expected": 40
+    },
+    {
+      "id": "live-presentation.guide-scroll-oversized-trailing",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": -400,
+        "size": 800,
+        "container": 500
+      },
+      "expected": -100
+    },
+    {
+      "id": "live-presentation.guide-scroll-leading-boundary",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 0,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.guide-scroll-trailing-boundary",
+      "operation": "guide-scroll",
+      "input": {
+        "offset": 460,
+        "size": 40,
+        "container": 500
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.visible-title-visible",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 0,
+        "viewportWidth": 500
+      },
+      "expected": {
+        "inset": 0,
+        "width": 200
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-left",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 80,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 70,
+        "width": 100
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-right",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 90
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-sliver",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 180,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 170,
+        "width": 30
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-before",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 200,
+        "viewportStart": 210,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 200,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-after",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 200,
+        "cellWidth": 100,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-zero",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": 0,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.visible-title-negative-width",
+      "operation": "guide-text-window",
+      "input": {
+        "cellX": 10,
+        "cellWidth": -20,
+        "viewportStart": 0,
+        "viewportWidth": 100
+      },
+      "expected": {
+        "inset": 0,
+        "width": 0
+      }
+    },
+    {
+      "id": "live-presentation.recording-action-order-0",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": false,
+        "hasDownload": false
+      },
+      "expected": [
+        "primary",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-1",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": true,
+        "hasDownload": false
+      },
+      "expected": [
+        "primary",
+        "from-start",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-2",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": false,
+        "hasDownload": true
+      },
+      "expected": [
+        "primary",
+        "download",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.recording-action-order-3",
+      "operation": "recording-action-order",
+      "input": {
+        "hasFromStart": true,
+        "hasDownload": true
+      },
+      "expected": [
+        "primary",
+        "from-start",
+        "download",
+        "played",
+        "favorite"
+      ]
+    },
+    {
+      "id": "live-presentation.compact-height-479-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 479,
+        "tv": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.compact-height-480-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 480,
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.compact-height-360-true",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 360,
+        "tv": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.compact-height-800-false",
+      "operation": "compact-height",
+      "input": {
+        "heightDp": 800,
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.disclosure-false",
+      "operation": "disclosure-rotation",
+      "input": {
+        "expanded": false
+      },
+      "expected": 90
+    },
+    {
+      "id": "live-presentation.disclosure-true",
+      "operation": "disclosure-rotation",
+      "input": {
+        "expanded": true
+      },
+      "expected": -90
+    },
+    {
+      "id": "program-entry-true-true",
+      "input": {
+        "tv": true,
+        "primary": true
+      },
+      "expected": true,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-true-false",
+      "input": {
+        "tv": true,
+        "primary": false
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-false-true",
+      "input": {
+        "tv": false,
+        "primary": true
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-entry-false-false",
+      "input": {
+        "tv": false,
+        "primary": false
+      },
+      "expected": false,
+      "operation": "program-record-entry-focus"
+    },
+    {
+      "id": "program-content-inset-true",
+      "input": {
+        "tv": true
+      },
+      "expected": 16,
+      "operation": "program-content-inset"
+    },
+    {
+      "id": "program-content-inset-false",
+      "input": {
+        "tv": false
+      },
+      "expected": 0,
+      "operation": "program-content-inset"
+    },
+    {
+      "id": "programme-recording-status-New",
+      "input": {
+        "status": "New"
+      },
+      "expected": "Recording scheduled",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-InProgress",
+      "input": {
+        "status": "InProgress"
+      },
+      "expected": "Recording",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-Error",
+      "input": {
+        "status": "Error"
+      },
+      "expected": "Failed",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-Cancelled",
+      "input": {
+        "status": "Cancelled"
+      },
+      "expected": "Cancelled",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "programme-recording-status-ProviderX",
+      "input": {
+        "status": "ProviderX"
+      },
+      "expected": "Unknown status (ProviderX)",
+      "operation": "program-recording-label"
+    },
+    {
+      "id": "live-media-pause-focus-True-True",
+      "operation": "live-pause-focus",
+      "input": {
+        "live": true,
+        "surfaceFocused": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-media-pause-focus-True-False",
+      "operation": "live-pause-focus",
+      "input": {
+        "live": true,
+        "surfaceFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-media-pause-focus-False-True",
+      "operation": "live-pause-focus",
+      "input": {
+        "live": false,
+        "surfaceFocused": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-media-pause-focus-False-False",
+      "operation": "live-pause-focus",
+      "input": {
+        "live": false,
+        "surfaceFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-buffer-fill-normal",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 0.37037037037037035
+    },
+    {
+      "id": "live-buffer-fill-threshold",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 25000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-near-edge",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-ahead",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 28000,
+        "expired": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "live-buffer-fill-missing",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": null,
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-no-default",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-no-seek",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-expired",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-outside",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-negative",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": -1,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-zero-edge",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        },
+        "position": 0,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-fill-invalid-default",
+      "operation": "live-buffer-fill",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 31000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": null
+    },
+    {
+      "id": "live-buffer-scrub-end-measured",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-scrub-end-no-default",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-zero",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-no-seek",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        }
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-scrub-end-invalid",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 31000,
+          "seekable": true
+        }
+      },
+      "expected": 30000
+    },
+    {
+      "id": "live-buffer-scrub-end-empty",
+      "operation": "live-buffer-scrub-end",
+      "input": {
+        "window": {
+          "duration": 0,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-buffer-status-paused",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Paused",
+        "clock": "−0:12",
+        "behind": 12000
+      },
+      "expected": "Paused · 12 sec behind live"
+    },
+    {
+      "id": "live-buffer-status-playing",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "",
+        "clock": "−2:13",
+        "behind": 133000
+      },
+      "expected": "2 min 13 sec behind live"
+    },
+    {
+      "id": "live-buffer-status-edge",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Live",
+        "clock": "",
+        "behind": 0
+      },
+      "expected": "Live"
+    },
+    {
+      "id": "live-buffer-status-unknown",
+      "operation": "live-buffer-status",
+      "input": {
+        "status": "Live position unavailable",
+        "clock": "",
+        "behind": null
+      },
+      "expected": "Live position unavailable"
+    },
+    {
+      "id": "guide-ruler-fit-left-clipped",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 180,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-ruler-fit-left-gutter",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 208,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-ruler-fit-right-clipped",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 560,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-ruler-fit-right-gutter",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 532,
+        "width": 60,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-ruler-fit-empty",
+      "operation": "guide-ruler-label-fit",
+      "input": {
+        "x": 208,
+        "width": 0,
+        "viewportStart": 200,
+        "viewportWidth": 400
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-viewport-focus-keep",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 0,
+        "viewportWidth": 400
+      },
+      "expected": "a"
+    },
+    {
+      "id": "guide-viewport-focus-left",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 300,
+        "viewportWidth": 400
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-right",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "c",
+        "viewportStart": 0,
+        "viewportWidth": 300
+      },
+      "expected": "a"
+    },
+    {
+      "id": "guide-viewport-focus-boundary",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 180,
+        "viewportWidth": 300
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-no-current",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": null,
+        "viewportStart": 300,
+        "viewportWidth": 400
+      },
+      "expected": "b"
+    },
+    {
+      "id": "guide-viewport-focus-no-visible",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 700,
+        "viewportWidth": 100
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-viewport-focus-no-viewport",
+      "operation": "guide-viewport-focus",
+      "input": {
+        "cells": [
+          {
+            "id": "a",
+            "x": 0,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "b",
+            "x": 180,
+            "width": 180,
+            "lane": 0
+          },
+          {
+            "id": "c",
+            "x": 360,
+            "width": 180,
+            "lane": 0
+          }
+        ],
+        "current": "a",
+        "viewportStart": 0,
+        "viewportWidth": 0
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-focus-cap-far-left",
+      "operation": "focus-shift",
+      "input": {
+        "x": 0,
+        "width": 98,
+        "viewportLeft": 500,
+        "viewportWidth": 500
+      },
+      "expected": 12.9
+    },
+    {
+      "id": "guide-focus-cap-far-right",
+      "operation": "focus-shift",
+      "input": {
+        "x": 900,
+        "width": 98,
+        "viewportLeft": 0,
+        "viewportWidth": 500
+      },
+      "expected": -12.9
+    },
+    {
+      "id": "live-buffer-thumb-normal",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-threshold",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 26000,
+        "expired": false
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-thumb-ahead",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 28000,
+        "expired": false
+      },
+      "expected": 27000
+    },
+    {
+      "id": "live-buffer-thumb-unknown",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-expired",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": 10000
+    },
+    {
+      "id": "live-buffer-thumb-nonseekable",
+      "operation": "live-buffer-thumb",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": 10000
+    },
+    {
+      "id": "buffer-endpoint-known",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Available buffer · start",
+        "Live edge"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-missing",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": null,
+        "position": 0,
+        "expired": false
+      },
+      "expected": [
+        "Time shift unavailable",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-nonseekable",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Time shift unavailable",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-unknown-edge",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": -1,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-outside",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 31000,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
+    },
+    {
+      "id": "buffer-endpoint-expired",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "position": 10000,
+        "expired": true
+      },
+      "expected": [
+        "Buffer expired",
+        ""
+      ]
+    },
+    {
+      "id": "buffer-endpoint-zero-edge",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 0,
+          "seekable": true
+        },
+        "position": 0,
+        "expired": false
+      },
+      "expected": [
+        "Measured buffer",
+        "Live edge unavailable"
+      ]
+    },
+    {
+      "id": "schedule-effective-changes-empty",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {}
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-effective-changes-same",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {
+          "PrePaddingSeconds": 60
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-effective-changes-different",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60
+        },
+        "edits": {
+          "PrePaddingSeconds": 300
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-effective-changes-mixed",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "PrePaddingSeconds": 60,
+          "Priority": 0
+        },
+        "edits": {
+          "PrePaddingSeconds": 60,
+          "Priority": 1
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-review-label-false-false",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": false,
+        "changed": false
+      },
+      "expected": "Review recording"
+    },
+    {
+      "id": "schedule-confirm-guard-false-false-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-false-false-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-false-true",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": false,
+        "changed": true
+      },
+      "expected": "Review recording"
+    },
+    {
+      "id": "schedule-confirm-guard-false-true-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": true,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-false-true-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": true,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-true-false",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": true,
+        "changed": false
+      },
+      "expected": "Review schedule"
+    },
+    {
+      "id": "schedule-confirm-guard-true-false-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": false,
+        "busy": false
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-confirm-guard-true-false-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": false,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-review-label-true-true",
+      "operation": "schedule-review-label",
+      "input": {
+        "existing": true,
+        "changed": true
+      },
+      "expected": "Review changes"
+    },
+    {
+      "id": "schedule-confirm-guard-true-true-false",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": false
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-confirm-guard-true-true-true",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": true
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-days-membership-reordered",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Friday",
+            "Monday"
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "schedule-days-membership-member-removed",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Friday"
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-days-membership-member-added",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "id": "schedule-days-membership-same-members-duplicate",
+      "operation": "schedule-effective-changes",
+      "input": {
+        "fields": {
+          "Days": [
+            "Monday",
+            "Friday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Monday",
+            "Friday",
+            "Monday"
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-now-focus-selected-future",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:c2-future",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-selected-past",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:c2-past",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-selected-channel",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-missing-key",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "p:removed",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c1-current"
+    },
+    {
+      "id": "guide-now-focus-empty-selected-channel",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c1-current"
+    },
+    {
+      "id": "guide-now-focus-first-row-empty",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-current"
+    },
+    {
+      "id": "guide-now-focus-future-fallback",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-future"
+    },
+    {
+      "id": "guide-now-focus-past-fallback",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          }
+        ],
+        "selectedKey": "c:c2",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:c2-past"
+    },
+    {
+      "id": "guide-now-focus-no-visible-channels",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [],
+        "programs": [
+          {
+            "id": "c1-past",
+            "channel": "c1",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c1-current",
+            "channel": "c1",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c1-future",
+            "channel": "c1",
+            "start": 200,
+            "end": 400
+          },
+          {
+            "id": "c2-past",
+            "channel": "c2",
+            "start": 0,
+            "end": 100
+          },
+          {
+            "id": "c2-current",
+            "channel": "c2",
+            "start": 100,
+            "end": 200
+          },
+          {
+            "id": "c2-future",
+            "channel": "c2",
+            "start": 200,
+            "end": 400
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-now-focus-invalid-range",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1",
+          "c2"
+        ],
+        "programs": [
+          {
+            "id": "bad",
+            "channel": "c1",
+            "start": 200,
+            "end": 100
+          }
+        ],
+        "selectedKey": null,
+        "start": 0,
+        "now": 150
+      },
+      "expected": null
+    },
+    {
+      "id": "guide-now-focus-end-is-exclusive",
+      "operation": "guide-now-focus",
+      "input": {
+        "channels": [
+          "c1"
+        ],
+        "programs": [
+          {
+            "id": "ended",
+            "channel": "c1",
+            "start": 0,
+            "end": 150
+          },
+          {
+            "id": "on-air",
+            "channel": "c1",
+            "start": 150,
+            "end": 300
+          }
+        ],
+        "selectedKey": "c:c1",
+        "start": 0,
+        "now": 150
+      },
+      "expected": "p:on-air"
+    },
+    {
+      "id": "guide-now-action-tv-current",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": true,
+        "atNow": true
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-tv-away",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": true,
+        "atNow": false
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-touch-current",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": true,
+        "atNow": true
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-now-action-touch-away",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": true,
+        "atNow": false
+      },
+      "expected": true
+    },
+    {
+      "id": "guide-now-action-tv-disabled",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": true,
+        "enabled": false,
+        "atNow": false
+      },
+      "expected": false
+    },
+    {
+      "id": "guide-now-action-touch-disabled",
+      "operation": "guide-now-enabled",
+      "input": {
+        "tv": false,
+        "enabled": false,
+        "atNow": false
+      },
+      "expected": false
+    },
+    {
+      "id": "recording-mutation-caption-does-not-set-width",
+      "operation": "recording-mutation-slot",
+      "input": {},
+      "expected": 48
+    },
+    {
+      "id": "live-presentation.recording-days-every-day",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      "expected": "Every day"
+    },
+    {
+      "id": "live-presentation.recording-days-weekdays",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday"
+        ]
+      },
+      "expected": "Weekdays"
+    },
+    {
+      "id": "live-presentation.recording-days-weekends",
+      "operation": "recording-days",
+      "input": {
+        "days": [
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      "expected": "Weekends"
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-0",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 0,
+        "remainingDp": 100
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-1",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 1,
+        "remainingDp": 100
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-2",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 8,
+        "remainingDp": 8
+      },
+      "expected": [
+        false,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-3",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 9,
+        "remainingDp": 100
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-4",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 4
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.quality-edge-threshold-5",
+      "operation": "quality-scroll-cues",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 0
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "live-presentation.program-metadata-touch",
+      "operation": "program-metadata-lines",
+      "input": {
+        "channel": "Ch 4 Open Sky",
+        "range": "4:19 – 4:46 AM",
+        "episode": "S1 E15",
+        "title": "Generated episode 15",
+        "tv": false
+      },
+      "expected": [
+        "Ch 4 Open Sky · 4:19 – 4:46 AM",
+        "S1 E15 · Generated episode 15"
+      ]
+    },
+    {
+      "id": "live-presentation.program-metadata-tv",
+      "operation": "program-metadata-lines",
+      "input": {
+        "channel": "Ch 4 Open Sky",
+        "range": "4:19 – 4:46 AM",
+        "episode": "S1 E15",
+        "title": "Generated episode 15",
+        "tv": true
+      },
+      "expected": [
+        "Ch 4 Open Sky · 4:19 – 4:46 AM · S1 E15 · Generated episode 15"
+      ]
+    },
+    {
+      "id": "live-presentation.touch-live-slider-0",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.touch-live-slider-1",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": false
+        },
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.touch-live-slider-2",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.touch-live-slider-3",
+      "operation": "touch-live-slider",
+      "input": {
+        "window": {
+          "duration": 0,
+          "default": 27000,
+          "seekable": true
+        },
+        "expired": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.live-seek-discernible-on-video",
+      "operation": "live-seek-presentation",
+      "input": {},
+      "expected": {
+        "glyphDp": 32,
+        "disabledAlpha": 0.38,
+        "scrimAlpha": 0.4
+      }
+    },
+    {
+      "id": "live-presentation.compact-label-inner-body",
+      "operation": "recording-label-body",
+      "input": {},
+      "expected": 28
+    },
+    {
+      "id": "live-presentation.tv-readonly-review-focus",
+      "operation": "review-summary-focus",
+      "input": {
+        "tv": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.touch-readonly-review-no-keyboard-stops",
+      "operation": "review-summary-focus",
+      "input": {
+        "tv": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.stale-new-confirm-disabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false,
+        "canSubmit": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.stale-edited-confirm-disabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": true,
+        "changed": true,
+        "busy": false,
+        "canSubmit": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.fresh-new-confirm-enabled",
+      "operation": "schedule-confirm-guard",
+      "input": {
+        "existing": false,
+        "changed": false,
+        "busy": false,
+        "canSubmit": true
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.program-time-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:00.999Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-exact-end",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:01Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-not-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T00:00:01.001Z",
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": true
+      }
+    },
+    {
+      "id": "live-presentation.program-time-missing",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": null,
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-malformed",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "unavailable",
+        "now": 1000
+      },
+      "expected": {
+        "ended": false,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.program-time-offset-ended",
+      "operation": "program-recording-time-state",
+      "input": {
+        "endDate": "1970-01-01T01:00:01+01:00",
+        "now": 1000
+      },
+      "expected": {
+        "ended": true,
+        "creationAvailable": false
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-top",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 0,
+        "remainingDp": 100
+      },
+      "expected": {
+        "above": false,
+        "below": true,
+        "dividerDp": 1
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-middle",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 9,
+        "remainingDp": 9
+      },
+      "expected": {
+        "above": true,
+        "below": true,
+        "dividerDp": 1
+      }
+    },
+    {
+      "id": "live-presentation.quality-visible-divider-bottom",
+      "operation": "quality-overflow-affordance",
+      "input": {
+        "offsetDp": 100,
+        "remainingDp": 0
+      },
+      "expected": {
+        "above": true,
+        "below": false,
+        "dividerDp": 1
+      }
+    },
+    {
+      "id": "live-presentation.review-surface-normal",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1,
+        "wrappedValue": false
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.review-surface-large",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1.3,
+        "wrappedValue": false
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.review-surface-wrapped",
+      "operation": "tv-review-surface",
+      "input": {
+        "fontScale": 1.3,
+        "wrappedValue": true
+      },
+      "expected": {
+        "minimumRowHeightDp": 48,
+        "disabledFocusBorderDp": 2,
+        "maximumCenterOffsetDp": 0.5,
+        "firstLineTopToleranceDp": 0.5,
+        "minimumFocusContrast": 3
+      }
+    },
+    {
+      "id": "live-presentation.header-reveal-false-false",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": false,
+        "firstActionRowFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-false-true",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": false,
+        "firstActionRowFocused": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-true-false",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": true,
+        "firstActionRowFocused": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.header-reveal-true-true",
+      "operation": "review-header-reveal",
+      "input": {
+        "tv": true,
+        "firstActionRowFocused": true
+      },
+      "expected": true
+    },
+    {
+      "id": "review-header-switch-edit-to-confirm",
+      "operation": "review-header-navigation",
+      "input": {
+        "tv": true,
+        "from": "edit",
+        "to": "confirm",
+        "direction": "left"
+      },
+      "expected": {
+        "focusedAction": "confirm",
+        "fullHeadingVisible": true,
+        "writes": 0
+      }
+    },
+    {
+      "id": "review-header-switch-confirm-to-edit",
+      "operation": "review-header-navigation",
+      "input": {
+        "tv": true,
+        "from": "confirm",
+        "to": "edit",
+        "direction": "right"
+      },
+      "expected": {
+        "focusedAction": "edit",
+        "fullHeadingVisible": true,
+        "writes": 0
+      }
+    },
+    {
+      "id": "round3-recording-now-start",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "recording-now-start",
+          "Status": "New",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "round3-recording-in-progress",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "recording-in-progress",
+          "Status": "InProgress",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "round3-failed-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "failed-current",
+          "Status": "Error",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-cancelled-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "cancelled-current",
+          "Status": "Cancelled",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-unknown-current",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "unknown-current",
+          "Status": "UnknownStatus",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:01:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-ended-error",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "ended-error",
+          "Status": "Error",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T12:00:00Z"
+        }
+      },
+      "expected": "Past"
+    },
+    {
+      "id": "round3-schedule-section-order",
+      "operation": "schedule-order",
+      "input": {},
+      "expected": [
+        "Recording now",
+        "Upcoming",
+        "Series rules",
+        "Other schedules",
+        "Past"
+      ]
+    },
+    {
+      "id": "round3-denied",
+      "operation": "empty-state",
+      "input": {
+        "access": false,
+        "offline": true,
+        "loading": true,
+        "tab": "Guide",
+        "favorites": true
+      },
+      "expected": [
+        "Live TV isn't available on this account",
+        "Back"
+      ]
+    },
+    {
+      "id": "round3-initial-loading",
+      "operation": "empty-state",
+      "input": {
+        "loading": true
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-no-tuner",
+      "operation": "empty-state",
+      "input": {
+        "tuner": false
+      },
+      "expected": [
+        "No tuner configured",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-no-channels",
+      "operation": "empty-state",
+      "input": {},
+      "expected": [
+        "No channels available",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-no-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "tab": "Guide"
+      },
+      "expected": [
+        "No guide data",
+        "Go to channels"
+      ]
+    },
+    {
+      "id": "round3-tune-without-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-empty-favorites",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true
+      },
+      "expected": [
+        "No favorite channels yet",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-search-and-favorites",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true,
+        "search": "missing"
+      },
+      "expected": [
+        "No matching channels",
+        "Clear filters"
+      ]
+    },
+    {
+      "id": "round3-guide-favorites-before-empty-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "filtered": 0,
+        "favorites": true,
+        "tab": "Guide"
+      },
+      "expected": [
+        "No favorite channels yet",
+        "Show all channels"
+      ]
+    },
+    {
+      "id": "round3-cold-read-error",
+      "operation": "empty-state",
+      "input": {
+        "offline": true
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-guide-read-error-without-programs",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "offline": true,
+        "tab": "Guide"
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-cached-channels",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "offline": true
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-cached-guide",
+      "operation": "empty-state",
+      "input": {
+        "channels": 1,
+        "programs": 1,
+        "offline": true,
+        "tab": "Guide"
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-empty-recordings",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Recordings"
+      },
+      "expected": [
+        "No recordings yet",
+        "Browse guide"
+      ]
+    },
+    {
+      "id": "round3-empty-schedules",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules"
+      },
+      "expected": [
+        "No scheduled recordings",
+        "Browse guide"
+      ]
+    },
+    {
+      "id": "round3-schedule-permission",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Go to channels"
+      ]
+    },
+    {
+      "id": "round3-episode-1-14",
+      "operation": "program-episode",
+      "input": {
+        "season": 1,
+        "episode": 14
+      },
+      "expected": "S1:E14"
+    },
+    {
+      "id": "round3-episode-0-2",
+      "operation": "program-episode",
+      "input": {
+        "season": 0,
+        "episode": 2
+      },
+      "expected": "Special E2"
+    },
+    {
+      "id": "round3-episode-0-None",
+      "operation": "program-episode",
+      "input": {
+        "season": 0,
+        "episode": null
+      },
+      "expected": "Special"
+    },
+    {
+      "id": "round3-episode-3-None",
+      "operation": "program-episode",
+      "input": {
+        "season": 3,
+        "episode": null
+      },
+      "expected": "S3"
+    },
+    {
+      "id": "round3-episode-None-4",
+      "operation": "program-episode",
+      "input": {
+        "season": null,
+        "episode": 4
+      },
+      "expected": "E4"
+    },
+    {
+      "id": "round3-episode-None-None",
+      "operation": "program-episode",
+      "input": {
+        "season": null,
+        "episode": null
+      },
+      "expected": null
+    },
+    {
+      "id": "round3-time-ended",
+      "operation": "program-relative-time",
+      "input": {
+        "start": null,
+        "end": "2026-11-13T12:00:00Z",
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 – 8:07 AM"
+      },
+      "expected": "Ended · 7:39 – 8:07 AM"
+    },
+    {
+      "id": "round3-time-starts",
+      "operation": "program-relative-time",
+      "input": {
+        "start": "2026-11-13T12:12:00Z",
+        "end": null,
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 – 8:07 AM"
+      },
+      "expected": "Starts in 12 min · 7:39 – 8:07 AM"
+    },
+    {
+      "id": "round3-time-unknown",
+      "operation": "program-relative-time",
+      "input": {
+        "start": null,
+        "end": null,
+        "now": "2026-11-13T12:00:00Z",
+        "range": "7:39 – 8:07 AM"
+      },
+      "expected": "7:39 – 8:07 AM"
+    },
+    {
+      "id": "round3-touch-live-parent",
+      "operation": "touch-parent",
+      "input": {
+        "route": "live-tv"
+      },
+      "expected": "libraries"
+    },
+    {
+      "id": "round3-transport-code-hidden",
+      "operation": "visible-error",
+      "input": {
+        "message": "Request failed (503)."
+      },
+      "expected": "Couldn't complete this change. Check your connection and try again."
+    },
+    {
+      "id": "round3-validation-retained",
+      "operation": "visible-error",
+      "input": {
+        "message": "Favorites are disabled for this viewer."
+      },
+      "expected": "Favorites are disabled for this viewer."
+    },
+    {
+      "id": "round3-review-once",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "Name": "Blue Hour",
+          "ChannelName": "Aurora Sessions",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:30:00Z"
+        },
+        "series": false,
+        "existing": false
+      },
+      "expected": "Records Blue Hour on Aurora Sessions, 12:00 – 12:30."
+    },
+    {
+      "id": "round3-review-new-channel",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records new episodes on this channel. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-all-any",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": false,
+          "RecordAnyChannel": true
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records all episodes on any channel. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-omitted-defaults",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {},
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records episodes using the options below. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-unknown-defaults",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "RecordNewOnly": {},
+          "RecordAnyChannel": []
+        },
+        "series": true,
+        "existing": false
+      },
+      "expected": "Records episodes using the options below. Recordings you already have stay if you cancel."
+    },
+    {
+      "id": "round3-review-existing",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {},
+        "series": false,
+        "existing": true
+      },
+      "expected": "Applies these options to this recording schedule."
+    },
+    {
+      "id": "round3-schedule-permission-before-read-failure",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false,
+        "offline": true
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Go to channels"
+      ]
+    },
+    {
+      "id": "round3-schedule-policy-unknown-after-read-failure",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "policyKnown": false,
+        "offline": true
+      },
+      "expected": [
+        "Couldn't load Live TV",
+        "Retry"
+      ]
+    },
+    {
+      "id": "round3-reversed-ended-interval",
+      "operation": "schedule-group",
+      "input": {
+        "now": "2026-11-13T12:00:00Z",
+        "fields": {
+          "Id": "bad",
+          "Status": "Cancelled",
+          "StartDate": "2026-11-13T11:59:00Z",
+          "EndDate": "2026-11-13T11:58:00Z"
+        }
+      },
+      "expected": "Other schedules"
+    },
+    {
+      "id": "round3-channel-column-phone",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 839,
+        "fontScale": 1.0
+      },
+      "expected": 80
+    },
+    {
+      "id": "round3-channel-column-tablet-boundary",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 840,
+        "fontScale": 1.0
+      },
+      "expected": 200
+    },
+    {
+      "id": "round3-channel-column-tablet-font",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": false,
+        "windowDp": 1280,
+        "fontScale": 1.3
+      },
+      "expected": 260
+    },
+    {
+      "id": "round3-channel-column-tv",
+      "operation": "guide-channel-column",
+      "input": {
+        "tv": true,
+        "windowDp": 960,
+        "fontScale": 1.0
+      },
+      "expected": 200
+    },
+    {
+      "id": "live-library-destination-1",
+      "input": {
+        "type": "UserView",
+        "collectionType": "livetv",
+        "name": "Live TV"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-2",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "livetv",
+        "name": "Broadcast"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-3",
+      "input": {
+        "type": "UserView",
+        "collectionType": "LiveTv",
+        "name": "Broadcast"
+      },
+      "expected": "live-tv",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-4",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "movies",
+        "name": "Live TV"
+      },
+      "expected": "catalog",
+      "operation": "library-destination"
+    },
+    {
+      "id": "live-library-destination-5",
+      "input": {
+        "type": "Movie",
+        "collectionType": "livetv",
+        "name": "Live TV"
+      },
+      "expected": "catalog",
+      "operation": "library-destination"
+    },
+    {
+      "id": "round3-live-card-empty-libraries",
+      "operation": "library-cards",
+      "input": {
+        "items": []
+      },
+      "expected": [
+        "destination:live-tv"
+      ]
+    },
+    {
+      "id": "round3-live-card-no-duplicate-preserve-name",
+      "operation": "library-cards",
+      "input": {
+        "items": [
+          {
+            "Id": "server-live",
+            "Name": "Live TV",
+            "Type": "UserView",
+            "CollectionType": "livetv"
+          },
+          {
+            "Id": "ordinary",
+            "Name": "Live TV",
+            "Type": "CollectionFolder",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "server-live-2",
+            "Name": "TV",
+            "Type": "CollectionFolder",
+            "CollectionType": "LiveTv"
+          }
+        ]
+      },
+      "expected": [
+        "destination:live-tv",
+        "ordinary"
+      ]
+    },
+    {
+      "id": "live-presentation.short-ruler-height",
+      "operation": "ruler-height",
+      "input": {
+        "tv": false,
+        "fontScale": 1,
+        "compact": true
+      },
+      "expected": 24
+    },
+    {
+      "id": "live-presentation.touch-once-review",
+      "operation": "schedule-review-summary",
+      "input": {
+        "fields": {
+          "Name": "Blue Hour",
+          "ChannelName": "Aurora",
+          "StartDate": "2026-11-13T12:00:00Z",
+          "EndDate": "2026-11-13T12:28:00Z"
+        },
+        "series": false,
+        "existing": false,
+        "touch": true
+      },
+      "expected": "Records this airing once."
+    },
+    {
+      "id": "live-presentation.guide-empty-favorites-recovers-in-place",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Guide",
+        "channels": 8,
+        "filtered": 0,
+        "favorites": true,
+        "programs": 2,
+        "includeAction": true
+      },
+      "expected": [
+        "No favorite channels yet",
+        "Show all channels",
+        "AllChannels"
+      ]
+    },
+    {
+      "id": "live-presentation.guide-empty-navigates-to-channels",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Guide",
+        "channels": 8,
+        "programs": 0,
+        "includeAction": true,
+        "includeBody": true
+      },
+      "expected": [
+        "No guide data",
+        "Go to channels",
+        "Channels",
+        "Try another time, or ask your server administrator to set up a TV guide."
+      ]
+    },
+    {
+      "id": "live-presentation.management-denied-navigates-to-channels",
+      "operation": "empty-state",
+      "input": {
+        "tab": "Schedules",
+        "manage": false,
+        "includeAction": true
+      },
+      "expected": [
+        "Recording schedules aren't available",
+        "Go to channels",
+        "Channels"
+      ]
+    },
+    {
+      "id": "live-presentation.channel-logo-missing",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "missing"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-loading",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "loading"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-error",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "error"
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.channel-logo-success",
+      "operation": "channel-monogram",
+      "input": {
+        "imageState": "success"
+      },
+      "expected": false
+    }
+  ]
+}

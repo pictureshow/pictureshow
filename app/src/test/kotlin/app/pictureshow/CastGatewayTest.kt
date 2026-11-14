@@ -7,11 +7,16 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import app.pictureshow.core.Account
+import app.pictureshow.core.ClientResult
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
+import app.pictureshow.core.control.CastViewedItem
+import app.pictureshow.core.playback.PlayMethod
+import app.pictureshow.core.playback.PlayOutcome
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -24,6 +29,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 
@@ -108,5 +115,140 @@ class CastGatewayTest {
         }
         val offline = ClientCastGateway(HttpClient(MockEngine { throw IOException("offline") }), identity(), "Phone")
         assertFalse(offline.revokeSession(session))
+    }
+
+    private val openInfo = """{"PlaySessionId":"cast-play","MediaSources":[{"Id":"tuner","RequiresOpening":true,"OpenToken":"open"}]}"""
+    private val liveSource = """{"MediaSource":{"Id":"source","LiveStreamId":"live","RequiresClosing":true,"IsInfiniteStream":true,""" +
+        """"SupportsDirectStream":true,"Container":"ts"}}"""
+
+    private suspend fun prepareLive(gateway: ClientCastGateway) {
+        val request = CastPlayRequest(listOf(CastPlayItem("channel", "Channel")))
+        val outcome = assertIs<ClientResult.Success<PlayOutcome>>(gateway.prepare(account, "channel", request, 0)).value
+        assertIs<PlayOutcome.Play>(outcome)
+    }
+
+    private fun liveGateway(closeStatus: () -> HttpStatusCode = { HttpStatusCode.NoContent }) = gateway { request ->
+        when {
+            request.url.encodedPath.endsWith("PlaybackInfo") -> HttpStatusCode.OK to openInfo
+            request.url.encodedPath.endsWith("LiveStreams/Open") -> HttpStatusCode.OK to liveSource
+            request.url.encodedPath.endsWith("LiveStreams/Close") -> closeStatus() to ""
+            else -> HttpStatusCode.NoContent to ""
+        }
+    }
+
+    @Test fun ownedLiveSourceStopsWithLiveIdThenClosesBeforeLogout() = runBlocking {
+        val gateway = liveGateway()
+        prepareLive(gateway)
+        val report = CastReport("channel", "source", "cast-play", PlayMethod.DirectStream, 30, false)
+        gateway.reportStart(account, report)
+        gateway.reportStopped(account, report)
+        assertTrue(gateway.revokeSession(account))
+        val paths = requests.map { it.url.encodedPath.substringAfter("/jf/") }
+        assertTrue(paths.indexOf("Sessions/Playing/Stopped") < paths.indexOf("LiveStreams/Close"), paths.toString())
+        assertTrue(paths.indexOf("LiveStreams/Close") < paths.indexOf("Sessions/Logout"), paths.toString())
+        val body = requests.first { it.url.encodedPath.endsWith("Stopped") }.body.toByteArray().decodeToString()
+        assertTrue("\"LiveStreamId\":\"live\"" in body, body)
+        assertEquals(1, paths.count { it == "LiveStreams/Close" })
+    }
+
+    @Test fun changingChannelStopsAndClosesPreviousAcquisitionEvenWhenProviderReusesLiveId() = runBlocking {
+        val gateway = liveGateway()
+        prepareLive(gateway)
+        gateway.reportStart(account, CastReport("channel", "source", "cast-play", PlayMethod.DirectStream, 10, false))
+        val next = gateway.prepare(account, "other-channel", CastPlayRequest(emptyList()), 0)
+        assertIs<PlayOutcome.Play>(assertIs<ClientResult.Success<PlayOutcome>>(next).value)
+        gateway.reportProgress(account, CastReport("other-channel", "source", "cast-play", PlayMethod.DirectStream, 0, false))
+        val paths = requests.map { it.url.encodedPath }
+        val stopped = paths.indexOfFirst { it.endsWith("Stopped") }
+        val close = paths.indexOfFirst { it.endsWith("LiveStreams/Close") }
+        val progress = paths.indexOfFirst { it.endsWith("Progress") }
+        assertTrue(stopped >= 0 && close > stopped && progress > close, paths.toString())
+        assertEquals(setOf(CastLiveOwnership("channel", "source", "cast-play", "live")), gateway.takeClosedLiveSources(account))
+        assertTrue(gateway.revokeSession(account))
+        assertEquals(2, requests.count { it.url.encodedPath.endsWith("LiveStreams/Close") })
+    }
+
+    @Test fun failedLoadClosesPreparedSourceWithoutAPlaybackReport() = runBlocking {
+        val gateway = liveGateway()
+        prepareLive(gateway)
+        assertTrue(gateway.revokeSession(account))
+        val paths = requests.map { it.url.encodedPath }
+        assertTrue(paths.any { it.endsWith("LiveStreams/Close") })
+        assertTrue(paths.none { it.endsWith("Sessions/Playing/Stopped") })
+        assertIs<ClientResult.Failure>(gateway.prepare(account, "later", CastPlayRequest(emptyList()), 0))
+        assertEquals(1, paths.count { it.endsWith("LiveStreams/Open") })
+    }
+
+    @Test fun closeFailureKeepsCredentialPendingAndRetriesBeforeLogout() = runBlocking {
+        var status = HttpStatusCode.InternalServerError
+        val gateway = liveGateway { status }
+        prepareLive(gateway)
+        assertFalse(gateway.revokeSession(account))
+        assertTrue(requests.none { it.url.encodedPath.endsWith("Logout") })
+        status = HttpStatusCode.NotFound
+        assertTrue(gateway.revokeSession(account))
+        assertEquals(2, requests.count { it.url.encodedPath.endsWith("LiveStreams/Close") })
+        assertEquals(1, requests.count { it.url.encodedPath.endsWith("Logout") })
+    }
+
+    @Test fun restoredPrivateOwnershipIsClosedWithoutNegotiatingAgain() = runBlocking {
+        val gateway = liveGateway()
+        gateway.restoreLiveSources(account, listOf(CastViewedItem("entry", "channel", ownedLiveStreamId = "saved-live")))
+        assertTrue(gateway.revokeSession(account))
+        assertEquals("saved-live", requests.first().url.parameters["liveStreamId"])
+        assertTrue(requests.last().url.encodedPath.endsWith("Logout"))
+        assertTrue(requests.none { it.url.encodedPath.endsWith("PlaybackInfo") })
+    }
+
+    @Test fun sharedLiveSourceIsReportedButNeverExplicitlyClosed() = runBlocking {
+        val gateway = gateway { request ->
+            if (request.url.encodedPath.endsWith("PlaybackInfo")) {
+                HttpStatusCode.OK to """{"MediaSources":[{"Id":"source","LiveStreamId":"shared","RequiresClosing":true,
+                    "SupportsDirectStream":true,"Container":"ts"}]}"""
+            } else {
+                HttpStatusCode.NoContent to ""
+            }
+        }
+        prepareLive(gateway)
+        gateway.reportStopped(account, CastReport("channel", "source", null, PlayMethod.DirectStream, 0, false))
+        assertTrue(gateway.revokeSession(account))
+        assertTrue(requests.none { it.url.encodedPath.endsWith("LiveStreams/Close") })
+        val body = requests.first { it.url.encodedPath.endsWith("Stopped") }.body.toByteArray().decodeToString()
+        assertTrue("shared" in body, body)
+    }
+
+    @Test fun revokeWaitsForInFlightOpenBeforeClosingAndInvalidatingCredential() = runBlocking {
+        val opened = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val http = HttpClient(
+            MockEngine { request ->
+                requests += request
+                val body = when {
+                    request.url.encodedPath.endsWith("PlaybackInfo") -> openInfo
+                    request.url.encodedPath.endsWith("LiveStreams/Open") -> {
+                        opened.complete(Unit)
+                        release.await()
+                        liveSource
+                    }
+                    else -> ""
+                }
+                respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            }
+        )
+        try {
+            val gateway = ClientCastGateway(http, identity(), "Phone")
+            val prepare = async { prepareLive(gateway) }
+            opened.await()
+            val revoke = async { gateway.revokeSession(account) }
+            release.complete(Unit)
+            prepare.await()
+            assertTrue(revoke.await())
+            val paths = requests.map { it.url.encodedPath }
+            val close = paths.indexOfFirst { it.endsWith("LiveStreams/Close") }
+            val logout = paths.indexOfFirst { it.endsWith("Logout") }
+            assertTrue(close >= 0 && logout > close, paths.toString())
+        } finally {
+            http.close()
+        }
     }
 }

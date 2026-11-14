@@ -18,9 +18,12 @@ class PlayDecision(
     val headers: Map<String, String>,
     val playSessionId: String?,
     /** Why the server transcodes, from the transcoding URL's `TranscodeReasons` (empty unless [method] is Transcode). */
-    val transcodeReasons: List<String> = emptyList()
+    val transcodeReasons: List<String> = emptyList(),
+    /** Only a source this negotiation opened (or asked PlaybackInfo to auto-open) may be closed. */
+    val ownedLiveStreamId: String? = null
 ) {
     val mediaSourceId: String? get() = mediaSource.id
+    val isLive: Boolean get() = mediaSource.isInfiniteStream || mediaSource.liveStreamId != null
 
     override fun toString(): String = "PlayDecision(itemId=$itemId, mediaSourceId=$mediaSourceId, method=$method, " +
         "url=${Redaction.url(url)}, headers=${Redaction.headers(headers)}, playSessionId=$playSessionId, " +
@@ -60,7 +63,8 @@ object PlayDecisions {
         identity: ClientIdentity,
         token: String,
         mediaSourceId: String? = null,
-        audio: Boolean = false
+        audio: Boolean = false,
+        ownedLiveStreamId: String? = null
     ): PlayOutcome {
         response.errorCode?.let { code ->
             return PlayOutcome.Unplayable(UnplayableReason.SERVER_REFUSED, "The server refused playback ($code).")
@@ -96,7 +100,8 @@ object PlayDecisions {
                 method = if (source.supportsDirectPlay) PlayMethod.DirectPlay else PlayMethod.DirectStream,
                 url = staticStreamUrl(server, itemId, source, playSessionId, audio),
                 headers = headers,
-                playSessionId = playSessionId
+                playSessionId = playSessionId,
+                ownedLiveStreamId = ownedLiveStreamId
             )
             else -> {
                 val transcodingUrl = source.transcodingUrl.orEmpty()
@@ -108,7 +113,8 @@ object PlayDecisions {
                     url = resolved,
                     headers = headers,
                     playSessionId = playSessionId,
-                    transcodeReasons = transcodeReasons(transcodingUrl)
+                    transcodeReasons = transcodeReasons(transcodingUrl),
+                    ownedLiveStreamId = ownedLiveStreamId
                 )
             }
         }
@@ -138,6 +144,7 @@ object PlayDecisions {
             source.id?.let { add("mediaSourceId" to it) }
             playSessionId?.let { add("playSessionId" to it) }
             source.eTag?.let { add("tag" to it) }
+            source.liveStreamId?.let { add("liveStreamId" to it) }
         }
         return base(server) + (if (audio) "/Audio/" else "/Videos/") + encode(itemId) + "/stream?" +
             query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }

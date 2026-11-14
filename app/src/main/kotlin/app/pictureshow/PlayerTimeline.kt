@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.pictureshow.core.displayRuntimeMillis
+import app.pictureshow.core.playback.ObservedLiveWindow
 
 /** Only deliberate interactions update the spoken position, so a focused timeline never chatters on every tick. */
 @Composable
@@ -46,8 +49,52 @@ internal fun PlayerTimeline(
     paused: Boolean = false,
     ended: Boolean = false,
     arrowsSeek: Boolean = false,
+    live: Boolean = false,
+    liveCanTimeShift: Boolean = false,
+    liveExpired: Boolean = false,
+    liveEdgeAvailable: Boolean = false,
+    liveWindow: ObservedLiveWindow? = null,
+    onGoLive: () -> Unit = {},
     onOpenSeek: () -> Unit = {}
 ) {
+    if (live) {
+        val readout = liveTimelineReadout(liveWindow, positionMs, paused, liveExpired, liveCanTimeShift)
+        val spoken = remember(paused, announcedPositionMs, liveExpired, liveCanTimeShift, liveWindow?.goLivePosition() != null) {
+            liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(announcedPositionMs))
+        }
+        CurrentPositionAccessibility(setOf("player:position")) {
+            liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(positionMs))
+        }
+        Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                val endpoints = liveBufferEndpointLabels(liveWindow, positionMs, liveExpired)
+                Text(endpoints.first, style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
+                if (endpoints.second.isNotEmpty()) {
+                    Text(
+                        endpoints.second,
+                        style = androidx.tv.material3.MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+            LivePlayerTrack(liveWindow, positionMs, Color(0xFFB8C4FF), expired = liveExpired)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    liveTimelineVisualStatus(readout, liveWindow?.behindLiveMs(positionMs)),
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+                Box(
+                    modifier = Modifier.widthIn(min = 48.dp).testTag("player:position")
+                        .clickable(enabled = liveCanTimeShift && !liveExpired, onClickLabel = "Seek in live buffer", onClick = onOpenSeek)
+                        .semantics {
+                            contentDescription = "Live playback position"
+                            stateDescription = spoken
+                        },
+                    contentAlignment = Alignment.CenterEnd
+                ) { Text(readout.clock, modifier = Modifier.clearAndSetSemantics {}) }
+            }
+        }
+        return
+    }
     CurrentPositionAccessibility(setOf("player:position")) {
         spokenPlaybackPosition(if (ended) completedPlaybackPosition(positionMs, durationMs) else positionMs, durationMs)
     }
@@ -120,4 +167,30 @@ private class SeekCount {
 @Composable
 internal fun PlaybackStatus(label: String, modifier: Modifier = Modifier) {
     Text(label, modifier = modifier.background(Color(0xEE10131C)).padding(16.dp))
+}
+
+internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: Boolean, behindMs: Long? = null): String = when {
+    expired -> "Paused · Buffer expired. Go live to resume."
+    !canTimeShift -> "Live · Time shift unavailable"
+    behindMs == null -> "Live position unavailable"
+    paused && behindMs != null && behindMs > 2_000 -> "Paused · ${liveBehindDescription(behindMs)}"
+    paused -> "Paused · At live edge"
+    behindMs != null && behindMs > 2_000 -> liveBehindDescription(behindMs)
+    else -> "Live"
+}
+
+/** Keep the compact negative clock, with explicit units nearby to distinguish seconds from programme minutes. */
+internal fun liveTimelineVisualStatus(readout: LiveTimelineReadout, behindMs: Long?): String =
+    if (readout.clock.isNotEmpty() && behindMs != null) {
+        listOf(readout.status, liveBehindDescription(behindMs)).filter(String::isNotBlank).joinToString(" · ")
+    } else {
+        readout.status
+    }
+
+/** Endpoint words never claim an available live target when the decoder cannot establish it. */
+internal fun liveBufferEndpointLabels(window: ObservedLiveWindow?, positionMs: Long, expired: Boolean): Pair<String, String> = when {
+    expired -> "Buffer expired" to ""
+    window?.canTimeShift != true -> "Time shift unavailable" to ""
+    liveTrackPositionFraction(window, positionMs, expired) != null -> "Available buffer · start" to "Live edge"
+    else -> "Measured buffer" to "Live edge unavailable"
 }
