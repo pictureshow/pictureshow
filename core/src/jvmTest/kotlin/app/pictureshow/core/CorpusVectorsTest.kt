@@ -90,6 +90,8 @@ class CorpusVectorsTest {
                     "sync-phone-surfaces",
                     "sync-phone-player-chrome",
                     "sync-phone-quality-cue",
+                    // SyncPhoneRemoteChromeRegressionTest executes native identity, chrome and scroll reachability.
+                    "sync-phone-remote-chrome",
                     "sync-player-intent-presentation",
                     "sync-speed-intent-origin",
                     "sync-drift",

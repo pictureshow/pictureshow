@@ -98,6 +98,8 @@ const pendingPortSuites = new Set([
     "sync-membership-registration",
     "sync-phone-player-chrome",
     "sync-phone-quality-cue",
+    // Native remote identity/chrome and structural scroll-position UI remain owed.
+    "sync-phone-remote-chrome",
     "sync-phone-surfaces",
     "sync-player-intent-presentation",
     "sync-rate-presentation",

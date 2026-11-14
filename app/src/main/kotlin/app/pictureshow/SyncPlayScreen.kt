@@ -6,6 +6,7 @@ package app.pictureshow
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -612,6 +615,23 @@ internal fun SyncTouchBody(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomFade)
                     .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
             )
+        }
+        if (scroll.canScrollBackward || scroll.canScrollForward) {
+            val indicator = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+                // An explicit position cue survives a clean row boundary or a padding-only fade.
+                Canvas(Modifier.width(3.dp).fillMaxHeight().testTag("sync:touch-scroll-indicator")) {
+                    val viewport = size.height
+                    val thumb = (viewport * viewport / (viewport + scroll.maxValue)).coerceAtLeast(24.dp.toPx()).coerceAtMost(viewport)
+                    val top = if (scroll.maxValue > 0) (viewport - thumb) * scroll.value / scroll.maxValue else 0f
+                    drawRoundRect(
+                        indicator,
+                        topLeft = androidx.compose.ui.geometry.Offset(0f, top),
+                        size = androidx.compose.ui.geometry.Size(size.width, thumb),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width / 2)
+                    )
+                }
+            }
         }
     }
 }

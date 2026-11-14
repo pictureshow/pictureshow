@@ -30,3 +30,23 @@ Android targets collect messages outside individual Compose screens and route in
 `remote-targets`: rights combinations, stale session/device, unsupported commands, same name, account changes; `remote-wire`: exact query vs JSON payloads, ticks, malformed/oversize text and secret-field rejection; `remote-receive`: duplicate messages, held key, late Play after account change, pending receiver preparation; `remote-reconnect`: dispatched versus confirmed, unknown mutation, new session and expired input.
 
 Two clients on isolated 10.10.7, 10.11.11 and 12.4 servers, with unchanged household 12.0.0 acceptance prove browse→TV play, pause/seek/Stop, queue, UI D-pad/text, rotation/lock, TV restart, revoked rights and a different user's inaccessible title. Use emulator/simulator pairs first; final physical phone→household TV and phone→Apple TV with their real remotes/readers are separate required checks. A received HTTP 204 is insufficient evidence.
+
+
+### Native phone controller identity and persistent chrome
+
+A TV's display name (including a necessary duplicate-device suffix) is distinct
+from the account signed in on it. The remote page and target picker show that
+account as localized supporting context only when it differs from this viewer;
+never concatenate it into the TV name or page title.
+
+While browsing, the persistent remote bar is contained, clickable native chrome
+with a top boundary, TV icon and navigation cue. Playback/command status owns its
+first line; the TV name owns a separate secondary line, so a long device/account
+cannot consume the status. Both lines can ellipsize independently. The Android
+reference uses a64dp minimum bar and grows for larger fonts rather than clipping.
+Opening it sends no TV command. Disconnect and Choose another TV remain reachable
+through the real scrolling page with whole48dp touch targets. Disconnect detaches
+this controller and leaves TV playback alone; it does not send Stop. The4 native
+`sync-phone-remote-chrome` profiles bind these roles and the SyncPlay body cue to
+actual rendering, scrolling and controller callbacks; inventory success alone does
+not qualify another platform's native UI.

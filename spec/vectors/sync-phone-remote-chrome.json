@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-phone-remote-chrome",
+  "scope": "Native phone remote identity/chrome/reachability and real group body scroll-position profiles. Not remote protocol vectors or actual-device evidence.",
+  "cases": [
+    {
+      "id": "remote-device-identity-and-account",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "deviceId": "owned-tv-ab12",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv-with-a-long-account-name",
+        "duplicateName": true,
+        "remoteCommands": [
+          "MoveUp",
+          "SendString"
+        ],
+        "pickerTitle": "Choose a TV"
+      },
+      "expected": {
+        "deviceLabel": "sdk_google_atv64_arm64 (ab12)",
+        "signedInText": "Signed in as sync91-r2-tv-with-a-long-account-name",
+        "picks": 1,
+        "remoteRequests": 0
+      }
+    },
+    {
+      "id": "remote-contained-status-first-bar",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.3,
+        "deviceId": "owned-tv-ab12",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv-with-a-long-account-name",
+        "duplicateName": true,
+        "remoteCommands": [
+          "MoveUp",
+          "SendString"
+        ]
+      },
+      "expected": {
+        "barHeightDp": 64,
+        "status": "Nothing playing",
+        "deviceLabel": "sdk_google_atv64_arm64 (ab12)",
+        "statusLines": 1,
+        "tvIconSizeDp": 24,
+        "dividerHeightDp": 1,
+        "paintChannelTolerance": 3,
+        "dividerCoverageMin": 0.7,
+        "backgroundChannelDeltaMin": 16,
+        "minimumIconPaintPixels": 8,
+        "opens": 1,
+        "remoteRequests": 0
+      }
+    },
+    {
+      "id": "remote-exit-actions-scroll-reachable",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.3,
+        "deviceId": "owned-tv-ab12",
+        "deviceName": "sdk_google_atv64_arm64",
+        "viewerName": "sync91-r2-tv-with-a-long-account-name",
+        "duplicateName": true,
+        "remoteCommands": [
+          "MoveUp",
+          "SendString"
+        ]
+      },
+      "expected": {
+        "chooseText": "Choose another TV",
+        "targetMinHeightDp": 48,
+        "choices": 1,
+        "phaseAfterDisconnect": "detached",
+        "remoteRequests": 0
+      }
+    },
+    {
+      "id": "group-body-structural-scroll-position",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "fontScale": 1.3,
+        "server": "Cinema",
+        "viewer": "Viewer",
+        "groupName": "Friday films",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "participants": [
+          "Ana",
+          "Bea"
+        ],
+        "paddingOnlyTailDp": 8,
+        "fittingPolicy": "JoinGroups"
+      },
+      "expected": {
+        "indicatorWidthDp": 3,
+        "endInsetMaxDp": 4,
+        "backgroundChannelDeltaMin": 16,
+        "minimumThumbPixelsPerRow": 2,
+        "minimumThumbPaintRows": 8,
+        "groupCommands": 0
+      }
+    }
+  ]
+}

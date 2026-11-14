@@ -15,24 +15,29 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -53,7 +58,20 @@ import app.pictureshow.core.control.remoteTrackSelected
 internal fun remoteTargetLabel(target: RemoteTarget): String = buildString {
     append(target.name)
     if (target.duplicateName) append(" (").append(target.device.takeLast(4)).append(')')
-    if (!target.sameViewer) target.viewerName?.let { append(", ").append(it) }
+}
+
+/** The signed-in account is supporting context, never part of the device's name. */
+internal fun remoteTargetViewerName(target: RemoteTarget): String? = target.viewerName?.takeIf { !target.sameViewer && it.isNotBlank() }
+
+@Composable
+internal fun RemoteTargetViewer(target: RemoteTarget) {
+    remoteTargetViewerName(target)?.let {
+        Text(
+            stringResource(R.string.remote_signed_in_as, it),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 internal fun remoteTargetDetail(target: RemoteTarget): String = when {
@@ -75,19 +93,49 @@ internal fun remoteClock(ticks: Long): String {
 @Composable
 internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -> Unit) {
     val target = state.controller?.target ?: return
-    val line = remoteProblem(state.controller.phase)?.let { "Needs attention" }
+    val line = remoteProblem(state.controller.phase)?.let { stringResource(R.string.remote_needs_attention) }
         ?: remoteCommandStatus(state.controller, nowMs, state.capped)
-        ?: target.now?.let { now -> "${now.title ?: "Playing"}${if (now.paused) ", paused" else ""}" }
-        ?: "Nothing playing"
-    TextButton(
+        ?: target.now?.let { now ->
+            val title = now.title ?: stringResource(R.string.remote_playing)
+            if (now.paused) stringResource(R.string.remote_paused_title, title) else title
+        }
+        ?: stringResource(R.string.remote_nothing_playing)
+    Surface(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:bar").semantics {
-            liveRegion =
-                LiveRegionMode.Polite
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("remote:bar").semantics {
+            liveRegion = LiveRegionMode.Polite
         }
     ) {
-        // One line whatever it says, so the bar's height never moves what is around it.
-        Text("${remoteTargetLabel(target)}: $line", maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).heightIn(min = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(touchActionIcon("cast"), null, Modifier.size(24.dp).testTag("remote:bar-icon"))
+                Column(Modifier.weight(1f)) {
+                    // Status owns its line. Device/account length cannot consume its room.
+                    Text(
+                        line,
+                        Modifier.testTag("remote:bar-status"),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        remoteTargetLabel(target),
+                        Modifier.testTag("remote:bar-target"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(touchActionIcon("chevron-right"), null, Modifier.size(24.dp).testTag("remote:bar-chevron"))
+            }
+            HorizontalDivider(Modifier.testTag("remote:bar-divider"), color = MaterialTheme.colorScheme.outlineVariant)
+        }
     }
 }
 
@@ -119,6 +167,7 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
                 Button(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:choose")) { Text("Choose a TV") }
                 return@Column
             }
+            RemoteTargetViewer(target)
             RemoteStatusSlot(status, attached, ready, now == null)
             now?.let { RemoteTransport(it, ready, host) }
             if ("MoveUp" in target.commands) RemoteDpad(ready, host)

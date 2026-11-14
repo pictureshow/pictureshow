@@ -482,7 +482,7 @@ failed-Leave recovery, cancellation, offline behavior or group transport policy.
 Native implementations and their portable consent traces must preserve this scope
 and individual-identity contract; a prior consent never authorizes a later viewer.
 
-The14 `sync-tv-surfaces` cases are native TV rendering/input profiles, separate from
+The15 `sync-tv-surfaces` cases are native TV rendering/input profiles, separate from
 network/timing vectors. Android executes their actual theme, font, draft, visibility
 and paint/geometry expectations through SyncPlayTvPrimaryPaintRegressionTest and
 SyncPlayTvRepeatPaintAndBackRegressionTest. Equivalent TV surfaces on other platforms
@@ -527,3 +527,16 @@ direct destination-chooser callers retain “Play on”. Changing this presentat
 does not select a receiver, start playback, alter consent, or change any request
 identity, permission, cancellation or route callback. Other platforms owe the same
 truthful task and participant-count presentation through their native adapters.
+
+
+The phone group body exposes an explicit passive scroll-position cue whenever its
+actual content overflows, including a padding-only tail where the bottom fade is
+absent. The cue follows the measured scroll offset, reaches the viewport end and
+disappears when content fits. It must not take focus, add an action, move transport,
+change fade/reveal clearances or depend on which row happens to meet the fold.
+`sync-phone-remote-chrome` has4 actual native phone profiles for this cue, structured
+remote identity, status-first contained controller chrome and real scroll reachability
+of the existing exit actions. `sync-tv-rhythm` has3 native TV profiles for pinned
+preview clearance, painted setting separation and title hierarchy. Android executes
+them in SyncPhoneRemoteChromeRegressionTest and SyncPlayTvRhythmRegressionTest;
+other platforms owe corresponding native executors and captures.

@@ -353,6 +353,7 @@ private fun ChooserTvs(remote: RemoteControllerUi, first: Boolean, onPickRemote:
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(remoteTargetLabel(target))
+                RemoteTargetViewer(target)
                 Text(remoteTargetDetail(target), style = MaterialTheme.typography.bodySmall)
             }
         }

@@ -22,6 +22,11 @@
 
     <string name="cast_play_on">Play on</string>
     <string name="remote_choose_tv">Choose a TV</string>
+    <string name="remote_signed_in_as">Signed in as %1$s</string>
+    <string name="remote_needs_attention">Needs attention</string>
+    <string name="remote_playing">Playing</string>
+    <string name="remote_nothing_playing">Nothing playing</string>
+    <string name="remote_paused_title">%1$s, paused</string>
 
     <!-- Watch together: protocol values and diagnostics never appear as viewer copy. -->
     <string name="sync_title">Watch together</string>
