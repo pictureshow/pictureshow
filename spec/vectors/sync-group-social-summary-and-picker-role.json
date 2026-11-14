@@ -66,6 +66,52 @@
         "dialogTitle": "Play on",
         "titleIsHeading": true
       }
+    },
+    {
+      "id": "phone-empty-count-snapshot-lifecycle",
+      "input": {
+        "platform": "touch",
+        "widthDp": 360,
+        "heightDp": 640,
+        "fontScale": 1.3,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "participantSnapshots": [
+          [],
+          [
+            "Morgan"
+          ],
+          [
+            "Morgan",
+            "Sam"
+          ],
+          []
+        ]
+      },
+      "expected": {
+        "countSnapshots": [
+          {
+            "count": 0,
+            "countText": "0 people watching"
+          },
+          {
+            "count": 1,
+            "countText": "1 person watching"
+          },
+          {
+            "count": 2,
+            "countText": "2 people watching"
+          },
+          {
+            "count": 0,
+            "countText": "0 people watching"
+          }
+        ],
+        "wholeCountAboveFooterOnArrival": true,
+        "rescueScroll": false,
+        "previousDistinctCountAbsent": true,
+        "groupCommands": 0
+      }
     }
   ]
 }
