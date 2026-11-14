@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -36,6 +38,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
@@ -256,13 +259,21 @@ class TouchPlayerDirectorRegressionTest {
             sent.clear()
         }
         compose.setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                TouchPlayerContent(
-                    account,
-                    playback,
-                    // Neutral picture seam: every production chrome layer remains under test.
-                    videoContent = if (whiteVideo) ({ Box(Modifier.fillMaxSize().background(Color.White)) }) else null
-                )
+            val direction = when (input?.get("layoutDirection")?.jsonPrimitive?.content) {
+                null -> LocalLayoutDirection.current
+                "rtl" -> LayoutDirection.Rtl
+                "ltr" -> LayoutDirection.Ltr
+                else -> error("Unsupported native layout direction")
+            }
+            CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    TouchPlayerContent(
+                        account,
+                        playback,
+                        // Neutral picture seam: every production chrome layer remains under test.
+                        videoContent = if (whiteVideo) ({ Box(Modifier.fillMaxSize().background(Color.White)) }) else null
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -431,11 +442,14 @@ class TouchPlayerDirectorRegressionTest {
                 "group-chip-skip-intro-portrait-large-font",
                 "group-chip-next-episode-portrait-large-font",
                 "group-chip-skip-intro-landscape-guard",
-                "group-chip-next-episode-landscape-guard"
+                "group-chip-next-episode-landscape-guard",
+                "group-chip-skip-intro-landscape-rtl",
+                "group-chip-next-episode-landscape-rtl",
+                "group-chip-next-episode-portrait-large-font-rtl"
             ),
             profiles.map { it.getValue("id").jsonPrimitive.content }.toSet()
         )
-        assertEquals(6, profiles.size, "All admitted overlay cases must be present exactly once")
+        assertEquals(9, profiles.size, "All admitted overlay cases must be present exactly once")
         return profiles.single { it.getValue("id").jsonPrimitive.content == id }
     }
 
@@ -540,6 +554,38 @@ class TouchPlayerDirectorRegressionTest {
             )
         }
         assertOverlayClear(c, chipBounds, actionBounds, "Skip/card bounds")
+        e["actionPlacement"]?.jsonPrimitive?.content?.let { placement ->
+            val gap = e.number("minimumOverlayClearanceDp") * density
+            val rounding = e.number("maximumGlyphBoundaryErrorNativePx")
+            val horizontalGapFits = chipBounds.right + gap <= actionBounds.left + rounding ||
+                actionBounds.right + gap <= chipBounds.left + rounding
+            val geometry = "chip=$chipBounds action=$actionBounds gap=$gap horizontalGapFits=$horizontalGapFits"
+            when (placement) {
+                "beside" -> {
+                    assertTrue(horizontalGapFits, "The actual landscape roles must have room beside each other: $geometry")
+                    assertTrue(
+                        actionBounds.right + gap <= chipBounds.left + rounding,
+                        "Actual RTL places the action physically left of the chip with full clearance: $geometry"
+                    )
+                    assertTrue(
+                        abs(chipBounds.top - actionBounds.top) <= rounding,
+                        "A fitting action must retain the chip's top band instead of stacking: $geometry"
+                    )
+                }
+                "below" -> {
+                    assertFalse(horizontalGapFits, "The actual portrait roles must exercise a horizontal conflict: $geometry")
+                    assertTrue(
+                        abs(frame.right - chipBounds.right - 16f * density) <= rounding,
+                        "Actual RTL anchors the chip at the physical right native edge: frame=$frame $geometry"
+                    )
+                    assertTrue(
+                        actionBounds.top >= chipBounds.bottom + gap - rounding,
+                        "A conflicting action must be below the whole chip with native clearance: $geometry"
+                    )
+                }
+                else -> error("Unsupported actual action placement: $placement")
+            }
+        }
         assertWholeChipText(c, "sync:chip-status", "chipPhasePhrase", actionBounds)
         assertWholeChipText(c, "sync:chip-name", "chipGroupName", actionBounds)
         assertWholeChipText(c, "sync:chip-count", "chipCountPhrase", actionBounds)
@@ -603,7 +649,10 @@ class TouchPlayerDirectorRegressionTest {
             assertOverlayClear(c, chipBounds, text.fetchSemanticsNode().boundsInRoot, "action label $label")
         }
         // Physical pointer dispatch at the chip's action-facing edge catches an overlay intercepting the live button.
-        chip.performTouchInput { click(Offset(width - 4f * density, center.y)) }
+        chip.performTouchInput {
+            val x = if (input["layoutDirection"]?.jsonPrimitive?.content == "rtl") 4f * density else width - 4f * density
+            click(Offset(x, center.y))
+        }
         compose.runOnIdle {
             assertTrue(requireNotNull(sync).panelOpen, "The chip tap must open its real group panel, not Skip/card")
             assertFalse(playback.nextCancelled)
@@ -664,6 +713,21 @@ class TouchPlayerDirectorRegressionTest {
     }
 
     private fun rgb(argb: Int) = listOf((argb ushr 16) and 255, (argb ushr 8) and 255, argb and 255)
+
+    @Test fun groupChipRtlLandscapeSkipIntroStaysBesideWhenTheActualGapFits() {
+        assertGroupOverlay("group-chip-skip-intro-landscape-rtl")
+    }
+
+    @Test fun groupChipRtlLandscapeManualNextEpisodeStaysBesideWhenTheActualGapFits() {
+        assertGroupOverlay("group-chip-next-episode-landscape-rtl")
+    }
+
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    @Test
+    fun groupChipRtlPortraitLargeFontManualNextEpisodeStacksBelowTheWholeChip() {
+        assertGroupOverlay("group-chip-next-episode-portrait-large-font-rtl")
+    }
+
     private class Decoder(positionMs: Long = 20_000) : SimpleBasePlayer(Looper.getMainLooper()) {
         private var value = State.Builder().setAvailableCommands(
             Player.Commands.Builder().addAll(

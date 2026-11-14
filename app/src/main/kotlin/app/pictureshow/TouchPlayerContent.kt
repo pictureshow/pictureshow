@@ -301,6 +301,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
     var topActionsMeasured by remember(host) { mutableStateOf(false) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     var actionsHeight by remember { mutableIntStateOf(0) }
+    var actionsWidth by remember { mutableIntStateOf(0) }
     var actionsBounds by remember { mutableStateOf<Rect?>(null) }
     var playerLeft by remember { mutableIntStateOf(0) }
     // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
@@ -835,8 +836,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             // Whatever is showing keeps its place when the notice ends; the gap closes once the column is empty.
             val belowNotice = if (actionsHeight > 0 && noticeBounds == null) heldNoticeGap else noticeGap
             SideEffect { heldNoticeGap = belowNotice }
+            val chipActionGapPx = with(density) { 12.dp.toPx() }
             val chipGap = chipBounds?.takeIf {
-                chipExpected && actionsHeight > 0 && it.right + with(density) { 12.dp.toPx() } > actionsLeft
+                chipExpected &&
+                    actionsHeight > 0 &&
+                    it.right + chipActionGapPx > actionsLeft &&
+                    actionsLeft + actionsWidth + chipActionGapPx > it.left
             }?.let {
                 with(density) {
                     (it.bottom - playerTop - WindowInsets.safeDrawing.getTop(this)).toDp() - TOUCH_PLAYER_EDGE + 12.dp
@@ -852,6 +857,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                         // Not boundsInRoot: an empty column has no bounds, which would read as a left edge of 0.
                         actionsLeft = it.positionInRoot().x
                         actionsHeight = it.size.height
+                        actionsWidth = it.size.width
                         topActionsBottom = (it.positionInRoot().y + it.size.height).toInt()
                         topActionsMeasured = true
                         actionsBounds = it.boundsInRoot()
