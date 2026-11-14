@@ -2124,15 +2124,15 @@ class TouchPlayerControlsTest {
             .map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == "live-secondary-header-alignment" }
         val input = case.getValue("input").jsonObject
         val frame = compose.onRoot().getBoundsInRoot()
-        assertEquals(input.getValue("widthDp").jsonPrimitive.float, frame.width.value, 1f)
-        assertEquals(input.getValue("heightDp").jsonPrimitive.float, frame.height.value, 1f)
+        assertEquals(input.getValue("widthDp").jsonPrimitive.float, (frame.right - frame.left).value, 1f)
+        assertEquals(input.getValue("heightDp").jsonPrimitive.float, (frame.bottom - frame.top).value, 1f)
         val expected = case.getValue("expected").jsonObject
         assertEquals(false, expected.getValue("syncEnabled").jsonPrimitive.boolean)
         val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed().assertIsNotEnabled()
         watch.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watch together is unavailable for live streams."))
         val watchBox = watch.getBoundsInRoot()
-        assertTrue(watchBox.width.value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
-        assertTrue(watchBox.height.value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
+        assertTrue((watchBox.right - watchBox.left).value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
+        assertTrue((watchBox.bottom - watchBox.top).value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
         assertEquals(true, expected.getValue("qualityRightAligned").jsonPrimitive.boolean)
         val row = bounds("touch:secondary")
         assertEquals(row.left, bounds("touch:open:Audio").left)
