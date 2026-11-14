@@ -42,6 +42,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -80,11 +88,14 @@ class TouchPlaybackHostTest {
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
     private val catalogApi = CatalogModelsTest.FakeCatalog()
+    private var terminalGroupScope: kotlinx.coroutines.CoroutineScope? = null
+    private var terminalOpening by androidx.compose.runtime.mutableStateOf<SyncOpen?>(null)
 
     @After fun cleanup() {
         releaseLookup.complete(Unit)
         metadataGate.complete(Unit)
         compose.runOnIdle { if (::output.isInitialized) output.release() }
+        terminalGroupScope?.cancel()
         stopKoin()
         if (::http.isInitialized) http.close()
     }
@@ -372,12 +383,225 @@ class TouchPlaybackHostTest {
         assertEquals(2, exits)
     }
 
+
+    @Test fun groupedTerminalVideoEosReportsPlayedAfterStoppedAndLeavesWithoutLocalNext() {
+        val case = terminalVideoCase("sync-completion-reporting.current-decision")
+        val requests = mutableListOf<app.pictureshow.core.sync.SyncRequest>()
+        val sync = terminalVideoGroup(requests)
+        catalogApi.detail = app.pictureshow.core.ClientResult.Success(episode)
+        catalogApi.actionBlock = {
+            reports += "catalog:played"
+            app.pictureshow.core.ClientResult.Success(app.pictureshow.core.ItemUserData(played = true))
+        }
+        launch(providedSync = sync)
+        releaseLookup.complete(Unit) // A real adjacent episode exists: grouped terminal completion must not select it.
+        joinTerminalVideoGroup(sync)
+        compose.runOnIdle {
+            requests.clear()
+            reachedEnd.set(true)
+            observedHost.applySyncTimeline(null, true, 1.0)
+            assertTerminalVideoAdmission(sync)
+            output.onEnded(terminalVideoDecision(case))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(false, sync.participating, "Terminal EOS was held: ${terminalVideoDiagnostic(sync)}")
+            assertEquals(1, requests.count { it.operation == "Leave" }, terminalVideoDiagnostic(sync))
+            assertEquals(1, exits, "Admitted terminal completion must exit before asynchronous reports drain")
+        }
+        try {
+            waitUntil { reports.contains("catalog:played") }
+        } catch (error: Throwable) {
+            throw AssertionError(
+                "Terminal EOS already Left and exited; Played is missing. reports=${reports.toList()} actions=${catalogApi.actions.toList()}",
+                error
+            )
+        }
+        compose.runOnIdle {
+            assertEquals(1, reports.count { it == "/Sessions/Playing/Stopped" })
+            assertEquals(1, reports.count { it == "catalog:played" })
+            assertTrue(
+                reports.indexOf("/Sessions/Playing/Stopped") < reports.indexOf("catalog:played"),
+                "The actual session's Stopped request must precede Played despite immediate navigation cleanup"
+            )
+            assertEquals(listOf(Triple("played", "episode", true)), catalogApi.actions.toList())
+            assertEquals(listOf("Leave"), requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation })
+            val departure = requireNotNull(sync.state.value.departure)
+            assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
+            assertEquals("Evening", departure.groupName)
+            assertEquals(false, sync.participating)
+            assertEquals(1, exits)
+            assertTrue(next.isEmpty(), "The local episode lookup cannot advance a terminal grouped viewing")
+            assertTerminalVideoVector(case, sync, requests)
+        }
+    }
+
+    @Test fun staleGroupedVideoDecisionCannotLeaveReportPlayedOrExitTheCurrentViewing() {
+        val case = terminalVideoCase("sync-completion-reporting.obsolete-decision")
+        val requests = mutableListOf<app.pictureshow.core.sync.SyncRequest>()
+        val sync = terminalVideoGroup(requests)
+        catalogApi.detail = app.pictureshow.core.ClientResult.Success(episode)
+        launch(providedSync = sync)
+        releaseLookup.complete(Unit)
+        joinTerminalVideoGroup(sync)
+        compose.runOnIdle {
+            requests.clear()
+            observedHost.applySyncTimeline(null, true, 1.0)
+            assertTerminalVideoAdmission(sync)
+            output.onEnded(terminalVideoDecision(case))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(sync.participating, "A rejected session completion cannot Leave its current group")
+            assertEquals(null, sync.state.value.departure)
+            assertTrue(requests.none { it.operation in setOf("Leave", "NextItem", "Stop", "SetPlaylistItem") })
+            assertEquals(0, reports.count { it == "/Sessions/Playing/Stopped" })
+            assertTrue(catalogApi.actions.isEmpty(), "The obsolete decision cannot mark the replacement viewing Played")
+            assertEquals(0, exits)
+            assertTrue(next.isEmpty())
+            assertTrue(output.player.value != null, "Rejecting obsolete EOS must retain the current native output")
+            assertTerminalVideoVector(case, sync, requests)
+        }
+    }
+
+    private fun terminalVideoCase(id: String): JsonObject {
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val file = roots.map { java.io.File(it, "spec/vectors/sync-completion-reporting.json") }.first { it.isFile }
+        val suite = Json.parseToJsonElement(file.readText()).jsonObject
+        assertEquals(1, suite.getValue("schemaVersion").jsonPrimitive.int)
+        assertEquals("sync-completion-reporting", suite.getValue("suite").jsonPrimitive.content)
+        val cases = suite.getValue("cases").jsonArray.map { it.jsonObject }
+        assertEquals(2, cases.size, "Both portable terminal completion cases must remain exercised")
+        assertEquals(
+            setOf("sync-completion-reporting.current-decision", "sync-completion-reporting.obsolete-decision"),
+            cases.map { it.getValue("id").jsonPrimitive.content }.toSet()
+        )
+        assertEquals(setOf("terminal-video-completion"), cases.map { it.getValue("operation").jsonPrimitive.content }.toSet())
+        return cases.single { it.getValue("id").jsonPrimitive.content == id }
+    }
+
+    private fun terminalVideoDecision(case: JsonObject): PlayDecision {
+        val current = decision()
+        if (case.getValue("currentDecision").jsonPrimitive.boolean) return current
+        // Same negotiated fields, different identity: no manual completion callback or session substitute.
+        return PlayDecision(
+            current.itemId,
+            current.mediaSource,
+            current.method,
+            current.url,
+            current.headers,
+            current.playSessionId,
+            current.transcodeReasons,
+            current.ownedLiveStreamId
+        )
+    }
+
+    private fun assertTerminalVideoVector(case: JsonObject, sync: SyncPlayHost, requests: List<app.pictureshow.core.sync.SyncRequest>) {
+        val id = case.getValue("id").jsonPrimitive.content
+        assertEquals(case.getValue("expectedMembership").jsonPrimitive.boolean, sync.participating, id)
+        assertEquals(
+            case.getValue("expectedWire").jsonArray.map { it.jsonPrimitive.content },
+            requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation },
+            id
+        )
+        assertEquals(
+            case.getValue("expectedReports").jsonArray.map { it.jsonPrimitive.content },
+            reports.filter { it in setOf("/Sessions/Playing/Stopped", "catalog:played") },
+            id + " ordered completion reports"
+        )
+        assertEquals(case.getValue("expectedExits").jsonPrimitive.int, exits, id)
+        assertEquals(case.getValue("expectedLocalNext").jsonArray.map { it.jsonPrimitive.content }, next.toList(), id)
+    }
+
+    /** Real coordinator/renderer binding; only group HTTP responses are recorded, as in the host tests. */
+    private fun terminalVideoGroup(requests: MutableList<app.pictureshow.core.sync.SyncRequest>): SyncPlayHost {
+        val epoch = 1_762_776_000_000L
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+        terminalGroupScope = scope
+        return SyncPlayHost(
+            scope,
+            object : SyncPlayGateway {
+                override suspend fun groups(account: Account) = app.pictureshow.core.ClientResult.Success(
+                    listOf(app.pictureshow.core.sync.SyncGroup("terminal-group", "Evening", "Playing", listOf("Viewer"), epoch * 10_000))
+                )
+                override suspend fun access(account: Account) = app.pictureshow.core.ClientResult.Success("CreateAndJoinGroups")
+                override suspend fun time(account: Account) = app.pictureshow.core.ClientResult.Success(app.pictureshow.core.sync.SyncUtcTime(epoch, epoch))
+                override suspend fun send(account: Account, request: app.pictureshow.core.sync.SyncRequest): Int {
+                    requests += request
+                    return 204
+                }
+            },
+            wall = { epoch },
+            monotonic = { 0L }
+        )
+    }
+
+    private fun joinTerminalVideoGroup(sync: SyncPlayHost) {
+        compose.runOnIdle {
+            assertTrue(observedHost.sync === sync, "The screen must mount the actual production SyncPlaybackBinding")
+            sync.bind(account)
+            sync.socket(true)
+            sync.refresh()
+        }
+        waitUntil { sync.state.value.policy == "CreateAndJoinGroups" }
+        compose.runOnIdle {
+            sync.join("terminal-group")
+            sync.receive(
+                """{"MessageType":"SyncPlayGroupUpdate","Data":{"GroupId":"terminal-group","Type":"GroupJoined","Data":{"GroupId":"terminal-group","GroupName":"Evening","State":"Playing","Participants":["Viewer"],"LastUpdatedAt":"${app.pictureshow.core.sync.syncUtcTimestamp(1_762_776_000_000L)}"}}}"""
+            )
+            sync.receive(
+                """{"MessageType":"SyncPlayGroupUpdate","Data":{"GroupId":"terminal-group","Type":"PlayQueue","Data":{"Reason":"NewPlaylist","LastUpdate":"${app.pictureshow.core.sync.syncUtcTimestamp(1_762_776_000_000L)}","Playlist":[{"ItemId":"episode","PlaylistItemId":"terminal-entry"}],"PlayingItemIndex":0,"StartPositionTicks":420000000,"IsPlaying":true,"RepeatMode":"RepeatNone","ShuffleMode":"Sorted"}}}"""
+            )
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(sync.participating)
+            assertTrue(sync.membership.hasSnapshot)
+            assertEquals("terminal-entry", sync.membership.queue?.current?.playlistItemId)
+            assertTrue(observedHost.onSyncEnded != null)
+            assertEquals(sync.membership.generation, terminalOpening?.generation)
+            assertEquals("terminal-entry", terminalOpening?.entryId)
+            assertEquals(null, SyncPlayHost::class.java.getDeclaredField("openingEntry").apply { isAccessible = true }.get(sync),
+                "The real binding must acknowledge the actual SyncOpen before EOS")
+        }
+    }
+
+    /** Read-only fixture diagnostics: never clear a pending opening or replace the production callback. */
+    private fun terminalVideoDiagnostic(sync: SyncPlayHost): String {
+        val renderer = SyncPlayHost::class.java.getDeclaredField("renderer").apply { isAccessible = true }.get(sync) as? SyncRenderer
+        val snapshot = renderer?.snapshot()
+        val pending = SyncPlayHost::class.java.getDeclaredField("openingEntry").apply { isAccessible = true }.get(sync)
+        return "phase=${sync.membership.phase} generation=${sync.membership.generation} snapshot=${sync.membership.hasSnapshot} " +
+            "queueMatch=${sync.membership.queue?.current?.itemId == episode.id} openingPending=${pending != null} " +
+            "sourceMatch=${renderer?.sourceIdentity === output.player.value} callback=${observedHost.onSyncEnded != null} " +
+            "pwr=${snapshot?.playWhenReady} unpaused=${snapshot?.unpaused} ready=${snapshot?.ready} buffering=${snapshot?.buffering} " +
+            "seekable=${snapshot?.seekable} durationTicks=${snapshot?.durationTicks} exits=$exits"
+    }
+
+    private fun assertTerminalVideoAdmission(sync: SyncPlayHost) {
+        val renderer = requireNotNull(SyncPlayHost::class.java.getDeclaredField("renderer").apply { isAccessible = true }.get(sync) as? SyncRenderer)
+        val snapshot = renderer.snapshot()
+        val diagnostic = terminalVideoDiagnostic(sync)
+        println("TERMINAL_VIDEO_FIXTURE $diagnostic")
+        assertTrue(sync.participating && sync.membership.hasSnapshot, diagnostic)
+        assertEquals("terminal-entry", sync.membership.queue?.current?.playlistItemId, diagnostic)
+        assertEquals(episode.id, snapshot.itemId, diagnostic)
+        assertTrue(renderer.sourceIdentity === output.player.value, diagnostic)
+        assertTrue(observedHost.state.decision === decision(), diagnostic)
+        assertEquals(sync.membership.generation, terminalOpening?.generation, diagnostic)
+        assertEquals("terminal-entry", terminalOpening?.entryId, diagnostic)
+        assertEquals(null, SyncPlayHost::class.java.getDeclaredField("openingEntry").apply { isAccessible = true }.get(sync), diagnostic)
+        assertTrue(snapshot.unpaused && snapshot.playWhenReady == true, diagnostic)
+        assertTrue(observedHost.onSyncEnded != null, diagnostic)
+    }
+
     private fun launch(
         failFirst: Boolean = false,
         accessible: Boolean = false,
         noNext: Boolean = false,
         failAlways: Boolean = false,
-        offlineEngine: OfflineEngine? = null
+        offlineEngine: OfflineEngine? = null,
+        providedSync: SyncPlayHost? = null
     ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
@@ -429,7 +653,7 @@ class TouchPlaybackHostTest {
         startKoin {
             modules(
                 module {
-                    syncPlayFixture()
+                    if (providedSync == null) syncPlayFixture() else single { requireNotNull(providedSync) }
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }
@@ -446,7 +670,18 @@ class TouchPlaybackHostTest {
         shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
-                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides configuration) {
+                androidx.compose.runtime.LaunchedEffect(providedSync) {
+                    providedSync?.let { sync ->
+                        sync.opens.collect { request ->
+                            assertEquals(episode.id, request.itemId)
+                            if (sync.resolved(request, true)) terminalOpening = request
+                        }
+                    }
+                }
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalConfiguration provides configuration,
+                    LocalSyncOpen provides terminalOpening
+                ) {
                     val version = callbackVersion
                     val host = rememberPlaybackHost(
                         account,

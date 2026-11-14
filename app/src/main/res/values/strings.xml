@@ -56,7 +56,7 @@
     <string name="sync_play">Play</string>
     <string name="sync_pause">Pause</string>
     <string name="sync_wait_for_me">Wait for this device</string>
-    <string name="sync_wait_explanation">When off, the group keeps playing while this device catches up.</string>
+    <string name="sync_wait_explanation">When off, the group does not wait for this device.</string>
     <string name="sync_repeat">Repeat</string>
     <string name="sync_repeat_off">Off</string>
     <string name="sync_repeat_one">One</string>

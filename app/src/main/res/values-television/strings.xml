@@ -2,7 +2,7 @@
     <!-- Keep the same device noun and third-person voice throughout Watch together. -->
     <string name="sync_this_device">This TV</string>
     <string name="sync_wait_for_me">Wait for this TV</string>
-    <string name="sync_wait_explanation">When off, the group keeps playing while this TV catches up.</string>
+    <string name="sync_wait_explanation">When off, the group does not wait for this TV.</string>
     <string name="sync_wait_personal">Choose whether the group waits for this TV.</string>
     <string name="sync_leave_explanation">Leaving pauses this TV.</string>
     <string name="sync_estimate_explanation">Sync is estimated from this TV. Other devices may differ.</string>

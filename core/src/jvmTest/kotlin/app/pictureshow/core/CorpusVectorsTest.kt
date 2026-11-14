@@ -101,6 +101,7 @@ class CorpusVectorsTest {
                     "sync-membership-registration",
                     "sync-queue",
                     "sync-completion",
+                    "sync-completion-reporting",
                     "sync-rate-presentation",
                     "sync-socket-readiness",
                     "sync-source",

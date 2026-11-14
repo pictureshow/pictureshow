@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-completion-reporting",
+  "cases": [
+    {
+      "id": "sync-completion-reporting.current-decision",
+      "operation": "terminal-video-completion",
+      "currentDecision": true,
+      "expectedMembership": false,
+      "expectedWire": [
+        "Leave"
+      ],
+      "expectedReports": [
+        "/Sessions/Playing/Stopped",
+        "catalog:played"
+      ],
+      "expectedExits": 1,
+      "expectedLocalNext": []
+    },
+    {
+      "id": "sync-completion-reporting.obsolete-decision",
+      "operation": "terminal-video-completion",
+      "currentDecision": false,
+      "expectedMembership": true,
+      "expectedWire": [],
+      "expectedReports": [],
+      "expectedExits": 0,
+      "expectedLocalNext": []
+    }
+  ]
+}

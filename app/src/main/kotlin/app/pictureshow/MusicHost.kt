@@ -1240,7 +1240,9 @@ internal class MusicHost(
                 enqueue {
                     if (binding != endingBinding || player !== endingPlayer) return@enqueue
                     if (endingGroup != null) {
-                        if (endingPlayer == null || endingGroup.rendererEnded(this@MusicHost, syncBridge, endingPlayer, generation, entryId)) {
+                        if (endingPlayer == null ||
+                            endingGroup.rendererEnded(this@MusicHost, syncBridge, endingPlayer, generation, entryId)
+                        ) {
                             return@enqueue
                         }
                         // Membership has left with PLAYBACK_ENDED; this stop only tears down local audio/reporting.

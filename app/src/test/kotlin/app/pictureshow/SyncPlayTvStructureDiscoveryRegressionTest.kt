@@ -175,7 +175,9 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
         return values.single()
     }
 
-    @Test fun actualTvSectionsSeparatePersonalWaitFromSharedRepeat() {
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualTvSectionsSeparatePersonalWaitFromSharedRepeat() {
         val c = case("joined-personal-and-group-sections")
         launch(c, joined = true)
         assertGroupContextVisibility(c)
@@ -218,9 +220,13 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
         }
     }
 
-    @Test fun actualForwardDiscoveryHasContrastingIndicatorAndWholeHeaderAtFont10() = discovery("forward-discovery-font10")
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualForwardDiscoveryHasContrastingIndicatorAndWholeHeaderAtFont10() = discovery("forward-discovery-font10")
 
-    @Test fun actualForwardDiscoveryHasContrastingIndicatorAndWholeHeaderAtFont13() = discovery("forward-discovery-font13")
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualForwardDiscoveryHasContrastingIndicatorAndWholeHeaderAtFont13() = discovery("forward-discovery-font13")
 
     private fun assertGroupContextVisibility(c: Case) {
         val context = compose.onNodeWithTag("sync:personal")
@@ -306,9 +312,13 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
         assertTrue(errors.isEmpty(), errors.joinToString("\n"))
     }
 
-    @Test fun actualPrivacyPaintClearsFloatingNameLabelAtFont10() = privacyGap("create-privacy-to-floating-label-font10")
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualPrivacyPaintClearsFloatingNameLabelAtFont10() = privacyGap("create-privacy-to-floating-label-font10")
 
-    @Test fun actualPrivacyPaintClearsFloatingNameLabelAtFont13() = privacyGap("create-privacy-to-floating-label-font13")
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualPrivacyPaintClearsFloatingNameLabelAtFont13() = privacyGap("create-privacy-to-floating-label-font13")
 
     private fun privacyGap(id: String) {
         val c = case(id)
@@ -331,7 +341,9 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
         )
     }
 
-    @Test fun actualTvEmptyQueueHidesTransportAndRealMediaKeepsActions() = emptyTransport("empty-transport-tv")
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    fun actualTvEmptyQueueHidesTransportAndRealMediaKeepsActions() = emptyTransport("empty-transport-tv")
 
     @Test
     @Config(qualifiers = "w360dp-h640dp-port-xhdpi")

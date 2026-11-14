@@ -269,8 +269,12 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
             // A stale server destination must retain pause intent even if its decoder is created later.
             host.output.applySync { host.output.pause() }
         }
-        host.onSyncEnded = {
-            if (active == null) sync.participating else sync.rendererEnded(token, bridge, active, generation, entryId)
+        host.onSyncEnded = { source ->
+            if (active == null) {
+                sync.participating
+            } else {
+                sync.rendererEnded(token, bridge, active, generation, entryId) { host.controller?.ended(source) == true }
+            }
         }
         onDispose {
             active?.removeListener(positionListener)
