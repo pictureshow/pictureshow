@@ -72,6 +72,7 @@ internal class ActiveReadBandwidthDataSource(
             // Sample buffers already arrive in bulk: avoid an extra copy on that path.
             if (length >= readAhead.size) return readUpstream(buffer, offset, length)
             readPosition = 0
+            readLimit = 0
             val count = readUpstream(readAhead, 0, readAhead.size)
             readLimit = count.coerceAtLeast(0)
             if (count <= 0) return count

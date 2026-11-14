@@ -37,6 +37,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import java.io.IOException
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -92,6 +93,7 @@ class ActiveReadBandwidthDataSourceTest {
     /** A real DataSource contract: tiny extractor reads must preserve the bytes while avoiding per-byte instrumentation. */
     private class CueBody(private val bytes: ByteArray, private val clock: Clock) : BaseDataSource(true) {
         var reads = 0
+        var failAtRead: Int? = null
         private var cursor = 0
         private var end = 0
         override fun open(dataSpec: DataSpec): Long {
@@ -103,6 +105,7 @@ class ActiveReadBandwidthDataSourceTest {
         }
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             reads++
+            if (reads == failAtRead) throw IOException("scripted refill failure")
             clock.nanos += 50_000_000
             if (cursor == end) return C.RESULT_END_OF_INPUT
             val count = minOf(length, 16_384, end - cursor)
@@ -155,6 +158,26 @@ class ActiveReadBandwidthDataSourceTest {
         assertEquals((-1).toByte(), small[0])
         assertEquals((-1).toByte(), small[4])
         assertEquals(C.RESULT_END_OF_INPUT, source.read(small, 2, 1))
+        source.close()
+    }
+
+    @Test fun aFailedRefillCannotReplayTheExhaustedBufferOnRetry() {
+        val clock = Clock()
+        val payload = ByteArray(32_768) { (it / 16_384 * 100 + it % 97).toByte() }
+        val body = CueBody(payload, clock).apply { failAtRead = 2 }
+        val source = ActiveReadBandwidthDataSource(body, { clock.nanos }) { _, _ -> }
+        val chunk = ByteArray(16_384)
+        source.open(spec)
+        assertEquals(chunk.size, source.read(chunk, 0, chunk.size))
+        assertContentEquals(payload.copyOfRange(0, chunk.size), chunk)
+        assertFailsWith<IOException> { source.read(chunk, 0, chunk.size) }
+        assertEquals(chunk.size, source.read(chunk, 0, chunk.size))
+        assertContentEquals(
+            payload.copyOfRange(chunk.size, payload.size),
+            chunk,
+            "Retry must return the next bytes, never stale read-ahead"
+        )
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(chunk, 0, chunk.size))
         source.close()
     }
 
