@@ -269,11 +269,13 @@ class SyncPlayDirectorRegressionTest {
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun enabledCreateHasTheVisibleThemePrimarySurfaceAtRest() {
-        var primary = 0
+    @Test fun enabledCreateUsesQuietThemeTonalSurfaceAtRest() {
+        var tonal = 0
+        var onTonal = 0
         compose.setContent {
             TvEnvironment {
-                primary = androidx.tv.material3.MaterialTheme.colorScheme.primary.toArgb()
+                tonal = androidx.tv.material3.MaterialTheme.colorScheme.secondaryContainer.toArgb()
+                onTonal = androidx.tv.material3.MaterialTheme.colorScheme.onSecondaryContainer.toArgb()
                 SyncPlayPanel(SyncPlayPresentation(policyKnown = true, policy = "CreateAndJoinGroups"), { _, _ -> }, {})
             }
         }
@@ -283,8 +285,16 @@ class SyncPlayDirectorRegressionTest {
         compose.onNodeWithTag("sync:name").performTextInput("Friday films")
         compose.onNodeWithTag("sync:create").assertIsEnabled()
         val enabled = dominantCreateColor()
-        assertEquals(primary, enabled, "Enabled Create must visibly use theme primary at rest; disabled=$disabled enabled=$enabled primary=$primary")
+        assertEquals(tonal, enabled, "Enabled resting Create must visibly use quiet theme secondaryContainer; disabled=$disabled enabled=$enabled tonal=$tonal")
         assertTrue(disabled != enabled, "Typing a usable name must visibly distinguish Create from its disabled appearance")
+        val bitmap = compose.onNodeWithTag("sync:create").captureToImage().asAndroidBitmap()
+        var exactTextInk = 0
+        for (y in bitmap.height / 4 until bitmap.height * 3 / 4) {
+            for (x in bitmap.width / 40 until bitmap.width / 2) {
+                if (bitmap.getPixel(x, y) == onTonal) exactTextInk++
+            }
+        }
+        assertTrue(exactTextInk >= 8, "Actual resting label must paint theme onSecondaryContainer ink, not merely report a style token")
     }
 
     private fun dominantCreateColor(): Int {

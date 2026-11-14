@@ -26,7 +26,7 @@
     <string name="sync_scope">%1$s · %2$s</string>
     <string name="sync_this_server">This server</string>
     <string name="sync_signed_in">Signed-in account</string>
-    <string name="sync_privacy">Other people on this server can see your group and who is in it. There is no public invite link.</string>
+    <string name="sync_privacy">People on this server can see your group and members. No public invite link.</string>
     <string name="sync_checking">Checking access…</string>
     <string name="sync_check_access">Refresh to check whether your account can join groups.</string>
     <string name="sync_access_failed">Could not check access. Refresh to try again.</string>
@@ -55,6 +55,7 @@
     <string name="sync_repeat_all">All</string>
     <string name="sync_shuffle">Shuffle</string>
     <string name="sync_queue">Group queue</string>
+    <string name="sync_empty_next_step">Play a movie, episode or song from your library to start it for everyone.</string>
     <string name="sync_queue_empty">Choose a movie, episode or song to start the group queue.</string>
     <string name="sync_loading">Loading…</string>
     <string name="sync_title_unavailable">Title unavailable</string>

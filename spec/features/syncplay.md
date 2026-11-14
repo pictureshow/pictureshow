@@ -163,10 +163,18 @@ TV keeps local playback facts next to group phase in the first viewport. The
 names-only limitation is stated once; up to four actual names (including duplicate
 names) and localized +N are separate, remote-focusable **read-only facts**, with no
 button/click/disabled/selected/switch semantics. The local fact does not identify a
-remote bufferer or infer “you”. Personal playback options are explained beside Wait.
+remote bufferer or infer “you”. On TV the group-wide shared/personal explanation follows
+status, above transport and Wait, with12dp of block separation rather than reading as
+the Wait row’s caption. Touch retains its existing explanation beside Wait.
 Recovery actions take initial focus when offered; Leave appears only in the pinned
-footer. A completed asynchronous access check preserves an attached Refresh focus,
-while a newly opened loaded chooser starts on its first Join. Actual mode changes
+footer. A completed asynchronous populated group load preserves an attached Refresh
+focus, while a newly opened loaded chooser starts on its first Join. One bounded
+exception promotes a loading EMPTY chooser from Refresh to the attached Group name
+field when its first settled access/list result permits creation, only before actual
+D-pad/Enter or pointer navigation. Programmatic focus does not claim user ownership;
+input received before the delayed native request prevents that request. Later
+refreshes, group publications and populated results do not repeat the promotion.
+Focusing the field does not open its keyboard. Actual mode changes
 and removed focus targets recover useful focus. Removing a queue entry focuses the
 entry now at its old index, else the previous entry, else enabled Wait. Queue rows
 share one title column and quiet remove actions; the selected current entry remains
@@ -261,8 +269,17 @@ panel once; a stale request-to-edit flag must not consume that Back. Preserve th
 draft, the name field's focus and its bounds through keyboard dismissal. Initial
 focus still does not request a keyboard, and Go still submits only once.
 
-An enabled TV Create action keeps its theme-primary resting surface and has a broad,
-visible focus indication without enlarging its painted body. Repeat chips also keep
+An enabled TV Create action uses a quiet tonal filled resting surface
+(secondaryContainer/onSecondaryContainer on Android TV), then the same unmistakable
+onSurface/inverseOnSurface focused fill as the native rows, without enlarging its
+painted body or a dark-on-dark focus ring. Rest/focus paint contrast is at least3:1.
+The pinned TV create section has the existing localized create heading and its
+privacy supporting text directly above the stable name field. The empty joined
+status gives a localized library-play next step before disabled transport. These
+requirements need native font1.0/1.3, floating-IME and D-pad evidence; source alone
+does not establish qualification. The six `sync-tv-attention` cases run through actual
+Compose paint, focus and section geometry in Android; other platforms owe their
+corresponding native adapters. Repeat chips also keep
 their resting painted bounds on focus, whether selected or unselected; focus alone
 must not change shared Repeat. The chooser's empty-group status uses quiet supporting
 hierarchy (bodyMedium/onSurfaceVariant on Android TV), separated from Refresh by at

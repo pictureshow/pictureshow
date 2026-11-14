@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
@@ -555,8 +556,10 @@ internal fun TvSettingsPanel(
     pinnedNotice: (@Composable () -> Unit)? = null,
     bodyScrollState: ScrollState? = null,
     footerDivider: Boolean = false,
+    contentFocusRequestAllowed: () -> Boolean = { true },
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val latestContentFocusRequestAllowed by rememberUpdatedState(contentFocusRequestAllowed)
     var contentHasFocus by remember { mutableStateOf(false) }
     var hadContentFocus by remember { mutableStateOf(false) }
     val focusRepair = if (repairLostContentFocus) {
@@ -666,7 +669,7 @@ internal fun TvSettingsPanel(
         }
         LaunchedEffect(firstFocus, contentFocusKey) {
             withFrameNanos { }
-            firstFocus.requestFocus()
+            if (latestContentFocusRequestAllowed()) firstFocus.requestFocus()
         }
         LaunchedEffect(contentHasFocus) {
             if (repairLostContentFocus && hadContentFocus && !contentHasFocus) {

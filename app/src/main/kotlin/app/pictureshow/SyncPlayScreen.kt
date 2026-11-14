@@ -93,6 +93,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -183,6 +185,9 @@ internal fun SyncPlayPanel(
     val departureChooser = !joined && !uncertain && (state.departure != null || notice?.kind == SyncNoticeKind.LEFT)
     var nameContract by remember(state.server, state.viewer, joined, uncertain) { mutableStateOf(false) }
     SideEffect { if (departureChooser) nameContract = true }
+    var chooserUserMoved by remember(state.server, state.viewer, joined, uncertain) { mutableStateOf(false) }
+    var chooserSettled by remember(state.server, state.viewer, joined, uncertain) { mutableStateOf(state.policyKnown && !state.busy) }
+    var chooserFocusGeneration by remember(state.server, state.viewer, joined, uncertain) { mutableStateOf(0) }
     val initialChooserTarget = remember(state.server, state.viewer, joined, uncertain) {
         when {
             departureChooser && canCreate -> "name"
@@ -192,10 +197,33 @@ internal fun SyncPlayPanel(
             else -> "refresh"
         }
     }
+    LaunchedEffect(tv, state.server, state.viewer, joined, uncertain, state.policyKnown, state.busy, state.groups.isEmpty(), canCreate) {
+        if (tv && !joined && !uncertain && !chooserSettled && state.policyKnown && !state.busy) {
+            chooserSettled = true
+            // A settled populated load keeps Refresh; only the empty chooser's new task earns one promotion.
+            if (!chooserUserMoved && state.groups.isEmpty() && canCreate && initialChooserTarget == "refresh") {
+                chooserFocusGeneration++
+            }
+        }
+    }
+    val chooserInput = Modifier.onPreviewKeyEvent { event ->
+        if (event.type == KeyEventType.KeyDown && event.key in setOf(
+                Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+                Key.DirectionCenter, Key.Enter, Key.NumPadEnter
+            )) chooserUserMoved = true
+        false
+    }.pointerInput(state.server, state.viewer, joined, uncertain) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.changes.any { it.pressed && !it.previousPressed }) chooserUserMoved = true
+            }
+        }
+    }
     val chooserFocus = when {
         joined || uncertain || recovery != null -> first
         (departureChooser || nameContract) && canCreate -> nameFocus
-        initialChooserTarget == "name" && canCreate -> nameFocus
+        (initialChooserTarget == "name" || chooserFocusGeneration > 0) && canCreate -> nameFocus
         initialChooserTarget == "join" && state.accessAllowed && state.groups.isNotEmpty() -> joinFocus
         else -> refreshFocus
     }
@@ -203,9 +231,9 @@ internal fun SyncPlayPanel(
         state.departure?.let { Modifier.syncDeparturePresentation(it.id, onDeparturePresented) } ?: Modifier
     } else Modifier
 
-    // Async chooser data does not invalidate an attached Refresh/name focus target.
+    // Async populated data preserves focus. An untouched empty chooser gets one settled-data promotion.
     // Membership, usable transport and newly offered recovery do change the useful primary.
-    val focusKey = listOf(state.groupId, uncertain, usable, transport, notice?.action)
+    val focusKey = listOf(state.groupId, uncertain, usable, transport, notice?.action, chooserFocusGeneration)
     var removedEntry by remember(state.server, state.viewer, state.groupId) { mutableStateOf<Pair<String, Int>?>(null) }
     val action: (String, String?) -> Unit = { op, value ->
         if (op == "remove-entry" && value != null) removedEntry = value to state.queue.indexOfFirst { it.id == value }
@@ -241,15 +269,9 @@ internal fun SyncPlayPanel(
                 enabled = !state.busy && name.isNotBlank(),
                 modifier = modifier.focusRequester(createFocus).testTag("sync:create"),
                 scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f),
-                border = androidx.tv.material3.ButtonDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(
-                        BorderStroke(3.dp, TvMaterialTheme.colorScheme.onPrimary),
-                        inset = (-1.5f).dp
-                    )
-                ),
                 colors = androidx.tv.material3.ButtonDefaults.colors(
-                    containerColor = TvMaterialTheme.colorScheme.primary,
-                    contentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    containerColor = TvMaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = TvMaterialTheme.colorScheme.onSecondaryContainer,
                     focusedContainerColor = TvMaterialTheme.colorScheme.onSurface,
                     focusedContentColor = TvMaterialTheme.colorScheme.inverseOnSurface,
                     disabledContainerColor = TvMaterialTheme.colorScheme.onSurface.copy(alpha = .12f),
@@ -353,7 +375,8 @@ internal fun SyncPlayPanel(
             TvSettingsPanel(
                 stringResource(R.string.sync_title),
                 onDismiss,
-                chooserFocus, modifier = Modifier.testTag("sync:panel"),
+                chooserFocus, modifier = Modifier.testTag("sync:panel").then(chooserInput),
+                contentFocusRequestAllowed = { joined || uncertain || recovery != null || !chooserUserMoved },
                 preview = {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         fixtureLabel?.let {
@@ -377,15 +400,22 @@ internal fun SyncPlayPanel(
                 pinnedEditor = if (canCreate) {
                     (
                         {
-                            SyncTvNameField(
-                                state,
-                                tvName,
-                                nameFocus,
-                                createFocus,
-                                tvKeyboardRequested,
-                                { tvKeyboardRequested = it },
-                                action
-                            )
+                            Column {
+                                TvSettingsSectionHeader(
+                                    stringResource(R.string.sync_create),
+                                    Modifier.testTag("sync:create-heading"),
+                                    supportingText = stringResource(R.string.sync_privacy)
+                                )
+                                SyncTvNameField(
+                                    state,
+                                    tvName,
+                                    nameFocus,
+                                    createFocus,
+                                    tvKeyboardRequested,
+                                    { tvKeyboardRequested = it },
+                                    action
+                                )
+                            }
                         }
                         )
                 } else {
@@ -664,7 +694,7 @@ private fun SyncGroups(
     val formFirst = !tv && canCreate && state.groups.isEmpty()
     if (formFirst) mountedForm(form)
     if (!compactEditing) {
-        if (state.accessAllowed) SyncText(stringResource(R.string.sync_privacy), tv, small = true)
+        if (state.accessAllowed && !(tv && canCreate)) SyncText(stringResource(R.string.sync_privacy), tv, small = true)
         val accessNotice = when (state.access.notice) {
             SyncAccessNotice.CHECKING -> R.string.sync_checking
             SyncAccessNotice.UNKNOWN -> R.string.sync_check_access
@@ -859,6 +889,14 @@ private fun SyncJoined(
         val status = if (panelQuality == SyncQuality.UNKNOWN) phase else "$phase\u00a0·\u00a0${syncQualityText(panelQuality)}"
         SyncText(status, tv, Modifier.testTag("sync:phase").semantics { liveRegion = LiveRegionMode.Polite }, small = compactHeight)
     }
+    if (tv && state.queue.isEmpty()) {
+        SyncText(stringResource(R.string.sync_empty_next_step), true,
+            Modifier.padding(top = 8.dp).testTag("sync:empty-next-step"), small = true)
+    }
+    if (tv) {
+        SyncText(stringResource(R.string.sync_personal), true,
+            Modifier.padding(top = 8.dp).testTag("sync:personal"), small = true)
+    }
     val local = stringResource(
         when (state.localPlayback) {
             SyncLocalPlayback.UNAVAILABLE -> R.string.sync_local_unavailable
@@ -938,7 +976,7 @@ private fun SyncJoined(
             ),
             usable
         )
-        SyncText(stringResource(R.string.sync_personal), tv, small = true)
+        if (!tv) SyncText(stringResource(R.string.sync_personal), false, small = true)
     }
     val playbackSettings: @Composable () -> Unit = {
         SyncHeading(stringResource(R.string.sync_repeat), tv, compact = !tv)

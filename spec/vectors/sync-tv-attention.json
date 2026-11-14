@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-tv-attention",
+  "scope": "Portable native presentation contract; each platform adapter renders its production component and observes focus/paint/bounds. No pure duplicate policy model.",
+  "contractChange": "Enabled Create uses quiet tonal theme paint at rest and unmistakable light focus; the focused versus resting native fills have at least 3:1 contrast.",
+  "cases": [
+    {
+      "id": "create-quiet-rest-focus-font10",
+      "profile": "create-rest-focused-attention",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.0,
+        "theme": {
+          "kind": "default"
+        }
+      },
+      "expected": {
+        "restContainerToken": "secondaryContainer",
+        "restContentToken": "onSecondaryContainer",
+        "focusedContainerToken": "onSurface",
+        "focusedContentToken": "inverseOnSurface",
+        "focusFillMinContrast": 3.0,
+        "focusedBrighterThanRest": true,
+        "stableBounds": true
+      }
+    },
+    {
+      "id": "create-quiet-rest-focus-font13",
+      "profile": "create-rest-focused-attention",
+      "input": {
+        "draft": "Friday films",
+        "fontScale": 1.3,
+        "theme": {
+          "kind": "default"
+        }
+      },
+      "expected": {
+        "restContainerToken": "secondaryContainer",
+        "restContentToken": "onSecondaryContainer",
+        "focusedContainerToken": "onSurface",
+        "focusedContentToken": "inverseOnSurface",
+        "focusFillMinContrast": 3.0,
+        "focusedBrighterThanRest": true,
+        "stableBounds": true
+      }
+    },
+    {
+      "id": "cold-empty-access-resolves-before-input",
+      "profile": "chooser-cold-empty-transition",
+      "input": {
+        "before": {
+          "busy": true,
+          "policyKnown": false,
+          "groups": []
+        },
+        "events": [
+          "AccessAllowedEmpty"
+        ],
+        "after": {
+          "busy": false,
+          "policyKnown": true,
+          "policy": "CreateAndJoinGroups",
+          "groups": []
+        }
+      },
+      "expected": {
+        "focusedTarget": "name",
+        "implicitKeyboardRequested": false,
+        "sharedActions": []
+      }
+    },
+    {
+      "id": "cold-empty-access-resolves-after-dpad",
+      "profile": "chooser-cold-empty-transition",
+      "input": {
+        "before": {
+          "busy": true,
+          "policyKnown": false,
+          "groups": []
+        },
+        "events": [
+          "DirectionDown",
+          "AccessAllowedEmpty"
+        ],
+        "after": {
+          "busy": false,
+          "policyKnown": true,
+          "policy": "CreateAndJoinGroups",
+          "groups": []
+        }
+      },
+      "expected": {
+        "focusedTarget": "refresh",
+        "implicitKeyboardRequested": false,
+        "sharedActions": []
+      }
+    },
+    {
+      "id": "create-heading-privacy-before-editor",
+      "profile": "chooser-create-context",
+      "input": {
+        "policy": "CreateAndJoinGroups",
+        "groups": []
+      },
+      "expected": {
+        "readingOrder": [
+          "createHeading",
+          "privacy",
+          "nameEditor",
+          "groupsHeading"
+        ],
+        "createHeadingSemantic": true,
+        "privacyOccurrences": 1,
+        "headingPrivacyMaxGapDp": 12,
+        "editorPinned": true
+      }
+    },
+    {
+      "id": "joined-shared-personal-is-group-context",
+      "profile": "joined-shared-personal-context",
+      "input": {
+        "groupName": "Friday films",
+        "phase": "Paused",
+        "queue": [],
+        "fontScale": 1.0
+      },
+      "expected": {
+        "personalFactBeforeTransport": true,
+        "personalFactIsWaitCaption": false,
+        "minimumBlockGapDp": 12,
+        "firstUsefulFocus": "ignore-wait"
+      }
+    }
+  ]
+}
