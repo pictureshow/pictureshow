@@ -336,7 +336,7 @@ internal fun SyncPlayPanel(
     }
     val footer: @Composable (Boolean) -> Unit = { compactHeight ->
         if (joined || uncertain) {
-            if (compactHeight) {
+            if (compactHeight || !tv) {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -346,7 +346,7 @@ internal fun SyncPlayPanel(
                     leave(Modifier)
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp)) {
                     if (tv) {
                         SyncText(stringResource(R.string.sync_leave_explanation), true, small = true)
                     } else {
@@ -458,6 +458,7 @@ internal fun SyncPlayPanel(
                                     Modifier.testTag("sync:create-heading"),
                                     supportingText = stringResource(R.string.sync_privacy)
                                 )
+                                Spacer(Modifier.height(8.dp))
                                 SyncTvNameField(
                                     state,
                                     tvName,
@@ -527,20 +528,29 @@ internal fun SyncPlayPanel(
                                     tonalElevation = 3.dp,
                                     modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
                                 ) {
-                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Box(Modifier.fillMaxWidth().testTag("sync:touch-footer"), contentAlignment = Alignment.Center) {
                                         Box(
                                             Modifier.widthIn(max = 600.dp).fillMaxWidth().windowInsetsPadding(
                                                 WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
                                             )
                                                 .padding(horizontal = 16.dp, vertical = if (compactHeight) 4.dp else 12.dp)
                                         ) { footer(compactHeight) }
+                                        if (bodyScroll.canScrollForward) {
+                                            Box(
+                                                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp)
+                                                    .background(MaterialTheme.colorScheme.outlineVariant)
+                                                    .testTag("sync:touch-footer-divider")
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     ) { insets ->
                         Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.TopCenter) {
-                            SyncTouchBody(Modifier.widthIn(max = 600.dp), compactHeight) { body(compactHeight, compactIme) }
+                            SyncTouchBody(Modifier.widthIn(max = 600.dp), compactHeight, scrollState = bodyScroll) {
+                                body(compactHeight, compactIme)
+                            }
                         }
                     }
                 }
@@ -552,8 +562,14 @@ internal fun SyncPlayPanel(
 /** Drawing and focus reveal share the live viewport's actual fade boundaries. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Composable ColumnScope.() -> Unit) {
-    val scroll = rememberScrollState()
+internal fun SyncTouchBody(
+    modifier: Modifier,
+    compactHeight: Boolean,
+    scrollState: ScrollState? = null,
+    body: @Composable ColumnScope.() -> Unit
+) {
+    val rememberedScroll = rememberScrollState()
+    val scroll = scrollState ?: rememberedScroll
     val surface = MaterialTheme.colorScheme.surface
     val density = LocalDensity.current
     val bottomFade = 20.dp
@@ -984,7 +1000,7 @@ private fun SyncJoined(
     }
     if (tv) {
         SyncText(
-            stringResource(R.string.sync_personal),
+            stringResource(R.string.sync_group_context),
             true,
             Modifier.padding(top = 8.dp).testTag("sync:personal"),
             small = true
@@ -1018,42 +1034,51 @@ private fun SyncJoined(
             bodyScroll.scrollTo(0)
         }
     }
-    Row(
-        Modifier.fillMaxWidth().then(
-            if (tv) {
-                Modifier.tvSettingsVisualBlock().padding(vertical = 8.dp)
-            } else {
-                Modifier.bringIntoViewRequester(touchReveal)
-                    .onPlaced { touchTransportPlaced = true }
-            }
-        ),
-        horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SyncTransport("previous", stringResource(R.string.sync_previous), {
-            action("previous", null)
-        }, tv, Modifier.testTag("sync:previous"), transport)
-        val play = state.phase != "Playing"
-        SyncTransport(
-            if (play) "play" else "pause",
-            stringResource(if (play) R.string.sync_play else R.string.sync_pause),
-            { action(if (play) "play" else "pause", null) },
-            tv,
-            Modifier.testTag(if (play) "sync:play" else "sync:pause").onFocusChanged {
-                if (transport) topControlFocused = it.isFocused
-            }.then(
-                if (transport &&
-                    !hasRecovery
-                ) {
-                    Modifier.focusRequester(first)
+    if (state.queue.isNotEmpty()) {
+        Row(
+            Modifier.fillMaxWidth().then(
+                if (tv) {
+                    Modifier.tvSettingsVisualBlock().padding(vertical = 8.dp)
                 } else {
-                    Modifier
+                    Modifier.bringIntoViewRequester(touchReveal)
+                        .onPlaced { touchTransportPlaced = true }
                 }
             ),
-            transport,
-            primary = true
-        )
-        SyncTransport("next", stringResource(R.string.sync_next), { action("next", null) }, tv, Modifier.testTag("sync:next"), transport)
+            horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SyncTransport("previous", stringResource(R.string.sync_previous), {
+                action("previous", null)
+            }, tv, Modifier.testTag("sync:previous"), transport)
+            val play = state.phase != "Playing"
+            SyncTransport(
+                if (play) "play" else "pause",
+                stringResource(if (play) R.string.sync_play else R.string.sync_pause),
+                { action(if (play) "play" else "pause", null) },
+                tv,
+                Modifier.testTag(if (play) "sync:play" else "sync:pause").onFocusChanged {
+                    if (transport) topControlFocused = it.isFocused
+                }.then(
+                    if (transport &&
+                        !hasRecovery
+                    ) {
+                        Modifier.focusRequester(first)
+                    } else {
+                        Modifier
+                    }
+                ),
+                transport,
+                primary = true
+            )
+            SyncTransport(
+                "next",
+                stringResource(R.string.sync_next),
+                { action("next", null) },
+                tv,
+                Modifier.testTag("sync:next"),
+                transport
+            )
+        }
     }
     if (compactHeight &&
         state.quality != SyncQuality.UNKNOWN
@@ -1088,7 +1113,16 @@ private fun SyncJoined(
         if (!tv) SyncText(stringResource(R.string.sync_personal), false, small = true)
     }
     val playbackSettings: @Composable () -> Unit = {
-        SyncHeading(stringResource(R.string.sync_repeat), tv, compact = !tv)
+        if (tv) {
+            androidx.tv.material3.Text(
+                stringResource(R.string.sync_repeat),
+                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                style = TvMaterialTheme.typography.labelLarge,
+                color = TvMaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            SyncHeading(stringResource(R.string.sync_repeat), false, compact = true)
+        }
         val repeats = listOf(
             "RepeatNone" to R.string.sync_repeat_off,
             "RepeatOne" to R.string.sync_repeat_one,
@@ -1233,8 +1267,18 @@ private fun SyncJoined(
         }
     }
     if (tv) {
-        // Keep the established remote path: Play → Wait → Repeat → Shuffle.
+        // Section labels explain scope without changing Play → Wait → Repeat → Shuffle.
+        TvSettingsSectionHeader(
+            stringResource(R.string.sync_your_settings),
+            Modifier.testTag("sync:personal-scope"),
+            supportingText = stringResource(R.string.sync_wait_personal)
+        )
         waitSetting()
+        TvSettingsSectionHeader(
+            stringResource(R.string.sync_group_playback),
+            Modifier.testTag("sync:group-scope"),
+            supportingText = stringResource(R.string.sync_group_playback_scope)
+        )
         playbackSettings()
         queue()
         roster()

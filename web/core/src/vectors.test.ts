@@ -106,6 +106,7 @@ const pendingPortSuites = new Set([
     "sync-speed-intent-origin",
     "sync-tv-surfaces",
     "sync-tv-attention",
+    "sync-tv-structure-discovery",
 
     "live-guide",
     "live-dvr",

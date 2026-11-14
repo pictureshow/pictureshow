@@ -112,10 +112,10 @@ class SyncPlayDirectorRegressionTest {
         compose.onNodeWithTag("sync:recovery").assertIsFocused()
     }
 
-    @Test fun emptyAuthoritativeQueueDisablesEveryTransport() {
+    @Test fun emptyAuthoritativeQueueOmitsEveryTransport() {
         show(joined().copy(phase = "Idle", queue = emptyList()))
         for (tag in listOf("sync:previous", "sync:play", "sync:next")) {
-            compose.onNodeWithTag(tag).assertIsNotEnabled()
+            compose.onNodeWithTag(tag).assertDoesNotExist()
         }
     }
 
@@ -228,7 +228,7 @@ class SyncPlayDirectorRegressionTest {
         key(Key.DirectionCenter)
         compose.onNodeWithTag("sync:entry:a").assertDoesNotExist()
         compose.onNodeWithTag("sync:ignore-wait").assertIsFocused().assertIsEnabled()
-        compose.onNodeWithTag("sync:play").assertIsNotEnabled()
+        compose.onNodeWithTag("sync:play").assertDoesNotExist()
     }
 
     @Test fun initialPlayFocusKeepsTheWholeScopeLineBelowTheFixedTitle() {

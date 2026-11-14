@@ -89,6 +89,10 @@
     <string name="sync_out_of_sync">This device is out of sync with the group. Rejoin to catch up.</string>
     <string name="sync_wait_unavailable">Available when connected and playback is ready.</string>
     <string name="sync_your_settings">Your settings</string>
+    <string name="sync_wait_personal">Choose whether the group waits for this TV.</string>
+    <string name="sync_group_playback">Group playback</string>
+    <string name="sync_group_playback_scope">Changes here apply to everyone.</string>
+    <string name="sync_group_context">Playback and queue are shared.</string>
     <string name="sync_lost">Lost sync with the group. Rejoin to catch up.</string>
     <string name="sync_rejoin">Rejoin</string>
     <string name="sync_library_denied">This title is unavailable to your account. Leave the group to keep watching on your own.</string>

@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-tv-structure-discovery",
+  "scope": "Production SyncPlay panel scope and discovery on TV and touch; actual native paint, dialog layout and scroll semantics. No protocol simulation or device-IME claim.",
+  "cases": [
+    {
+      "id": "joined-personal-and-group-sections",
+      "profile": "joined-setting-scope",
+      "input": {
+        "fontScale": 1.0,
+        "phase": "Paused",
+        "queueEntries": 0,
+        "platform": "tv"
+      },
+      "expected": {
+        "personalHeading": "Your settings",
+        "personalScopeContains": "this TV",
+        "groupHeading": "Group playback",
+        "groupScopeContains": "everyone",
+        "readingOrder": [
+          "personalHeading",
+          "personalScope",
+          "wait",
+          "groupHeading",
+          "groupScope",
+          "repeat"
+        ],
+        "firstUsefulFocus": "wait-setting"
+      }
+    },
+    {
+      "id": "forward-discovery-font10",
+      "profile": "forward-scroll-discovery",
+      "input": {
+        "fontScale": 1.0,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "platform": "tv"
+      },
+      "expected": {
+        "indicatorMinimumContrast": 3.0,
+        "indicatorMinimumPaintedRunDp": 16.0,
+        "currentLabelAboveMask": true,
+        "nativePixelTolerance": 1.0,
+        "continuationHeading": "Group playback",
+        "emptyTransportVisible": false
+      }
+    },
+    {
+      "id": "forward-discovery-font13",
+      "profile": "forward-scroll-discovery",
+      "input": {
+        "fontScale": 1.3,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "platform": "tv"
+      },
+      "expected": {
+        "indicatorMinimumContrast": 3.0,
+        "indicatorMinimumPaintedRunDp": 16.0,
+        "currentLabelAboveMask": true,
+        "nativePixelTolerance": 1.0,
+        "continuationHeading": "Group playback",
+        "emptyTransportVisible": false
+      }
+    },
+    {
+      "id": "create-privacy-to-floating-label-font10",
+      "profile": "create-field-context-gap",
+      "input": {
+        "fontScale": 1.0,
+        "platform": "tv"
+      },
+      "expected": {
+        "minimumPaintedGapDp": 12.0,
+        "nativePixelTolerance": 1.0,
+        "nameFocused": true
+      }
+    },
+    {
+      "id": "create-privacy-to-floating-label-font13",
+      "profile": "create-field-context-gap",
+      "input": {
+        "fontScale": 1.3,
+        "platform": "tv"
+      },
+      "expected": {
+        "minimumPaintedGapDp": 12.0,
+        "nativePixelTolerance": 1.0,
+        "nameFocused": true
+      }
+    },
+    {
+      "id": "empty-transport-tv",
+      "profile": "empty-transport-lifecycle",
+      "input": {
+        "platform": "tv",
+        "fontScale": 1.0,
+        "nonemptyPhase": "Paused",
+        "phase": "Idle",
+        "queueEntries": 0
+      },
+      "expected": {
+        "emptyUsefulFocus": "wait-setting",
+        "nonemptyActions": [
+          "previous",
+          "play",
+          "next"
+        ],
+        "emptyAbsentActions": [
+          "previous",
+          "play",
+          "pause",
+          "next"
+        ],
+        "nonemptyEnabledActions": [
+          "previous",
+          "play",
+          "next"
+        ]
+      }
+    },
+    {
+      "id": "empty-transport-phone",
+      "profile": "empty-transport-lifecycle",
+      "input": {
+        "platform": "touch",
+        "fontScale": 1.0,
+        "nonemptyPhase": "Paused",
+        "phase": "Idle",
+        "queueEntries": 0
+      },
+      "expected": {
+        "nonemptyActions": [
+          "previous",
+          "play",
+          "next"
+        ],
+        "emptyAbsentActions": [
+          "previous",
+          "play",
+          "pause",
+          "next"
+        ],
+        "nonemptyEnabledActions": [
+          "previous",
+          "play",
+          "next"
+        ]
+      }
+    },
+    {
+      "id": "phone640-discovery-font10",
+      "profile": "phone-forward-discovery",
+      "input": {
+        "platform": "touch",
+        "fontScale": 1.0,
+        "windowWidthDp": 360,
+        "windowHeightDp": 640,
+        "queueEntries": 0,
+        "phase": "Idle"
+      },
+      "expected": {
+        "footerHorizontalGapDp": 8.0,
+        "minimumLeaveTargetDp": 48.0,
+        "dividerHeightDp": 1.0,
+        "dividerColorToken": "outlineVariant",
+        "dividerAbsentAtEnd": true,
+        "nativePixelTolerance": 1.0,
+        "initialWholeShuffleLabel": true,
+        "revealTextAfterOrdinaryScroll": [
+          "Shuffle",
+          "People watching"
+        ]
+      }
+    },
+    {
+      "id": "phone640-discovery-font13",
+      "profile": "phone-forward-discovery",
+      "input": {
+        "platform": "touch",
+        "fontScale": 1.3,
+        "windowWidthDp": 360,
+        "windowHeightDp": 640,
+        "queueEntries": 0,
+        "phase": "Idle"
+      },
+      "expected": {
+        "footerHorizontalGapDp": 8.0,
+        "minimumLeaveTargetDp": 48.0,
+        "dividerHeightDp": 1.0,
+        "dividerColorToken": "outlineVariant",
+        "dividerAbsentAtEnd": true,
+        "nativePixelTolerance": 1.0,
+        "initialWholeShuffleLabel": false,
+        "revealTextAfterOrdinaryScroll": [
+          "Shuffle",
+          "People watching"
+        ]
+      }
+    },
+    {
+      "id": "phone800-discovery-font13",
+      "profile": "phone-forward-discovery",
+      "input": {
+        "platform": "touch",
+        "fontScale": 1.3,
+        "windowWidthDp": 360,
+        "windowHeightDp": 800,
+        "queueEntries": 0,
+        "phase": "Idle"
+      },
+      "expected": {
+        "footerHorizontalGapDp": 8.0,
+        "minimumLeaveTargetDp": 48.0,
+        "dividerHeightDp": 1.0,
+        "dividerColorToken": "outlineVariant",
+        "dividerAbsentAtEnd": true,
+        "nativePixelTolerance": 1.0,
+        "initialWholeShuffleLabel": false,
+        "revealTextAfterOrdinaryScroll": [
+          "Shuffle",
+          "People watching"
+        ]
+      }
+    }
+  ]
+}

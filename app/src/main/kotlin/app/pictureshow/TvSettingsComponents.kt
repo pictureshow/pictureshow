@@ -810,9 +810,9 @@ internal fun TvSettingsList(
             )
         }
         if (scroll.canScrollBackward || scroll.canScrollForward) {
-            val indicator = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f)
+            val indicator = MaterialTheme.colorScheme.onSurfaceVariant
             Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 4.dp, top = 8.dp, bottom = 8.dp)) {
-                Canvas(Modifier.width(2.dp).fillMaxHeight().testTag("tv-settings:scroll-indicator")) {
+                Canvas(Modifier.width(4.dp).fillMaxHeight().testTag("tv-settings:scroll-indicator")) {
                     val viewport = size.height
                     val thumb = (viewport * viewport / (viewport + scroll.maxValue)).coerceAtLeast(32.dp.toPx()).coerceAtMost(viewport)
                     val top = if (scroll.maxValue > 0) (viewport - thumb) * scroll.value / scroll.maxValue else 0f

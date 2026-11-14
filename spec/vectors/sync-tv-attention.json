@@ -121,14 +121,20 @@
       "input": {
         "groupName": "Friday films",
         "phase": "Paused",
-        "queue": [],
+        "queue": [
+          {
+            "id": "a",
+            "title": "A real film",
+            "current": true
+          }
+        ],
         "fontScale": 1.0
       },
       "expected": {
         "personalFactBeforeTransport": true,
         "personalFactIsWaitCaption": false,
         "minimumBlockGapDp": 12,
-        "firstUsefulFocus": "ignore-wait"
+        "firstUsefulFocus": "play"
       }
     }
   ]

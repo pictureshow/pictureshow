@@ -264,11 +264,26 @@ class SyncPlayTvChooserAttentionRegressionTest {
 
     @Test fun sharedPersonalFactIsGroupContextBeforeControlsWithPaintedBlockClearance() {
         val c = case("joined-shared-personal-is-group-context")
-        val state = allowedEmpty().copy(groupId = "g", groupName = "Friday films", phase = "Paused")
+        RuntimeEnvironment.setFontScale(c.number("fontScale"))
+        val queue = c.input.getValue("queue").jsonArray.map { entry ->
+            val row = entry.jsonObject
+            SyncPlayQueueRow(
+                row.getValue("id").jsonPrimitive.content,
+                row.getValue("title").jsonPrimitive.content,
+                row.getValue("current").jsonPrimitive.boolean
+            )
+        }
+        val state = allowedEmpty().copy(
+            groupId = "g",
+            groupName = c.text("groupName"),
+            phase = c.text("phase"),
+            queue = queue,
+            localPlayback = SyncLocalPlayback.READY
+        )
         compose.setContent { TvEnvironment { SyncPlayPanel(state, { _, _ -> }, {}) } }
         settle()
-        compose.onNodeWithTag("sync:ignore-wait").assertIsFocused()
-        val personal = compose.onNodeWithText(text(R.string.sync_personal), useUnmergedTree = true)
+        compose.onNodeWithTag("sync:${c.expected.getValue("firstUsefulFocus").jsonPrimitive.content}").assertIsFocused()
+        val personal = compose.onNodeWithTag("sync:personal", useUnmergedTree = true)
         personal.assertIsDisplayed()
         val fact = personal.fetchSemanticsNode().boundsInRoot
         val transport = listOf("sync:previous", "sync:play", "sync:next").map {

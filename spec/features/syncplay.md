@@ -153,19 +153,28 @@ https://developer.android.com/training/tv/playback/compose/layouts .
 ### Native UI recovery, layout and capture contract
 
 Transport is available only when the current group controls are usable and its
-**authoritative queue has a positive entry count**. An empty queue disables Previous,
-Play/Pause and Next, explains how to start the queue, and starts TV focus on the
-useful Wait control. The pure Kotlin `syncTransportAvailable(usable, queueEntries)`
-projection implements the six portable `op=transport` boundary cases. This does not
-change group transport authorization, readiness, playback clocks or source policy.
+**authoritative queue has a positive entry count**. With an empty queue the TV and
+touch group panels omit Previous, Play/Pause and Next, explain how to start the queue,
+and start TV focus on the useful Wait control. A nonempty queue retains the existing
+transport roles, availability and request behavior. The native player screen’s
+separate empty-group primary action remains disabled. The pure Kotlin
+`syncTransportAvailable(usable, queueEntries)` projection implements the six portable
+`op=transport` boundary cases. This does not change group transport authorization,
+readiness, playback clocks or source policy.
 
 TV keeps local playback facts next to group phase in the first viewport. The
 names-only limitation is stated once; up to four actual names (including duplicate
 names) and localized +N are separate, remote-focusable **read-only facts**, with no
 button/click/disabled/selected/switch semantics. The local fact does not identify a
-remote bufferer or infer “you”. On TV the group-wide shared/personal explanation follows
-status, above transport and Wait, with12dp of block separation rather than reading as
-the Wait row’s caption. Touch retains its existing explanation beside Wait.
+remote bufferer or infer “you”. On TV a short group-wide playback/queue fact follows
+status, above transport (when present) and Wait, with12dp of block separation rather
+than reading as the Wait row’s caption. TV additionally places a native Your settings
+section header immediately above Wait explaining the choice of whether the group
+waits for this TV, and a Group playback header above Repeat/Shuffle stating that
+changes apply to everyone.
+Repeat is a subordinate label in that shared section. These passive labels do not
+change the Play→Wait→Repeat→Shuffle remote order or initial Wait focus for an empty
+queue. Touch retains its existing explanation beside Wait.
 Recovery actions take initial focus when offered; Leave appears only in the pinned
 footer. A completed asynchronous populated group load preserves an attached Refresh
 focus, while a newly opened loaded chooser starts on its first Join. One bounded
@@ -184,7 +193,11 @@ buttons; other shared settings callers retain their prior defaults.
 
 Touch compact portrait remains full-screen. Wide windows keep the Scaffold, app bar and footer backing full-bleed; only their
 readable body/footer content is centered at a600dp maximum. Compact height uses a48dp collapsing app bar, compact
-status and a one-row footer so useful transport is initially visible at640×360dp.
+status so useful transport is initially visible at640×360dp. At every touch height,
+the Leave caption and action share the existing compact footer row; the caption may
+wrap naturally beside the native48dp action. While the actual body can scroll
+forward, a1dp outlineVariant divider spans the pinned footer’s upper edge. The body
+and footer read the same native scroll state; fade/reveal rules remain unchanged.
 A compact chooser never pins Create to a footer: its field and inline Create remain
 together before and during IME display. Empty touch choosers put this form first at
 every height. IME Go submits a nonblank trimmed name. Compactness and IME insets
@@ -274,9 +287,11 @@ An enabled TV Create action uses a quiet tonal filled resting surface
 onSurface/inverseOnSurface focused fill as the native rows, without enlarging its
 painted body or a dark-on-dark focus ring. Rest/focus paint contrast is at least3:1.
 The pinned TV create section has the existing localized create heading and its
-privacy supporting text directly above the stable name field. The empty joined
-status gives a localized library-play next step before disabled transport. These
-requirements need native font1.0/1.3, floating-IME and D-pad evidence; source alone
+privacy supporting text above the stable name field, with an additional8dp caller
+gap so the privacy glyphs and native floating field label have at least12dp of
+separation. This spacing preserves the pinned editor, IME and keyboard action roles.
+The empty joined status gives a localized library-play next step without an empty
+transport row. These requirements need native font1.0/1.3, floating-IME and D-pad evidence; source alone
 does not establish qualification. The six `sync-tv-attention` cases run through actual
 Compose paint, focus and section geometry in Android; other platforms owe their
 corresponding native adapters. Repeat chips also keep
@@ -303,6 +318,16 @@ SyncPlay surface and preserve other shared-component callers' default behavior.
 Fully visible targets do not move, violated edges move minimally, oversized targets
 remain stable and terminal48dp padding lets the last read-only roster fact clear the
 bottom fade.
+Scrolling Android TV settings surfaces use a4dp position indicator in the
+full-opacity onSurfaceVariant theme color with at least3:1 contrast over their
+surface. The initial empty-group panel must show the Your settings header and Wait,
+then a whole legible Group playback header above the active bottom mask, or the
+Repeat chips if they also fit. The removed empty transport and concise TV intro
+make room for that continuation; the40dp/8dp cut-content mask and whole-ink rules
+remain unchanged. No scroll hint is added to the Leave explanation. The footer
+explanation has8dp clearance from Leave. Native font1.0/1.3 captures must establish
+that actual header/chip continuation and visible indicator paint; source is not
+native qualification.
 The Play→Wait→Repeat→Shuffle remote order remains unchanged. Transport controls
 have12dp gaps and scale1 on focus; the pinned footer keeps12dp body surface edges,
 scale1 and at least24dp bottom title-safe clearance (28dp content padding).
@@ -458,3 +483,12 @@ Phone player chrome uses a native gradient over its measured extent, exposing th
 The5 sync-phone-quality-cue cases execute real Quality detail, changed-fact lifetime/no replay, null reset, conversion priority and mounted-sheet priority. Start the five-second cue lifetime on actual visible placement; an insufficient gap leaves the fact pending. Android source and renderer tests remain distinct from native device, screen-reader speech, other-platform and SYN-06 qualification.
 
 The shared centered phone transport treats the live group status chip as a measured blocker. A changed-quality cue preserves at least8dp clearance from that transport, the status chip and its existing panel roles; available space above the transport may be used, otherwise the fact remains pending until it can actually be drawn. The cue lifetime begins after visible placement. `sync-phone-player-chrome` profile `native-grouped-overlay-geometry` (case `grouped-centered-transport-blockers-font-1-3`) is exercised by the Android real-host native geometry tests; other platforms owe the same priority and bounds checks.
+
+The ten `sync-tv-structure-discovery` native profiles exercise personal/shared
+section reading order, actual TV scroll-indicator paint and first-viewport
+continuation at font scales1.0/1.3, privacy-to-floating-label glyph clearance,
+empty/nonempty group-panel transport and request/focus transitions, and compact
+touch footer geometry with a divider coupled to the actual body scroll state.
+Touch-target checks measure the native input region independently of button paint.
+Android executes the production Compose surfaces; other platforms owe equivalent
+native adapters. An inventory entry or TODO is not a UI qualification.

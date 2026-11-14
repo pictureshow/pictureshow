@@ -198,7 +198,15 @@ class SyncPlayTouchDesignTest {
     @Test fun fixedTransportSelectedRepeatAndInverseWaitAreServerConfirmed() {
         val actions = mutableListOf<Pair<String, String?>>()
         val state =
-            SyncPlayPresentation(groupId = "g", groupName = "Film night", phase = "Paused", repeat = "RepeatOne", shuffle = "Shuffle")
+            SyncPlayPresentation(
+                groupId = "g",
+                groupName = "Film night",
+                phase = "Paused",
+                repeat = "RepeatOne",
+                shuffle = "Shuffle",
+                queue = listOf(SyncPlayQueueRow("a", "A real film", true)),
+                localPlayback = SyncLocalPlayback.READY
+            )
         compose.setContent { app.pictureshow.ui.PictureshowTheme { SyncPlayPanel(state, { op, value -> actions += op to value }, {}) } }
         compose.onNodeWithTag("sync:close").assertIsDisplayed()
         compose.onNodeWithTag("sync:pause").assertDoesNotExist()

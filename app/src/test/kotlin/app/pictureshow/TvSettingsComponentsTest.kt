@@ -304,7 +304,7 @@ class TvSettingsComponentsTest {
                 compose.onNodeWithTag("tv-settings:fade-bottom").getUnclippedBoundsInRoot().top
         )
         val indicator = compose.onNodeWithTag("tv-settings:scroll-indicator").getUnclippedBoundsInRoot()
-        assertEquals(2.dp, indicator.right - indicator.left)
+        assertEquals(4.dp, indicator.right - indicator.left)
         repeat(11) { key("tv-settings:panel", Key.DirectionDown) }
         compose.onNodeWithTag("row:11").assertIsFocused().assertIsDisplayed()
         val support = compose.onNode(

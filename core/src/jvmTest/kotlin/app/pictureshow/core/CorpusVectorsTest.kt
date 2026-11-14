@@ -83,6 +83,7 @@ class CorpusVectorsTest {
                     // Android native render/input tests execute TV and phone surface profiles.
                     "sync-tv-surfaces",
                     "sync-tv-attention",
+                    "sync-tv-structure-discovery",
                     "sync-phone-surfaces",
                     "sync-phone-player-chrome",
                     "sync-phone-quality-cue",
