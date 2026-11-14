@@ -65,3 +65,5 @@ controls. Advancing only the UI frame clock is not proof that the native positio
 the original exact spoken-position assertion after reopening; synchronization cannot substitute for its result.
 
 Settings contrast regressions sample actual current-value glyphs in both resting and focused native controls, including retained unreadable pixels as a negative control. A named AX value alone cannot establish visible ink. Authentication error evidence requires the whole error inside the current visible viewport beside the relevant field, including phone landscape; address guidance must not create a navigable example link. Artwork and tab evidence waits for the state named by the capture, and screenshot sampling normalizes orientation before translating window coordinates.
+
+Track-label composition is shared through the portable policy while native adapters retain their language naming and metadata matching. JVM source consolidation preserves friendly ISO-639-2 names and runs the same track-label vectors; a unique unnamed-language track gains a number only when its displayed label collides with another choice.

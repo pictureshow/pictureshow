@@ -14,5 +14,4 @@ private fun String.names(value: String): Boolean = app.pictureshow.core.playback
 internal fun trackLabel(stream: MediaStream, trackNumber: Int? = null, showDefault: Boolean = true): String =
     app.pictureshow.core.playback.trackLabel(stream, trackNumber, showDefault)
 
-
 internal fun trackLabels(streams: List<MediaStream>): List<String> = app.pictureshow.core.playback.trackLabels(streams)
