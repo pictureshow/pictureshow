@@ -169,7 +169,10 @@ final class RoundThreeCaptureUITests: XCTestCase {
         focusOnly(node("segment-Intro"))
         record("Round4 Settings Skip segments values")
         try assertRenderedTextAA(node("segment-Intro"), expected: "Ask", state: "Intro focused")
-        focusOnly(node("audioLanguage"))
+        // Scroll the last preference into the viewport before sampling it at
+        // rest; focusing the first language row can leave Subtitle mode below it.
+        focusOnly(node("subtitleMode"))
+        focusOnly(node("subtitleLanguage"))
         record("Round4 Settings Jellyfin preferences values")
         try assertRenderedTextAA(node("subtitleMode"), expected: "Default", state: "Subtitle mode unfocused")
     }
