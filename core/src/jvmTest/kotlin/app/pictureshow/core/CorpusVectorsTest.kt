@@ -33,6 +33,7 @@ class CorpusVectorsTest {
                     "playback-start",
                     "player-quality",
                     "settings-presentation",
+                    "track-labels",
                     "recovery"
                 ),
             "control-vectors" to
