@@ -12,8 +12,10 @@ import android.graphics.Bitmap
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -84,6 +86,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.boolean
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -2111,6 +2118,22 @@ class TouchPlayerControlsTest {
     fun liveSecondaryControlsUseTheWholeContentColumn() {
         launch(live = true)
         settled()
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val file = roots.map { java.io.File(it, "spec/vectors/sync-phone-player-chrome.json") }.first { it.isFile }
+        val case = kotlinx.serialization.json.Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == "live-secondary-header-alignment" }
+        val input = case.getValue("input").jsonObject
+        val frame = compose.onRoot().getBoundsInRoot()
+        assertEquals(input.getValue("widthDp").jsonPrimitive.float, frame.width.value, 1f)
+        assertEquals(input.getValue("heightDp").jsonPrimitive.float, frame.height.value, 1f)
+        val expected = case.getValue("expected").jsonObject
+        assertEquals(false, expected.getValue("syncEnabled").jsonPrimitive.boolean)
+        val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed().assertIsNotEnabled()
+        watch.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watch together is unavailable for live streams."))
+        val watchBox = watch.getBoundsInRoot()
+        assertTrue(watchBox.width.value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
+        assertTrue(watchBox.height.value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
+        assertEquals(true, expected.getValue("qualityRightAligned").jsonPrimitive.boolean)
         val row = bounds("touch:secondary")
         assertEquals(row.left, bounds("touch:open:Audio").left)
         assertEquals(row.right, bounds("touch:more").right)
@@ -2155,7 +2178,9 @@ class TouchPlayerControlsTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, liveFontScale ?: fontScale ?: density.fontScale)) {
                 MaterialTheme(colorScheme = darkColorScheme()) {
                     CompositionLocalProvider(LocalTouchPlayerCast provides cast) {
-                        if (playerShown) TouchPlayerContent(account, host)
+                        Surface(Modifier.fillMaxSize()) {
+                            if (playerShown) TouchPlayerContent(account, host)
+                        }
                     }
                 }
             }

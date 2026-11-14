@@ -92,6 +92,7 @@
     <string name="sync_rejoin">Rejoin</string>
     <string name="sync_library_denied">This title is unavailable to your account. Leave the group to keep watching on your own.</string>
     <string name="sync_connection">Waiting for a server connection. Try again when connected.</string>
+    <string name="sync_live_unavailable">Watch together is unavailable for live streams.</string>
     <string name="sync_source_unavailable">Watch together needs an online movie, episode or song. Leave the group to play this source separately.</string>
     <string name="sync_request_failed">The server has not confirmed that request. Try again after refreshing the connection.</string>
     <string name="sync_snapshot">The group has not finished loading. Rejoin to try again.</string>

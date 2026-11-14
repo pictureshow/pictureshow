@@ -161,6 +161,21 @@
         "minimumRoleGapDp": 8,
         "cueMayDeferWithoutRoom": true
       }
+    },
+    {
+      "id": "live-secondary-header-alignment",
+      "profile": "native-live-header",
+      "input": {
+        "widthDp": 780,
+        "heightDp": 360,
+        "fontScale": 1,
+        "isLive": true
+      },
+      "expected": {
+        "qualityRightAligned": true,
+        "syncEnabled": false,
+        "minimumTouchTargetDp": 48
+      }
     }
   ]
 }

@@ -45,6 +45,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -636,6 +637,20 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f).testTag("touch:title")
                     )
+                    val syncUnavailable = if (host.isLive) stringResource(R.string.sync_live_unavailable) else null
+                    IconButton(
+                        onClick = {
+                            if (!host.isLive) host.sync?.show()
+                            ui.interact()
+                        },
+                        enabled = !host.isLive,
+                        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                        modifier = Modifier.size(48.dp).testTag("touch:syncplay").semantics {
+                            syncUnavailable?.let { stateDescription = it }
+                        }
+                    ) {
+                        Icon(syncIcon("group"), stringResource(R.string.sync_title))
+                    }
                     TouchBarButton(
                         {
                             qualityOpen = true
@@ -654,15 +669,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            host.sync?.show()
-                            ui.interact()
-                        },
-                        modifier = Modifier.size(48.dp).testTag("touch:syncplay")
-                    ) {
-                        Icon(syncIcon("group"), stringResource(R.string.sync_title), tint = Color.White)
-                    }
+
                 }
                 val qualityNotice = if (offlineQuality) {
                     "Quality is fixed for this download."
