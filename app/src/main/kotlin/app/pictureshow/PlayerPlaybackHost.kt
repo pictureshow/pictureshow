@@ -74,6 +74,7 @@ internal class PlaybackHostState(
     /** Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself. */
     val reportScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     var sync: SyncPlayHost? = null
+    var onSyncEnded: (() -> Boolean)? = null
     var localPreferences by mutableStateOf(PlaybackPreferences())
     val initialPositionMs get() = app.pictureshow.core.playback.PlaybackStartPosition.of(startMs, startOrigin, localPreferences.tuning)
     var network by mutableStateOf(PlaybackNetwork.Remote)
@@ -596,7 +597,11 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 output.onFailure = { retry, source -> session.failed(retry, source) }
                 output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
                 output.onEnded = ended@{ source ->
-                    if (sync?.transport("next") == true) return@ended
+                    if (sync?.participating == true) {
+                        if (onSyncEnded?.invoke() != false) return@ended
+                        finish(reason = "natural-end")
+                        return@ended
+                    }
                     if (!output.foreground.value || output.pauseIntent.value) return@ended
                     val finalPosition = output.position().milliseconds
                     val finalDuration = output.player.value?.duration?.takeIf { it > 0 } ?: duration

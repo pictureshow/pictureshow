@@ -1232,8 +1232,22 @@ internal class MusicHost(
             publish()
             if (playbackState == Player.STATE_ENDED && !endedHandled) {
                 endedHandled = true
+                val endingGroup = group()
+                val endingPlayer = player
+                val endingBinding = binding
+                val generation = endingGroup?.membership?.generation ?: -1
+                val entryId = endingGroup?.membership?.queue?.current?.playlistItemId
                 enqueue {
-                    if (groupTransport("next")) return@enqueue
+                    if (binding != endingBinding || player !== endingPlayer) return@enqueue
+                    if (endingGroup != null) {
+                        if (endingPlayer == null || endingGroup.rendererEnded(this@MusicHost, syncBridge, endingPlayer, generation, entryId)) {
+                            return@enqueue
+                        }
+                        // Membership has left with PLAYBACK_ENDED; this stop only tears down local audio/reporting.
+                        endOutput("stop")
+                        return@enqueue
+                    }
+                    if (group() != null) return@enqueue
                     endedHandled = false
                     commit { QueueEvent("end", revision = it.revision, generation = it.generation, completion = it.completion) }
                 }

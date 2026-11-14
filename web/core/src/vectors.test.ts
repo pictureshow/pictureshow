@@ -90,6 +90,7 @@ const pendingPortSuites = new Set([
     "sync-drift",
     "sync-state",
     "sync-queue",
+    "sync-completion",
     "sync-source",
     // New Android reference adapters and native UI remain explicit Web port obligations.
     "sync-chip-name",

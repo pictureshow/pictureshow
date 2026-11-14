@@ -12,6 +12,7 @@ import app.pictureshow.core.sync.SyncClockAnchor
 import app.pictureshow.core.sync.SyncClockCalibration
 import app.pictureshow.core.sync.SyncClockSample
 import app.pictureshow.core.sync.SyncCommand
+import app.pictureshow.core.sync.SyncCompletionAction
 import app.pictureshow.core.sync.SyncDepartureCause
 import app.pictureshow.core.sync.SyncDepartureEvent
 import app.pictureshow.core.sync.SyncDepartureState
@@ -31,6 +32,7 @@ import app.pictureshow.core.sync.recoverSync
 import app.pictureshow.core.sync.reduceSyncDeparture
 import app.pictureshow.core.sync.reduceSyncEvent
 import app.pictureshow.core.sync.stopSyncDrift
+import app.pictureshow.core.sync.syncCompletionAction
 import app.pictureshow.core.sync.syncCreate
 import app.pictureshow.core.sync.syncDrift
 import app.pictureshow.core.sync.syncIgnoreWait
@@ -758,16 +760,43 @@ internal class SyncPlayHost(
         trace("position-applied", "source=native-callback " + stateFields(value))
     }
 
-    /** True consumes every timeline intent while grouped, even during reconnect or preparation. */
+    /** A retired native completion cannot finish or advance a replacement viewing, even for the same media. */
+    fun rendererEnded(token: Any, output: SyncRenderer, source: Any, generation: Long, entryId: String?): Boolean {
+        if (!participating) return false
+        if (rendererToken !== token || renderer !== output || output.sourceIdentity !== source ||
+            generation != membership.generation || entryId == null || entryId != membership.queue?.current?.playlistItemId
+        ) {
+            return true
+        }
+        return transport("ended")
+    }
+
+    /** True consumes grouped intent; terminal natural completion returns false for the caller's local cleanup. */
     fun transport(command: String, positionMs: Long? = null): Boolean {
         trace(
             "transport",
-            "command=${if (command in setOf("play", "pause", "stop", "seek", "next", "previous", "speed")) command else "unknown"} " +
+            "command=${if (command in setOf("play", "pause", "stop", "seek", "next", "previous", "speed", "ended")) command else "unknown"} " +
                 "positionMs=${positionMs ?: -1} consumed=$participating"
         )
         if (!participating) return false
-        val entry = membership.queue?.current
+        val queue = membership.queue
+        val entry = queue?.current
         when (command) {
+            "ended" -> {
+                val value = renderer?.snapshot()
+                val matches = entry != null && value != null && value.itemId == entry.itemId &&
+                    (value.playlistItemId?.let { it == entry.playlistItemId } ?: (openingEntry == null))
+                when (syncCompletionAction(queue, membership.hasSnapshot, matches, value?.unpaused == true)) {
+                    SyncCompletionAction.HOLD -> Unit
+                    SyncCompletionAction.NEXT -> send(syncTransport("NextItem", playlistItemId = entry!!.playlistItemId))
+                    SyncCompletionAction.REPEAT -> send(syncSelect(entry!!.playlistItemId))
+                    SyncCompletionAction.FINISH -> {
+                        leave(SyncDepartureCause.PLAYBACK_ENDED)
+                        return false
+                    }
+                }
+            }
+
             "play", "pause", "stop" -> send(
                 syncTransport(
                     when (command) {

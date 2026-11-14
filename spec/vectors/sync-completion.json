@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-completion",
+  "cases": [
+    {
+      "id": "sync-completion.RepeatNone-first",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 0,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatNone-middle",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatNone-last",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 2,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "FINISH"
+    },
+    {
+      "id": "sync-completion.RepeatNone-single",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 1,
+        "currentIndex": 0,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "FINISH"
+    },
+    {
+      "id": "sync-completion.RepeatOne-first",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 0,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "REPEAT"
+    },
+    {
+      "id": "sync-completion.RepeatOne-middle",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 1,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "REPEAT"
+    },
+    {
+      "id": "sync-completion.RepeatOne-last",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 2,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "REPEAT"
+    },
+    {
+      "id": "sync-completion.RepeatOne-single",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 1,
+        "currentIndex": 0,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "REPEAT"
+    },
+    {
+      "id": "sync-completion.RepeatAll-first",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 0,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatAll-middle",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 1,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatAll-last",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 3,
+        "currentIndex": 2,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatAll-single",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 1,
+        "currentIndex": 0,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "NEXT"
+    },
+    {
+      "id": "sync-completion.RepeatNone-without-snapshot",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": false,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatNone-without-matches",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": false,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatNone-without-unpaused",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": false
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatOne-without-snapshot",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": false,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatOne-without-matches",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": false,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatOne-without-unpaused",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatOne",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": false
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatAll-without-snapshot",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": false,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatAll-without-matches",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": false,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.RepeatAll-without-unpaused",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": false
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.empty",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 0,
+        "currentIndex": -1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.negative-index",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": -1,
+        "repeatMode": "RepeatNone",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.past-end-index",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 2,
+        "repeatMode": "RepeatAll",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    },
+    {
+      "id": "sync-completion.unknown-repeat",
+      "operation": "natural-completion",
+      "input": {
+        "queueCount": 2,
+        "currentIndex": 1,
+        "repeatMode": "FutureMode",
+        "hasSnapshot": true,
+        "rendererMatches": true,
+        "unpaused": true
+      },
+      "expected": "HOLD"
+    }
+  ]
+}

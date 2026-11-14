@@ -1256,8 +1256,25 @@ class MusicHostTest {
         assertFalse(lastPlayer!!.playWhenReady)
     }
 
-    @Test fun groupedMusicEosRequestsNextOnceAndDoesNotRepeatOrAutoAdvanceItsLocalQueue() {
+    @Test fun groupedMusicEosRequestsRepeatOneRestartOnceAndDoesNotAutoAdvanceItsLocalQueue() {
         val (music, rig) = groupedMusic(repeat = "RepeatOne")
+        rig.sent.clear()
+        // Start the ready slot: seek/rebuffer needs another server barrier, covered by the incoming seek/Ready test.
+        music.syncBridge.apply(null, true, 1.0)
+        until("the group track to actually start before EOS") { "start a" in log }
+        until("one group restart at actual audio EOS") { rig.sent.any { it.operation == "SetPlaylistItem" } }
+        pump(400)
+        assertEquals(1, rig.sent.count { it.operation == "SetPlaylistItem" }, "One rendering completion produces one request")
+        assertEquals(JsonPrimitive("group-a"), rig.sent.single { it.operation == "SetPlaylistItem" }.body!!["PlaylistItemId"])
+        assertEquals("group-a", music.state.value.queue!!.current)
+        assertEquals(listOf("a"), negotiated.toList(), "The server has not yet chosen the following entry")
+        assertFalse("start b" in log)
+        assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, lastPlayer!!.repeatMode)
+        assertEquals(1, lastPlayer!!.mediaItemCount)
+    }
+
+    @Test fun groupedMusicEosEarlierRepeatNoneRequestsNextOnceWithoutLocalAdvance() {
+        val (music, rig) = groupedMusic(repeat = "RepeatNone")
         rig.sent.clear()
         // Start the ready slot: seek/rebuffer needs another server barrier, covered by the incoming seek/Ready test.
         music.syncBridge.apply(null, true, 1.0)
@@ -1271,6 +1288,41 @@ class MusicHostTest {
         assertFalse("start b" in log)
         assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, lastPlayer!!.repeatMode)
         assertEquals(1, lastPlayer!!.mediaItemCount)
+    }
+
+    @Test fun groupedMusicTerminalRepeatNoneEosLeavesAndClosesLocalReportingOnceWithoutGroupStop() {
+        val music = host()
+        ready(music)
+        val rig = MusicSyncRig(music)
+        rig.join(entries = listOf("a" to "group-a"), repeat = "RepeatNone")
+        assertTrue(runBlocking { music.openSync(account, "a", 200_000L) })
+        until("the terminal server-selected audio entry to be prepared paused") {
+            music.state.value.current?.entry == "group-a" && music.syncBridge.snapshot().ready
+        }
+        rig.sent.clear()
+        music.syncBridge.apply(null, true, 1.0)
+        until("the terminal group track to actually start before EOS") { "start a" in log }
+        until("actual audio EOS to leave and close this local viewing") {
+            rig.sent.any { it.operation == "Leave" } && !music.state.value.outputActive && "stop a" in log
+        }
+        pump(400)
+        assertEquals(listOf("Leave"), rig.controls().map { it.operation }, "terminal EOS must not send NextItem, restart or group Stop")
+        assertFalse(rig.sent.any { it.operation == "NextItem" || it.operation == "Stop" })
+        assertFalse(rig.sync.participating)
+        val departure = assertNotNull(rig.sync.state.value.departure)
+        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
+        assertEquals("Music", departure.groupName)
+        assertFalse(music.state.value.outputActive, "Leave is followed by local audio teardown")
+        assertEquals(null, music.state.value.output)
+        assertEquals(listOf("start a", "stop a"), log.toList(), "one actual viewing opens and closes exactly once")
+        assertEquals(
+            listOf("${account.user.id} start a", "${account.user.id} stop a"),
+            reportedTo.toList(),
+            "the participant's reporting closes exactly once after natural completion"
+        )
+        assertEquals("group-a", music.state.value.queue!!.current)
+        assertEquals(listOf("a"), negotiated.toList(), "terminal cleanup cannot negotiate a replacement")
+        assertFalse("start b" in log)
     }
 
     @Test fun leavingAfterAPausedGroupSeekPersistsTheObservedPausedResume() {

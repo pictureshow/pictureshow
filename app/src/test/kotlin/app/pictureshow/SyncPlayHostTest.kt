@@ -2914,4 +2914,183 @@ class SyncPlayHostTest {
     @Test fun routeConsentIdentityDuplicate() = runTest { routeConsentIdentityCase("duplicate") }
 
     @Test fun routeConsentIdentityScopeChangeDuringLeave() = runTest { routeConsentIdentityCase("scope-change-during-leave") }
+
+    /** Native completion uses the parsed authoritative queue, never the Rig's one-entry default. */
+    private fun TestScope.naturalCompletionRig(repeatMode: String, currentIndex: Int): Rig {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.host.receive(
+            rig.update(
+                "PlayQueue",
+                buildJsonObject {
+                    put("Reason", "NewPlaylist")
+                    put("LastUpdate", syncUtcTimestamp(rig.wall()))
+                    put(
+                        "Playlist",
+                        JsonArray(
+                            listOf("entry-a", "entry-b").map { entry ->
+                                buildJsonObject {
+                                    put("ItemId", "local-item")
+                                    put("PlaylistItemId", entry)
+                                }
+                            }
+                        )
+                    )
+                    put("PlayingItemIndex", currentIndex)
+                    put("StartPositionTicks", 55_000_000L)
+                    put("IsPlaying", true)
+                    put("RepeatMode", repeatMode)
+                    put("ShuffleMode", "Sorted")
+                }
+            )
+        )
+        runCurrent()
+        rig.preparedEntry()
+        // A drained decoder need not be isPlaying; actual play intent remains true at natural EOS.
+        rig.renderer.value = rig.renderer.value.copy(
+            positionTicks = rig.renderer.value.durationTicks,
+            playing = false,
+            playWhenReady = true
+        )
+        rig.sent.clear()
+        rig.renderer.applied.clear()
+        return rig
+    }
+
+    @Test fun naturalLastRepeatNoneLeavesOnceWithoutStoppingGroupAndAllowsLocalCompletion() = runTest {
+        val rig = naturalCompletionRig("RepeatNone", 1)
+        val position = rig.renderer.value.positionTicks
+        assertFalse(rig.host.transport("ended"), "terminal completion must reach the caller's local cleanup")
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations(), "natural terminal departure is neither NextItem nor group Stop")
+        assertFalse(rig.host.participating)
+        assertFalse(rig.renderer.value.unpaused)
+        assertEquals(position, rig.renderer.value.positionTicks)
+        assertTrue(rig.renderer.applied.none { it.position != null }, "departure must not rewind or seek")
+        val fact = assertNotNull(rig.host.state.value.departure)
+        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, fact.cause)
+        assertEquals("Evening", fact.groupName)
+        assertFalse(rig.host.transport("ended"), "a duplicate decoder completion cannot rejoin or leave twice")
+        runCurrent()
+        advanceTimeBy(5_001)
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations())
+        assertEquals(fact, rig.host.state.value.departure, "hidden completion retains the departure identity")
+    }
+
+    @Test fun naturalQueueContinuationUsesServerWireWhileExplicitNextKeepsItsOwnMeaning() = runTest {
+        for ((repeatMode, index) in listOf(
+            "RepeatNone" to 0,
+            "RepeatAll" to 0,
+            "RepeatAll" to 1,
+            "RepeatOne" to 0,
+            "RepeatOne" to 1
+        )) {
+            val rig = naturalCompletionRig(repeatMode, index)
+            val before = rig.renderer.value
+            val entry = if (index == 0) "entry-a" else "entry-b"
+            assertTrue(rig.host.transport("ended"), "$repeatMode/$index waits for the authoritative continuation")
+            runCurrent()
+            val operation = if (repeatMode == "RepeatOne") "SetPlaylistItem" else "NextItem"
+            assertEquals(listOf(operation), rig.operations(), "$repeatMode/$index must not Leave or group Stop")
+            assertEquals(JsonPrimitive(entry), rig.sent.single().second.body!!["PlaylistItemId"])
+            assertEquals(before, rig.renderer.value, "a request cannot optimistically restart or advance local output")
+            assertTrue(rig.renderer.applied.isEmpty())
+            assertTrue(rig.host.participating)
+            assertEquals(null, rig.host.state.value.departure)
+        }
+        for (repeatMode in listOf("RepeatNone", "RepeatOne")) {
+            val rig = naturalCompletionRig(repeatMode, 1)
+            val before = rig.renderer.value
+            assertTrue(rig.host.transport("next"), "an explicit Next is not a natural terminal event")
+            runCurrent()
+            assertEquals(listOf("NextItem"), rig.operations(), "$repeatMode explicit Next retains the server's policy")
+            assertEquals(JsonPrimitive("entry-b"), rig.sent.single().second.body!!["PlaylistItemId"])
+            assertEquals(before, rig.renderer.value)
+            assertTrue(rig.renderer.applied.isEmpty())
+            assertTrue(rig.host.participating)
+            assertEquals(null, rig.host.state.value.departure)
+        }
+    }
+
+    @Test fun unownedRecoveringOrPausedCompletionCannotLeaveOrAdvanceTheGroup() = runTest {
+        for (scenario in listOf("missing-queue", "recovering", "wrong-item", "wrong-entry", "paused-end")) {
+            val rig = if (scenario == "missing-queue") {
+                Rig(this).also {
+                    it.join()
+                    it.joined("Playing")
+                    runCurrent()
+                    it.renderer.value = it.renderer.value.copy(playing = false, playWhenReady = true)
+                }
+            } else {
+                naturalCompletionRig("RepeatNone", 1)
+            }
+            when (scenario) {
+                "recovering" -> rig.host.socket(false)
+                "wrong-item" -> rig.renderer.value = rig.renderer.value.copy(itemId = "obsolete-item")
+                "wrong-entry" -> rig.renderer.value = rig.renderer.value.copy(playlistItemId = "entry-a")
+                "paused-end" -> rig.renderer.value = rig.renderer.value.copy(playWhenReady = false)
+            }
+            runCurrent()
+            rig.sent.clear()
+            rig.renderer.applied.clear()
+            val before = rig.renderer.value
+            assertTrue(rig.host.transport("ended"), "$scenario must consume an unsafe completion")
+            runCurrent()
+            assertTrue(rig.sent.isEmpty(), "$scenario cannot issue Leave, Stop, NextItem or a repeat restart")
+            assertEquals(before, rig.renderer.value, "$scenario cannot seek or change native play intent")
+            assertTrue(rig.renderer.applied.isEmpty())
+            assertTrue(rig.host.participating)
+            assertEquals(null, rig.host.state.value.departure)
+        }
+    }
+
+    @Test fun rendererCompletionRejectsObsoleteIdentityBeforeCurrentTerminalDeparture() = runTest {
+        for (scenario in listOf("wrong-token", "wrong-output", "old-source", "old-generation", "wrong-entry")) {
+            val rig = naturalCompletionRig("RepeatNone", 1)
+            val sourceBeforeReplacement = rig.renderer.sourceIdentity
+            if (scenario == "old-source") rig.renderer.sourceIdentity = Any()
+            val foreignOutput = Renderer().also {
+                it.value = rig.renderer.value
+                it.sourceIdentity = rig.renderer.sourceIdentity
+            }
+            val generation = rig.host.membership.generation
+            val before = rig.renderer.value
+            val foreignBefore = foreignOutput.value
+            assertTrue(
+                rig.host.rendererEnded(
+                    token = if (scenario == "wrong-token") Any() else rig.renderer,
+                    output = if (scenario == "wrong-output") foreignOutput else rig.renderer,
+                    source = if (scenario == "old-source") sourceBeforeReplacement else rig.renderer.sourceIdentity,
+                    generation = if (scenario == "old-generation") generation - 1 else generation,
+                    // Both queue entries name the same media: an obsolete entry must not end its replacement.
+                    entryId = if (scenario == "wrong-entry") "entry-a" else "entry-b"
+                ),
+                "$scenario completion must be consumed before it can reach local cleanup"
+            )
+            runCurrent()
+            assertTrue(rig.sent.isEmpty(), "$scenario cannot issue Leave, NextItem, Stop or restart")
+            assertEquals(before, rig.renderer.value, "$scenario cannot move or pause current output")
+            assertEquals(foreignBefore, foreignOutput.value, "$scenario cannot move a different output bridge")
+            assertTrue(rig.renderer.applied.isEmpty())
+            assertTrue(foreignOutput.applied.isEmpty())
+            assertTrue(rig.host.participating)
+            assertEquals(null, rig.host.state.value.departure)
+
+            assertFalse(
+                rig.host.rendererEnded(rig.renderer, rig.renderer, rig.renderer.sourceIdentity, generation, "entry-b"),
+                "$scenario rejection must leave the current completion eligible for terminal cleanup"
+            )
+            runCurrent()
+            assertEquals(listOf("Leave"), rig.operations())
+            assertFalse(rig.host.participating)
+            assertFalse(rig.renderer.value.unpaused)
+            assertEquals(before.positionTicks, rig.renderer.value.positionTicks)
+            assertTrue(rig.renderer.applied.none { it.position != null }, "current completion must not rewind")
+            val departure = assertNotNull(rig.host.state.value.departure)
+            assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
+            assertEquals("Evening", departure.groupName)
+        }
+    }
 }
