@@ -830,8 +830,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             }
         }
         if (host.error == null && !host.switching) {
-            // A narrow window can't hold the notice and the action column side by side, so the column waits below it.
-            val noticeGap = noticeBounds?.takeIf { it.right > actionsLeft }
+            // Reserve the full action band: a narrow Skip can become the next-episode card without moving its target.
+            // A narrow window can't hold the notice and that band side by side, so actions wait below it.
+            val noticeGap = noticeBounds?.takeIf {
+                noticeCap == null || (it.right > actionsLeft && actionsLeft + actionsWidth > it.left)
+            }
                 ?.let { with(density) { it.height.toDp() + 12.dp } } ?: 0.dp
             // Whatever is showing keeps its place when the notice ends; the gap closes once the column is empty.
             val belowNotice = if (actionsHeight > 0 && noticeBounds == null) heldNoticeGap else noticeGap

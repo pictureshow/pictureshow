@@ -59,6 +59,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
@@ -81,6 +82,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -88,9 +90,11 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -2149,6 +2153,91 @@ class TouchPlayerControlsTest {
         assertTrue(
             scrim.red < .05f && scrim.green < .05f && scrim.blue < .05f,
             "Live toggle paints its black scrim over the black video fixture: $scrim"
+        )
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun reservedNoticeActionBandKeepsNarrowSkipBelowAndHoldsUntilTheColumnEmpties() {
+        val roots = generateSequence(java.io.File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val file = roots.map { java.io.File(it, "spec/vectors/touch-player-director-clearance-paint-edges.json") }.first { it.isFile }
+        val case = kotlinx.serialization.json.Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
+            .map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == "conversion-notice-reserved-action-band" }
+        assertEquals("conversion-notice-reserved-action-band", case.getValue("profile").jsonPrimitive.content)
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val positions = input.getValue("positionSequenceMs").jsonArray.map { it.jsonPrimitive.long }
+        assertEquals(3, positions.size)
+        val segment = input.getValue("segment").jsonObject
+        launch(fontScale = input.getValue("fontScale").jsonPrimitive.float)
+        compose.runOnIdle {
+            host.position = positions[0]
+            host.segments = listOf(
+                MediaSegment(
+                    segment.getValue("id").jsonPrimitive.content,
+                    SegmentType.valueOf(segment.getValue("type").jsonPrimitive.content),
+                    segment.getValue("startTicks").jsonPrimitive.long,
+                    segment.getValue("endTicks").jsonPrimitive.long
+                )
+            )
+        }
+        settled()
+        val player = compose.onNodeWithTag("touch:player").fetchSemanticsNode()
+        val frame = bounds("touch:player")
+        assertEquals(input.getValue("widthDp").jsonPrimitive.float, (frame.right - frame.left).value, 1f)
+        assertEquals(input.getValue("heightDp").jsonPrimitive.float, (frame.bottom - frame.top).value, 1f)
+        assertEquals(input.getValue("densityDpi").jsonPrimitive.int, compose.activity.resources.displayMetrics.densityDpi)
+        assertEquals(input.getValue("densityDpi").jsonPrimitive.float / 160f, player.layoutInfo.density.density, .001f)
+        assertEquals(input.getValue("fontScale").jsonPrimitive.float, player.layoutInfo.density.fontScale, .01f)
+        val skip = compose.onNodeWithTag("touch:skip").assertIsDisplayed().assertIsEnabled()
+        val unreserved = skip.getBoundsInRoot()
+        decided(PlayMethod.valueOf(input.getValue("noticeMethod").jsonPrimitive.content))
+        settled()
+        val notice = compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed().getBoundsInRoot()
+        val held = skip.assertIsDisplayed().getBoundsInRoot()
+        val band = expected.getValue("reservedActionBandWidthDp").jsonPrimitive.float
+        val gap = expected.getValue("minimumNoticeToActionGapDp").jsonPrimitive.float
+        assertTrue(
+            (held.right - held.left).value < band,
+            "Real Skip stays naturally narrower than the reserved band: skip=$held band=$band"
+        )
+        assertTrue(
+            notice.bottom.value + gap <= held.top.value,
+            "The reserved action band must remain below the notice: frame=$frame notice=$notice skip=$held gap=$gap band=$band"
+        )
+        val expiry = expected.getValue("noticeDurationMs").jsonPrimitive.long
+        assertEquals(CONVERSION_NOTICE_MS, expiry)
+        compose.mainClock.advanceTimeBy(expiry + 100)
+        compose.waitForIdle()
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+        fun targetChange(a: DpRect, b: DpRect) = listOf(
+            abs((a.left - b.left).value),
+            abs((a.top - b.top).value),
+            abs((a.right - b.right).value),
+            abs((a.bottom - b.bottom).value)
+        ).maxOrNull()!!
+        val unchanged = expected.getValue("maximumTargetChangeDp").jsonPrimitive.float
+        assertEquals(0f, unchanged, "The target stability contract is exact")
+        val afterExpiry = skip.assertIsDisplayed().getBoundsInRoot()
+        assertEquals(
+            unchanged,
+            targetChange(held, afterExpiry),
+            "Notice expiry cannot move the real target: before=$held after=$afterExpiry"
+        )
+        compose.runOnIdle { host.position = positions[1] }
+        settled()
+        assertEquals(
+            expected.getValue("emptyTargetCount").jsonPrimitive.int,
+            compose.onAllNodesWithTag("touch:skip").fetchSemanticsNodes().size
+        )
+        compose.onNodeWithTag("touch:skip").assertDoesNotExist()
+        compose.runOnIdle { host.position = positions[2] }
+        settled()
+        val reset = skip.assertIsDisplayed().assertIsEnabled().getBoundsInRoot()
+        assertEquals(
+            unchanged,
+            targetChange(unreserved, reset),
+            "After the real column empties, Skip returns to its original top target: initial=$unreserved held=$held reset=$reset"
         )
     }
 

@@ -1313,8 +1313,10 @@ private fun SyncJoined(
     } else {
         // Shared media leads; a large personal row must not imply the end of this scrollable page.
         queue()
-        SyncHeading(stringResource(R.string.sync_group_playback), false, Modifier.testTag("sync:group-scope"))
-        SyncText(stringResource(R.string.sync_group_playback_scope), false, small = true)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SyncHeading(stringResource(R.string.sync_group_playback), false, Modifier.testTag("sync:group-scope"), compact = true)
+            SyncText(stringResource(R.string.sync_group_playback_scope), false, small = true)
+        }
         playbackSettings()
         roster()
         SyncHeading(stringResource(R.string.sync_your_settings), false)

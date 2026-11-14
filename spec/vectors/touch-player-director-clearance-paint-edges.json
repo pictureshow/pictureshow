@@ -350,6 +350,35 @@
         "membershipRetained": true,
         "actionPlacement": "below"
       }
+    },
+    {
+      "id": "conversion-notice-reserved-action-band",
+      "profile": "conversion-notice-reserved-action-band",
+      "input": {
+        "widthDp": 400,
+        "heightDp": 800,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "noticeMethod": "Transcode",
+        "positionSequenceMs": [
+          20000,
+          40000,
+          20000
+        ],
+        "segment": {
+          "id": "intro",
+          "type": "Intro",
+          "startTicks": 150000000,
+          "endTicks": 300000000
+        }
+      },
+      "expected": {
+        "reservedActionBandWidthDp": 360,
+        "minimumNoticeToActionGapDp": 12,
+        "noticeDurationMs": 10000,
+        "maximumTargetChangeDp": 0,
+        "emptyTargetCount": 0
+      }
     }
   ]
 }
