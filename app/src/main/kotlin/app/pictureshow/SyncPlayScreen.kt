@@ -935,21 +935,28 @@ private fun SyncJoined(
         }
     }
     val groupName = state.groupName ?: stringResource(R.string.sync_your_group)
+    val peopleCount = state.participants.size
+    val peopleText = pluralStringResource(R.plurals.sync_people_watching, peopleCount, syncNumber(peopleCount))
     if (tv) {
-        androidx.tv.material3.Text(
-            groupName,
-            Modifier.tvSettingsVisualBlock().padding(horizontal = 16.dp).testTag("sync:group").semantics { heading() },
-            style = TvMaterialTheme.typography.headlineSmall.copy(lineBreak = LineBreak.Heading),
-            maxLines = if (groupName.any {
-                    it.isWhitespace()
-                }
-            ) {
-                2
-            } else {
-                1
-            },
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            Modifier.tvSettingsVisualBlock().fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.tv.material3.Text(
+                groupName,
+                Modifier.weight(1f).testTag("sync:group").semantics { heading() },
+                style = TvMaterialTheme.typography.headlineSmall.copy(lineBreak = LineBreak.Heading),
+                maxLines = if (groupName.any { it.isWhitespace() }) 2 else 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            androidx.tv.material3.Text(
+                peopleText,
+                Modifier.testTag("sync:people-count"),
+                style = TvMaterialTheme.typography.bodyMedium,
+                color = TvMaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     } else {
         Text(
             groupName,
@@ -1010,13 +1017,7 @@ private fun SyncJoined(
         val status = if (panelQuality == SyncQuality.UNKNOWN) phase else "$phase\u00a0·\u00a0${syncQualityText(panelQuality)}"
         SyncText(status, tv, Modifier.testTag("sync:phase").semantics { liveRegion = LiveRegionMode.Polite }, small = compactHeight)
     }
-    val peopleCount = state.participants.size
-    SyncText(
-        pluralStringResource(R.plurals.sync_people_watching, peopleCount, syncNumber(peopleCount)),
-        tv,
-        Modifier.testTag("sync:people-count"),
-        small = true
-    )
+    if (!tv) SyncText(peopleText, false, Modifier.testTag("sync:people-count"), small = true)
     if (tv && state.queue.isEmpty()) {
         SyncText(
             stringResource(R.string.sync_empty_next_step),
