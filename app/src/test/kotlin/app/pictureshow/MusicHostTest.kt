@@ -487,9 +487,11 @@ class MusicHostTest {
         until("the committed pause") { music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true }
         prepared.complete(Unit)
         until("the next track prepared while paused") {
-            music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true &&
+            music.state.value.current?.track?.id == "a" &&
+                music.state.value.queue?.paused == true &&
                 lastPlayer?.mediaItemCount == 2 &&
-                lastPlayer?.playbackState == androidx.media3.common.Player.STATE_READY && lastPlayer?.playWhenReady == false
+                lastPlayer?.playbackState == androidx.media3.common.Player.STATE_READY &&
+                lastPlayer?.playWhenReady == false
         }
         music.playNext(account, listOf(MusicTrack("c", "Title c")))
         until("the row") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
