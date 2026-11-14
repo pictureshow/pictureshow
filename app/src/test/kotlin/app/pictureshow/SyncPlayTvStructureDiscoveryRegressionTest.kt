@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -36,8 +37,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
@@ -175,6 +178,7 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
     @Test fun actualTvSectionsSeparatePersonalWaitFromSharedRepeat() {
         val c = case("joined-personal-and-group-sections")
         launch(c, joined = true)
+        assertGroupContextVisibility(c)
         compose.onNodeWithTag(focusTag(c.text("firstUsefulFocus"))).assertIsFocused()
         val personalHeading = compose.onNodeWithText(c.text("personalHeading"), useUnmergedTree = true)
         val groupHeading = compose.onNodeWithText(c.text("groupHeading"), useUnmergedTree = true)
@@ -218,6 +222,11 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
 
     @Test fun actualForwardDiscoveryHasContrastingIndicatorAndWholeHeaderAtFont13() = discovery("forward-discovery-font13")
 
+    private fun assertGroupContextVisibility(c: Case) {
+        val context = compose.onNodeWithTag("sync:personal")
+        if (c.flag("groupContextVisible")) context.assertExists() else context.assertDoesNotExist()
+    }
+
     private fun scrollOwner(): SemanticsNodeInteraction {
         val target = compose.onNodeWithTag("sync:ignore-wait").fetchSemanticsNode()
         val owner = generateSequence(target.parent) { it.parent }.firstOrNull {
@@ -229,6 +238,7 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
     private fun discovery(id: String) {
         val c = case(id)
         launch(c, joined = true)
+        assertGroupContextVisibility(c)
         compose.onNodeWithTag("sync:ignore-wait").assertIsFocused()
         val owner = scrollOwner()
         val range = owner.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
@@ -358,9 +368,18 @@ class SyncPlayTvStructureDiscoveryRegressionTest {
         settle()
         val enabled = c.expected.getValue("nonemptyEnabledActions").jsonArray.map { "sync:${it.jsonPrimitive.content}" }
         val actions = c.expected.getValue("nonemptyActions").jsonArray.map { it.jsonPrimitive.content }
-        enabled.zip(actions).forEach { (tag, action) ->
+        enabled.zip(actions).forEachIndexed { index, (tag, action) ->
             val node = compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertIsEnabled()
-            node.performClick()
+            if (tv) {
+                node.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+                compose.waitForIdle()
+                node.assertIsFocused()
+                compose.onNodeWithTag("sync:panel").performKeyInput { pressKey(Key.DirectionCenter) }
+                compose.waitForIdle()
+            } else {
+                node.performClick()
+            }
+            assertEquals(actions.take(index + 1), sent, "Each native transport request must dispatch exactly once, in order")
             assertEquals(action, sent.last(), "Nonempty native transport must dispatch its real action")
         }
         if (tv) {

@@ -55,7 +55,7 @@
     <string name="sync_repeat_all">All</string>
     <string name="sync_shuffle">Shuffle</string>
     <string name="sync_queue">Group queue</string>
-    <string name="sync_empty_next_step">Play a movie, episode or song from your library to start it for everyone.</string>
+    <string name="sync_empty_next_step">Play something from your library for everyone.</string>
     <string name="sync_queue_empty">Choose a movie, episode or song to start the group queue.</string>
     <string name="sync_loading">Loading…</string>
     <string name="sync_title_unavailable">Title unavailable</string>

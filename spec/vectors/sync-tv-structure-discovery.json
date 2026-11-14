@@ -25,7 +25,8 @@
           "groupScope",
           "repeat"
         ],
-        "firstUsefulFocus": "wait-setting"
+        "firstUsefulFocus": "wait-setting",
+        "groupContextVisible": false
       }
     },
     {
@@ -43,7 +44,8 @@
         "currentLabelAboveMask": true,
         "nativePixelTolerance": 1.0,
         "continuationHeading": "Group playback",
-        "emptyTransportVisible": false
+        "emptyTransportVisible": false,
+        "groupContextVisible": false
       }
     },
     {
@@ -61,7 +63,8 @@
         "currentLabelAboveMask": true,
         "nativePixelTolerance": 1.0,
         "continuationHeading": "Group playback",
-        "emptyTransportVisible": false
+        "emptyTransportVisible": false,
+        "groupContextVisible": false
       }
     },
     {

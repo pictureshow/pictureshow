@@ -998,7 +998,7 @@ private fun SyncJoined(
             small = true
         )
     }
-    if (tv) {
+    if (tv && state.queue.isNotEmpty()) {
         SyncText(
             stringResource(R.string.sync_group_context),
             true,
@@ -1116,7 +1116,7 @@ private fun SyncJoined(
         if (tv) {
             androidx.tv.material3.Text(
                 stringResource(R.string.sync_repeat),
-                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                 style = TvMaterialTheme.typography.labelLarge,
                 color = TvMaterialTheme.colorScheme.onSurfaceVariant
             )

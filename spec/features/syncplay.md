@@ -166,13 +166,18 @@ TV keeps local playback facts next to group phase in the first viewport. The
 names-only limitation is stated once; up to four actual names (including duplicate
 names) and localized +N are separate, remote-focusable **read-only facts**, with no
 button/click/disabled/selected/switch semantics. The local fact does not identify a
-remote bufferer or infer “you”. On TV a short group-wide playback/queue fact follows
-status, above transport (when present) and Wait, with12dp of block separation rather
-than reading as the Wait row’s caption. TV additionally places a native Your settings
+remote bufferer or infer “you”. On TV with a nonempty queue, a short group-wide
+playback/queue fact follows status, above transport and Wait, with12dp of block
+separation rather than reading as the Wait row’s caption. An empty TV group instead
+keeps its concise library-play next step and the explicit personal/shared section
+scopes, omitting the redundant free context paragraph so the shared section can
+continue visibly at large fonts. TV additionally places a native Your settings
 section header immediately above Wait explaining the choice of whether the group
 waits for this TV, and a Group playback header above Repeat/Shuffle stating that
 changes apply to everyone.
-Repeat is a subordinate label in that shared section. These passive labels do not
+Repeat is a subordinate label in that shared section, retaining the section
+header’s4dp bottom padding plus the list’s4dp gap before the native chip row.
+These passive labels do not
 change the Play→Wait→Repeat→Shuffle remote order or initial Wait focus for an empty
 queue. Touch retains its existing explanation beside Wait.
 Recovery actions take initial focus when offered; Leave appears only in the pinned
