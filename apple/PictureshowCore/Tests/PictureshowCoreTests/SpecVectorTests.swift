@@ -94,7 +94,10 @@ final class SpecVectorTests:XCTestCase {
             guard try required(Int.self,document,"schemaVersion") == 1 else { throw NSError(domain:"Unknown vector schema in \(file.lastPathComponent)",code:1) }
             let suite=try required(String.self,document,"suite")
             guard allowedSuites.contains(suite) else { throw NSError(domain:"Unknown vector suite \(suite)",code:1) }
-            if pendingSuites.contains(suite) {
+            // A reference suite spans several files; count its pending cohort
+            // only in the document containing its explicitly pending IDs.
+            if pendingSuites.contains(suite), let vectors = document["cases"] as? [[String: Any]],
+               vectors.contains(where: { PendingSpecCaseManifest.contracts[text($0, "id")] != nil }) {
                 guard discoveredPendingSuites.insert(suite).inserted else { throw NSError(domain: "Duplicate pending suite \(suite)", code: 1) }
             }
             if traceSuites.contains(suite) {
