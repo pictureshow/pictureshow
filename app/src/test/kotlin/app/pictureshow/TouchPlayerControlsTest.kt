@@ -2156,6 +2156,7 @@ class TouchPlayerControlsTest {
         )
     }
 
+    @Config(qualifiers = "w660dp-h800dp-port-xhdpi")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
     fun reservedNoticeActionBandKeepsNarrowSkipBelowAndHoldsUntilTheColumnEmpties() {
@@ -2211,9 +2212,25 @@ class TouchPlayerControlsTest {
         settled()
         val notice = compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed().getBoundsInRoot()
         val held = skip.assertIsDisplayed().assertIsEnabled().getBoundsInRoot()
-        println("notice-first nativeDp triggerOrder=$triggerOrder frame=$frame unreserved=$unreserved notice=$notice skip=$held")
         val band = expected.getValue("reservedActionBandWidthDp").jsonPrimitive.float
         val gap = expected.getValue("minimumNoticeToActionGapDp").jsonPrimitive.float
+        val minimumSideGap = expected.getValue("minimumPhysicalSideGapDp").jsonPrimitive.float
+        val actualSideGap = held.left.value - notice.right.value
+        val availableAfterNotice = held.right.value - notice.right.value - minimumSideGap
+        println(
+            "notice-first nativeDp triggerOrder=$triggerOrder frame=$frame unreserved=$unreserved notice=$notice skip=$held " +
+                "physicalSideGap=$actualSideGap minimumSideGap=$minimumSideGap availableAfterNotice=$availableAfterNotice band=$band"
+        )
+        assertTrue(
+            notice.right.value + minimumSideGap <= held.left.value,
+            "Geometry prerequisite: narrow Skip must fit physically beside the notice: " +
+                "notice=$notice skip=$held actualSideGap=$actualSideGap required=$minimumSideGap"
+        )
+        assertTrue(
+            availableAfterNotice < band,
+            "Geometry prerequisite: actual space after notice must not fit the reserved band: " +
+                "notice=$notice skip=$held available=$availableAfterNotice band=$band"
+        )
         assertTrue(
             (held.right - held.left).value < band,
             "Real Skip stays naturally narrower than the reserved band: skip=$held band=$band"
