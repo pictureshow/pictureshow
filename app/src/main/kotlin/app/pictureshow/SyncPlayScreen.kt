@@ -920,6 +920,24 @@ private fun SyncJoined(
 ) {
     val previousAvailable = syncDirectionAvailable(transport, state.queue.size, true, state.navigation)
     val nextAvailable = syncDirectionAvailable(transport, state.queue.size, false, state.navigation)
+    var previousFocused by remember(state.server, state.viewer, state.groupId) { mutableStateOf(false) }
+    var nextFocused by remember(state.server, state.viewer, state.groupId) { mutableStateOf(false) }
+    var previousWasAvailable by remember(state.server, state.viewer, state.groupId) { mutableStateOf(previousAvailable) }
+    var nextWasAvailable by remember(state.server, state.viewer, state.groupId) { mutableStateOf(nextAvailable) }
+    // Capture ownership before disabling the node can clear focus during apply.
+    // A later deliberate focus on an already-disabled arrow is not an availability transition.
+    val recoverDisabledDirectionFocus = tv &&
+        transport &&
+        !hasRecovery &&
+        (
+            (previousWasAvailable && !previousAvailable && previousFocused) ||
+                (nextWasAvailable && !nextAvailable && nextFocused)
+            )
+    SideEffect {
+        previousWasAvailable = previousAvailable
+        nextWasAvailable = nextAvailable
+        if (recoverDisabledDirectionFocus) first.requestFocus()
+    }
     val density = LocalDensity.current
     val touchReveal = remember(state.server, state.viewer, state.groupId, touchWindowSize, density.density, density.fontScale) {
         BringIntoViewRequester()
@@ -1078,9 +1096,18 @@ private fun SyncJoined(
             horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SyncTransport("previous", stringResource(R.string.sync_previous), {
-                action("previous", null)
-            }, tv, Modifier.testTag("sync:previous"), previousAvailable)
+            SyncTransport(
+                "previous",
+                stringResource(R.string.sync_previous),
+                {
+                    action("previous", null)
+                },
+                tv,
+                Modifier.testTag("sync:previous").onFocusChanged {
+                    previousFocused = it.isFocused
+                },
+                previousAvailable
+            )
             val play = state.phase != "Playing"
             SyncTransport(
                 if (play) "play" else "pause",
@@ -1106,7 +1133,9 @@ private fun SyncJoined(
                 stringResource(R.string.sync_next),
                 { action("next", null) },
                 tv,
-                Modifier.testTag("sync:next"),
+                Modifier.testTag("sync:next").onFocusChanged {
+                    nextFocused = it.isFocused
+                },
                 nextAvailable
             )
         }
