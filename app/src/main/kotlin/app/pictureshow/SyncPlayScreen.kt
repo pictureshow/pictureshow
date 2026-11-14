@@ -1145,7 +1145,7 @@ private fun SyncJoined(
         if (tv) {
             androidx.tv.material3.Text(
                 stringResource(R.string.sync_repeat),
-                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
                 style = TvMaterialTheme.typography.bodyLarge,
                 color = TvMaterialTheme.colorScheme.onSurface
             )

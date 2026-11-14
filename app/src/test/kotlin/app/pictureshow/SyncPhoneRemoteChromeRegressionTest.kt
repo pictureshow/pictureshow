@@ -133,15 +133,22 @@ class SyncPhoneRemoteChromeRegressionTest {
     }
 
     private fun target(c: Case) = RemoteTarget(
-        session = "s1", device = c.text("deviceId"), name = c.text("deviceName"), viewer = "other",
-        viewerName = c.text("viewerName"), sameViewer = false,
+        session = "s1",
+        device = c.text("deviceId"),
+        name = c.text("deviceName"),
+        viewer = "other",
+        viewerName = c.text("viewerName"),
+        sameViewer = false,
         duplicateName = c.input.getValue("duplicateName").jsonPrimitive.boolean,
         commands = c.input.getValue("remoteCommands").jsonArray.map { it.jsonPrimitive.content }
     )
 
     private fun attached(target: RemoteTarget) = RemoteControllerUi(
         RemoteControllerState(
-            "server", "me", phase = "attached", target = target,
+            "server",
+            "me",
+            phase = "attached",
+            target = target,
             command = CommandState(ViewingIdentity("server", "me", target.device, target.session, 1), fresh = true)
         )
     )
@@ -213,7 +220,10 @@ class SyncPhoneRemoteChromeRegressionTest {
         settled(c)
         compose.onNodeWithText(account, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(name, useUnmergedTree = true).assertIsDisplayed()
-        compose.runOnIdle { ui = attached(target(c)); picker = true }
+        compose.runOnIdle {
+            ui = attached(target(c))
+            picker = true
+        }
         settled(c)
         val row = compose.onNodeWithTag("remote:target:s1").assertIsDisplayed()
         val deviceText = compose.onNodeWithText(name, useUnmergedTree = true).assertIsDisplayed()
@@ -365,7 +375,10 @@ class SyncPhoneRemoteChromeRegressionTest {
         assertTrue(abs(end.second - viewport.bottom) <= c.metric("endInsetMaxDp") * density + 1f, "End thumb reaches the real viewport end")
         compose.runOnIdle {
             state = SyncPlayPresentation(
-                server = c.text("server"), viewer = c.text("viewer"), policyKnown = true, policy = c.text("fittingPolicy")
+                server = c.text("server"),
+                viewer = c.text("viewer"),
+                policyKnown = true,
+                policy = c.text("fittingPolicy")
             )
         }
         settled(c)
