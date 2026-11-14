@@ -1620,6 +1620,13 @@ internal class SyncPlayHost(
             phase = membership.phase, groupId = membership.groupId, groupName = membership.group?.name,
             participants = membership.group?.participants.orEmpty(), ignoreWait = ignoreWait,
             repeat = q?.repeatMode ?: "RepeatNone", shuffle = q?.shuffleMode ?: "Sorted",
+            navigation = q?.takeIf { connected && membership.hasSnapshot }?.let {
+                app.pictureshow.core.sync.SyncNavigationAuthority(
+                    it.repeatMode,
+                    it.entries.map { entry -> entry.playlistItemId },
+                    it.current?.playlistItemId
+                )
+            },
             queue = entries.map { entry ->
                 SyncPlayQueueRow(
                     entry.playlistItemId,

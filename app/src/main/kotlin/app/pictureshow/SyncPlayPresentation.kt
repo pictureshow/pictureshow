@@ -63,6 +63,7 @@ internal data class SyncPlayPresentation(
     val queue: List<SyncPlayQueueRow> = emptyList(),
     val ignoreWait: Boolean = false,
     val repeat: String = "RepeatNone",
+    val navigation: app.pictureshow.core.sync.SyncNavigationAuthority? = null,
     val shuffle: String = "Sorted",
     val busy: Boolean = false,
     val departure: app.pictureshow.core.sync.SyncDeparture? = null

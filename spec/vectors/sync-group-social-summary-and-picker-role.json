@@ -250,6 +250,191 @@
         "passive": true,
         "groupCommands": 0
       }
+    },
+    {
+      "id": "native-direction-none-single",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            }
+          ],
+          "PlayingItemIndex": 0,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatNone",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": false,
+        "nextEnabled": false,
+        "playEnabled": true,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "native-direction-none-first",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            },
+            {
+              "ItemId": "item-1",
+              "PlaylistItemId": "entry-b"
+            },
+            {
+              "ItemId": "item-2",
+              "PlaylistItemId": "entry-c"
+            }
+          ],
+          "PlayingItemIndex": 0,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatNone",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": false,
+        "nextEnabled": true,
+        "playEnabled": true,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "native-direction-none-middle",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            },
+            {
+              "ItemId": "item-1",
+              "PlaylistItemId": "entry-b"
+            },
+            {
+              "ItemId": "item-2",
+              "PlaylistItemId": "entry-c"
+            }
+          ],
+          "PlayingItemIndex": 1,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatNone",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": true,
+        "nextEnabled": true,
+        "playEnabled": true,
+        "membershipRetained": true,
+        "focusAfterNextDisabledIn": [
+          "sync:play",
+          "sync:previous"
+        ],
+        "unrelatedFocusRetained": "sync:ignore-wait"
+      }
+    },
+    {
+      "id": "native-direction-none-last",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            },
+            {
+              "ItemId": "item-1",
+              "PlaylistItemId": "entry-b"
+            },
+            {
+              "ItemId": "item-2",
+              "PlaylistItemId": "entry-c"
+            }
+          ],
+          "PlayingItemIndex": 2,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatNone",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": true,
+        "nextEnabled": false,
+        "playEnabled": true,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "native-direction-one-single",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            }
+          ],
+          "PlayingItemIndex": 0,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatOne",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": true,
+        "nextEnabled": true,
+        "playEnabled": true,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "native-direction-all-single",
+      "profile": "authoritative-directional-transport",
+      "input": {
+        "snapshot": {
+          "Playlist": [
+            {
+              "ItemId": "item-0",
+              "PlaylistItemId": "entry-a"
+            }
+          ],
+          "PlayingItemIndex": 0,
+          "StartPositionTicks": 0,
+          "IsPlaying": false,
+          "RepeatMode": "RepeatAll",
+          "ShuffleMode": "Sorted",
+          "LastUpdate": "2026-11-14T00:00:00.0000000Z"
+        }
+      },
+      "expected": {
+        "previousEnabled": true,
+        "nextEnabled": true,
+        "playEnabled": true,
+        "membershipRetained": true
+      }
     }
   ]
 }

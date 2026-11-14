@@ -3,10 +3,12 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.sync.SyncNavigationAuthority
 import app.pictureshow.core.sync.SyncQuality
 import app.pictureshow.core.sync.SyncTitleScope
 import app.pictureshow.core.sync.syncAcceptTitle
 import app.pictureshow.core.sync.syncChipShowsQuality
+import app.pictureshow.core.sync.syncDirectionAvailable
 import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
@@ -28,7 +30,7 @@ class SyncPresentationVectorsTest {
     @Test fun allPresentationRules() {
         val resource = requireNotNull(javaClass.classLoader.getResource("sync-vectors/sync-presentation.json"))
         val cases = Json.parseToJsonElement(resource.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(41, cases.size)
+        assertEquals(57, cases.size)
         cases.forEach { element ->
             val c = element.jsonObject
             val id = c.getValue("id").jsonPrimitive.content
@@ -72,6 +74,26 @@ class SyncPresentationVectorsTest {
                     syncTransportAvailable(bool("usable"), c.getValue("queueEntries").jsonPrimitive.int),
                     id
                 )
+                "directional-transport" -> {
+                    val navigation = c.getValue("navigation").takeUnless { it is JsonNull }?.jsonObject?.let { a ->
+                        SyncNavigationAuthority(
+                            a.getValue("repeatMode").takeUnless { it is JsonNull }?.jsonPrimitive?.content,
+                            a.getValue("entryIds").jsonArray.map { it.jsonPrimitive.content },
+                            a.getValue("currentEntryId").takeUnless { it is JsonNull }?.jsonPrimitive?.content
+                        )
+                    }
+                    val entries = c.getValue("queueEntries").jsonPrimitive.int
+                    assertEquals(
+                        bool("expectedPrevious"),
+                        syncDirectionAvailable(bool("usable"), entries, true, navigation),
+                        "$id previous"
+                    )
+                    assertEquals(
+                        bool("expectedNext"),
+                        syncDirectionAvailable(bool("usable"), entries, false, navigation),
+                        "$id next"
+                    )
+                }
                 "people" -> {
                     val people = syncPeople(strings("names"))
                     assertEquals(strings("visible"), people.names, id)

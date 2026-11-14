@@ -2169,17 +2169,21 @@ class TouchPlayerControlsTest {
         val positions = input.getValue("positionSequenceMs").jsonArray.map { it.jsonPrimitive.long }
         assertEquals(3, positions.size)
         val segment = input.getValue("segment").jsonObject
+        val triggerOrder = input.getValue("triggerOrder").jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(
+            listOf("measure-unreserved-skip", "remove-skip", "admit-notice-empty-column", "restore-same-skip"),
+            triggerOrder
+        )
+        val admittedSegment = MediaSegment(
+            segment.getValue("id").jsonPrimitive.content,
+            SegmentType.valueOf(segment.getValue("type").jsonPrimitive.content),
+            segment.getValue("startTicks").jsonPrimitive.long,
+            segment.getValue("endTicks").jsonPrimitive.long
+        )
         launch(fontScale = input.getValue("fontScale").jsonPrimitive.float)
         compose.runOnIdle {
             host.position = positions[0]
-            host.segments = listOf(
-                MediaSegment(
-                    segment.getValue("id").jsonPrimitive.content,
-                    SegmentType.valueOf(segment.getValue("type").jsonPrimitive.content),
-                    segment.getValue("startTicks").jsonPrimitive.long,
-                    segment.getValue("endTicks").jsonPrimitive.long
-                )
-            )
+            host.segments = listOf(admittedSegment)
         }
         settled()
         val player = compose.onNodeWithTag("touch:player").fetchSemanticsNode()
@@ -2191,10 +2195,23 @@ class TouchPlayerControlsTest {
         assertEquals(input.getValue("fontScale").jsonPrimitive.float, player.layoutInfo.density.fontScale, .01f)
         val skip = compose.onNodeWithTag("touch:skip").assertIsDisplayed().assertIsEnabled()
         val unreserved = skip.getBoundsInRoot()
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+        compose.runOnIdle { host.segments = emptyList() }
+        settled()
+        assertEquals(
+            expected.getValue("emptyTargetCount").jsonPrimitive.int,
+            compose.onAllNodesWithTag("touch:skip").fetchSemanticsNodes().size
+        )
+        skip.assertDoesNotExist()
         decided(PlayMethod.valueOf(input.getValue("noticeMethod").jsonPrimitive.content))
         settled()
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+        skip.assertDoesNotExist()
+        compose.runOnIdle { host.segments = listOf(admittedSegment) }
+        settled()
         val notice = compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed().getBoundsInRoot()
-        val held = skip.assertIsDisplayed().getBoundsInRoot()
+        val held = skip.assertIsDisplayed().assertIsEnabled().getBoundsInRoot()
+        println("notice-first nativeDp triggerOrder=$triggerOrder frame=$frame unreserved=$unreserved notice=$notice skip=$held")
         val band = expected.getValue("reservedActionBandWidthDp").jsonPrimitive.float
         val gap = expected.getValue("minimumNoticeToActionGapDp").jsonPrimitive.float
         assertTrue(
@@ -2234,6 +2251,7 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { host.position = positions[2] }
         settled()
         val reset = skip.assertIsDisplayed().assertIsEnabled().getBoundsInRoot()
+        println("notice-first nativeDp afterExpiry=$afterExpiry reset=$reset unreserved=$unreserved")
         assertEquals(
             unchanged,
             targetChange(unreserved, reset),

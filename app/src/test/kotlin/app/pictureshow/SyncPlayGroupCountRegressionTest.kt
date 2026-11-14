@@ -12,6 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -22,15 +23,21 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntSize
+import app.pictureshow.core.sync.SyncNavigationAuthority
+import app.pictureshow.core.sync.parseSyncQueue
 import java.io.File
 import java.text.NumberFormat
 import kotlin.math.abs
@@ -470,5 +477,129 @@ class SyncPlayGroupCountRegressionTest {
             joinedCommands.size,
             "Reading scope, scrolling and queue publication send no group command"
         )
+    }
+
+    // New directional boundary fixtures use an actual parsed server queue, never the presentation repeat default.
+    @Test fun phoneConfirmedRepeatNoneDirectionsRespectQueueBounds() = verifyDirectionalTransport(false, false)
+
+    @Test
+    @Config(qualifiers = "w985dp-h554dp-land-television-156dpi")
+    fun tvConfirmedRepeatNoneDirectionsRespectQueueBounds() = verifyDirectionalTransport(true, false)
+
+    @Test fun phoneConfirmedRepeatModesKeepValidDirectionsEnabled() = verifyDirectionalTransport(false, true)
+
+    @Test
+    @Config(qualifiers = "w985dp-h554dp-land-television-156dpi")
+    fun tvConfirmedRepeatModesKeepValidDirectionsEnabled() = verifyDirectionalTransport(true, true)
+
+    private fun verifyDirectionalTransport(tv: Boolean, repeats: Boolean) {
+        val profile = syncSocialRoleCase(
+            if (tv) "tv-joined-name-count-first-baseline-font10" else "phone-joined-shared-playback-scope-font10"
+        )
+        val state = launchJoinedGeometry(tv, profile.getValue("input").jsonObject)
+        val ids = if (repeats) {
+            listOf("native-direction-one-single", "native-direction-all-single")
+        } else {
+            listOf(
+                "native-direction-none-single",
+                "native-direction-none-first",
+                "native-direction-none-middle",
+                "native-direction-none-last"
+            )
+        }
+        for (id in ids) {
+            val row = syncSocialRoleCase(id)
+            assertEquals("authoritative-directional-transport", row.getValue("profile").jsonPrimitive.content)
+            val queue = parseSyncQueue(row.getValue("input").jsonObject.getValue("snapshot").jsonObject)
+            val expected = row.getValue("expected").jsonObject
+            val modes = if (repeats) setOf("RepeatOne", "RepeatAll") else setOf("RepeatNone")
+            assertTrue(queue.repeatMode in modes)
+            assertTrue(queue.current != null, "Actual authoritative queue must identify a current entry")
+            assertEquals(queue.entries.size, queue.entries.map { it.playlistItemId }.toSet().size)
+            compose.runOnIdle {
+                state.value = state.value.copy(
+                    phase = "Paused",
+                    localPlayback = SyncLocalPlayback.READY,
+                    repeat = queue.repeatMode,
+                    navigation = SyncNavigationAuthority(
+                        queue.repeatMode,
+                        queue.entries.map { it.playlistItemId },
+                        queue.current?.playlistItemId
+                    ),
+                    queue = queue.entries.mapIndexed { index, entry ->
+                        SyncPlayQueueRow(entry.playlistItemId, "Film ${index + 1}", index == queue.currentIndex, entry.itemId)
+                    }
+                )
+            }
+            settleJoinedGeometry()
+            joinedCommands.clear()
+            val before = state.value
+            for ((tag, key) in listOf("sync:previous" to "previousEnabled", "sync:next" to "nextEnabled")) {
+                val node = compose.onNodeWithTag(tag).assertIsDisplayed()
+                if (expected.getValue(key).jsonPrimitive.boolean) node.assertIsEnabled() else node.assertIsNotEnabled()
+            }
+            val play = compose.onNodeWithTag("sync:play").assertIsDisplayed()
+            if (expected.getValue("playEnabled").jsonPrimitive.boolean) play.assertIsEnabled() else play.assertIsNotEnabled()
+            val enabled = listOf("previous" to "previousEnabled", "next" to "nextEnabled")
+                .filter { expected.getValue(it.second).jsonPrimitive.boolean }.map { it.first }
+            enabled.forEach {
+                val node = compose.onNodeWithTag("sync:$it").performScrollTo().assertIsDisplayed().assertIsEnabled()
+                if (tv) {
+                    node.performSemanticsAction(SemanticsActions.RequestFocus) { request -> assertTrue(request()) }
+                    compose.waitForIdle()
+                    node.assertIsFocused()
+                    compose.onNodeWithTag("sync:panel").performKeyInput { pressKey(Key.DirectionCenter) }
+                    compose.waitForIdle()
+                } else {
+                    node.performClick()
+                }
+            }
+            assertEquals(enabled, joinedCommands, "$id preserves valid server-owned direction requests")
+            assertEquals(before, state.value, "$id cannot optimistically change membership or queue")
+            assertEquals(expected.getValue("membershipRetained").jsonPrimitive.boolean, state.value.groupId != null)
+        }
+        if (tv && !repeats) {
+            fun publishFocusSnapshot(id: String) {
+                val row = syncSocialRoleCase(id)
+                val queue = parseSyncQueue(row.getValue("input").jsonObject.getValue("snapshot").jsonObject)
+                compose.runOnIdle {
+                    state.value = state.value.copy(
+                        phase = "Paused",
+                        localPlayback = SyncLocalPlayback.READY,
+                        repeat = queue.repeatMode,
+                        navigation = SyncNavigationAuthority(
+                            queue.repeatMode,
+                            queue.entries.map { it.playlistItemId },
+                            queue.current?.playlistItemId
+                        ),
+                        queue = queue.entries.mapIndexed { index, entry ->
+                            SyncPlayQueueRow(entry.playlistItemId, "Film ${index + 1}", index == queue.currentIndex, entry.itemId)
+                        }
+                    )
+                }
+                settleJoinedGeometry()
+            }
+            val expected = syncSocialRoleCase("native-direction-none-middle").getValue("expected").jsonObject
+            publishFocusSnapshot("native-direction-none-middle")
+            val next = compose.onNodeWithTag("sync:next").performScrollTo().assertIsDisplayed().assertIsEnabled()
+            next.performSemanticsAction(SemanticsActions.RequestFocus) { request -> assertTrue(request()) }
+            next.assertIsFocused()
+            publishFocusSnapshot("native-direction-none-last")
+            next.assertIsNotEnabled()
+            val useful = expected.getValue("focusAfterNextDisabledIn").jsonArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                useful.any { tag ->
+                    val config = compose.onNodeWithTag(tag).assertIsEnabled().fetchSemanticsNode().config
+                    config.contains(SemanticsProperties.Focused) && config[SemanticsProperties.Focused]
+                },
+                "Disabling the actually focused Next must preserve useful focus on Play or valid Previous"
+            )
+            val unrelated = compose.onNodeWithTag(expected.getValue("unrelatedFocusRetained").jsonPrimitive.content)
+                .performScrollTo().assertIsDisplayed().assertIsEnabled()
+            unrelated.performSemanticsAction(SemanticsActions.RequestFocus) { request -> assertTrue(request()) }
+            unrelated.assertIsFocused()
+            publishFocusSnapshot("native-direction-none-middle")
+            unrelated.assertIsFocused()
+        }
     }
 }

@@ -360,6 +360,12 @@
         "densityDpi": 320,
         "fontScale": 1.0,
         "noticeMethod": "Transcode",
+        "triggerOrder": [
+          "measure-unreserved-skip",
+          "remove-skip",
+          "admit-notice-empty-column",
+          "restore-same-skip"
+        ],
         "positionSequenceMs": [
           20000,
           40000,

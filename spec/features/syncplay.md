@@ -156,7 +156,7 @@ Transport is available only when the current group controls are usable and its
 **authoritative queue has a positive entry count**. With an empty queue the TV and
 touch group panels omit Previous, Play/Pause and Next, explain how to start the queue,
 and start TV focus on the useful Wait control. A nonempty queue retains the existing
-transport roles, availability and request behavior. The native player screen’s
+transport roles, general Play/Pause availability and server-owned request behavior; confirmed directional bounds follow the rule below. The native player screen’s
 separate empty-group primary action remains disabled. The pure Kotlin
 `syncTransportAvailable(usable, queueEntries)` projection implements the six portable
 `op=transport` boundary cases. This does not change group transport authorization,
@@ -604,3 +604,8 @@ The persistent phone group chip and Skip intro/manual Next Episode actions retai
 The touch Group playback heading and shared-change explanation form a compact passive settings scope. Preserve the existing phone discovery contract: in the360×640/font1.0 reference, the initial Shuffle label paints wholly above the bottom fade; larger-text profiles retain ordinary scroll reachability and the pinned Leave footer. Do not remove the scope or shrink unrelated content to recover that clearance.
 
 Conversion notices retain their reserved next-episode action band even while only a narrow Skip button is present. When the window cannot fit that band beside the notice, keep the action below the notice with12dp clearance. After the notice expires, hold the action's target in place until the column becomes empty; a later Skip starts at the top again. In an adequate band use physical intervals in either layout direction. This notice priority is distinct from measuring a narrow action's actual width beside the persistent group chip. The conversion-notice-reserved-action-band case executes the native layout, expiry and reset rule; the existing Controls regression remains unchanged.
+
+
+Queue direction availability is separate from general transport and Play/Pause. Disable Previous at a confirmed first Repeat Off entry and Next at a confirmed last Repeat Off entry; disable both for a confirmed single-entry Repeat Off queue. Only a current connected authoritative snapshot with recognized Repeat Off, matching queue size, unique nonblank playlist-entry IDs and one matching current entry establishes these bounds. Repeat One and Repeat All retain server restart/wrap controls. Missing or ambiguous authority and unknown repeat modes retain the existing nonempty-queue request availability; a default displayed repeat value cannot establish a boundary. Unusable or empty transport stays disabled. Each action remains a server request with no optimistic local move; explicit boundary Next does not become natural completion, Leave, Stop or a local seek.
+
+The16 directional-transport cases extend sync-presentation without changing its six general-transport cases. Six parsed-queue native profiles exercise phone and TV boundary states and valid Repeat One/All requests; when a focused direction becomes unavailable, TV retains useful transport focus without stealing focus from unrelated settings. Android Host publication separately verifies current snapshot, replacement playlist identity, disconnect/reconnect and account scope. Other platforms owe equivalent authority projection and native controls/focus. A prior screenshot without queue/mode evidence is not proof of a particular boundary state.

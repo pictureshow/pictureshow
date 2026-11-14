@@ -431,6 +431,244 @@
       "op": "chip-quality",
       "quality": "OUT_OF_SYNC",
       "expected": true
+    },
+    {
+      "id": "direction-none-single",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": false,
+      "expectedNext": false
+    },
+    {
+      "id": "direction-none-first",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 3,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a",
+          "entry-b",
+          "entry-c"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": false,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-none-middle",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 3,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a",
+          "entry-b",
+          "entry-c"
+        ],
+        "currentEntryId": "entry-b"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-none-last",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 3,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a",
+          "entry-b",
+          "entry-c"
+        ],
+        "currentEntryId": "entry-c"
+      },
+      "expectedPrevious": true,
+      "expectedNext": false
+    },
+    {
+      "id": "direction-one-single",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatOne",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-all-single",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatAll",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-unknown-repeat-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "FutureMode",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-null-repeat-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": null,
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-missing-authority-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": null,
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-missing-current-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": null
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-ambiguous-current-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 3,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a",
+          "entry-a",
+          "entry-c"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-current-not-in-queue-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "other-entry"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-authority-size-mismatch-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a",
+          "entry-b",
+          "entry-c"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
+    },
+    {
+      "id": "direction-unusable-still-disabled",
+      "op": "directional-transport",
+      "usable": false,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          "entry-a"
+        ],
+        "currentEntryId": "entry-a"
+      },
+      "expectedPrevious": false,
+      "expectedNext": false
+    },
+    {
+      "id": "direction-empty-still-disabled",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 0,
+      "navigation": null,
+      "expectedPrevious": false,
+      "expectedNext": false
+    },
+    {
+      "id": "direction-blank-entry-retains-general",
+      "op": "directional-transport",
+      "usable": true,
+      "queueEntries": 1,
+      "navigation": {
+        "repeatMode": "RepeatNone",
+        "entryIds": [
+          ""
+        ],
+        "currentEntryId": ""
+      },
+      "expectedPrevious": true,
+      "expectedNext": true
     }
   ]
 }

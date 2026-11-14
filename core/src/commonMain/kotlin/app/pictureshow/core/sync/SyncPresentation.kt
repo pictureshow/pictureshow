@@ -46,6 +46,21 @@ fun syncPeople(names: List<String>): SyncPeople = SyncPeople(names.take(4), (nam
 /** An empty authoritative group queue has no transport target, even while settings remain usable. */
 fun syncTransportAvailable(usable: Boolean, queueEntries: Int): Boolean = usable && queueEntries > 0
 
+/** A validated current server snapshot can establish queue bounds; presentation defaults cannot. */
+data class SyncNavigationAuthority(val repeatMode: String?, val entryIds: List<String>, val currentEntryId: String?)
+
+/** Only a confirmed Repeat Off boundary removes a direction; all requests remain server-owned. */
+fun syncDirectionAvailable(usable: Boolean, queueEntries: Int, previous: Boolean, navigation: SyncNavigationAuthority?): Boolean {
+    val general = syncTransportAvailable(usable, queueEntries)
+    if (!general || navigation?.repeatMode != "RepeatNone") return general
+    val entries = navigation.entryIds
+    if (entries.size != queueEntries || entries.any { it.isBlank() } || entries.distinct().size != entries.size) return general
+    val current = navigation.currentEntryId ?: return general
+    val index = entries.indexOf(current)
+    if (index < 0) return general
+    return if (previous) index > 0 else index < entries.lastIndex
+}
+
 /** A recovery banner owns its estimate/action; the panel phase must not duplicate its chip hint. */
 fun syncPanelQuality(quality: SyncQuality, recoveryOffered: Boolean): SyncQuality = if (recoveryOffered) SyncQuality.UNKNOWN else quality
 

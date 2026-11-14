@@ -142,6 +142,7 @@ import app.pictureshow.core.sync.SyncPhase
 import app.pictureshow.core.sync.SyncQuality
 import app.pictureshow.core.sync.syncChipName
 import app.pictureshow.core.sync.syncChipShowsQuality
+import app.pictureshow.core.sync.syncDirectionAvailable
 import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
@@ -917,6 +918,8 @@ private fun SyncJoined(
     bodyScroll: ScrollState,
     touchWindowSize: IntSize
 ) {
+    val previousAvailable = syncDirectionAvailable(transport, state.queue.size, true, state.navigation)
+    val nextAvailable = syncDirectionAvailable(transport, state.queue.size, false, state.navigation)
     val density = LocalDensity.current
     val touchReveal = remember(state.server, state.viewer, state.groupId, touchWindowSize, density.density, density.fontScale) {
         BringIntoViewRequester()
@@ -1077,7 +1080,7 @@ private fun SyncJoined(
         ) {
             SyncTransport("previous", stringResource(R.string.sync_previous), {
                 action("previous", null)
-            }, tv, Modifier.testTag("sync:previous"), transport)
+            }, tv, Modifier.testTag("sync:previous"), previousAvailable)
             val play = state.phase != "Playing"
             SyncTransport(
                 if (play) "play" else "pause",
@@ -1104,7 +1107,7 @@ private fun SyncJoined(
                 { action("next", null) },
                 tv,
                 Modifier.testTag("sync:next"),
-                transport
+                nextAvailable
             )
         }
     }
