@@ -15,6 +15,7 @@ import app.pictureshow.core.sync.SyncGroup
 import app.pictureshow.core.sync.SyncRequest
 import app.pictureshow.core.sync.SyncUtcTime
 import app.pictureshow.core.sync.syncUtcTimestamp
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,6 +29,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -100,6 +102,7 @@ class SyncPlayHostTest {
         var accessGate: CompletableDeferred<Unit>? = null
         var failAccess = false
         var failClock = false
+        var clockGate: CompletableDeferred<Unit>? = null
         val epoch = 1_762_776_000_000L
         var timingOffsetMs = 0L
         fun wall() = epoch + scope.testScheduler.currentTime + timingOffsetMs
@@ -121,10 +124,13 @@ class SyncPlayHostTest {
                 ClientResult.Success(policy)
             }
         }
-        override suspend fun time(account: Account): ClientResult<SyncUtcTime> = if (failClock) {
-            ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Clock unavailable"))
-        } else {
-            ClientResult.Success(SyncUtcTime(wall(), wall()))
+        override suspend fun time(account: Account): ClientResult<SyncUtcTime> {
+            clockGate?.await()
+            return if (failClock) {
+                ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Clock unavailable"))
+            } else {
+                ClientResult.Success(SyncUtcTime(wall(), wall()))
+            }
         }
         override suspend fun send(account: Account, request: SyncRequest): Int {
             sent += account to request
@@ -219,6 +225,29 @@ class SyncPlayHostTest {
                 }
             )
         }.toString()
+    }
+
+    private fun clockRecoveryBoundary(): Pair<Long, Long> {
+        val roots = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val file = roots.map { File(it, "spec/vectors/sync-clock.json") }.first { it.isFile }
+        val suite = Json.parseToJsonElement(file.readText()).jsonObject
+        assertEquals(1, suite.getValue("schemaVersion").jsonPrimitive.int)
+        assertEquals("sync-clock", suite.getValue("suite").jsonPrimitive.content)
+        val cases = suite.getValue("cases").jsonArray.map { it.jsonObject }
+        fun boundary(id: String, expected: Boolean): Long {
+            val row = cases.single { it.getValue("id").jsonPrimitive.content == id }
+            assertEquals("clock-refresh-due", row.getValue("op").jsonPrimitive.content)
+            assertEquals(expected, row.getValue("expected").jsonPrimitive.boolean)
+            val input = row.getValue("input").jsonObject
+            assertEquals(JsonNull, input.getValue("anchor"))
+            assertEquals(0L, input.getValue("lastAttemptFinishedMillis").jsonPrimitive.long)
+            return input.getValue("monotonicMillis").jsonPrimitive.long
+        }
+        val before = boundary("clock-refresh-null-before", false)
+        val due = boundary("clock-refresh-null-exact", true)
+        assertEquals(30_000L, due, "Recovery cadence is the existing active30s contract")
+        assertEquals(due - 1, before)
+        return before to due
     }
 
     @Test fun titleLookupsAreBoundedAndQueuedOldAccountRequestsNeverStart() = runTest {
@@ -3091,6 +3120,202 @@ class SyncPlayHostTest {
             val departure = assertNotNull(rig.host.state.value.departure)
             assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
             assertEquals("Evening", departure.groupName)
+        }
+    }
+
+    @Test fun initialInvalidClockRecoversAfterThirtySecondsWithoutRejoiningOrPlayingEarly() = runTest {
+        val (before, due) = clockRecoveryBoundary()
+        val rig = Rig(this)
+        rig.failClock = true
+        rig.join()
+        rig.snapshot()
+        val generation = rig.host.membership.generation
+        val entry = rig.host.membership.queue?.current?.playlistItemId
+        rig.host.receive(rig.command("Unpause", ticks = rig.renderer.value.positionTicks, id = "pending-initial-clock"))
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertTrue(rig.host.participating)
+        assertEquals(SyncNoticeKind.CLOCK, rig.host.state.value.notice?.kind)
+        assertFalse(rig.renderer.value.unpaused)
+        assertTrue(rig.renderer.applied.none { it.playing == true })
+        val attempts = rig.diagnostics.count { it.startsWith("trace-clock-begin ") }
+        assertEquals(1, attempts)
+        rig.sent.clear()
+        rig.failClock = false
+        advanceTimeBy(before)
+        runCurrent()
+        assertEquals(attempts, rig.diagnostics.count { it.startsWith("trace-clock-begin ") })
+        assertTrue(rig.operations().none { it in setOf("Ready", "Ping", "NewGroup", "JoinGroup", "Leave", "Unpause") })
+        assertFalse(rig.renderer.value.unpaused, "A restored network alone cannot borrow the invalid clock")
+        advanceTimeBy(due - before)
+        runCurrent()
+        assertEquals(attempts + 1, rig.diagnostics.count { it.startsWith("trace-clock-begin ") }, "One bounded recovery attempt")
+        advanceTimeBy(250)
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertTrue(rig.operations().contains("Ping"), "Fresh valid clock must be measured and reported")
+        assertTrue(rig.operations().contains("Ready"), "Actual eligible entry must report timed readiness after clock recovery")
+        assertTrue(rig.renderer.value.unpaused, "The retained authoritative pending Unpause may apply only after valid calibration")
+        assertTrue(rig.renderer.applied.any { it.playing == true })
+        assertEquals(generation, rig.host.membership.generation)
+        assertEquals(entry, rig.host.membership.queue?.current?.playlistItemId)
+        assertTrue(rig.host.participating)
+        assertEquals(null, rig.host.state.value.departure)
+        assertTrue(
+            rig.operations().none { it in setOf("NewGroup", "JoinGroup", "Leave", "Unpause") },
+            "Clock recovery cannot manufacture a new group intent or echo the server command"
+        )
+    }
+
+    @Test fun failedRefreshRetriesThirtySecondsAfterCompletionAndRecoversTheHeldServerCommand() = runTest {
+        val (before, due) = clockRecoveryBoundary()
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.tick()
+        runCurrent()
+        val generation = rig.host.membership.generation
+        val entry = rig.host.membership.queue?.current?.playlistItemId
+        // Mirror the actual chain: report an unready renderer while the previous clock is still valid.
+        rig.renderer.value = rig.renderer.value.copy(ready = false, buffering = true)
+        rig.host.tick()
+        runCurrent()
+        assertTrue(rig.operations().contains("Buffering"), "Readiness cache must hold a real acknowledged unready observation")
+        val initialAttempts = rig.diagnostics.count { it.startsWith("trace-clock-begin ") }
+        rig.failClock = true
+        val gate = CompletableDeferred<Unit>()
+        rig.clockGate = gate
+        advanceTimeBy(due)
+        runCurrent()
+        assertEquals(initialAttempts + 1, rig.diagnostics.count { it.startsWith("trace-clock-begin ") })
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(
+            initialAttempts + 1,
+            rig.diagnostics.count { it.startsWith("trace-clock-begin ") },
+            "Only one calibration may remain in flight"
+        )
+        gate.complete(Unit)
+        runCurrent()
+        assertTrue(
+            rig.diagnostics.any {
+                it.startsWith("trace-clock-end ") &&
+                    it.contains("oldAnchor=true") &&
+                    it.contains("newAnchor=false")
+            }
+        )
+        rig.clockGate = null
+        rig.host.receive(rig.command("Unpause", ticks = rig.renderer.value.positionTicks, id = "pending-after-refresh"))
+        runCurrent()
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Waiting")
+                    put("Reason", "Buffer")
+                }
+            )
+        )
+        rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false)
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertEquals(SyncNoticeKind.CLOCK, rig.host.state.value.notice?.kind)
+        assertEquals("Waiting", rig.host.state.value.phase)
+        assertEquals("Buffer", rig.host.state.value.waitReason)
+        assertTrue(rig.renderer.value.ready && !rig.renderer.value.buffering)
+        assertFalse(rig.renderer.value.unpaused)
+        rig.renderer.applied.clear()
+        rig.sent.clear()
+        val failedAttempts = rig.diagnostics.count { it.startsWith("trace-clock-begin ") }
+        rig.failClock = false
+        // Failed attempt started30s and completed35s. This spans the incorrect60s start-based retry boundary.
+        advanceTimeBy(before)
+        runCurrent()
+        assertEquals(failedAttempts, rig.diagnostics.count { it.startsWith("trace-clock-begin ") })
+        assertFalse(rig.renderer.value.unpaused)
+        assertTrue(rig.renderer.applied.none { it.playing == true })
+        assertTrue(rig.operations().none { it in setOf("Ready", "Ping", "NewGroup", "JoinGroup", "Leave", "Unpause") })
+        advanceTimeBy(due - before)
+        runCurrent()
+        assertEquals(
+            failedAttempts + 1,
+            rig.diagnostics.count { it.startsWith("trace-clock-begin ") },
+            "Retry must begin30s after failed completion, at65s, not at60s or every ticker tick"
+        )
+        advanceTimeBy(250)
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertTrue(rig.operations().contains("Ping"))
+        assertTrue(rig.operations().contains("Ready"), "Recovered clock must report the renderer's actual READY transition")
+        assertEquals("Waiting", rig.host.state.value.phase)
+        assertFalse(rig.renderer.value.unpaused, "A fresh clock and Ready cannot override the server's Waiting barrier")
+        assertTrue(rig.renderer.applied.none { it.playing == true })
+        assertEquals(generation, rig.host.membership.generation)
+        assertEquals(entry, rig.host.membership.queue?.current?.playlistItemId)
+        assertTrue(rig.operations().none { it in setOf("NewGroup", "JoinGroup", "Leave", "Unpause") })
+        // Only one fresh authoritative response may resume output, at its actual future When.
+        rig.host.receive(
+            rig.command("Unpause", delayMs = 500, ticks = rig.renderer.value.positionTicks, id = "fresh-after-ready")
+        )
+        runCurrent()
+        assertFalse(rig.renderer.value.unpaused, "Receiving a future Unpause cannot apply it early")
+        advanceTimeBy(499)
+        runCurrent()
+        assertFalse(rig.renderer.value.unpaused, "Hold output until the server When")
+        assertTrue(rig.renderer.applied.none { it.playing == true })
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(rig.renderer.value.unpaused)
+        assertTrue(rig.renderer.applied.any { it.playing == true })
+        assertEquals(generation, rig.host.membership.generation)
+        assertEquals(entry, rig.host.membership.queue?.current?.playlistItemId)
+        assertTrue(rig.host.participating)
+        assertEquals(null, rig.host.state.value.departure)
+        assertTrue(rig.operations().none { it in setOf("NewGroup", "JoinGroup", "Leave", "Unpause") })
+    }
+
+    @Test fun clockRecoveryDeadlineCannotRetryOrApplyAfterLeaveOrAccountReplacement() = runTest {
+        val (_, due) = clockRecoveryBoundary()
+        for (replaceAccount in listOf(false, true)) {
+            val rig = Rig(this)
+            rig.failClock = true
+            rig.join()
+            rig.snapshot()
+            rig.host.receive(rig.command("Unpause", ticks = rig.renderer.value.positionTicks, id = "obsolete-clock-scope"))
+            runCurrent()
+            assertFalse(rig.renderer.value.unpaused)
+            val attempts = rig.diagnostics.count { it.startsWith("trace-clock-begin ") }
+            advanceTimeBy(10_000)
+            runCurrent()
+            rig.sent.clear()
+            if (replaceAccount) rig.host.bind(other) else rig.host.leave()
+            runCurrent()
+            assertFalse(rig.host.participating)
+            assertFalse(rig.renderer.value.unpaused)
+            assertTrue(rig.operations().all { it == "Leave" })
+            assertTrue(rig.operations().size <= 1, "Only the deliberate departure may dispatch")
+            val departureOperations = rig.operations()
+            rig.renderer.applied.clear()
+            rig.failClock = false
+            advanceTimeBy(due + 250)
+            runCurrent()
+            rig.host.tick()
+            runCurrent()
+            assertEquals(
+                attempts,
+                rig.diagnostics.count {
+                    it.startsWith("trace-clock-begin ")
+                },
+                "Cancelled account/membership cannot retry"
+            )
+            assertEquals(departureOperations, rig.operations(), "Old deadline cannot send readiness, ping, join or another leave")
+            assertFalse(rig.host.participating)
+            assertFalse(rig.renderer.value.unpaused)
+            assertTrue(rig.renderer.applied.isEmpty(), "Old pending command cannot mutate the renderer")
         }
     }
 }

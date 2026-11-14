@@ -7,6 +7,7 @@
 package app.pictureshow
 
 import android.app.Application
+import android.content.res.Configuration
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -17,13 +18,18 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -35,6 +41,8 @@ import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.MediaSegment
+import app.pictureshow.core.SegmentType
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import app.pictureshow.core.sync.SyncGroup
@@ -46,6 +54,7 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -55,11 +64,14 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Rule
@@ -109,22 +121,28 @@ class TouchPlayerDirectorRegressionTest {
             if (::decoder.isInitialized) decoder.release()
             if (::output.isInitialized) output.release()
         }
-    }
-    private fun show(grouped: Boolean = false, whiteVideo: Boolean = false) {
-        val phase = "Playing"
         RuntimeEnvironment.setFontScale(1f)
+    }
+    private fun show(grouped: Boolean = false, whiteVideo: Boolean = false, overlay: JsonObject? = null) {
+        val input = overlay?.getValue("input")?.jsonObject
+        val phase = input?.getValue("phase")?.jsonPrimitive?.content ?: "Playing"
+        val groupName = input?.getValue("groupName")?.jsonPrimitive?.content ?: "Sync91Design4k"
+        val participants = input?.getValue("participants")?.jsonArray ?: JsonArray(emptyList())
+        val positionMs = input?.getValue("positionMs")?.jsonPrimitive?.long ?: 20_000L
+        val fontScale = input?.getValue("fontScale")?.jsonPrimitive?.float ?: 1f
+        RuntimeEnvironment.setFontScale(fontScale)
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
-            decoder = Decoder()
+            decoder = Decoder(positionMs)
             if (grouped) {
                 val gateway = object : SyncPlayGateway {
                     override suspend fun groups(account: Account) = ClientResult.Success(
                         listOf(
                             SyncGroup(
                                 "g",
-                                "Sync91Design4k",
+                                groupName,
                                 phase,
-                                emptyList(),
+                                participants.map { it.jsonPrimitive.content },
                                 epoch * 10_000
                             )
                         )
@@ -160,9 +178,9 @@ class TouchPlayerDirectorRegressionTest {
                         "GroupJoined",
                         buildJsonObject {
                             put("GroupId", "g")
-                            put("GroupName", "Sync91Design4k")
+                            put("GroupName", groupName)
                             put("State", phase)
-                            put("Participants", JsonArray(emptyList()))
+                            put("Participants", participants)
                             put("LastUpdatedAt", syncUtcTimestamp(epoch))
                         }
                     )
@@ -185,7 +203,7 @@ class TouchPlayerDirectorRegressionTest {
                                 )
                             )
                             put("PlayingItemIndex", 0)
-                            put("StartPositionTicks", 200_000_000L)
+                            put("StartPositionTicks", positionMs * 10_000)
                             put("IsPlaying", phase == "Playing")
                             put("RepeatMode", "RepeatNone")
                             put("ShuffleMode", "Sorted")
@@ -201,11 +219,40 @@ class TouchPlayerDirectorRegressionTest {
                 output.onSyncPauseRequested = { pauseFeedback++ }
             }
             val exposed = if (grouped) SyncTransportPlayer(decoder, output::interceptSync) else decoder
-            playback = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
+            playback = PlaybackHostState(MediaItem("film", "A film"), positionMs, output, {}, {})
             playback.sync = sync
             playback.playerSource = mutableStateOf(exposed)
             playback.stateSource = mutableStateOf(PlaybackState(preparing = false))
             playback.duration = 60_000
+            if (overlay != null) {
+                val action = requireNotNull(input).getValue("action").jsonPrimitive.content
+                if (action == "skip-intro") {
+                    playback.segments = listOf(MediaSegment("intro", SegmentType.Intro, 0, 600_000_000))
+                } else {
+                    assertEquals("next-episode", action)
+                    playback.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+                }
+                val group = requireNotNull(sync)
+                // Geometry fixture bridge uses the actual Host snapshot/apply path. No ready/seekable state is invented.
+                val bridge = object : SyncRenderer {
+                    override val sourceIdentity: Any get() = playback.player ?: output
+                    override fun snapshot() = playback.syncRendererSnapshot()
+                    override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double) =
+                        playback.applySyncTimeline(positionTicks, playing, rate)
+                }
+                assertTrue(
+                    group.bindRenderer(
+                        playback,
+                        bridge,
+                        opening = SyncOpen(
+                            group.membership.generation,
+                            "entry-a",
+                            "film",
+                            positionMs * 10_000
+                        )
+                    )
+                )
+            }
             sent.clear()
         }
         compose.setContent {
@@ -222,12 +269,22 @@ class TouchPlayerDirectorRegressionTest {
         compose.mainClock.advanceTimeBy(400)
         compose.waitForIdle()
         val actual = dpBounds("touch:player")
-        assertEquals(640f, (actual.right - actual.left).value, 1f, "Actual window width, not injected LocalConfiguration")
-        assertEquals(360f, (actual.bottom - actual.top).value, 1f, "Actual window height")
+        assertEquals(
+            input?.getValue("widthDp")?.jsonPrimitive?.float ?: 640f,
+            (actual.right - actual.left).value,
+            1f,
+            "Actual window width, not injected LocalConfiguration"
+        )
+        assertEquals(
+            input?.getValue("heightDp")?.jsonPrimitive?.float ?: 360f,
+            (actual.bottom - actual.top).value,
+            1f,
+            "Actual window height"
+        )
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithTag("touch:title").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.isNotEmpty())
-        layouts.forEach { assertEquals(1f, it.layoutInput.density.fontScale, .01f) }
+        layouts.forEach { assertEquals(fontScale, it.layoutInput.density.fontScale, .01f) }
     }
 
     @Test fun joinedLandscapeTransportHasMeaningfulChipClearanceAndFreeBandPlacement() {
@@ -359,8 +416,255 @@ class TouchPlayerDirectorRegressionTest {
         )
     }
 
+    private fun overlayProfile(id: String): JsonObject {
+        val roots = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+        val file = roots.map { File(it, "spec/vectors/touch-player-director-clearance-paint-edges.json") }.first { it.isFile }
+        val suite = Json.parseToJsonElement(file.readText()).jsonObject
+        assertEquals(1, suite.getValue("schemaVersion").jsonPrimitive.int)
+        assertEquals("touch-player-director-clearance-paint-edges", suite.getValue("suite").jsonPrimitive.content)
+        val profiles = suite.getValue("cases").jsonArray.map { it.jsonObject }
+            .filter { it.getValue("profile").jsonPrimitive.content == "actual-player-group-overlay-clearance" }
+        assertEquals(
+            setOf(
+                "group-chip-skip-intro-portrait-normal",
+                "group-chip-next-episode-portrait-normal",
+                "group-chip-skip-intro-portrait-large-font",
+                "group-chip-next-episode-portrait-large-font",
+                "group-chip-skip-intro-landscape-guard",
+                "group-chip-next-episode-landscape-guard"
+            ),
+            profiles.map { it.getValue("id").jsonPrimitive.content }.toSet()
+        )
+        assertEquals(6, profiles.size, "All admitted overlay cases must be present exactly once")
+        return profiles.single { it.getValue("id").jsonPrimitive.content == id }
+    }
+
+    private fun controlRequests() = sent.filterNot { it in setOf("Ready", "Ping") }
+
+    private fun overlayTarget(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
+    private fun chipButton() = compose.onNode(
+        hasClickAction() and hasAnyAncestor(hasTestTag("sync:player-chip")),
+        useUnmergedTree = true
+    )
+
+    private fun assertOverlayClear(c: JsonObject, a: Rect, b: Rect, role: String) {
+        val density = compose.onNodeWithTag("touch:player").fetchSemanticsNode().layoutInfo.density.density
+        val gap = c.getValue("expected").jsonObject.number("minimumOverlayClearanceDp") * density
+        assertTrue(
+            a.right + gap <= b.left + .5f ||
+                b.right + gap <= a.left + .5f ||
+                a.bottom + gap <= b.top + .5f ||
+                b.bottom + gap <= a.top + .5f,
+            "${c.getValue("id")}: actual $role must clear whole live chip by ${gap / density}dp: chip=$a other=$b"
+        )
+    }
+
+    private fun assertWholeChipText(c: JsonObject, tag: String, expectedKey: String, blocker: Rect) {
+        val input = c.getValue("input").jsonObject
+        val expected = c.getValue("expected").jsonObject
+        val node = overlayTarget(tag).assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.isNotEmpty(), "Real chip Text layout must be available: $tag")
+        val text = layouts.joinToString(" ") { it.layoutInput.text.text.replace('\n', ' ') }
+        assertTrue(text.contains(expected.getValue(expectedKey).jsonPrimitive.content), "Whole chip phrase: $tag=$text")
+        layouts.forEach { layout ->
+            assertEquals(input.number("fontScale"), layout.layoutInput.density.fontScale, .01f)
+            val rounding = expected.number("maximumGlyphBoundaryErrorNativePx")
+            assertFalse(layout.didOverflowHeight || layout.multiParagraph.didExceedMaxLines, "Whole chip phrase: $tag $text")
+            for (line in 0 until layout.lineCount) {
+                assertFalse(layout.isLineEllipsized(line), "Whole chip phrase: $tag $text")
+                assertTrue(
+                    layout.getLineLeft(line) >= -rounding &&
+                        layout.getLineRight(line) <= layout.size.width + rounding &&
+                        layout.getLineTop(line) >= -rounding &&
+                        layout.getLineBottom(line) <= layout.size.height + rounding,
+                    "Actual chip glyph line must fit the Text box: $tag $text size=${layout.size} line=$line"
+                )
+            }
+        }
+        val bounds = node.fetchSemanticsNode().boundsInRoot
+        val chip = chipButton().fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            bounds.left >= chip.left && bounds.right <= chip.right && bounds.top >= chip.top && bounds.bottom <= chip.bottom,
+            "Actual whole phrase must remain inside chip: $tag bounds=$bounds chip=$chip"
+        )
+        assertOverlayClear(c, bounds, blocker, "action vs $tag text")
+    }
+
+    private fun assertGroupOverlay(id: String) {
+        val c = overlayProfile(id)
+        val input = c.getValue("input").jsonObject
+        val e = c.getValue("expected").jsonObject
+        assertTrue(input.getValue("participating").jsonPrimitive.boolean)
+        assertTrue(input.getValue("controlsInitiallyVisible").jsonPrimitive.boolean)
+        assertEquals(1, input.getValue("queueItems").jsonPrimitive.int)
+        assertEquals(60_000L, input.getValue("durationMs").jsonPrimitive.long)
+        show(grouped = true, overlay = c)
+        val root = compose.onNodeWithTag("touch:player").fetchSemanticsNode()
+        val density = root.layoutInfo.density.density
+        assertEquals(input.getValue("densityDpi").jsonPrimitive.int, compose.activity.resources.displayMetrics.densityDpi)
+        assertEquals(input.number("densityDpi") / 160f, density, .001f)
+        assertEquals(
+            if (input.getValue("orientation").jsonPrimitive.content ==
+                "portrait"
+            ) {
+                Configuration.ORIENTATION_PORTRAIT
+            } else {
+                Configuration.ORIENTATION_LANDSCAPE
+            },
+            compose.activity.resources.configuration.orientation
+        )
+        compose.runOnIdle {
+            val group = requireNotNull(sync)
+            assertTrue(group.participating, "Real membership prerequisite")
+            assertEquals(input.getValue("phase").jsonPrimitive.content, group.state.value.phase)
+            assertEquals(input.getValue("groupName").jsonPrimitive.content, group.state.value.groupName)
+            assertEquals(2, group.state.value.participants.size)
+            assertFalse(group.panelOpen)
+            assertEquals(input.getValue("positionMs").jsonPrimitive.long, decoder.currentPosition)
+            assertFalse(playback.ended)
+            assertFalse(playback.switching)
+            sent.clear()
+        }
+        val card = input.getValue("action").jsonPrimitive.content == "next-episode"
+        val action = overlayTarget(if (card) "next:card" else "touch:skip").assertIsDisplayed()
+        val actionBounds = action.fetchSemanticsNode().boundsInRoot
+        val chip = chipButton().assertIsDisplayed().assertIsEnabled()
+        val chipBounds = chip.fetchSemanticsNode().touchBoundsInRoot
+        val frame = root.boundsInRoot
+        for ((role, rect) in listOf("chip" to chipBounds, "action" to actionBounds)) {
+            assertTrue(
+                rect.left >= frame.left && rect.right <= frame.right && rect.top >= frame.top && rect.bottom <= frame.bottom,
+                "Whole $role must stay inside actual player: $rect frame=$frame"
+            )
+        }
+        assertOverlayClear(c, chipBounds, actionBounds, "Skip/card bounds")
+        assertWholeChipText(c, "sync:chip-status", "chipPhasePhrase", actionBounds)
+        assertWholeChipText(c, "sync:chip-name", "chipGroupName", actionBounds)
+        assertWholeChipText(c, "sync:chip-count", "chipCountPhrase", actionBounds)
+        val targetTags = if (card) listOf("next:play", "next:cancel") else listOf("touch:skip")
+        for (tag in targetTags) {
+            val target = overlayTarget(tag).assertIsDisplayed().assertIsEnabled().fetchSemanticsNode().touchBoundsInRoot
+            assertTrue(target.width / density >= e.number("minimumActionTargetDp") - .5f)
+            assertTrue(target.height / density >= e.number("minimumActionTargetDp") - .5f)
+            assertOverlayClear(c, chipBounds, target, tag)
+        }
+        // Existing notice-specific tests stay unchanged; keep full native control targets in this collision fixture.
+        for (tag in listOf("touch:back10", "touch:forward10", "touch:toggle")) {
+            val bounds = overlayTarget(tag).assertIsDisplayed().assertIsEnabled().fetchSemanticsNode().touchBoundsInRoot
+            val minimum = if (tag == "touch:toggle") e.number("minimumPrimaryTargetDp") else e.number("minimumActionTargetDp")
+            assertTrue(bounds.width / density >= minimum - .5f && bounds.height / density >= minimum - .5f)
+        }
+        overlayTarget("touch:conversion-notice").assertDoesNotExist()
+        if (card) {
+            compose.onNodeWithText(e.getValue("cardTitle").jsonPrimitive.content, useUnmergedTree = true).assertIsDisplayed()
+            assertFalse(e.getValue("countdownVisible").jsonPrimitive.boolean)
+            compose.onNodeWithText("s left", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        } else {
+            compose.onNodeWithText(e.getValue("skipLabel").jsonPrimitive.content, useUnmergedTree = true).assertIsDisplayed()
+            overlayTarget("next:card").assertDoesNotExist()
+        }
+        val actionLabels = if (card) {
+            listOf(e.getValue("cardTitle").jsonPrimitive.content, "Play now", "Cancel")
+        } else {
+            listOf(e.getValue("skipLabel").jsonPrimitive.content)
+        }
+        for (label in actionLabels) {
+            val text = compose.onNodeWithText(label, useUnmergedTree = true).assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.isNotEmpty(), "Actual action label layout: $label")
+            layouts.forEach { layout ->
+                val rounding = e.number("maximumGlyphBoundaryErrorNativePx")
+                val metrics = "label=$label size=${layout.size} " +
+                    "paragraph=${layout.multiParagraph.width}x${layout.multiParagraph.height} " +
+                    "constraints=${layout.layoutInput.constraints} lines=${layout.lineCount} " +
+                    "widthOverflow=${layout.didOverflowWidth} heightOverflow=${layout.didOverflowHeight} " +
+                    "maxLinesExceeded=${layout.multiParagraph.didExceedMaxLines} " +
+                    "lineBoxes=${(0 until layout.lineCount).map {
+                        listOf(layout.getLineLeft(it), layout.getLineRight(it), layout.getLineTop(it), layout.getLineBottom(it))
+                    }}"
+                assertFalse(
+                    layout.didOverflowHeight || layout.multiParagraph.didExceedMaxLines,
+                    "Whole action label must fit vertically and retain all lines: $metrics"
+                )
+                for (line in 0 until layout.lineCount) {
+                    assertFalse(layout.isLineEllipsized(line), "Whole action label must not be ellipsized: $metrics")
+                    assertTrue(
+                        layout.getLineLeft(line) >= -rounding &&
+                            layout.getLineRight(line) <= layout.size.width + rounding &&
+                            layout.getLineTop(line) >= -rounding &&
+                            layout.getLineBottom(line) <= layout.size.height + rounding,
+                        "Actual action-label glyph line must fit the Text box: line=$line $metrics"
+                    )
+                }
+            }
+            assertOverlayClear(c, chipBounds, text.fetchSemanticsNode().boundsInRoot, "action label $label")
+        }
+        // Physical pointer dispatch at the chip's action-facing edge catches an overlay intercepting the live button.
+        chip.performTouchInput { click(Offset(width - 4f * density, center.y)) }
+        compose.runOnIdle {
+            assertTrue(requireNotNull(sync).panelOpen, "The chip tap must open its real group panel, not Skip/card")
+            assertFalse(playback.nextCancelled)
+            assertTrue(controlRequests().isEmpty(), "Chip tap cannot perform an action: $sent")
+            requireNotNull(sync).panelOpen = false
+        }
+        overlayTarget(if (card) "next:cancel" else "touch:skip").performTouchInput { click(center) }
+        compose.runOnIdle {
+            scheduler.runCurrent()
+            assertFalse(requireNotNull(sync).panelOpen, "Action tap cannot hit the group chip")
+            assertEquals(e.getValue("membershipRetained").jsonPrimitive.boolean, requireNotNull(sync).participating)
+            if (card) {
+                assertTrue(playback.nextCancelled, "Physical Cancel tap must reach the real manual card")
+                assertTrue(controlRequests().isEmpty(), "Cancel cannot send control requests: $sent")
+            } else {
+                assertEquals(listOf("Seek"), controlRequests(), "Physical Skip tap must dispatch the real group request")
+            }
+            assertFalse(playback.exitRequested)
+            assertFalse(playback.switching)
+            assertEquals(
+                input.getValue("positionMs").jsonPrimitive.long,
+                decoder.currentPosition,
+                "Group request cannot optimistically seek/advance the local fixture decoder"
+            )
+        }
+    }
+
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    @Test
+    fun groupChipPortraitSkipIntroKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-skip-intro-portrait-normal")
+    }
+
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    @Test
+    fun groupChipPortraitManualNextEpisodeKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-next-episode-portrait-normal")
+    }
+
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    @Test
+    fun groupChipPortraitLargeFontSkipIntroKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-skip-intro-portrait-large-font")
+    }
+
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    @Test
+    fun groupChipPortraitLargeFontManualNextEpisodeKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-next-episode-portrait-large-font")
+    }
+
+    @Test fun groupChipLandscapeSkipIntroKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-skip-intro-landscape-guard")
+    }
+
+    @Test fun groupChipLandscapeManualNextEpisodeKeepsWholePhrasesAndSeparateActionTargets() {
+        assertGroupOverlay("group-chip-next-episode-landscape-guard")
+    }
+
     private fun rgb(argb: Int) = listOf((argb ushr 16) and 255, (argb ushr 8) and 255, argb and 255)
-    private class Decoder : SimpleBasePlayer(Looper.getMainLooper()) {
+    private class Decoder(positionMs: Long = 20_000) : SimpleBasePlayer(Looper.getMainLooper()) {
         private var value = State.Builder().setAvailableCommands(
             Player.Commands.Builder().addAll(
                 Player.COMMAND_PLAY_PAUSE,
@@ -371,7 +675,7 @@ class TouchPlayerDirectorRegressionTest {
             ).build()
         ).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
             .setPlaybackState(Player.STATE_READY).setPlayWhenReady(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-            .setContentPositionMs(20_000).build()
+            .setContentPositionMs(positionMs).build()
         override fun getState(): State = value
         override fun handleSetPlayWhenReady(playWhenReady: Boolean) = Futures.immediateVoidFuture().also {
             value = value.buildUpon().setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST).build()

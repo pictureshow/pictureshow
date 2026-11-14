@@ -47,6 +47,24 @@ class SyncTimingVectorsTest {
         cases("sync-clock").forEach { row ->
             val expected = row.getValue("expected")
             when (row.getValue("op").jsonPrimitive.content) {
+                "clock-refresh-due" -> {
+                    val i = row.getValue("input").jsonObject
+                    val anchor = i.getValue("anchor").takeUnless { it is JsonNull }?.jsonObject?.let {
+                        app.pictureshow.core.sync.SyncClockAnchor(
+                            it.long("serverTicksAtAnchor"),
+                            it.long("localWallMillis"),
+                            it.long("localMonotonicMillis"),
+                            it.long("uncertaintyTicks")
+                        )
+                    }
+                    val finished = i.getValue("lastAttemptFinishedMillis").takeUnless { it is JsonNull }?.jsonPrimitive?.long
+                    assertEquals(
+                        expected.jsonPrimitive.boolean,
+                        app.pictureshow.core.sync.syncClockRefreshDue(anchor, finished, i.long("monotonicMillis")),
+                        row.toString()
+                    )
+                }
+
                 "prepared-future-unpause" -> {
                     val i = row.getValue("input").jsonObject
                     assertEquals(

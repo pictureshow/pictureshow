@@ -32,6 +32,7 @@ import app.pictureshow.core.sync.recoverSync
 import app.pictureshow.core.sync.reduceSyncDeparture
 import app.pictureshow.core.sync.reduceSyncEvent
 import app.pictureshow.core.sync.stopSyncDrift
+import app.pictureshow.core.sync.syncClockRefreshDue
 import app.pictureshow.core.sync.syncCompletionAction
 import app.pictureshow.core.sync.syncCreate
 import app.pictureshow.core.sync.syncDrift
@@ -197,6 +198,7 @@ internal class SyncPlayHost(
     private var calibration = SyncClockCalibration()
     private var anchor: SyncClockAnchor? = null
     private var clockJob: Job? = null
+    private var lastClockAttemptFinishedMillis: Long? = null
     private var ticker: Job? = null
     private var scheduled: Job? = null
     private var timeline: SyncCommand? = null
@@ -927,6 +929,7 @@ internal class SyncPlayHost(
     private suspend fun calibrate() {
         val target = account ?: return
         val version = sequence
+        val generation = membership.generation
         val attempt = ++clockAttempt
         trace("clock-begin", "attempt=$attempt " + stateFields())
         var completed = false
@@ -988,6 +991,9 @@ internal class SyncPlayHost(
                 )
             }
         } finally {
+            if (completed && current(target, version) && generation == membership.generation && connected && participating) {
+                lastClockAttemptFinishedMillis = monotonic()
+            }
             if (!completed) trace("clock-unfinished", "attempt=$attempt current=${current(target, version)}")
         }
     }
@@ -998,7 +1004,11 @@ internal class SyncPlayHost(
             trace("ticker-start", stateFields())
             try {
                 while (participating && isActive) {
-                    if (anchor?.needsRefresh(monotonic()) == true && clockJob?.isActive != true) {
+                    if (connected &&
+                        (anchor != null || membership.hasSnapshot) &&
+                        syncClockRefreshDue(anchor, lastClockAttemptFinishedMillis, monotonic()) &&
+                        clockJob?.isActive != true
+                    ) {
                         clockJob = scope.launch { calibrate() }
                     }
                     tick()
@@ -1390,6 +1400,7 @@ internal class SyncPlayHost(
         scheduled?.cancel()
         scheduled = null
         anchor = null
+        lastClockAttemptFinishedMillis = null
         anchorGeneration++
         calibration = SyncClockCalibration()
         timeline = null

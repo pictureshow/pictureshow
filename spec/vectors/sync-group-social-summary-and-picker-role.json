@@ -112,6 +112,144 @@
         "previousDistinctCountAbsent": true,
         "groupCommands": 0
       }
+    },
+    {
+      "id": "tv-joined-name-count-first-baseline-font10",
+      "input": {
+        "platform": "tv",
+        "widthPx": 960,
+        "heightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "groupName": "Friday films",
+        "participants": [
+          "Morgan",
+          "Sam"
+        ],
+        "phase": "Idle",
+        "queueEntries": 0
+      },
+      "expected": {
+        "baselineToleranceNativePx": 1,
+        "firstUsefulFocus": "ignore-wait",
+        "passive": true,
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "tv-joined-name-count-first-baseline-font13",
+      "input": {
+        "platform": "tv",
+        "widthPx": 960,
+        "heightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.3,
+        "groupName": "Friday films",
+        "participants": [
+          "Morgan",
+          "Sam"
+        ],
+        "phase": "Idle",
+        "queueEntries": 0
+      },
+      "expected": {
+        "baselineToleranceNativePx": 1,
+        "firstUsefulFocus": "ignore-wait",
+        "passive": true,
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "phone-joined-shared-playback-scope-font10",
+      "input": {
+        "platform": "touch",
+        "widthPx": 720,
+        "heightPx": 1280,
+        "densityDpi": 320,
+        "fontScale": 1.0,
+        "groupName": "Friday films",
+        "participants": [
+          "Morgan",
+          "Sam"
+        ],
+        "phase": "Idle",
+        "queueEntries": 0,
+        "nextPresentation": {
+          "phase": "Paused",
+          "localPlayback": "READY",
+          "queue": [
+            {
+              "id": "film",
+              "title": "A real film",
+              "current": true
+            }
+          ]
+        }
+      },
+      "expected": {
+        "geometryToleranceNativePx": 1,
+        "minimumHitDp": 48,
+        "footerGapDp": 8,
+        "scopeHeading": "Group playback",
+        "scopeExplanation": "Changes here apply to everyone.",
+        "readingOrder": [
+          "queue",
+          "scope-heading",
+          "scope-helper",
+          "repeat-title",
+          "repeat-control",
+          "shuffle",
+          "people"
+        ],
+        "passive": true,
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "phone-joined-shared-playback-scope-font13",
+      "input": {
+        "platform": "touch",
+        "widthPx": 720,
+        "heightPx": 1280,
+        "densityDpi": 320,
+        "fontScale": 1.3,
+        "groupName": "Friday films",
+        "participants": [
+          "Morgan",
+          "Sam"
+        ],
+        "phase": "Idle",
+        "queueEntries": 0,
+        "nextPresentation": {
+          "phase": "Paused",
+          "localPlayback": "READY",
+          "queue": [
+            {
+              "id": "film",
+              "title": "A real film",
+              "current": true
+            }
+          ]
+        }
+      },
+      "expected": {
+        "geometryToleranceNativePx": 1,
+        "minimumHitDp": 48,
+        "footerGapDp": 8,
+        "scopeHeading": "Group playback",
+        "scopeExplanation": "Changes here apply to everyone.",
+        "readingOrder": [
+          "queue",
+          "scope-heading",
+          "scope-helper",
+          "repeat-title",
+          "repeat-control",
+          "shuffle",
+          "people"
+        ],
+        "passive": true,
+        "groupCommands": 0
+      }
     }
   ]
 }

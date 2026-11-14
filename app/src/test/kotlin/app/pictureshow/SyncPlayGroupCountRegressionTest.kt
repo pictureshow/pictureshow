@@ -7,15 +7,33 @@ import android.app.Application
 import android.app.UiModeManager
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.IntSize
 import java.io.File
 import java.text.NumberFormat
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
@@ -182,5 +200,275 @@ class SyncPlayGroupCountRegressionTest {
         assertTrue(bounds.top.value * density >= owner.boundsInRoot.top - 1f, "Whole count must be below the app bar: $bounds")
         assertTrue(bounds.bottom.value * density <= owner.boundsInRoot.bottom - 1f, "Whole count must be above the footer: $bounds")
         assertEquals(expected.getValue("groupCommands").jsonPrimitive.int, sent.size, "A passive summary must send no group command")
+    }
+
+    /** Same real TV title/count row; compare native first baselines rather than the two layout-box centres. */
+    @Test
+    @Config(qualifiers = "w985dp-h554dp-land-television-156dpi")
+    fun tvGroupNameAndCountShareTheirActualFirstBaselineAtFont10() = joinedTvBaseline("tv-joined-name-count-first-baseline-font10")
+
+    @Test
+    @Config(qualifiers = "w985dp-h554dp-land-television-156dpi")
+    fun tvGroupNameAndCountShareTheirActualFirstBaselineAtFont13() = joinedTvBaseline("tv-joined-name-count-first-baseline-font13")
+
+    @Test fun phoneSharedPlaybackScopePrecedesRepeatAndShuffleAtFont10() = joinedPhoneScope("phone-joined-shared-playback-scope-font10")
+
+    @Test fun phoneSharedPlaybackScopePrecedesRepeatAndShuffleAtFont13() = joinedPhoneScope("phone-joined-shared-playback-scope-font13")
+
+    private var joinedDensity = 0f
+    private var joinedWindow = IntSize.Zero
+    private val joinedCommands = mutableListOf<String>()
+
+    private fun launchJoinedGeometry(tv: Boolean, input: JsonObject): MutableState<SyncPlayPresentation> {
+        assertEquals(if (tv) "tv" else "touch", input.getValue("platform").jsonPrimitive.content)
+        val fontScale = input.getValue("fontScale").jsonPrimitive.float
+        val initialQueue = emptyList<SyncPlayQueueRow>()
+        assertEquals(input.getValue("queueEntries").jsonPrimitive.int, initialQueue.size, "Bind the actual initial empty queue")
+        RuntimeEnvironment.setFontScale(fontScale)
+        shadowOf(compose.activity.getSystemService(UiModeManager::class.java))
+            .setCurrentModeType(if (tv) Configuration.UI_MODE_TYPE_TELEVISION else Configuration.UI_MODE_TYPE_NORMAL)
+        val state = mutableStateOf(
+            SyncPlayPresentation(
+                server = "Cinema", viewer = "Viewer", policyKnown = true,
+                policy = "CreateAndJoinGroups", groupId = "g", groupName = input.getValue("groupName").jsonPrimitive.content,
+                phase = input.getValue("phase").jsonPrimitive.content,
+                participants = input.getValue("participants").jsonArray.map { it.jsonPrimitive.content },
+                localPlayback = SyncLocalPlayback.UNAVAILABLE, queue = initialQueue
+            )
+        )
+        compose.setContent {
+            val scale = LocalDensity.current.density
+            val actualWindow = LocalWindowInfo.current.containerSize
+            SideEffect {
+                joinedDensity = scale
+                joinedWindow = actualWindow
+            }
+            if (tv) {
+                PictureshowTheme { SyncPlayPanel(state.value, { op, _ -> joinedCommands += op }, {}) }
+            } else {
+                app.pictureshow.ui.PictureshowTheme { SyncPlayPanel(state.value, { op, _ -> joinedCommands += op }, {}) }
+            }
+        }
+        settleJoinedGeometry()
+        assertEquals(if (tv) 156 else 320, input.getValue("densityDpi").jsonPrimitive.int)
+        assertEquals(input.getValue("densityDpi").jsonPrimitive.int, compose.activity.resources.displayMetrics.densityDpi)
+        val profileWindow = IntSize(input.getValue("widthPx").jsonPrimitive.int, input.getValue("heightPx").jsonPrimitive.int)
+        assertEquals(if (tv) IntSize(960, 540) else IntSize(720, 1280), profileWindow)
+        assertEquals(profileWindow, joinedWindow, "Use the real physical window")
+        assertEquals(if (tv) .975f else 2f, joinedDensity, .001f, "No synthetic density override")
+        return state
+    }
+
+    private fun settleJoinedGeometry() {
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+    }
+
+    private fun joinedLayout(node: SemanticsNodeInteraction): TextLayoutResult {
+        val values = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(values) }
+        assertEquals(1, values.size, "Measure the actual production Text")
+        return values.single()
+    }
+
+    private fun joinedNativeBounds(node: SemanticsNodeInteraction): Rect {
+        val b = node.getUnclippedBoundsInRoot()
+        return Rect(
+            b.left.value * joinedDensity,
+            b.top.value * joinedDensity,
+            b.right.value * joinedDensity,
+            b.bottom.value * joinedDensity
+        )
+    }
+
+    private fun joinedTvBaseline(id: String) {
+        val case = syncSocialRoleCase(id)
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val fontScale = input.getValue("fontScale").jsonPrimitive.float
+        val tolerance = expected.getValue("baselineToleranceNativePx").jsonPrimitive.float
+        assertEquals(1f, tolerance, "Retain the strict one-native-pixel contract")
+        launchJoinedGeometry(true, input)
+        val group = compose.onNodeWithTag("sync:group", useUnmergedTree = true).assertIsDisplayed()
+        val people = compose.onNodeWithTag("sync:people-count", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("sync:${expected.getValue("firstUsefulFocus").jsonPrimitive.content}").assertIsFocused()
+        val baselines = listOf(group, people).map { node ->
+            val layout = joinedLayout(node)
+            assertEquals(fontScale, layout.layoutInput.density.fontScale, .01f)
+            assertTrue(layout.firstBaseline > 0f && layout.firstBaseline < layout.size.height)
+            val coordinates = node.fetchSemanticsNode().layoutInfo.coordinates
+            coordinates.localToRoot(Offset(0f, layout.firstBaseline)).y
+        }
+        val count = people.fetchSemanticsNode()
+        assertEquals(
+            expected.getValue("passive").jsonPrimitive.boolean,
+            !count.config.contains(SemanticsActions.OnClick) && !count.config.contains(SemanticsActions.RequestFocus)
+        )
+        assertTrue(
+            abs(baselines[0] - baselines[1]) <= tolerance,
+            "Actual group-name and people-count first baselines must align within one native pixel: title=${baselines[0]} count=${baselines[1]} font=$fontScale"
+        )
+        assertEquals(
+            expected.getValue("groupCommands").jsonPrimitive.int,
+            joinedCommands.size,
+            "Passive header geometry sends no group command"
+        )
+    }
+
+    private fun joinedText(resource: Int) = compose.onNodeWithText(compose.activity.getString(resource), useUnmergedTree = true)
+
+    private fun joinedPhoneFooter(expected: JsonObject): Rect {
+        val tolerance = expected.getValue("geometryToleranceNativePx").jsonPrimitive.float
+        val minimumHit = expected.getValue("minimumHitDp").jsonPrimitive.float
+        val gap = expected.getValue("footerGapDp").jsonPrimitive.float
+        assertEquals(1f, tolerance)
+        assertEquals(48f, minimumHit)
+        assertEquals(8f, gap)
+        val footer = joinedNativeBounds(compose.onNodeWithTag("sync:touch-footer").assertIsDisplayed())
+        val caption = joinedNativeBounds(joinedText(R.string.sync_leave_explanation).assertIsDisplayed())
+        val leave = compose.onNodeWithTag("sync:leave").assertIsDisplayed()
+        val leaveBox = joinedNativeBounds(leave)
+        val hit = leave.fetchSemanticsNode().touchBoundsInRoot
+        assertTrue(hit.width >= minimumHit * joinedDensity - tolerance && hit.height >= minimumHit * joinedDensity - tolerance)
+        assertTrue(caption.right + gap * joinedDensity <= leaveBox.left + tolerance, "Caption and Leave retain their native one-row gap")
+        assertTrue(minOf(caption.bottom, leaveBox.bottom) > maxOf(caption.top, leaveBox.top))
+        assertTrue(
+            footer.left >= -tolerance && footer.right <= joinedWindow.width + tolerance && footer.bottom <= joinedWindow.height + tolerance
+        )
+        return footer
+    }
+
+    private fun joinedPhoneScope(id: String) {
+        val case = syncSocialRoleCase(id)
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val fontScale = input.getValue("fontScale").jsonPrimitive.float
+        val tolerance = expected.getValue("geometryToleranceNativePx").jsonPrimitive.float
+        val minimumHit = expected.getValue("minimumHitDp").jsonPrimitive.float
+        val state = launchJoinedGeometry(false, input)
+        val footer = joinedPhoneFooter(expected)
+        listOf("sync:previous", "sync:play", "sync:pause", "sync:next").forEach { compose.onNodeWithTag(it).assertDoesNotExist() }
+        assertEquals(expected.getValue("scopeHeading").jsonPrimitive.content, compose.activity.getString(R.string.sync_group_playback))
+        assertEquals(
+            expected.getValue("scopeExplanation").jsonPrimitive.content,
+            compose.activity.getString(R.string.sync_group_playback_scope)
+        )
+        val heading = joinedText(R.string.sync_group_playback).assertExists()
+        val explanation = joinedText(R.string.sync_group_playback_scope).assertExists()
+        heading.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+        listOf(heading, explanation).forEach { node ->
+            val config = node.fetchSemanticsNode().config
+            assertEquals(
+                expected.getValue("passive").jsonPrimitive.boolean,
+                !config.contains(SemanticsActions.OnClick) && !config.contains(SemanticsActions.RequestFocus),
+                "Scope is passive context"
+            )
+        }
+        val repeat = joinedText(R.string.sync_repeat)
+        val shuffle = compose.onNodeWithTag("sync:shuffle")
+        val sections = mapOf(
+            "queue" to joinedText(R.string.sync_queue),
+            "scope-heading" to heading,
+            "scope-helper" to explanation,
+            "repeat-title" to repeat,
+            "repeat-control" to compose.onNodeWithTag("sync:repeat:RepeatNone"),
+            "shuffle" to shuffle,
+            "people" to joinedText(R.string.sync_people)
+        )
+        val readingOrder = expected.getValue("readingOrder").jsonArray.map { sections.getValue(it.jsonPrimitive.content) }
+        readingOrder.zipWithNext().forEach { (before, after) ->
+            assertTrue(
+                joinedNativeBounds(before).bottom <= joinedNativeBounds(after).top + tolerance,
+                "Queue, shared scope and shared settings retain their reading order"
+            )
+        }
+        repeat.performScrollTo()
+        settleJoinedGeometry()
+        val owner = generateSequence(repeat.fetchSemanticsNode().parent) { it.parent }.first {
+            it.config.contains(SemanticsProperties.VerticalScrollAxisRange)
+        }
+        val viewport = owner.boundsInRoot
+        val clearTop = compose.onAllNodesWithTag("sync:fade-top").fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.bottom ?: viewport.top
+        val clearBottom =
+            compose.onAllNodesWithTag("sync:fade-bottom").fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.top ?: viewport.bottom
+        listOf(heading, explanation, repeat).forEach { node ->
+            node.assertIsDisplayed()
+            val layout = joinedLayout(node)
+            assertEquals(fontScale, layout.layoutInput.density.fontScale, .01f)
+            val rounding = .5f
+            val metrics = "text=${layout.layoutInput.text} size=${layout.size} " +
+                "paragraph=${layout.multiParagraph.width}x${layout.multiParagraph.height} " +
+                "constraints=${layout.layoutInput.constraints} lines=${layout.lineCount} " +
+                "widthOverflow=${layout.didOverflowWidth} heightOverflow=${layout.didOverflowHeight} " +
+                "maxLinesExceeded=${layout.multiParagraph.didExceedMaxLines} " +
+                "lineBoxes=${(0 until layout.lineCount).map {
+                    listOf(layout.getLineLeft(it), layout.getLineRight(it), layout.getLineTop(it), layout.getLineBottom(it))
+                }}"
+            assertTrue(
+                !layout.didOverflowHeight && !layout.multiParagraph.didExceedMaxLines,
+                "The real scope text must fit vertically and retain all lines: $metrics"
+            )
+            for (line in 0 until layout.lineCount) {
+                assertTrue(!layout.isLineEllipsized(line), "The real scope text must be readable without ellipsis: $metrics")
+                assertTrue(
+                    layout.getLineLeft(line) >= -rounding &&
+                        layout.getLineRight(line) <= layout.size.width + rounding &&
+                        layout.getLineTop(line) >= -rounding &&
+                        layout.getLineBottom(line) <= layout.size.height + rounding,
+                    "Actual scope glyph line must fit the Text box: line=$line $metrics"
+                )
+            }
+            val b = joinedNativeBounds(node)
+            assertTrue(
+                b.top >= clearTop - tolerance && b.bottom <= clearBottom + tolerance,
+                "Scope and its Repeat setting must be visible outside real fades: $b clear=$clearTop..$clearBottom"
+            )
+        }
+        shuffle.performScrollTo()
+        settleJoinedGeometry()
+        shuffle.assertIsDisplayed()
+        val afterScroll = joinedPhoneFooter(expected)
+        assertTrue(
+            abs(footer.top - afterScroll.top) <= tolerance && abs(footer.bottom - afterScroll.bottom) <= tolerance,
+            "Body context cannot move the pinned footer"
+        )
+        val media = input.getValue("nextPresentation").jsonObject
+        val queue = media.getValue("queue").jsonArray.map { item ->
+            val row = item.jsonObject
+            SyncPlayQueueRow(
+                row.getValue("id").jsonPrimitive.content,
+                row.getValue("title").jsonPrimitive.content,
+                row.getValue("current").jsonPrimitive.boolean
+            )
+        }
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                phase = media.getValue("phase").jsonPrimitive.content,
+                localPlayback = SyncLocalPlayback.valueOf(media.getValue("localPlayback").jsonPrimitive.content),
+                queue = queue
+            )
+        }
+        settleJoinedGeometry()
+        val controls = listOf("sync:previous", "sync:play", "sync:next").map {
+            compose.onNodeWithTag(it).assertIsDisplayed().assertIsEnabled()
+        }
+        val boxes = controls.map { node ->
+            val hit = node.fetchSemanticsNode().touchBoundsInRoot
+            assertTrue(hit.width >= minimumHit * joinedDensity - tolerance && hit.height >= minimumHit * joinedDensity - tolerance)
+            assertTrue(hit.left >= -tolerance && hit.right <= joinedWindow.width + tolerance && hit.bottom <= footer.top + tolerance)
+            joinedNativeBounds(node)
+        }
+        boxes.zipWithNext().forEach { (before, after) ->
+            assertTrue(before.right <= after.left + tolerance, "Transport targets cannot overlap")
+            assertTrue(abs(before.center.y - after.center.y) <= tolerance, "Transport remains one centred native row")
+        }
+        val afterMedia = joinedPhoneFooter(expected)
+        assertTrue(abs(footer.top - afterMedia.top) <= tolerance && abs(footer.bottom - afterMedia.bottom) <= tolerance)
+        assertEquals(
+            expected.getValue("groupCommands").jsonPrimitive.int,
+            joinedCommands.size,
+            "Reading scope, scrolling and queue publication send no group command"
+        )
     }
 }

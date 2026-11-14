@@ -20,6 +20,222 @@
       "profile": "actual-player-native-ink",
       "input": {"widthDp":640,"heightDp":360,"fontScale":1.0,"videoArgb":"FF000000","positionMs":20000,"durationMs":60000,"qualityLabel":"Auto"},
       "expected": {"maximumInkRightEdgeDifferenceDp":2,"minimumQualityTargetDp":48,"qualityTargetInsidePlayer":true}
+    },
+    {
+      "id": "group-chip-skip-intro-portrait-normal",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "orientation": "portrait",
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "skip-intro",
+        "positionMs": 20000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": "Skip intro",
+        "cardTitle": null,
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "group-chip-next-episode-portrait-normal",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "orientation": "portrait",
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "next-episode",
+        "positionMs": 50000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": null,
+        "cardTitle": "Another episode",
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "group-chip-skip-intro-portrait-large-font",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "orientation": "portrait",
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "skip-intro",
+        "positionMs": 20000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": "Skip intro",
+        "cardTitle": null,
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "group-chip-next-episode-portrait-large-font",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 360,
+        "heightDp": 640,
+        "densityDpi": 320,
+        "orientation": "portrait",
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "next-episode",
+        "positionMs": 50000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": null,
+        "cardTitle": "Another episode",
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "group-chip-skip-intro-landscape-guard",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 640,
+        "heightDp": 360,
+        "densityDpi": 320,
+        "orientation": "landscape",
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "skip-intro",
+        "positionMs": 20000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": "Skip intro",
+        "cardTitle": null,
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
+    },
+    {
+      "id": "group-chip-next-episode-landscape-guard",
+      "profile": "actual-player-group-overlay-clearance",
+      "input": {
+        "widthDp": 640,
+        "heightDp": 360,
+        "densityDpi": 320,
+        "orientation": "landscape",
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Paused",
+        "groupName": "Sync91",
+        "participants": [
+          "Viewer A",
+          "Viewer B"
+        ],
+        "queueItems": 1,
+        "action": "next-episode",
+        "positionMs": 50000,
+        "durationMs": 60000,
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "minimumOverlayClearanceDp": 12,
+        "maximumGlyphBoundaryErrorNativePx": 0.5,
+        "minimumActionTargetDp": 48,
+        "minimumPrimaryTargetDp": 64,
+        "chipPhasePhrase": "Paused by the group",
+        "chipGroupName": "Sync91",
+        "chipCountPhrase": "2 people watching",
+        "skipLabel": null,
+        "cardTitle": "Another episode",
+        "countdownVisible": false,
+        "membershipRetained": true
+      }
     }
   ]
 }

@@ -63,6 +63,13 @@ data class SyncClockAnchor(
         subtract(monotonicMillis, localMonotonicMillis)?.let { it < 0 || it >= 30_000 } ?: true
 }
 
+/** A failed calibration has no anchor; retry it at a bounded cadence instead of holding forever. */
+fun syncClockRefreshDue(anchor: SyncClockAnchor?, lastAttemptFinishedMillis: Long?, monotonicMillis: Long): Boolean {
+    if (anchor != null) return anchor.needsRefresh(monotonicMillis)
+    val finished = lastAttemptFinishedMillis ?: return false
+    return subtract(monotonicMillis, finished)?.let { it < 0 || it >= 30_000 } ?: true
+}
+
 fun millisecondsToSyncTicks(milliseconds: Long): Long? = multiply(milliseconds, TICKS_PER_MILLISECOND)
 
 /** A generic speed command alone says nothing about an encoded sink's exact-rate support. */

@@ -1220,6 +1220,106 @@
         "base": -1
       },
       "expected": false
+    },
+    {
+      "id": "clock-refresh-null-no-completion",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": null,
+        "monotonicMillis": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "clock-refresh-null-before",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": 0,
+        "monotonicMillis": 29999
+      },
+      "expected": false
+    },
+    {
+      "id": "clock-refresh-null-exact",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": 0,
+        "monotonicMillis": 30000
+      },
+      "expected": true
+    },
+    {
+      "id": "clock-refresh-null-after",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": 0,
+        "monotonicMillis": 30001
+      },
+      "expected": true
+    },
+    {
+      "id": "clock-refresh-null-backward",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": 1000,
+        "monotonicMillis": 999
+      },
+      "expected": true
+    },
+    {
+      "id": "clock-refresh-anchor-before",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": {
+          "serverTicksAtAnchor": 10000000,
+          "localWallMillis": 1000,
+          "localMonotonicMillis": 0,
+          "uncertaintyTicks": 0
+        },
+        "lastAttemptFinishedMillis": null,
+        "monotonicMillis": 29999
+      },
+      "expected": false
+    },
+    {
+      "id": "clock-refresh-anchor-exact",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": {
+          "serverTicksAtAnchor": 10000000,
+          "localWallMillis": 1000,
+          "localMonotonicMillis": 0,
+          "uncertaintyTicks": 0
+        },
+        "lastAttemptFinishedMillis": null,
+        "monotonicMillis": 30000
+      },
+      "expected": true
+    },
+    {
+      "id": "clock-refresh-null-positive-overflow",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": "-9223372036854775808",
+        "monotonicMillis": "9223372036854775807"
+      },
+      "expected": true
+    },
+    {
+      "id": "clock-refresh-null-negative-overflow",
+      "op": "clock-refresh-due",
+      "input": {
+        "anchor": null,
+        "lastAttemptFinishedMillis": "9223372036854775807",
+        "monotonicMillis": "-9223372036854775808"
+      },
+      "expected": true
     }
   ]
 }

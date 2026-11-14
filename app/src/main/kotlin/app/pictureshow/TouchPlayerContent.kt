@@ -835,12 +835,19 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             // Whatever is showing keeps its place when the notice ends; the gap closes once the column is empty.
             val belowNotice = if (actionsHeight > 0 && noticeBounds == null) heldNoticeGap else noticeGap
             SideEffect { heldNoticeGap = belowNotice }
+            val chipGap = chipBounds?.takeIf {
+                chipExpected && actionsHeight > 0 && it.right + with(density) { 12.dp.toPx() } > actionsLeft
+            }?.let {
+                with(density) {
+                    (it.bottom - playerTop - WindowInsets.safeDrawing.getTop(this)).toDp() - TOUCH_PLAYER_EDGE + 12.dp
+                }.coerceAtLeast(0.dp)
+            } ?: 0.dp
             // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
                 Modifier.align(Alignment.TopEnd).testTag("touch:actions").windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(top = belowNotice)
+                    .padding(top = maxOf(belowNotice, chipGap))
                     .padding(TOUCH_PLAYER_EDGE)
-                    .width(TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - TOUCH_PLAYER_EDGE * 2))
+                    .widthIn(max = TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - TOUCH_PLAYER_EDGE * 2))
                     .onGloballyPositioned {
                         // Not boundsInRoot: an empty column has no bounds, which would read as a left edge of 0.
                         actionsLeft = it.positionInRoot().x

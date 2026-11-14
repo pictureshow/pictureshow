@@ -945,14 +945,14 @@ private fun SyncJoined(
         ) {
             androidx.tv.material3.Text(
                 groupName,
-                Modifier.weight(1f).testTag("sync:group").semantics { heading() },
+                Modifier.weight(1f).alignByBaseline().testTag("sync:group").semantics { heading() },
                 style = TvMaterialTheme.typography.headlineSmall.copy(lineBreak = LineBreak.Heading),
                 maxLines = if (groupName.any { it.isWhitespace() }) 2 else 1,
                 overflow = TextOverflow.Ellipsis
             )
             androidx.tv.material3.Text(
                 peopleText,
-                Modifier.testTag("sync:people-count"),
+                Modifier.alignByBaseline().testTag("sync:people-count"),
                 style = TvMaterialTheme.typography.bodyMedium,
                 color = TvMaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1313,6 +1313,8 @@ private fun SyncJoined(
     } else {
         // Shared media leads; a large personal row must not imply the end of this scrollable page.
         queue()
+        SyncHeading(stringResource(R.string.sync_group_playback), false, Modifier.testTag("sync:group-scope"))
+        SyncText(stringResource(R.string.sync_group_playback_scope), false, small = true)
         playbackSettings()
         roster()
         SyncHeading(stringResource(R.string.sync_your_settings), false)
