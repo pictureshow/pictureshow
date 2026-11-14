@@ -318,8 +318,12 @@ visible known last row, shorten or suppress the mask as necessary to preserve ev
 solid label stroke and its trailing content at full enabled contrast. Derive painting
 and reveal clearance from the same current mask extent; absent masks reserve no
 invisible clearance. Empty, incomplete or invalid geometry retains the conservative
-40dp/8dp cut-content treatment. These opt-in rules cover every visual block in this
-SyncPlay surface and preserve other shared-component callers' default behavior.
+40dp/8dp cut-content treatment. A later known cut row must not dim earlier wholly
+visible known content above the final opaque band: keep the mask extent and reveal
+clearance, but hold its ramp transparent through that content plus one physical
+pixel before reaching the unchanged opaque band. Unknown or incomplete geometry
+retains the original conservative ramp. These opt-in rules cover every visual block
+in this SyncPlay surface and preserve other shared-component callers' default behavior.
 Fully visible targets do not move, violated edges move minimally, oversized targets
 remain stable and terminal48dp padding lets the last read-only roster fact clear the
 bottom fade.
@@ -497,3 +501,18 @@ touch footer geometry with a divider coupled to the actual body scroll state.
 Touch-target checks measure the native input region independently of button paint.
 Android executes the production Compose surfaces; other platforms owe equivalent
 native adapters. An inventory entry or TODO is not a UI qualification.
+
+On the touch joined-group panel, show a passive localized participant-count summary
+next to the initial group phase, including when the queue is empty. Use the actual
+participant-list length, preserve zero and plural forms, and update with the next
+snapshot; do not invent the viewer, readiness or per-person state. The detailed
+People section retains its existing order and names-only limitation. The count
+is ordinary text, with no focus, action or announcement role.
+
+The shared native destination chooser names the task from the actual captured
+media request: a null request used to attach a remote or select a queue target
+has the localized title “Choose a TV”; a real media request has “Play on”. Existing
+direct destination-chooser callers retain “Play on”. Changing this presentation
+does not select a receiver, start playback, alter consent, or change any request
+identity, permission, cancellation or route callback. Other platforms owe the same
+truthful task and participant-count presentation through their native adapters.

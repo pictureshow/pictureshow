@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -238,7 +239,8 @@ internal fun TouchPlayOnDialog(
             }
         },
         onSetCastEnabled = cast::setEnabled,
-        onDismiss = ::close
+        onDismiss = ::close,
+        title = stringResource(if (castRequest == null) R.string.remote_choose_tv else R.string.cast_play_on)
     )
 }
 
@@ -254,6 +256,31 @@ internal fun TouchCastChooser(
     onSetCastEnabled: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    TouchCastChooser(
+        remote,
+        ui,
+        showCast,
+        onThisDevice,
+        onPickRemote,
+        onPickCast,
+        onSetCastEnabled,
+        onDismiss,
+        title = stringResource(R.string.cast_play_on)
+    )
+}
+
+@Composable
+internal fun TouchCastChooser(
+    remote: RemoteControllerUi,
+    ui: CastUi,
+    showCast: Boolean,
+    onThisDevice: (() -> Unit)?,
+    onPickRemote: (RemoteTarget) -> Unit,
+    onPickCast: (CastRoute) -> Unit,
+    onSetCastEnabled: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    title: String
+) {
     val castSection = showCast && ui.capability.visible
     // A short window can't stack the sections: the TVs and devices fall below the fold, where nothing says they are (CAST-01).
     val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
@@ -262,7 +289,7 @@ internal fun TouchCastChooser(
         onDismissRequest = onDismiss,
         modifier = if (columns) Modifier.widthIn(max = 560.dp).fillMaxWidth() else Modifier,
         properties = DialogProperties(usePlatformDefaultWidth = !columns),
-        title = { Text("Play on", modifier = Modifier.semantics { heading() }) },
+        title = { Text(title, modifier = Modifier.semantics { heading() }) },
         text = {
             val scroll = rememberScrollState()
             Box {

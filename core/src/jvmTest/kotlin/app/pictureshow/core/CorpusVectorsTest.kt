@@ -84,6 +84,7 @@ class CorpusVectorsTest {
                     "sync-tv-surfaces",
                     "sync-tv-attention",
                     "sync-tv-structure-discovery",
+                    "sync-group-social-summary-and-picker-role",
                     "sync-phone-surfaces",
                     "sync-phone-player-chrome",
                     "sync-phone-quality-cue",

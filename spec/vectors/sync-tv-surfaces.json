@@ -295,6 +295,40 @@
         "retainedDraft": "Friday films",
         "stableEditorBounds": true
       }
+    },
+    {
+      "id": "whole-repeat-full-ink-native-156dpi",
+      "profile": "whole-repeat-ink",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "server": "Pictureshow Demo",
+        "viewer": "sync91-r2-tv",
+        "groupName": "Sync91Design4it",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "participants": [
+          "sync91-r2-tv"
+        ],
+        "selectedRepeat": "RepeatNone",
+        "targetModes": [
+          "RepeatNone",
+          "RepeatOne",
+          "RepeatAll"
+        ]
+      },
+      "expected": {
+        "bottomFadeExtentDp": 40,
+        "opaqueBandDp": 8,
+        "probeOutsetNativePx": 1,
+        "paintBackgroundChannelDeltaMin": 16,
+        "paintChannelTolerance": 3,
+        "minimumReferencePaintedPixels": 8,
+        "maximumChangedPaintedPixels": 0,
+        "repeatRequests": 0
+      }
     }
   ]
 }

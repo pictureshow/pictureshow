@@ -28,6 +28,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -328,6 +331,36 @@ class TouchCastChooserTest {
         compose.onNodeWithTag("cast:this-device").performClick()
         compose.waitForIdle()
         assertFalse(sender.holdsNextStep(player))
+    }
+
+    @Test
+    fun choosingATvForRemoteNamesControlInsteadOfStartingPlayback() {
+        val case = syncSocialRoleCase("remote-only-picker")
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val sender = signedInCastSender()
+        sender.openChooser(null)
+        assertEquals(input.getValue("mediaRequestPresent").jsonPrimitive.boolean, sender.chooserRequest != null)
+        dialog(sender)
+        assertHeading(expected.getValue("dialogTitle").jsonPrimitive.content)
+        assertTrue(expected.getValue("titleIsHeading").jsonPrimitive.boolean)
+        assertFalse(expected.getValue("thisDeviceOption").jsonPrimitive.boolean)
+        compose.onNodeWithText("Play on").assertDoesNotExist()
+        compose.onNodeWithTag("cast:this-device").assertDoesNotExist()
+    }
+
+    @Test
+    fun choosingATvForActualMediaStillNamesPlayback() {
+        val case = syncSocialRoleCase("media-play-picker")
+        val input = case.getValue("input").jsonObject
+        val expected = case.getValue("expected").jsonObject
+        val sender = signedInCastSender()
+        sender.openChooser(filmRequest())
+        assertEquals(input.getValue("mediaRequestPresent").jsonPrimitive.boolean, sender.chooserRequest != null)
+        dialog(sender)
+        assertHeading(expected.getValue("dialogTitle").jsonPrimitive.content)
+        assertTrue(expected.getValue("titleIsHeading").jsonPrimitive.boolean)
+        compose.onNodeWithText("Choose a TV").assertDoesNotExist()
     }
 
     private fun colours(text: String): Set<Color> {

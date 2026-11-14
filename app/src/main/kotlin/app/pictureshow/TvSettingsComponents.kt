@@ -129,6 +129,37 @@ private class TvSettingsVisuals(val scroll: ScrollState) {
         return TvSettingsMeasuredBounds(bounds, scroll.value)
     }
 
+    fun bottomFadeTransparentStart(extent: Float, opaqueBand: Float): Float {
+        val view = viewport ?: return 0f
+        if (items.isEmpty()) return 0f
+        val offset = scroll.value
+        val visible = items.keys.map { item ->
+            val bounds = item.bounds?.atScroll(offset) ?: return 0f
+            item to bounds
+        }.filter { (_, bounds) -> bounds.overlaps(view) }
+        if (visible.isEmpty()) return 0f
+        val protected = visible.map { (item, bounds) ->
+            val bottom = if (item.protectWholeItem) {
+                bounds.bottom
+            } else {
+                if (item.content.isEmpty()) return 0f
+                item.content.values.maxOf { measured ->
+                    (measured ?: return 0f).atScroll(offset).bottom
+                }
+            }
+            bounds to bottom
+        }.filter { (bounds, bottom) ->
+            bounds.top >= view.top - .5f &&
+                bounds.bottom <= view.bottom + .5f &&
+                bottom + 1f <= view.bottom - opaqueBand
+        }
+        val protectedBottom = protected.maxOfOrNull { it.second } ?: return 0f
+        // A later cut row still needs the full mask. Keep earlier whole content clear
+        // inside that mask, without moving its final opaque band or reveal boundary.
+        val clearUntil = (protectedBottom + 1f - (view.bottom - extent)).coerceAtLeast(0f)
+        return if (clearUntil <= extent - opaqueBand) clearUntil else 0f
+    }
+
     fun bottomFadeExtent(fullExtent: Float): Float {
         val view = viewport ?: return fullExtent
         if (items.isEmpty()) return fullExtent
@@ -789,6 +820,7 @@ internal fun TvSettingsList(
             }
         }
         if (bottomFade > 0f) {
+            val transparentStart = (visuals?.bottomFadeTransparentStart(bottomFade, edgeGap) ?: 0f) / bottomFade
             val opaqueStart = ((bottomFade - edgeGap) / bottomFade).coerceIn(0f, 1f)
             Box(
                 Modifier.fillMaxWidth().height(
@@ -800,6 +832,7 @@ internal fun TvSettingsList(
                         if (minimalFocusScroll) {
                             Brush.verticalGradient(
                                 0f to Color.Transparent,
+                                transparentStart to Color.Transparent,
                                 opaqueStart to surface,
                                 1f to surface
                             )

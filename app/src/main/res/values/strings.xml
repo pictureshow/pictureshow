@@ -20,6 +20,9 @@
     <string name="supporter_error">Could not complete the Google Play request. Try again later.</string>
     <string name="supporter_back">Back</string>
 
+    <string name="cast_play_on">Play on</string>
+    <string name="remote_choose_tv">Choose a TV</string>
+
     <!-- Watch together: protocol values and diagnostics never appear as viewer copy. -->
     <string name="sync_title">Watch together</string>
     <string name="sync_close">Close</string>

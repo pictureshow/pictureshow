@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-group-social-summary-and-picker-role",
+  "scope": "Native group first-arrival social count and actual remote versus media chooser role. No inferred named readiness, self identity, receiver selection or output qualification.",
+  "cases": [
+    {
+      "id": "phone-empty-one-person",
+      "input": {
+        "platform": "touch",
+        "widthDp": 360,
+        "heightDp": 640,
+        "fontScale": 1.0,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "participants": [
+          "Morgan"
+        ]
+      },
+      "expected": {
+        "countText": "1 person watching",
+        "wholeCountAboveFooterOnArrival": true,
+        "rescueScroll": false,
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "phone-empty-two-people-large-font",
+      "input": {
+        "platform": "touch",
+        "widthDp": 360,
+        "heightDp": 640,
+        "fontScale": 1.3,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "participants": [
+          "Morgan",
+          "Sam"
+        ]
+      },
+      "expected": {
+        "countText": "2 people watching",
+        "wholeCountAboveFooterOnArrival": true,
+        "rescueScroll": false,
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "remote-only-picker",
+      "input": {
+        "request": "remote-control",
+        "mediaRequestPresent": false
+      },
+      "expected": {
+        "dialogTitle": "Choose a TV",
+        "titleIsHeading": true,
+        "thisDeviceOption": false
+      }
+    },
+    {
+      "id": "media-play-picker",
+      "input": {
+        "request": "play-media",
+        "mediaRequestPresent": true
+      },
+      "expected": {
+        "dialogTitle": "Play on",
+        "titleIsHeading": true
+      }
+    }
+  ]
+}
