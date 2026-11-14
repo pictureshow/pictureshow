@@ -3,10 +3,11 @@
  */
 package app.pictureshow.core.playback
 
-import app.pictureshow.core.playback.MediaStream
-import app.pictureshow.core.playback.MediaStreamType
 import java.util.Locale
 import java.util.regex.Pattern
+
+// Desktop JDK locale data echoes some ISO 639-2 terminology codes; Android ICU names them.
+private val trackLanguageTags = Locale.getISOLanguages().associateBy { Locale.forLanguageTag(it).isO3Language }
 
 fun trackLanguage(language: String?): String? {
     if (language.isNullOrBlank() || language == "und") return null
@@ -14,7 +15,7 @@ fun trackLanguage(language: String?): String? {
     val tag = language.replace('_', '-')
     val display = Locale.forLanguageTag(tag).getDisplayLanguage(Locale.ENGLISH)
     if (display.isNotBlank() && !display.equals(tag, ignoreCase = true)) return display
-    val normalized = StreamDefaults.language(language) ?: language
+    val normalized = trackLanguageTags[StreamDefaults.language(language)] ?: language
     val normalizedDisplay = Locale.forLanguageTag(normalized).getDisplayLanguage(Locale.ENGLISH)
     if (normalizedDisplay.isNotBlank() && !normalizedDisplay.equals(normalized, ignoreCase = true)) return normalizedDisplay
     return language

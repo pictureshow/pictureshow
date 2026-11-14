@@ -25,7 +25,7 @@ class TrackLabelPolicyTest {
     @Test fun descriptiveRoleAndForcedStateSurviveWithoutInventingLanguage() {
         val subtitle = MediaStream(type = MediaStreamType.Subtitle, index = 7, codec = "srt", title = "Commentary", isForced = true)
         assertEquals(
-            "Commentary · SRT · Track 1 · Forced",
+            "Commentary · SRT · Forced",
             trackLabelsPolicy(listOf(subtitle), languageName, names).single()
         )
         assertEquals(
