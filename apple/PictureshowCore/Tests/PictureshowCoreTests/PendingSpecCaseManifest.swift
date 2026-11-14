@@ -1527,7 +1527,7 @@ enum PendingSpecCaseManifest {
                   vector["expected"] is [String: Any] else {
                 throw NSError(domain: "Malformed pending observed live-window vector", code: 1)
             }
-        } else if suite.hasPrefix("offline-") && !(suite == "offline-plan" && ["presets", "select"].contains(vector["operation"] as? String ?? "")) {
+        } else if suite.hasPrefix("offline-") {
             let permitsNoRecord = suite == "offline-outbox" && (vector["operation"] as? String) == "outbox"
             guard vector["state"] is [String: Any] || (permitsNoRecord && vector["state"] is NSNull),
                   let steps = vector["steps"] as? [[String: Any]], !steps.isEmpty,
