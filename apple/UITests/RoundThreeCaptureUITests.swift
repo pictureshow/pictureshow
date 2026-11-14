@@ -95,9 +95,17 @@ final class RoundThreeCaptureUITests: XCTestCase {
         // Sample the picture's upper area, excluding labels and progress. A flat
         // navy/grey film glyph cannot pass the demo poster's chromatic coverage.
         XCTAssertTrue(wait(20) {
-            guard card.exists, !card.frame.isEmpty, let image = XCUIScreen.main.screenshot().image.cgImage else { return false }
+            guard card.exists, !card.frame.isEmpty else { return false }
             let window = self.app.windows.firstMatch.frame
             guard window.width > 0, window.height > 0, window.contains(card.frame) else { return false }
+            let shot = XCUIScreen.main.screenshot().image
+            // XCTest's raw CGImage can retain portrait storage after a native
+            // landscape rotation. UIImage drawing applies its orientation first.
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            let upright = UIGraphicsImageRenderer(size: window.size, format: format).image { _ in
+                shot.draw(in: CGRect(origin: .zero, size: window.size))
+            }
+            guard let image = upright.cgImage else { return false }
             let rect = CGRect(x: (card.frame.minX - window.minX) * CGFloat(image.width) / window.width,
                               y: (card.frame.minY - window.minY) * CGFloat(image.height) / window.height,
                               width: card.frame.width * CGFloat(image.width) / window.width,
@@ -148,13 +156,15 @@ final class RoundThreeCaptureUITests: XCTestCase {
         try assertRenderedTextAA(size, expected: "System", state: "Settings value focused")
         record("Round4 Settings Subtitle size focused")
         activate(size)
-        let large = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Large")).firstMatch
+        // The native menu Cell, rather than its contained Other label,
+        // owns remote focus. Target that real row for selection.
+        let large = app.cells.containing(.other, identifier: "Large").firstMatch
         XCTAssertTrue(large.waitForExistence(timeout: 5))
         activate(large)
         XCTAssertTrue(wait(5) { (size.value as? String) == "Large" })
         record("Round4 Settings native choice applied Large")
         // Restore the same core preference via the visible menu.
-        activate(size); activate(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "System")).firstMatch)
+        activate(size); activate(app.cells.containing(.other, identifier: "System").firstMatch)
         XCTAssertTrue(wait(5) { (size.value as? String) == "System" })
         focusOnly(node("segment-Intro"))
         record("Round4 Settings Skip segments values")
