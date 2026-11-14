@@ -1415,8 +1415,7 @@ private fun SyncSecondaryAction(
             null,
             modifier,
             enabled = enabled,
-            onClick = onClick,
-            leading = if (refreshIcon) ({ androidx.tv.material3.Icon(syncIcon("refresh"), null, Modifier.size(20.dp)) }) else null
+            onClick = onClick
         )
     } else {
         TextButton(onClick = onClick, modifier = modifier.padding(start = 4.dp), enabled = enabled) {
