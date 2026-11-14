@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-tv-rhythm",
+  "cases": [
+    {
+      "id": "pinned-preview-rule-separation-native-156dpi",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "server": "Pictureshow Demo",
+        "viewer": "sync91-r2-tv",
+        "groupName": "Sync91Design4ix",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "selectedRepeat": "RepeatNone",
+        "participants": [
+          "sync91-r2-tv"
+        ],
+        "downKeys": 2
+      },
+      "expected": {
+        "previewRuleGapMinDp": 12,
+        "nativePixelTolerance": 1,
+        "paintChannelTolerance": 3,
+        "broadRuleCoverageMin": 0.8,
+        "commands": 0
+      }
+    },
+    {
+      "id": "repeat-next-setting-painted-separation-native-156dpi",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "server": "Pictureshow Demo",
+        "viewer": "sync91-r2-tv",
+        "groupName": "Sync91Design4ix",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "selectedRepeat": "RepeatNone",
+        "participants": [
+          "sync91-r2-tv"
+        ],
+        "downKeys": 2,
+        "targetModes": [
+          "RepeatNone",
+          "RepeatOne",
+          "RepeatAll"
+        ]
+      },
+      "expected": {
+        "nextSettingGapMinDp": 12,
+        "nativePixelTolerance": 1,
+        "paintChannelTolerance": 3,
+        "backgroundChannelDeltaMin": 16,
+        "minimumPaintedPixelsPerRow": 8,
+        "broadPlateCoverageMin": 0.8,
+        "commands": 0,
+        "plateBackgroundChannelDeltaMin": 64
+      }
+    },
+    {
+      "id": "repeat-setting-title-hierarchy-native-156dpi",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "server": "Pictureshow Demo",
+        "viewer": "sync91-r2-tv",
+        "groupName": "Sync91Design4ix",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "selectedRepeat": "RepeatNone",
+        "participants": [
+          "sync91-r2-tv"
+        ]
+      },
+      "expected": {
+        "settingTypography": "bodyLarge",
+        "settingInk": "onSurface",
+        "sectionTypography": "titleSmall",
+        "sectionInk": "onSurfaceVariant",
+        "commands": 0
+      }
+    }
+  ]
+}

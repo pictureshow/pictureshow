@@ -596,6 +596,9 @@ internal fun TvSettingsPanel(
     contentFocusRequestAllowed: () -> Boolean = { true },
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // Move the existing list inset into pinned chrome only when the preview directly
+    // borders the scrolling body. Editors/notices keep their existing geometry.
+    val separatedPreview = minimalFocusScroll && preview != null && pinnedEditor == null && pinnedNotice == null
     val latestContentFocusRequestAllowed by rememberUpdatedState(contentFocusRequestAllowed)
     var contentHasFocus by remember { mutableStateOf(false) }
     var hadContentFocus by remember { mutableStateOf(false) }
@@ -656,7 +659,11 @@ internal fun TvSettingsPanel(
                     },
                     style = MaterialTheme.typography.headlineSmall
                 )
-                preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
+                preview?.let {
+                    Box(Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, bottom = if (separatedPreview) 12.dp else 0.dp)) {
+                        it()
+                    }
+                }
                 pinnedNotice?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) { it() } }
                 pinnedEditor?.let {
                     Box(
@@ -688,6 +695,7 @@ internal fun TvSettingsPanel(
                             Modifier.weight(1f),
                             minimalFocusScroll = minimalFocusScroll,
                             scrollState = bodyScrollState,
+                            contentTopPadding = if (separatedPreview) 0.dp else 12.dp,
                             content = content
                         )
                     } else {
@@ -754,6 +762,7 @@ internal fun TvSettingsList(
     modifier: Modifier = Modifier,
     minimalFocusScroll: Boolean = false,
     scrollState: ScrollState? = null,
+    contentTopPadding: androidx.compose.ui.unit.Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val rememberedScroll = rememberScrollState()
@@ -797,7 +806,7 @@ internal fun TvSettingsList(
         ) {
             Column(
                 Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().verticalScroll(scroll)
-                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = if (minimalFocusScroll) 48.dp else 12.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = contentTopPadding, bottom = if (minimalFocusScroll) 48.dp else 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 content = content
             )

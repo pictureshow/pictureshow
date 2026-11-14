@@ -1125,9 +1125,9 @@ private fun SyncJoined(
         if (tv) {
             androidx.tv.material3.Text(
                 stringResource(R.string.sync_repeat),
-                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-                style = TvMaterialTheme.typography.labelLarge,
-                color = TvMaterialTheme.colorScheme.onSurfaceVariant
+                Modifier.tvSettingsVisualBlock().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                style = TvMaterialTheme.typography.bodyLarge,
+                color = TvMaterialTheme.colorScheme.onSurface
             )
         } else {
             SyncHeading(stringResource(R.string.sync_repeat), false, compact = true)
@@ -1140,7 +1140,7 @@ private fun SyncJoined(
         if (tv) {
             val repeatFocus = remember { List(3) { FocusRequester() } }
             Row(
-                Modifier.tvSettingsVisualBlock().fillMaxWidth().focusProperties {
+                Modifier.padding(bottom = 8.dp).tvSettingsVisualBlock().fillMaxWidth().focusProperties {
                     onEnter = { if (usable) repeatFocus[repeats.indexOfFirst { it.first == state.repeat }.coerceAtLeast(0)].requestFocus() }
                 }.focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)

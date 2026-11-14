@@ -82,6 +82,8 @@ class CorpusVectorsTest {
                     "sync-route-consent",
                     // Android native render/input tests execute TV and phone surface profiles.
                     "sync-tv-surfaces",
+                    // SyncPlayTvRhythmRegressionTest executes native header and setting rhythm.
+                    "sync-tv-rhythm",
                     "sync-tv-attention",
                     "sync-tv-structure-discovery",
                     "sync-group-social-summary-and-picker-role",

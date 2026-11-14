@@ -175,8 +175,19 @@ continue visibly at large fonts. TV additionally places a native Your settings
 section header immediately above Wait explaining the choice of whether the group
 waits for this TV, and a Group playback header above Repeat/Shuffle stating that
 changes apply to everyone.
-Repeat is a subordinate label in that shared section, retaining the section
-header’s4dp bottom padding plus the list’s4dp gap before the native chip row.
+Repeat is a setting within that shared section, using the native toggle-row title
+typography and normal setting-title foreground, distinct from the quieter section
+heading. Keep its native selected chips and8dp horizontal spacing. The visible chip
+outlines have at least12dp separation before the next setting plate, greater than
+their label-to-control gap. Blank spacing is outside the measured painted block,
+so whole-control fade protection still measures actual content.
+When a minimal-focus-scroll TV panel has a pinned preview directly adjoining the
+scrolling viewport, with no intervening pinned editor or notice, leave12dp below
+the preview before the viewport and its top continuation rule. Transfer the existing
+12dp list top inset into that fixed header, preserving initial body positions.
+Panels with an intervening editor/notice, default shared panels and direct-list
+callers retain their existing layout. The full40dp cut-content mask,8dp opaque
+guard and whole-visible enabled-paint rules remain unchanged.
 These passive labels do not
 change the Play→Wait→Repeat→Shuffle remote order or initial Wait focus for an empty
 queue. Touch retains its existing explanation beside Wait.
