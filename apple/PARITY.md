@@ -379,3 +379,29 @@ TV Settings owns the visible native-menu value label: white resting ink and dark
 Server-address guidance is plain text without an example link. Failed authentication appears immediately below Password and before Sign in; reachability errors appear beside the address before Connect. Error changes scroll into view and announce from the shared sign-in root. Actual rejected-password tests verify complete visible errors on phone portrait/landscape, iPad and TV. A closed-listener test verifies the phone landscape address error. All tested address routes contain no Link.
 
 The iPad Home captures wait for actual demo artwork pixels in the first Continue watching card, in portrait and landscape. The screenshot sampler normalizes UIImage orientation before translating main-window coordinates to pixels. Native TV Libraries, Search and Settings are captured after their destination has settled. These are simulator observations, not additional physical pointer, Larger Text or spoken-reader qualification.
+
+### Mandatory main integration for the round-four gate
+
+The current merge includes main `6de3f1e3`. The prior pending table is historical:
+current Apple inventory is **1,500 active contracts and 1,470 explicitly pending contracts in 23 named cohorts**.
+The active manifest is unchanged. Existing active cases in `application` and `reference` still execute;
+only individually pinned pending IDs are omitted from policy execution, with named XCTest skips.
+No previously active case was reclassified to obtain a green gate.
+
+| Newly merged pending cohort | Added cases | Work owed |
+|---|---:|---|
+| home-browse | 142 | Home configuration, library filters and editor policy adapters |
+| live-dvr | 22 | Native Live TV recording policy and mutations |
+| live-guide | 14 | Guide data, freshness and tune policies |
+| live-source | 11 | Observed live player windows; its distinct envelope is validated explicitly |
+| live-presentation | 366 | Native Live TV presentation and input acceptance |
+| player-overlay-layout | 8 | Native transport layout acceptance |
+| offline-plan | 13 | Recording-aware plan policy; 58 total pending in this cohort |
+| reference image additions | 19 | New image policy contracts; existing reference cases remain active |
+| application additions | 11 | New catalog/track-selection contracts; existing application cases remain active |
+
+These 606 added contracts remain owed to their feature ports. The required merge also changed three
+existing active catalog request contracts: Swift now requests hidden UserViews metadata and uses the
+ordinary parent-authorized Items browse query for Latest, matching main's Jellyfin 12 authority rule.
+Those contracts execute rather than being moved to pending. Round-four view composition, existing
+Continue watching artwork requests and the 58 shared track-label cases are unchanged by this transport update.
