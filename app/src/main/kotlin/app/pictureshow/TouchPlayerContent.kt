@@ -287,6 +287,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     var noticeBounds by remember { mutableStateOf<Rect?>(null) }
     var conversionCardReleased by remember(host) { mutableStateOf(false) }
     var chipBounds by remember { mutableStateOf<Rect?>(null) }
+    var transportBounds by remember { mutableStateOf<Rect?>(null) }
     var topActionsBottom by remember { mutableIntStateOf(0) }
     var topActionsMeasured by remember(host) { mutableStateOf(false) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -456,7 +457,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         val chipExpected = groupPresentation?.let { it.groupId != null || it.phase == "Reconnecting" } == true
         val qualityCueAllowed = foreground && controlsVisible && !host.state.preparing &&
             !topCues && !captionsPresent && noticeBounds == null && (conversionNotice == null || conversionCardReleased) &&
-            topActionsMeasured && (!chipExpected || chipBounds != null)
+            topActionsMeasured && transportBounds != null && (!chipExpected || chipBounds != null)
         LaunchedEffect(host, adaptiveNotice, qualityCueAllowed) {
             if (adaptiveNotice == null) announcedQuality = null
             if (!qualityCueAllowed || adaptiveNotice != qualityCue) qualityCue = null
@@ -493,11 +494,25 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val edge = TOUCH_PLAYER_EDGE.roundToPx()
                 val width = minOf(480.dp.roundToPx(), (constraints.maxWidth - safeLeft - safeRight - edge * 2).coerceAtLeast(0))
                 val message = measurables.single().measure(Constraints.fixedWidth(width))
-                val bottom = cueBottom - 8.dp.roundToPx()
-                val fits = bottom - message.height >= cueTop + 8.dp.roundToPx()
+                val gap = 8.dp.roundToPx()
+                val x = safeLeft + (constraints.maxWidth - safeLeft - safeRight - message.width) / 2
+                val transport = transportBounds?.translate(-playerLeft.toFloat(), -playerTop.toFloat())
+                fun messageBounds(bottom: Int) = Rect(x.toFloat(), (bottom - message.height).toFloat(),
+                    (x + message.width).toFloat(), bottom.toFloat())
+                val paddedTransport = transport?.let {
+                    Rect(it.left - gap, it.top - gap, it.right + gap, it.bottom + gap)
+                }
+                val panelBottom = cueBottom - gap
+                val bottom = if (paddedTransport?.overlaps(messageBounds(panelBottom)) == true) {
+                    minOf(panelBottom, kotlin.math.floor(requireNotNull(transport).top - gap).toInt())
+                } else {
+                    panelBottom
+                }
+                val fits = bottom - message.height >= cueTop + gap && paddedTransport != null &&
+                    !paddedTransport.overlaps(messageBounds(bottom))
                 layout(constraints.maxWidth, constraints.maxHeight) {
                     if (fits && noticeBounds == null && !captionsPresent && (conversionNotice == null || conversionCardReleased)) {
-                        message.place(safeLeft + (constraints.maxWidth - safeLeft - safeRight - message.width) / 2, bottom - message.height)
+                        message.place(x, bottom - message.height)
                     }
                 }
             }
@@ -539,6 +554,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 .onGloballyPositioned { chipBounds = it.boundsInRoot() }
         )
 
+        if (!controlsVisible) SideEffect { transportBounds = null }
         if (controlsVisible) {
             val frame = subtitleVideoFrame(
                 constraints.maxWidth,
@@ -550,7 +566,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 constraints.maxHeight,
                 controlsHeight,
                 Rect(frame.left.toFloat(), frame.top.toFloat(), frame.right.toFloat(), frame.bottom.toFloat()),
-                listOfNotNull(noticeBounds, actionsBounds?.takeIf { actionsHeight > 0 }).map {
+                listOfNotNull(noticeBounds, actionsBounds?.takeIf { actionsHeight > 0 }, chipBounds?.takeIf { chipExpected }).map {
                     it.translate(-playerLeft.toFloat(), -playerTop.toFloat())
                 },
                 with(density) { 208.dp.roundToPx() },
@@ -564,7 +580,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             )
             Row(
                 Modifier.align(Alignment.TopCenter).offset { transportOffset }
-                    .testTag("touch:transport"),
+                    .testTag("touch:transport").onGloballyPositioned { transportBounds = it.boundsInRoot() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {

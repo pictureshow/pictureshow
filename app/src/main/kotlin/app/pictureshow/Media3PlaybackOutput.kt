@@ -44,6 +44,7 @@ internal class Media3PlaybackOutput(
 ) : PlaybackOutput {
     /** Group transport is intercepted before UI, media keys or controller commands touch the decoder. */
     var syncRequest: ((String, Long?) -> Boolean)? = null
+    internal var syncPrimaryAction: ((Player) -> Boolean)? = null
 
     /** Deliberate viewer pause needs feedback before a scheduled server response changes native output. */
     var onSyncPauseRequested: () -> Unit = {}
@@ -655,6 +656,7 @@ internal class Media3PlaybackOutput(
         } else {
             existingSession.replacePlayer(exposed)
         }
+        mediaSession?.onPrimaryAction = { current -> syncPrimaryAction?.invoke(current) == true }
     }
 
     override fun reselect(type: MediaStreamType, index: Int) {

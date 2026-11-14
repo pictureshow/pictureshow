@@ -147,9 +147,11 @@ internal fun PlaybackToggle(
     ended: Boolean = false,
     enabled: Boolean = true,
     liveStyle: Boolean = false,
+    primaryState: String? = null,
+    actionLabel: String? = null,
     onClick: () -> Unit
 ) {
-    val current = playbackToggleState(paused, showPlayButton)
+    val current = primaryState ?: playbackToggleState(paused, showPlayButton)
     // The end of the video stops the player, which isn't the viewer pausing. A changed state on the
     // focused button is read aloud, so keep it still until focus moves; a later visit reads the real state.
     // The end sets `ended` in the same main-thread turn that releases the player, so anything the release
@@ -164,14 +166,14 @@ internal fun PlaybackToggle(
         fillContentWidth = liveStyle,
         scale = playerButtonScale(),
         modifier = modifier.onFocusChanged { focused = it.isFocused }.semantics {
-            stateDescription = if (ended && focused) beforeEnd[0] else current
+            stateDescription = if (ended && focused && primaryState == null) beforeEnd[0] else current
         }
     ) {
         if (liveStyle) {
             Icon(touchActionIcon(if (showPlayButton) "play" else "pause"), null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
         }
-        Text(if (showPlayButton) "Play" else "Pause")
+        Text(actionLabel ?: if (showPlayButton) "Play" else "Pause")
     }
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -174,9 +175,19 @@ class TouchPlayerChromeRegressionTest {
         assertTrue(slider.touchBoundsInRoot.height >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float *
             slider.layoutInfo.density.density - expected.getValue("physicalPixelTolerance").jsonPrimitive.float,
             "Seek row compaction must retain the native48dp slider input height")
-        for (tag in input.getValue("targetTags").jsonArray.map { it.jsonPrimitive.content }) {
+        val targetTags = input.getValue("targetTags").jsonArray.map { it.jsonPrimitive.content }
+        val stationaryTransport = setOf("touch:toggle", "touch:back10", "touch:forward10")
+        val overflowTargets = setOf("touch:stop", "touch:open:Info")
+        // Incoming native transport is a sibling of the bottom scroll panel. Overflow is reached by More.
+        // Check ordinary targets first, then open the real popup once without invoking destructive Stop.
+        for (tag in targetTags.filterNot { it in overflowTargets } + targetTags.filter { it in overflowTargets }) {
+            if (tag == targetTags.firstOrNull { it in overflowTargets }) {
+                compose.onNodeWithTag("touch:more").performScrollTo().assertIsDisplayed().performClick()
+                compose.waitForIdle()
+            }
             val target = compose.onNodeWithTag(tag)
-            target.performScrollTo().assertIsDisplayed().assertHasClickAction()
+            if (tag !in stationaryTransport && tag !in overflowTargets) target.performScrollTo()
+            target.assertIsDisplayed().assertHasClickAction()
             val node = target.fetchSemanticsNode()
             val density = node.layoutInfo.density.density
             val touch = node.touchBoundsInRoot

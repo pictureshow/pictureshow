@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ScrollAxisRange
@@ -256,6 +257,16 @@ internal fun PlayerItemScreen(
     val ended by host::ended
     val switching by host::switching
     val deferredNext by host::deferredNext
+    val groupPresentation = host.sync?.state?.collectAsState()?.value
+    val primaryAction = if (deferredNext != null) "play" else touchPlayerPrimaryAction(host.sync, groupPresentation, showPlayButton)
+    val primaryEnabled = primaryAction != null && (!host.isLive || host.liveCanTimeShift)
+    val groupedPrimary = host.sync?.participating == true && deferredNext == null
+    val primaryState = if (groupedPrimary && groupPresentation != null) syncPhaseText(groupPresentation) else null
+    val primaryLabel = if (groupedPrimary) {
+        stringResource(if (primaryAction == "pause") R.string.sync_pause else R.string.sync_play)
+    } else {
+        null
+    }
     val exitRequested by host::exitRequested
     var topCues by remember { mutableStateOf(false) }
     var conversionDetailsRequested by remember { mutableStateOf(false) }
@@ -382,7 +393,7 @@ internal fun PlayerItemScreen(
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
         if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && extraPanel == null && !restoringSeekFocus) {
-            if (host.isLive && !host.liveCanTimeShift) audioFocus.requestFocus() else playFocus.requestFocus()
+            if (primaryEnabled) playFocus.requestFocus() else audioFocus.requestFocus()
             focusControls = false
         }
     }
@@ -770,7 +781,7 @@ internal fun PlayerItemScreen(
                     ) {
                         PlaybackToggle(
                             paused,
-                            showPlayButton,
+                            primaryAction != "pause",
                             Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))
                                 .then(
                                     if (host.isLive) {
@@ -780,11 +791,13 @@ internal fun PlayerItemScreen(
                                     }
                                 ),
                             ended,
-                            enabled = !host.isLive || host.liveCanTimeShift,
-                            liveStyle = host.isLive
+                            enabled = primaryEnabled,
+                            liveStyle = host.isLive,
+                            primaryState = primaryState,
+                            actionLabel = primaryLabel
                         ) {
                             val pending = deferredNext
-                            if (pending != null) finish(pending) else player?.togglePlayback()
+                            if (pending != null) finish(pending) else host.player?.performTouchPrimaryAction(host.sync)
                             interaction++
                         }
                         if (host.isLive) {

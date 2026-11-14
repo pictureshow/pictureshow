@@ -37,7 +37,9 @@ internal object AnonymousMediaButtons : MediaSession.Callback {
         if (!player.isCommandAvailable(command)) return true
         val before = player.playWhenReady
         when (key.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> Util.handlePlayPauseButtonAction(player)
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                if (!PlaybackMediaSession.performPrimaryAction(session)) Util.handlePlayPauseButtonAction(player)
+            }
             KeyEvent.KEYCODE_MEDIA_PLAY -> Util.handlePlayButtonAction(player)
             KeyEvent.KEYCODE_MEDIA_PAUSE -> Util.handlePauseButtonAction(player)
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> player.seekForward()

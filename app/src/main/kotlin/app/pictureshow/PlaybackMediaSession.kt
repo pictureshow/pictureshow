@@ -49,9 +49,16 @@ internal object PlaybackMediaSession {
         return active?.controller?.dispatchMediaButtonEvent(event) ?: false
     }
 
+    /** Resolve a toggle only for the still-active session, using its current wrapped player. */
+    internal fun performPrimaryAction(session: MediaSession): Boolean =
+        active?.takeIf { it.session === session }?.performPrimaryAction() == true
+
     class Handle internal constructor(context: Context, player: Player, onStop: (() -> Unit)?) {
         private var closed = false
         private var stopRequested = false
+        internal var onPrimaryAction: ((Player) -> Boolean)? = null
+
+        internal fun performPrimaryAction(): Boolean = !closed && onPrimaryAction?.invoke(session.player) == true
 
         // STOP means leaving this viewer. Do not idle the decoder before finish captures its position.
         // A plain forwarding wrapper also permits finish to synchronously release the session/player.
@@ -101,6 +108,7 @@ internal object PlaybackMediaSession {
         fun close() {
             if (closed) return
             closed = true
+            onPrimaryAction = null
             if (active === this) active = null
             session.release()
             rebufferPlayer?.detach()

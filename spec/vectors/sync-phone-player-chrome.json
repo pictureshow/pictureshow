@@ -141,6 +141,26 @@
         "minimumTouchTargetDp": 48,
         "physicalPixelTolerance": 1
       }
+    },
+    {
+      "id": "grouped-centered-transport-blockers-font-1-3",
+      "profile": "native-grouped-overlay-geometry",
+      "input": {
+        "widthDp": 640,
+        "heightDp": 280,
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Playing",
+        "nativePlaying": false,
+        "bandwidthA": 1000000,
+        "bandwidthB": 2000000,
+        "settleMs": 400
+      },
+      "expected": {
+        "transportOverlapsChip": false,
+        "minimumRoleGapDp": 8,
+        "cueMayDeferWithoutRoom": true
+      }
     }
   ]
 }
