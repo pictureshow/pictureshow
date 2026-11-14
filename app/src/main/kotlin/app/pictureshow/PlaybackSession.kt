@@ -557,8 +557,7 @@ internal class PlaybackSession(
         }
 
     /** Read-only admission for EOS actions that must retain this viewing, such as shared queue continuation. */
-    fun acceptsCompletion(source: PlayDecision): Boolean =
-        !closing && !ending && source === decision && mutable.value.error == null
+    fun acceptsCompletion(source: PlayDecision): Boolean = !closing && !ending && source === decision && mutable.value.error == null
 
     /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
     fun ended(source: PlayDecision? = decision): Boolean {
