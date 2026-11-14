@@ -138,4 +138,6 @@
     <string name="remote_search_help">Works when the TV has its search screen open. Passwords can\'t be typed from here.</string>
     <string name="remote_search_error">That can\'t be sent. Use up to %1$s characters on one line.</string>
     <string name="remote_search_send">Send to TV</string>
+    <string name="player_more_actions_right">More actions to the right</string>
+    <string name="player_more_actions_left">More actions to the left</string>
 </resources>

@@ -193,7 +193,7 @@ internal fun PlayerActionButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.then(if (liveStyle) Modifier.height(48.dp) else Modifier),
+        modifier = modifier.wholePlayerActionPaint().then(if (liveStyle) Modifier.height(48.dp) else Modifier),
         enabled = enabled,
         scale = scale,
         contentPadding = if (liveStyle) PaddingValues(horizontal = 16.dp) else ButtonDefaults.ContentPadding

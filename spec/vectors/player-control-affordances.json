@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "suite": "player-control-affordances",
+  "cases": [
+    {
+      "id": "vod-seeks-white-large-font",
+      "profile": "native-vod-seek-paint",
+      "input": {
+        "windowWidthPx": 1280,
+        "windowHeightPx": 720,
+        "densityDpi": 320,
+        "fontScale": 1.3,
+        "orientation": "landscape",
+        "videoArgb": "FFFFFFFF",
+        "positionMs": 20000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "minimumBrightInkChannel": 200,
+        "coreColorDistance": 1,
+        "minimumCorePixels": 8,
+        "adjacentRadiusPx": 3,
+        "minimumBackingChannelDelta": 16,
+        "minimumArrowContrast": 3,
+        "minimumNumeralContrast": 4.5,
+        "markRegionDp": 32,
+        "numeralRegionWidthDp": 18,
+        "numeralRegionHeightDp": 14,
+        "minimumZeroHolePixels": 4,
+        "minimumZeroHoleWidthDp": 1,
+        "minimumZeroHoleHeightDp": 2,
+        "minimumOneStemHeightDp": 4
+      }
+    },
+    {
+      "id": "landscape-portrait-inward-corners",
+      "profile": "native-orientation-corner-geometry",
+      "input": {
+        "windowWidthPx": 1280,
+        "windowHeightPx": 720,
+        "densityDpi": 320,
+        "fontScale": 1,
+        "orientation": "landscape",
+        "videoArgb": "FFFFFFFF",
+        "positionMs": 20000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "minimumBrightInkChannel": 200,
+        "coreColorDistance": 1,
+        "minimumCorePixels": 8,
+        "adjacentRadiusPx": 3,
+        "minimumBackingChannelDelta": 16,
+        "glyphViewportDp": 24,
+        "innerStartDp": 7,
+        "innerEndDp": 11,
+        "outerStartDp": 2,
+        "outerEndDp": 6,
+        "minimumDesiredCorePixels": 8,
+        "maximumOppositeCorePixels": 2,
+        "actionDescription": "Portrait",
+        "cornerDirection": "inward"
+      }
+    },
+    {
+      "id": "portrait-landscape-outward-corners",
+      "profile": "native-orientation-corner-geometry",
+      "input": {
+        "windowWidthPx": 720,
+        "windowHeightPx": 1280,
+        "densityDpi": 320,
+        "fontScale": 1,
+        "orientation": "portrait",
+        "videoArgb": "FFFFFFFF",
+        "positionMs": 20000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "minimumBrightInkChannel": 200,
+        "coreColorDistance": 1,
+        "minimumCorePixels": 8,
+        "adjacentRadiusPx": 3,
+        "minimumBackingChannelDelta": 16,
+        "glyphViewportDp": 24,
+        "innerStartDp": 7,
+        "innerEndDp": 11,
+        "outerStartDp": 2,
+        "outerEndDp": 6,
+        "minimumDesiredCorePixels": 8,
+        "maximumOppositeCorePixels": 2,
+        "actionDescription": "Landscape",
+        "cornerDirection": "outward"
+      }
+    },
+    {
+      "id": "tv-action-overflow-large-font",
+      "profile": "native-tv-action-overflow-affordance",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Playing",
+        "queueEntries": 1,
+        "localShowPlayButton": true,
+        "usable": true,
+        "title": "A film with a deliberately long source title",
+        "speed": 1.25,
+        "actionLabels": [
+          "Pause",
+          "Audio",
+          "Subtitles",
+          "Chapters",
+          "Speed \u00b7 1.25\u00d7",
+          "Playback info",
+          "Watch together",
+          "Quality \u00b7 Auto",
+          "Stop"
+        ]
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "minimumCueContrast": 3,
+        "minimumCueCorePixels": 8,
+        "minimumCueChangedPixels": 8,
+        "groupCommands": 0,
+        "exitCalls": 0,
+        "minimumLabelCoreChannel": 150,
+        "partialEdgeProbeDp": 4,
+        "minimumEdgeAttenuationChannel": 16,
+        "minimumLabelCorePixels": 8,
+        "minimumAttenuatedCoreFraction": 0.8
+      }
+    }
+  ]
+}

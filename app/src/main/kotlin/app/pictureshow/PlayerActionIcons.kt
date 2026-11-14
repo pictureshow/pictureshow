@@ -71,7 +71,7 @@ internal fun playerActionIcon(action: String): ImageVector {
                     lineTo(14f, 17f)
                     close()
                 }
-                "fullscreen", "portrait" -> {
+                "fullscreen" -> {
                     moveTo(3f, 3f)
                     lineTo(10f, 3f)
                     lineTo(10f, 5f)
@@ -99,6 +99,36 @@ internal fun playerActionIcon(action: String): ImageVector {
                     lineTo(14f, 21f)
                     lineTo(14f, 19f)
                     lineTo(19f, 19f)
+                    close()
+                }
+                "portrait" -> {
+                    moveTo(3f, 8f)
+                    lineTo(8f, 8f)
+                    lineTo(8f, 3f)
+                    lineTo(10f, 3f)
+                    lineTo(10f, 10f)
+                    lineTo(3f, 10f)
+                    close()
+                    moveTo(14f, 3f)
+                    lineTo(16f, 3f)
+                    lineTo(16f, 8f)
+                    lineTo(21f, 8f)
+                    lineTo(21f, 10f)
+                    lineTo(14f, 10f)
+                    close()
+                    moveTo(3f, 14f)
+                    lineTo(10f, 14f)
+                    lineTo(10f, 21f)
+                    lineTo(8f, 21f)
+                    lineTo(8f, 16f)
+                    lineTo(3f, 16f)
+                    close()
+                    moveTo(14f, 14f)
+                    lineTo(21f, 14f)
+                    lineTo(21f, 16f)
+                    lineTo(16f, 16f)
+                    lineTo(16f, 21f)
+                    lineTo(14f, 21f)
                     close()
                 }
                 "more" -> {

@@ -11,12 +11,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -776,16 +773,15 @@ internal fun PlayerItemScreen(
                             seekOpen = true
                         }
                     )
-                    // Keep panel openers composed while native focus reveals one non-wrapping action row.
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()).focusGroup().then(
+                    // Keep every direct opener composed; native focus scrolls and the passive cue exposes overflow.
+                    TvPlayerActions(
+                        modifier = Modifier.then(
                             if (restoringSeekFocus) {
                                 Modifier.focusProperties { canFocus = false }.clearAndSetSemantics { hideFromAccessibility() }
                             } else {
                                 Modifier
                             }
                         ),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
                     ) {
                         PlaybackToggle(
@@ -810,7 +806,7 @@ internal fun PlayerItemScreen(
                             interaction++
                         }
                         if (host.isLive) {
-                            Box(Modifier.align(Alignment.CenterVertically)) {
+                            Box(Modifier.align(Alignment.CenterVertically).wholePlayerActionPaint()) {
                                 PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused) {
                                     host.goLive()
                                     if (!accessibleControls) playFocus.requestFocus()

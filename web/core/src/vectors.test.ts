@@ -123,6 +123,8 @@ const pendingPortSuites = new Set([
     "player-overlay-layout",
     // Native player paint/geometry and clearance adapter remain owed.
     "touch-player-director-clearance-paint-edges",
+    // Native seek/orientation ink and TV overflow paint remain owed UI adapters.
+    "player-control-affordances",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.
