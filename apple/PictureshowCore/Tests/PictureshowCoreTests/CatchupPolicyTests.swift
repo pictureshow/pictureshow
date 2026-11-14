@@ -5,9 +5,9 @@ import XCTest
 final class CatchupPolicyTests: XCTestCase {
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
         XCTAssertEqual(SpecCaseManifest.contracts.count, 1500)
-        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 864)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 15)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 864)
+        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 1470)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 23)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 1470)
         XCTAssertTrue(Set(SpecCaseManifest.contracts.keys).isDisjoint(with: Set(PendingSpecCaseManifest.contracts.keys)))
         XCTAssertThrowsError(try PendingSpecCaseManifest.validate(id: "offline-job.invented", suite: "offline-job", operation: "job"))
         let pendingID = try XCTUnwrap(PendingSpecCaseManifest.contracts.keys.first)

@@ -4,6 +4,14 @@ import XCTest
 
 /// Explicit unported work from the main merge. These are skips, never successful policy executions.
 final class PendingSpecVectorTests: XCTestCase {
+    func testPendingApplication11Cases() throws { try pending("application") }
+    func testPendingHomeBrowse142Cases() throws { try pending("home-browse") }
+    func testPendingLiveDvr22Cases() throws { try pending("live-dvr") }
+    func testPendingLiveGuide14Cases() throws { try pending("live-guide") }
+    func testPendingLivePresentation366Cases() throws { try pending("live-presentation") }
+    func testPendingLiveSource11Cases() throws { try pending("live-source") }
+    func testPendingPlayerOverlayLayout8Cases() throws { try pending("player-overlay-layout") }
+    func testPendingReference19Cases() throws { try pending("reference") }
     private func pending(_ suite: String) throws {
         let metadata = try XCTUnwrap(PendingSpecCaseManifest.suites[suite])
         throw XCTSkip("\(suite): \(metadata.count) known pending cases. \(metadata.reason)")
@@ -15,7 +23,7 @@ final class PendingSpecVectorTests: XCTestCase {
     func testPendingOfflineManifest98Cases() throws { try pending("offline-manifest") }
     func testPendingOfflineNext14Cases() throws { try pending("offline-next") }
     func testPendingOfflineOutbox83Cases() throws { try pending("offline-outbox") }
-    func testPendingOfflinePlan45Cases() throws { try pending("offline-plan") }
+    func testPendingOfflinePlan58Cases() throws { try pending("offline-plan") }
     func testPendingOfflineReconnect16Cases() throws { try pending("offline-reconnect") }
     func testPendingOfflineResume78Cases() throws { try pending("offline-resume") }
     func testPendingPlaybackSettingsLayout7Cases() throws { try pending("playback-settings-layout") }

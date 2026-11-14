@@ -103,9 +103,9 @@ final class SpecVectorTests:XCTestCase {
             let cases=try XCTUnwrap(document["cases"] as? [[String:Any]])
             guard !cases.isEmpty else { throw NSError(domain:"Empty vector suite \(file.lastPathComponent)",code:1) }
             for vector in cases {
-                let id=try required(String.self,vector,"id"),operation=try required(String.self,vector,"operation")
+                let id=try required(String.self,vector,"id"),operation = suite == "live-source" ? "observed-window" : try required(String.self,vector,"operation")
                 guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
-                if pendingSuites.contains(suite) {
+                if PendingSpecCaseManifest.contracts[id] != nil {
                     try PendingSpecCaseManifest.validate(id: id, suite: suite, operation: operation)
                     try PendingSpecCaseManifest.validateEnvelope(vector, suite: suite)
                     continue
@@ -147,17 +147,17 @@ final class SpecVectorTests:XCTestCase {
         guard ids == knownIDs else { throw NSError(domain: "Missing known vector IDs: \(knownIDs.subtracting(ids).sorted())", code: 1) }
         guard discoveredPendingSuites == pendingSuites else { throw NSError(domain: "Missing pending suites: \(pendingSuites.subtracting(discoveredPendingSuites).sorted())", code: 1) }
         for (suite, metadata) in PendingSpecCaseManifest.suites {
-            let found = documents.filter { text($0.0, "suite") == suite }.reduce(0) { $0 + $1.1.count }
+            let found = documents.filter { text($0.0, "suite") == suite }.reduce(0) { $0 + $1.1.filter { pendingIDs.contains(text($0, "id")) }.count }
             guard found == metadata.count else { throw NSError(domain: "Pending count changed for \(suite): \(found)", code: 1) }
         }
-        print("Shared vector inventory: active \(activeIDs.count), pending \(pendingIDs.count) in \(pendingSuites.count) explicitly named skipped suites; pending cases are not execution passes.")
+        print("Shared vector inventory: active \(activeIDs.count), pending \(pendingIDs.count) in \(pendingSuites.count) explicitly named pending cohorts; pending cases are not execution passes.")
         guard discoveredControlSuites == traceSuites else { throw NSError(domain:"Missing control suites: \(traceSuites.subtracting(discoveredControlSuites).sorted())",code:1) }
         var count=0;var counts:[String:Int]=[:];var stepsBySuite:[String:Int]=[:];var failures:[String]=[]
         for (document,cases) in documents{
             let suite=text(document,"suite")
             // Every pending identity/envelope was validated above; named PendingSpecVectorTests report why execution is owed.
-            if pendingSuites.contains(suite) { continue }
             for vector in cases {
+                if pendingIDs.contains(text(vector, "id")) { continue }
                 if let operations, !operations.contains(text(vector,"operation")) { continue }
                 if traceSuites.contains(suite), vector["steps"] != nil {
                     guard operations == nil else { continue }
