@@ -1010,15 +1010,13 @@ private fun SyncJoined(
         val status = if (panelQuality == SyncQuality.UNKNOWN) phase else "$phase\u00a0·\u00a0${syncQualityText(panelQuality)}"
         SyncText(status, tv, Modifier.testTag("sync:phase").semantics { liveRegion = LiveRegionMode.Polite }, small = compactHeight)
     }
-    if (!tv) {
-        val peopleCount = state.participants.size
-        SyncText(
-            pluralStringResource(R.plurals.sync_people_watching, peopleCount, syncNumber(peopleCount)),
-            false,
-            Modifier.testTag("sync:people-count"),
-            small = true
-        )
-    }
+    val peopleCount = state.participants.size
+    SyncText(
+        pluralStringResource(R.plurals.sync_people_watching, peopleCount, syncNumber(peopleCount)),
+        tv,
+        Modifier.testTag("sync:people-count"),
+        small = true
+    )
     if (tv && state.queue.isEmpty()) {
         SyncText(
             stringResource(R.string.sync_empty_next_step),

@@ -84,6 +84,7 @@ class CorpusVectorsTest {
                     "sync-tv-surfaces",
                     // SyncPlayTvRhythmRegressionTest executes native header and setting rhythm.
                     "sync-tv-rhythm",
+                    "sync-tv-player-coherence",
                     "sync-tv-attention",
                     "sync-tv-structure-discovery",
                     "sync-group-social-summary-and-picker-role",

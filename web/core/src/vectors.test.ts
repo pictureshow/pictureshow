@@ -111,6 +111,7 @@ const pendingPortSuites = new Set([
     "sync-tv-surfaces",
     // Native TV geometry/typography profiles remain an explicit Web UI port obligation.
     "sync-tv-rhythm",
+    "sync-tv-player-coherence",
     "sync-tv-attention",
     "sync-tv-structure-discovery",
     "sync-group-social-summary-and-picker-role",

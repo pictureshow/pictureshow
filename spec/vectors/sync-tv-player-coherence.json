@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-tv-player-coherence",
+  "cases": [
+    {
+      "id": "tv-roster-lifecycle-font-one",
+      "profile": "native-tv-roster",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "phase": "Playing",
+        "participantSnapshots": [
+          [],
+          [
+            "One"
+          ],
+          [
+            "One",
+            "Two"
+          ],
+          []
+        ]
+      },
+      "expected": {
+        "countTexts": [
+          "0 people watching",
+          "1 person watching",
+          "2 people watching",
+          "0 people watching"
+        ],
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "tv-roster-lifecycle-large-font",
+      "profile": "native-tv-roster",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.3,
+        "phase": "Playing",
+        "participantSnapshots": [
+          [],
+          [
+            "One"
+          ],
+          [
+            "One",
+            "Two"
+          ],
+          []
+        ]
+      },
+      "expected": {
+        "countTexts": [
+          "0 people watching",
+          "1 person watching",
+          "2 people watching",
+          "0 people watching"
+        ],
+        "groupCommands": 0
+      }
+    },
+    {
+      "id": "tv-actions-one-row-font-one",
+      "profile": "native-tv-actions-one-row",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Playing",
+        "queueEntries": 1,
+        "localShowPlayButton": true,
+        "usable": true,
+        "title": "A film with a deliberately long source title",
+        "speed": 1.25,
+        "actionLabels": [
+          "Pause",
+          "Audio",
+          "Subtitles",
+          "Chapters",
+          "Speed · 1.25×",
+          "Playback info",
+          "Watch together",
+          "Quality · Auto",
+          "Stop"
+        ]
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "sameRowTolerancePx": 1
+      }
+    },
+    {
+      "id": "tv-actions-one-row-large-font",
+      "profile": "native-tv-actions-one-row",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Playing",
+        "queueEntries": 1,
+        "localShowPlayButton": true,
+        "usable": true,
+        "title": "A film with a deliberately long source title",
+        "speed": 1.25,
+        "actionLabels": [
+          "Pause",
+          "Audio",
+          "Subtitles",
+          "Chapters",
+          "Speed · 1.25×",
+          "Playback info",
+          "Watch together",
+          "Quality · Auto",
+          "Stop"
+        ]
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "sameRowTolerancePx": 1
+      }
+    },
+    {
+      "id": "tv-safe-edges-font-one",
+      "profile": "native-tv-safe-edges",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Playing",
+        "queueEntries": 1,
+        "localShowPlayButton": true,
+        "usable": true,
+        "title": "A film with a deliberately long source title",
+        "speed": 1.25,
+        "actionLabels": [
+          "Pause",
+          "Audio",
+          "Subtitles",
+          "Chapters",
+          "Speed · 1.25×",
+          "Playback info",
+          "Watch together",
+          "Quality · Auto",
+          "Stop"
+        ]
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "horizontalInsetDp": 48,
+        "firstGlyphBearingMaxPx": 3,
+        "titleInkMinimumChannel": 150,
+        "minimumTitleInkPixels": 8
+      }
+    },
+    {
+      "id": "tv-safe-edges-large-font",
+      "profile": "native-tv-safe-edges",
+      "input": {
+        "windowWidthPx": 960,
+        "windowHeightPx": 540,
+        "densityDpi": 156,
+        "fontScale": 1.3,
+        "participating": true,
+        "phase": "Playing",
+        "queueEntries": 1,
+        "localShowPlayButton": true,
+        "usable": true,
+        "title": "A film with a deliberately long source title",
+        "speed": 1.25,
+        "actionLabels": [
+          "Pause",
+          "Audio",
+          "Subtitles",
+          "Chapters",
+          "Speed · 1.25×",
+          "Playback info",
+          "Watch together",
+          "Quality · Auto",
+          "Stop"
+        ]
+      },
+      "expected": {
+        "minimumTargetDp": 48,
+        "horizontalInsetDp": 48,
+        "firstGlyphBearingMaxPx": 3,
+        "titleInkMinimumChannel": 150,
+        "minimumTitleInkPixels": 8
+      }
+    }
+  ]
+}

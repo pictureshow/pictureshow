@@ -11,12 +11,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +95,9 @@ import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.trickplayTile
 import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
+
+/** Shared horizontal safe edge for TV player chrome and transient actions. */
+private val TV_PLAYER_SIDE_INSET = 48.dp
 
 /** A restored route is a recovery destination, not a request to replay its original start offset. */
 @Composable
@@ -164,7 +168,6 @@ private class PlayerTrackChooserRequest(
     var opened by mutableStateOf(initiallyOpen)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlayerItemScreen(
     account: Account,
@@ -665,7 +668,7 @@ internal fun PlayerItemScreen(
                     !chaptersOpen &&
                     !seekOpen,
                 // 48 dp is the TV overscan-safe side margin.
-                modifier = Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 36.dp)
+                modifier = Modifier.align(Alignment.TopStart).padding(horizontal = TV_PLAYER_SIDE_INSET, vertical = 36.dp)
             ) {
                 controls = true
                 interaction++
@@ -698,7 +701,7 @@ internal fun PlayerItemScreen(
             }
             SyncPlayerChip(
                 host.sync,
-                Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 28.dp).widthIn(max = 640.dp),
+                Modifier.align(Alignment.TopStart).padding(horizontal = TV_PLAYER_SIDE_INSET, vertical = 28.dp).widthIn(max = 640.dp),
                 tv = true
             )
             // Keep opener nodes composed while the sibling modal hides this player tree.
@@ -713,7 +716,7 @@ internal fun PlayerItemScreen(
                         }.semantics {
                             isTraversalGroup = true
                             testTagsAsResourceId = true
-                        }.background(Color(0xE610131C)).padding(36.dp),
+                        }.background(Color(0xE610131C)).padding(horizontal = TV_PLAYER_SIDE_INSET, vertical = 36.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val sourceId = state.decision?.mediaSourceId
@@ -773,15 +776,17 @@ internal fun PlayerItemScreen(
                             seekOpen = true
                         }
                     )
-                    FlowRow(
-                        modifier = if (restoringSeekFocus) {
-                            Modifier.focusProperties { canFocus = false }.clearAndSetSemantics { hideFromAccessibility() }
-                        } else {
-                            Modifier
-                        },
+                    // Keep panel openers composed while native focus reveals one non-wrapping action row.
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()).focusGroup().then(
+                            if (restoringSeekFocus) {
+                                Modifier.focusProperties { canFocus = false }.clearAndSetSemantics { hideFromAccessibility() }
+                            } else {
+                                Modifier
+                            }
+                        ),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        itemVerticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
+                        verticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
                     ) {
                         PlaybackToggle(
                             paused,
@@ -864,7 +869,7 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Playback info")
                         }
-                        Button(scale = playerButtonScale(), onClick = {
+                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             host.sync?.show()
                         }, modifier = Modifier.testTag("player:syncplay")) {
                             Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
@@ -913,7 +918,9 @@ internal fun PlayerItemScreen(
             }
             if (error == null && !switching) {
                 Column(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
+                    Modifier.align(
+                        Alignment.BottomEnd
+                    ).padding(end = TV_PLAYER_SIDE_INSET, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
                         .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } }
                         .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)

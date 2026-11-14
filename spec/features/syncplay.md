@@ -579,3 +579,12 @@ the search controls; a stale callback cannot send to the detached target. The
 three `sync-phone-remote-search` profiles cover native layout, retained-control
 stability and exactly-once guarded keyboard dispatch. These are UI/input rules;
 they do not change REM-04 freshness or the remote wire protocol.
+
+
+## TV group facts and player action row
+
+The joined TV panel exposes the same passive localized authoritative participant count as touch, including an empty queue. Use the actual participant-list length, retain zero/singular/plural, update on server snapshots, and do not invent identity or readiness. Count publication sends no group request and does not move deliberate focus.
+
+TV player actions form one non-wrapping horizontal row. All existing actions remain available through native D-pad navigation; focusing an action brings its complete native target into the viewport, and returning to the first action restores its visibility. Keep the current primary group intent and explicit Stop behavior, use the shared player action component for Watch together, and preserve panel opener/return ownership. Long labels, conditional Chapters and font1.3 do not create an orphan second row.
+
+Use the shared48dp horizontal TV player safe edge for conversion notice, persistent group chip, title/timeline/action content and bottom-end segment/next actions. The picture and controls backing remain full-bleed; independent existing vertical spacing remains appropriate to each role. Actual native geometry, full targets, focus and paint require native tests and device evidence, rather than a vector inventory pass. Other TV-capable platforms owe equivalent source facts, action navigation and safe-area handling through their native APIs.
