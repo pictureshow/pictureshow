@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -209,8 +211,11 @@ internal fun PlayerItemScreen(
     var interaction by remember { mutableLongStateOf(0) }
     var position by host::position
     val duration by host::duration
+    var rootFocused by remember { mutableStateOf(false) }
+    var focusControls by remember { mutableStateOf(false) }
     val playback = rememberPlayerPlayback(player, onPause = {
         controls = true
+        if (livePauseRequestsControlFocus(host.isLive, rootFocused)) focusControls = true
         interaction++
     }, onResume = { interaction++ })
     val paused = playback.paused || pauseIntent
@@ -246,8 +251,6 @@ internal fun PlayerItemScreen(
     val tiles by host::tiles
     var chaptersOpen by remember { mutableStateOf(false) }
     var seekPreview by host::seekPreview
-    var rootFocused by remember { mutableStateOf(false) }
-    var focusControls by remember { mutableStateOf(false) }
     var actionsFocused by remember { mutableStateOf(false) }
     val nextCancelled by host::nextCancelled
     val ended by host::ended
@@ -283,7 +286,10 @@ internal fun PlayerItemScreen(
     }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") = host.finish(next, reason)
-    fun seek(delta: Long) = host.seek(delta)
+    fun forwardSeekAllowed() = liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired)
+    fun seek(delta: Long) {
+        if (delta <= 0 || forwardSeekAllowed()) host.seek(delta)
+    }
     SideEffect {
         host.onFinishing = {
             extraPanel = null
@@ -309,6 +315,7 @@ internal fun PlayerItemScreen(
 
     // A reader's seek reveals the controls with the position control focused, so the new clock is spoken.
     fun readerSeek(delta: Long, arrow: Boolean = false) {
+        if (delta > 0 && !forwardSeekAllowed()) return
         if (arrow && !onePressSeek.admit(OnePressSeek.Path.Reader, delta)) {
             PlaybackDiagnostics.write("player-seek source=reader deltaMs=$delta dropped=paired")
             return
@@ -365,7 +372,7 @@ internal fun PlayerItemScreen(
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
         if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && extraPanel == null && !restoringSeekFocus) {
-            playFocus.requestFocus()
+            if (host.isLive && !host.liveCanTimeShift) audioFocus.requestFocus() else playFocus.requestFocus()
             focusControls = false
         }
     }
@@ -547,28 +554,42 @@ internal fun PlayerItemScreen(
                         // ends at "no next item". There TalkBack scrolls a focused scrollable node in the
                         // arrow's direction, so the arrows keep their meaning: Left/Right seek 10 s and land
                         // on the position control, Up/Down show the controls. Keys without a reader are unchanged.
-                        horizontalScrollAxisRange = ReaderArrowRange
+                        val canSeekHere = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
+                        if (canSeekHere) horizontalScrollAxisRange = ReaderArrowRange
                         verticalScrollAxisRange = ReaderArrowRange
                         scrollBy { x, y ->
                             // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
                             val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
                             when {
-                                x != 0f -> readerSeek(if (forward) 10_000L else -10_000L, arrow = true)
+                                x != 0f && canSeekHere && (!forward || forwardSeekAllowed()) -> readerSeek(
+                                    if (forward) 10_000L else -10_000L,
+                                    arrow = true
+                                )
                                 y != 0f -> readerShowControls()
                                 else -> return@scrollBy false
                             }
                             true
                         }
-                        customActions = listOf(
-                            CustomAccessibilityAction("Back 10 seconds") {
-                                readerSeek(-10_000L)
-                                true
-                            },
-                            CustomAccessibilityAction("Forward 10 seconds") {
-                                readerSeek(10_000L)
-                                true
+                        customActions = if (canSeekHere) {
+                            buildList {
+                                add(
+                                    CustomAccessibilityAction("Back 10 seconds") {
+                                        readerSeek(-10_000L)
+                                        true
+                                    }
+                                )
+                                if (forwardSeekAllowed()) {
+                                    add(
+                                        CustomAccessibilityAction("Forward 10 seconds") {
+                                            readerSeek(10_000L)
+                                            true
+                                        }
+                                    )
+                                }
                             }
-                        )
+                        } else {
+                            emptyList()
+                        }
                     } else {
                         hideFromAccessibility()
                     }
@@ -675,7 +696,7 @@ internal fun PlayerItemScreen(
                         TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
                     }
                     Text(
-                        item.name,
+                        if (host.isLive) host.liveProgram?.name ?: item.name else item.name,
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = if (restoringSeekFocus || openerReturnTag != null) {
                             Modifier.clearAndSetSemantics { hideFromAccessibility() }
@@ -683,16 +704,29 @@ internal fun PlayerItemScreen(
                             Modifier
                         }
                     )
+                    if (host.isLive) {
+                        val program = host.liveProgram
+                        val time = liveTime()
+                        Text(
+                            listOfNotNull(
+                                host.liveChannel?.name ?: item.name,
+                                program?.let { time.range(it.startDate, it.endDate) }
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
-                    val announcedPosition = rememberAnnouncedPosition(
-                        paused,
-                        // The preview follows a held key; the server's target can lag it.
-                        seekRequest = seekPreview ?: state.seekTargetMs,
-                        durationMs = duration,
-                        ended = ended,
-                        positionMs = position
-                    )
+                    val announcedPosition = key(host.isLive, host.liveCanTimeShift, host.liveWindow?.goLivePosition() != null) {
+                        rememberAnnouncedPosition(
+                            paused,
+                            // The preview follows a held key; the server's target can lag it.
+                            seekRequest = seekPreview ?: state.seekTargetMs,
+                            durationMs = if (host.isLive) 0 else duration,
+                            ended = ended,
+                            positionMs = position
+                        )
+                    }
                     PlayerTimeline(
                         position,
                         announcedPosition,
@@ -700,7 +734,14 @@ internal fun PlayerItemScreen(
                         modifier = Modifier.focusRequester(timelineFocus).then(readerOpenerOnly("player:position")),
                         paused = paused,
                         ended = ended,
-                        arrowsSeek = rootFocused && !restoringSeekFocus,
+                        arrowsSeek =
+                        rootFocused && !restoringSeekFocus && (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)),
+                        live = host.isLive,
+                        liveCanTimeShift = host.liveCanTimeShift,
+                        liveExpired = host.liveBufferExpired,
+                        liveEdgeAvailable = host.liveWindow?.goLivePosition() != null,
+                        liveWindow = host.liveWindow,
+                        onGoLive = host::goLive,
                         onOpenSeek = {
                             seekOpen = true
                         }
@@ -712,19 +753,37 @@ internal fun PlayerItemScreen(
                             Modifier
                         },
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        itemVerticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
                     ) {
                         PlaybackToggle(
                             paused,
                             showPlayButton,
-                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play")),
-                            ended
+                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))
+                                .then(
+                                    if (host.isLive) {
+                                        Modifier.width(liveControlWidth()).heightIn(min = 48.dp).align(Alignment.CenterVertically)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            ended,
+                            enabled = !host.isLive || host.liveCanTimeShift,
+                            liveStyle = host.isLive
                         ) {
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()
                             interaction++
                         }
-                        Button(scale = playerButtonScale(), onClick = {
+                        if (host.isLive) {
+                            Box(Modifier.align(Alignment.CenterVertically)) {
+                                PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused) {
+                                    host.goLive()
+                                    if (!accessibleControls) playFocus.requestFocus()
+                                }
+                            }
+                        }
+                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Audio,
                                 trackMenus,
@@ -733,7 +792,7 @@ internal fun PlayerItemScreen(
                                 state.audioIndex
                             )
                         }, modifier = Modifier.focusRequester(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
-                        Button(scale = playerButtonScale(), onClick = {
+                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Subtitle,
                                 trackMenus,
@@ -745,14 +804,15 @@ internal fun PlayerItemScreen(
                             Text("Subtitles")
                         }
                         if (metadata.chapters.isNotEmpty()) {
-                            Button(scale = playerButtonScale(), onClick = {
+                            PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                                 chaptersOpen = true
                                 seekPreview = null
                             }, modifier = Modifier.focusRequester(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
                                 Text("Chapters")
                             }
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Playback speed", speedFocus)
@@ -764,7 +824,8 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Playback info", infoFocus)
@@ -774,7 +835,8 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Playback info")
                         }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Quality", qualityFocus)
@@ -793,7 +855,8 @@ internal fun PlayerItemScreen(
                                 },
                             enabled = offline == null && !state.preparing && state.decision != null
                         ) { Text("Quality · ${if (offline != null) "Download" else host.qualityLabel}") }
-                        Button(
+                        PlayerActionButton(
+                            liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = { finish(reason = "stop-button") },
                             modifier = readerOpenerOnly("player:stop")
@@ -997,7 +1060,7 @@ internal fun PlayerItemScreen(
                 restoringSeekFocus = true
                 returnFocus = timelineFocus
             }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
-                SeekPanel(position, duration, ::seek) {
+                SeekPanel(position, if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration, ::seek, forwardSeekAllowed()) {
                     close {
                         seekOpen = false
                         restoringSeekFocus = true

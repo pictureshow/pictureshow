@@ -10,12 +10,19 @@ import android.content.Context
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -101,9 +108,47 @@ class PausedReturnFocusTest {
         compose.onNodeWithText("Audio").assertIsFocused()
     }
 
-    private fun launch(accessible: Boolean) {
+    @Test fun nativeLivePauseMovesSurfaceFocusToPlayAndOneRightReachesGoLive() {
+        launch(false, live = true)
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        // Decoder duration arrives before the host's asynchronous live-window sample.
+        // Observe the actual enabled transport, then restore the original hidden-HUD
+        // surface-focus precondition; never wait for the focus result after pausing.
+        compose.onNodeWithTag("player:surface").performTouchInput { click(center) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onAllNodes(hasText("Pause") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Pause").assertIsEnabled()
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Pause").assertDoesNotExist()
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.runOnIdle {
+            val player = requireNotNull(output.player.value)
+            kotlin.test.assertTrue(
+                player.isCommandAvailable(androidx.media3.common.Player.COMMAND_PLAY_PAUSE),
+                "Measured live fixture must allow pause"
+            )
+            player.pause()
+        }
+        compose.onNodeWithText("Play").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNodeWithTag("player:go-live").assertIsFocused()
+    }
+
+    @Test fun nativeLivePausePreservesAnAlreadyFocusedAudioAction() {
+        launch(false, live = true)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Audio").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.runOnIdle { requireNotNull(output.player.value).pause() }
+        compose.onNodeWithText("Audio").assertIsFocused()
+    }
+
+    private fun launch(accessible: Boolean, live: Boolean = false) {
         val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "fake")
-        val item = MediaItem("episode", "An episode", "Episode", seriesId = "series")
+        val item = MediaItem("episode", "An episode", if (live) "TvChannel" else "Episode", seriesId = "series")
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
@@ -129,7 +174,15 @@ class PausedReturnFocusTest {
                                 "Type":"Episode","SeriesId":"series"}"""
                         else -> return@addHandler respond("", HttpStatusCode.NoContent)
                     }
-                    respond(json, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                    val body = if (live && request.url.encodedPath.endsWith("/PlaybackInfo")) {
+                        json.replace(
+                            "\"SupportsTranscoding\"",
+                            "\"LiveStreamId\":\"live\",\"IsInfiniteStream\":true,\"SupportsTranscoding\""
+                        )
+                    } else {
+                        json
+                    }
+                    respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json"))
                 }
             }
         }

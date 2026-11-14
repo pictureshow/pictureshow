@@ -12,7 +12,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Adding a contract without a JVM executor fails the desktop vector task instead of silently dropping it. */
+/** Reject unregistered contracts; native presentation contracts name their Android executor explicitly.
+ * This inventory validates packaging and envelopes. Each registered runner separately executes its rules.
+ */
 class CorpusVectorsTest {
     @Test fun everyJsonContractHasAnExecutor() {
         val groups = mapOf(
@@ -66,13 +68,15 @@ class CorpusVectorsTest {
                     "offline-resume"
                 ),
             "remote-vectors" to setOf("remote-queue", "remote-receive", "remote-reconnect", "remote-targets", "remote-wire"),
-            "grid-vectors" to setOf("grid-navigation", "home-browse")
+            "grid-vectors" to setOf("grid-navigation", "home-browse"),
+            "live-vectors" to setOf("live-guide", "live-dvr", "live-source"),
+            "android-native-vectors" to setOf("live-presentation", "player-overlay-layout")
         )
         fun directory(name: String) = File(requireNotNull(javaClass.classLoader.getResource(name)) { "Missing packaged $name" }.toURI())
         val inventory = directory("vector-inventory").listFiles()!!.filter {
             it.extension == "json"
         }.associateBy { it.nameWithoutExtension }
-        assertEquals(groups.values.flatten().toSet(), inventory.keys, "A new contract needs an executable JVM suite")
+        assertEquals(groups.values.flatten().toSet(), inventory.keys, "A new contract needs a registered executor")
         groups.forEach { (resource, names) ->
             assertEquals(
                 names,

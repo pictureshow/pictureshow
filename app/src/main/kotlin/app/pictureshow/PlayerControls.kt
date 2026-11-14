@@ -8,6 +8,16 @@ package app.pictureshow
 import android.content.Context
 import android.os.Build
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -15,15 +25,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ButtonScale
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
@@ -122,6 +136,8 @@ internal fun PlaybackToggle(
     showPlayButton: Boolean,
     modifier: Modifier = Modifier,
     ended: Boolean = false,
+    enabled: Boolean = true,
+    liveStyle: Boolean = false,
     onClick: () -> Unit
 ) {
     val current = playbackToggleState(paused, showPlayButton)
@@ -132,13 +148,54 @@ internal fun PlaybackToggle(
     val beforeEnd = remember { arrayOf(current) }
     if (!ended) beforeEnd[0] = current
     var focused by remember { mutableStateOf(false) }
-    Button(
+    PlayerActionButton(
         onClick = onClick,
+        enabled = enabled,
+        liveStyle = liveStyle,
+        fillContentWidth = liveStyle,
         scale = playerButtonScale(),
         modifier = modifier.onFocusChanged { focused = it.isFocused }.semantics {
             stateDescription = if (ended && focused) beforeEnd[0] else current
         }
     ) {
+        if (liveStyle) {
+            Icon(touchActionIcon(if (showPlayButton) "play" else "pause"), null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+        }
         Text(if (showPlayButton) "Play" else "Pause")
+    }
+}
+
+/** Media events reveal controls outside Compose's key path; do not steal an existing control's focus. */
+internal fun livePauseRequestsControlFocus(live: Boolean, surfaceFocused: Boolean): Boolean = live && surfaceFocused
+
+/** One native family and height for live actions; ordinary playback retains its original native defaults. */
+@Composable
+internal fun PlayerActionButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    liveStyle: Boolean = false,
+    fillContentWidth: Boolean = false,
+    scale: ButtonScale = playerButtonScale(),
+    content: @Composable RowScope.() -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.then(if (liveStyle) Modifier.height(48.dp) else Modifier),
+        enabled = enabled,
+        scale = scale,
+        contentPadding = if (liveStyle) PaddingValues(horizontal = 16.dp) else ButtonDefaults.ContentPadding
+    ) {
+        if (liveStyle) {
+            Row(
+                Modifier.fillMaxHeight().then(if (fillContentWidth) Modifier.fillMaxWidth() else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                content = content
+            )
+        } else {
+            content()
+        }
     }
 }

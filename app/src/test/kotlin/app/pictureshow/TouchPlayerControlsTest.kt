@@ -48,8 +48,6 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -172,7 +170,7 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(6_000)
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
-        compose.onNodeWithText("Play").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Play").assertIsDisplayed()
     }
 
     @Test fun leftAndRightDoubleTapSeekTenSecondsAndClamp() {
@@ -303,7 +301,7 @@ class TouchPlayerControlsTest {
     @Test fun allSheetsOpenAndDoneDismisses() {
         launch()
         TouchPlayerSheet.entries.forEach { sheet ->
-            compose.onNodeWithTag("touch:open:$sheet").performClick()
+            openSheet(sheet)
             compose.onNodeWithTag("touch:sheet:$sheet").assertIsDisplayed()
             compose.onNodeWithText("Done").performClick()
             compose.onNodeWithTag("touch:sheet:$sheet").assertDoesNotExist()
@@ -312,7 +310,7 @@ class TouchPlayerControlsTest {
 
     @Test fun chapterSelectionSeeksAndDismisses() {
         launch()
-        compose.onNodeWithTag("touch:open:Chapters").performClick()
+        openSheet(TouchPlayerSheet.Chapters)
         compose.onNodeWithTag("touch:chapter:1").performClick()
         compose.runOnIdle { assertEquals(30_000, host.position) }
         compose.onNodeWithTag("touch:sheet:Chapters").assertDoesNotExist()
@@ -376,12 +374,10 @@ class TouchPlayerControlsTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
     @Test
-    fun theSpeedLabelStartsOnItsColumn() {
+    fun speedIsANamedIconOnTheSecondaryRow() {
         launch()
         settled()
-        val cell = bounds("touch:open:Speed")
-        val word = compose.onNodeWithText("Speed · 1×", useUnmergedTree = true).getBoundsInRoot()
-        assertEquals((cell.left + 8.dp).value, word.left.value, 1f)
+        assertIconLayout()
     }
 
     // Phone T2: a wide window holds the notice beside the column, so Skip stays at the top, on the player's one edge.
@@ -433,21 +429,23 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed().assertHasClickAction()
         compose.onNodeWithTag("touch:open:Audio").assertHasClickAction()
         compose.onNodeWithTag("touch:open:Subtitles").assertHasClickAction()
+        compose.onNodeWithTag("touch:more").performClick()
         compose.onNodeWithTag("touch:open:Chapters").assertHasClickAction()
         compose.onNodeWithTag("touch:stop").assertHasClickAction()
+        back()
         compose.onNodeWithTag("touch:scrubber").performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(25_000f)) }
         compose.runOnIdle { assertEquals(25_000, decoder.seeks.last()) }
     }
 
     @Test fun speedSheetChangesTheViewingSpeedAndTheButtonNamesIt() {
         launch()
-        compose.onNodeWithText("Speed · 1×").assertIsDisplayed()
+        assertSpeed("1×")
         compose.onNodeWithTag("touch:open:Speed").performClick()
         compose.onNodeWithText(PLAYBACK_SPEED_NOTE).assertIsDisplayed()
         compose.onNodeWithTag("touch:speed:150").performClick()
         compose.onNodeWithTag("touch:sheet:Speed").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1.5f, output.speed.value.speed) }
-        compose.onNodeWithText("Speed · 1.5×").assertIsDisplayed()
+        assertSpeed("1.5×")
     }
 
     @Test fun encodedAudioOnlyOffersNormalSpeed() {
@@ -458,7 +456,7 @@ class TouchPlayerControlsTest {
     @Test fun playbackInfoSheetCarriesWhyWhatTheServerReportsAndWhatArrived() {
         launch()
         decided(PlayMethod.Transcode)
-        compose.onNodeWithTag("touch:open:Info").performClick()
+        openSheet(TouchPlayerSheet.Info)
         compose.onNodeWithTag("touch:info").assertIsDisplayed()
         listOf("Why the server converts this stream", "Server-reported media", "Stream received by this device").forEach {
             compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
@@ -830,6 +828,7 @@ class TouchPlayerControlsTest {
     @Test fun stopsTargetAnswersRightToItsEdge() {
         launch()
         settled()
+        compose.onNodeWithTag("touch:more").performClick()
         compose.onNodeWithTag("touch:stop").performTouchInput { click(Offset(width - 2f, height / 2f)) }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(1, exits) }
@@ -861,11 +860,11 @@ class TouchPlayerControlsTest {
     fun playAndPauseTakeOneWidth() {
         launch()
         settled()
-        val pausing = listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds)
+        val pausing = listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:more").map(::bounds)
         compose.onNodeWithTag("touch:toggle").performClick()
         settled()
-        compose.onNodeWithText("Play").assertIsDisplayed()
-        assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds))
+        compose.onNodeWithContentDescription("Play").assertIsDisplayed()
+        assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:more").map(::bounds))
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -879,7 +878,7 @@ class TouchPlayerControlsTest {
         val title = bounds("touch:title")
         assertTrue(title.right <= quality.left)
         assertTrue(quality.right <= bounds("touch:panel").right)
-        assertTrue(quality.bottom <= bounds("touch:toggle").top)
+        assertTrue(bounds("touch:toggle").bottom <= quality.top, "Transport stays above the bottom title/Quality panel")
         assertTrue(quality.right - quality.left >= 48.dp)
         val before = host.position
         compose.onNodeWithTag("touch:quality").performClick()
@@ -905,33 +904,29 @@ class TouchPlayerControlsTest {
     @Config(qualifiers = "w1600dp-h700dp-land-xhdpi")
     @Test
     fun speedDoesNotReserveAnInvisibleOptionBeforePlaybackInfo() {
-        launch()
+        launch(cast = null)
         settled()
-        val chapter = textBounds("Chapters")
-        val speed = textBounds("Speed · 1×")
-        val info = textBounds("Playback info")
-        assertEquals(chapter.top.value, speed.top.value, 1f)
-        assertEquals(speed.top.value, info.top.value, 1f)
-        assertEquals((speed.left - chapter.right).value, (info.left - speed.right).value, 1f)
+        val audio = bounds("touch:open:Audio")
+        val subtitles = bounds("touch:open:Subtitles")
+        val speed = bounds("touch:open:Speed")
+        val more = bounds("touch:more")
+        assertEquals(audio.top.value, speed.top.value, 1f)
+        assertEquals(speed.top.value, more.top.value, 1f)
+        assertEquals((subtitles.left - audio.right).value, (speed.left - subtitles.right).value, 1f)
+        assertEquals((speed.left - subtitles.right).value, (more.left - speed.right).value, 1f)
+        assertEquals((audio.right - audio.left).value, (speed.right - speed.left).value, 1f)
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.onNodeWithTag("touch:open:Chapters").assertIsDisplayed()
+        compose.onNodeWithTag("touch:open:Info").assertIsDisplayed()
     }
 
     // Phone B4: a deliberate layout, not wherever the width ran out.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
-    fun portraitControlsAreTransportThenEqualColumns() {
+    fun portraitCentersTransportAboveOneSecondaryIconRow() {
         launch()
         settled()
-        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
-        listOf("touch:back10", "touch:forward10", "touch:stop").forEach {
-            assertEquals(row.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
-        }
-        assertTrue(bounds("touch:stop").right > bounds("touch:open:Subtitles").right, "Stop ends the row")
-        assertEquals(bounds("touch:open:Audio").left, bounds("touch:open:Speed").left)
-        assertEquals(bounds("touch:open:Subtitles").left, bounds("touch:open:Info").left)
-        assertEquals(bounds("touch:open:Chapters").left, bounds("touch:orientation").left)
-        val first = bounds("touch:open:Subtitles").left - bounds("touch:open:Audio").left
-        val second = bounds("touch:open:Chapters").left - bounds("touch:open:Subtitles").left
-        assertEquals(first.value, second.value, 1f, "equal cells")
+        assertIconLayout()
     }
 
     // TOUCH-03: at a large font nothing in the transport is squeezed or pushed off the panel.
@@ -941,29 +936,16 @@ class TouchPlayerControlsTest {
     fun aLargeFontKeepsTheTransportWhole() {
         launch(fontScale = 1.5f)
         settled()
-        val panel = bounds("touch:panel")
-        val transport = listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds)
-        transport.forEach {
-            assertTrue(it.left >= panel.left && it.right <= panel.right, "inside the panel: $it")
-            assertTrue(it.right - it.left >= 48.dp, "a whole target: $it")
-        }
-        val stop = bounds("touch:stop")
-        assertTrue(stop.bottom - stop.top < 56.dp, "Stop stays on one line: $stop")
-        transport.zipWithNext { a, b -> assertTrue(a.right <= b.left || a.bottom <= b.top, "no overlap: $a $b") }
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
     @Test
-    fun landscapeControlsHoldOneLineWithStopAtTheFarEnd() {
+    fun landscapeCentersTransportAboveTheSecondaryRow() {
         launch()
         settled()
-        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
-        TouchPlayerSheet.entries.map { "touch:open:$it" }.plus(listOf("touch:orientation", "touch:stop")).forEach {
-            assertEquals(row.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
-        }
-        assertEquals(bounds("touch:panel").right.value - 8f, bounds("touch:stop").right.value, 1f)
-        assertTrue(bounds("touch:open:Audio").left - bounds("touch:forward10").right >= 16.dp)
+        assertIconLayout()
     }
 
     // Phone B3: on a short window every rate shows at once, and the video stays in view.
@@ -981,7 +963,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:speed:100").assertIsSelected()
         compose.onNodeWithTag("touch:speed:200").performClick()
         settled()
-        compose.onNodeWithText("Speed · 2×").assertIsDisplayed()
+        assertSpeed("2×")
     }
 
     // PLAY-25: panel entry is the current rate.
@@ -1218,113 +1200,85 @@ class TouchPlayerControlsTest {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
     }
 
-    private fun textBounds(label: String) = compose.onNodeWithText(label, useUnmergedTree = true).getBoundsInRoot()
-
     // TextButton's minimum centred a short word, so Audio started right of Pause and of whatever shared its column.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
-    fun aShortOptionStartsOnItsColumnsLine() {
+    fun secondaryIconsHaveSeparateNamedTargets() {
         launch()
         settled()
-        val columns = TouchPlayerSheet.entries.groupBy { bounds("touch:open:$it").left.value }.values
-        assertTrue(columns.any { it.size > 1 }, "the options wrap into columns here")
-        columns.forEach { column ->
-            val starts = column.map { sheet ->
-                val word = if (sheet == TouchPlayerSheet.Speed) "Speed ·" else sheet.title
-                compose.onAllNodesWithText(word, substring = true, useUnmergedTree = true).onFirst().getBoundsInRoot().left.value
-            }
-            assertEquals(starts.first(), starts.max(), 0.5f, "text in ${column.first().title}'s column")
-            assertEquals(starts.first(), starts.min(), 0.5f, "text in ${column.first().title}'s column")
-        }
-        assertEquals(bounds("touch:toggle").left.value, textBounds("Audio").left.value, 0.5f, "and on Pause's edge")
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
     @Test
-    fun stopsTextEndsOnThePanelsLine() {
+    fun stopIsAWholeTargetInOverflowAndBackDismissesIt() {
         launch()
         settled()
-        assertEquals(bounds("touch:panel").right.value - 16f, textBounds("Stop").right.value, 1f)
-    }
-
-    private fun optionBounds() = (
-        TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation"
-        ).map(::bounds)
-
-    /** Transport and Stop on one line, every option on the next one, its text starting on Pause's edge. */
-    private fun assertTwoLines() {
-        val toggle = bounds("touch:toggle")
+        compose.onNodeWithTag("touch:stop").assertDoesNotExist()
+        compose.onNodeWithTag("touch:open:Info").assertDoesNotExist()
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.onNodeWithTag("touch:stop").assertIsDisplayed().assertHasClickAction()
         val stop = bounds("touch:stop")
-        val middle = (toggle.top + toggle.bottom) / 2
-        listOf("touch:back10", "touch:forward10", "touch:stop").forEach {
-            assertEquals(middle.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
-        }
-        assertEquals(bounds("touch:panel").right.value - 8f, stop.right.value, 1f, "Stop at the far end, its text on the panel's line")
-        val options = optionBounds()
-        options.forEach { assertEquals(options[0].top.value, it.top.value, 0.5f, "one line: $options") }
-        assertTrue(options[0].top >= toggle.bottom, "options below the transport: ${options[0]} $toggle")
-        assertEquals(toggle.left.value, options[0].left.value + 8f, 1f, "first option's text on Pause's edge")
-        options.zipWithNext { a, b -> assertTrue(a.right <= b.left, "no overlap: $a $b") }
-        assertTrue(options.last().right <= stop.right + 8.dp, "on the panel: ${options.last()}")
+        assertTrue(stop.bottom - stop.top >= 48.dp - 0.001.dp)
+        back()
+        compose.onNodeWithTag("touch:stop").assertDoesNotExist()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
-    fun aRowThatDoesNotFitTakesTwoLinesWithNothingOrphaned() {
+    fun shortLandscapeKeepsTransportAndOneIconRow() {
         launch()
         settled()
-        assertTwoLines()
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
-    fun aLargerFontTakesTwoLinesAtAPhonesLandscapeWidth() {
+    fun largeFontShortLandscapeKeepsIconTargets() {
         launch(fontScale = 1.3f)
         settled()
-        assertTwoLines()
+        assertIconLayout()
     }
 
     // The choice is what fits, not the window's width: the same window holds one line at 1x and two at 1.8x.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w1000dp-h500dp-land-xhdpi")
     @Test
-    fun theSameWindowChoosesByTheFontScale() {
+    fun wideWindowKeepsSecondaryActionsSeparateFromTransport() {
         launch()
         settled()
-        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
-        optionBounds().forEach { assertEquals(row.value, ((it.top + it.bottom) / 2).value, 1f, "$it") }
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w1000dp-h500dp-land-xhdpi")
     @Test
-    fun theSameWindowAtALargeFontTakesTwoLines() {
+    fun wideWindowAtLargeFontKeepsWholeTargets() {
         launch(fontScale = 1.8f)
         settled()
-        val options = optionBounds()
-        assertTrue(options[0].top >= bounds("touch:toggle").bottom, "two lines at 1.8x: ${options[0]}")
+        assertIconLayout()
     }
 
     // A title with no chapters needs less room, so it keeps the single line a chaptered title has to give up.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w790dp-h360dp-land-xxhdpi")
     @Test
-    fun aTitleWithNoChaptersCountsInTheFit() {
+    fun removingChaptersDoesNotMoveTheSecondaryIconRow() {
         launch()
         settled()
-        val spare = bounds("touch:play-on").left - bounds("touch:forward10").right - 32.dp
-        val options = optionBounds()
-        val chapters = bounds("touch:open:Chapters")
-        val needed = options.last().right - options.first().left
-        val withoutChapters = needed - (chapters.right - chapters.left) - 4.dp
-        assertTrue(needed > spare && withoutChapters <= spare, "fixture must straddle the fit: $needed $withoutChapters $spare")
+        val before = bounds("touch:secondary")
         compose.runOnIdle { host.metadata = host.item.copy(chapters = emptyList()) }
         settled()
-        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
-        assertEquals(row.value, bounds("touch:open:Audio").let { (it.top + it.bottom) / 2 }.value, 1f, "one line again")
+        assertIconLayout()
+        assertEquals(before, bounds("touch:secondary"))
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.onNodeWithTag("touch:open:Chapters").assertDoesNotExist()
+        compose.onNodeWithTag("touch:open:Info").assertIsDisplayed()
+        compose.onNodeWithTag("touch:stop").assertIsDisplayed()
     }
 
     @Test fun optionLinesKeepToTheRoomAndLeaveNoOptionAlone() {
@@ -1332,6 +1286,52 @@ class TouchPlayerControlsTest {
         assertEquals(listOf(listOf(0, 1), listOf(2)), touchOptionLines(listOf(150, 150, 400), 400, 4), "too wide to pair")
         assertEquals(listOf(listOf(0), listOf(1, 2)), touchOptionLines(listOf(100, 100, 100), 210, 4))
         assertEquals(listOf(listOf(0, 1), listOf(2, 3), listOf(4, 5)), touchOptionLines(List(6) { 100 }, 210, 4))
+    }
+
+    private fun openSheet(sheet: TouchPlayerSheet) {
+        if (sheet == TouchPlayerSheet.Info || sheet == TouchPlayerSheet.Chapters) {
+            compose.onNodeWithTag("touch:more").performClick()
+        }
+        compose.onNodeWithTag("touch:open:$sheet").performClick()
+    }
+
+    private fun assertSpeed(rate: String) {
+        compose.onNodeWithTag("touch:open:Speed")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, rate))
+            .assertHasClickAction()
+    }
+
+    /** Three transport targets over the frame; native, named secondary targets on a single separate row.
+     * Pixel-to-dp subtraction can round just below an integer; 0.001 dp admits only that numerical noise.
+     */
+    private fun assertIconLayout() {
+        val transport = listOf("touch:back10", "touch:toggle", "touch:forward10").map(::bounds)
+        val center = transport[1].let { (it.top + it.bottom) / 2 }
+        transport.forEach {
+            assertEquals(center.value, ((it.top + it.bottom) / 2).value, 1f)
+            assertTrue(it.right - it.left >= 48.dp - 0.001.dp && it.bottom - it.top >= 48.dp - 0.001.dp, "whole transport target: $it")
+            assertInsideTheWindow(it)
+        }
+        assertTrue(transport[1].right - transport[1].left >= 64.dp - 0.001.dp)
+        transport.zipWithNext { a, b -> assertTrue(a.right <= b.left, "separate transport: $a $b") }
+        val window = bounds("touch:player")
+        assertEquals(((window.left + window.right) / 2).value, ((transport[1].left + transport[1].right) / 2).value, 1f)
+        assertTrue(transport.last().bottom <= bounds("touch:panel").top, "transport above bottom controls")
+        val tags = mutableListOf("touch:open:Audio", "touch:open:Subtitles", "touch:open:Speed")
+        if (compose.onAllNodesWithTag("touch:play-on").fetchSemanticsNodes().isNotEmpty()) tags += "touch:play-on"
+        if (compose.onAllNodesWithTag("touch:orientation").fetchSemanticsNodes().isNotEmpty()) tags += "touch:orientation"
+        tags += "touch:more"
+        val boxes = tags.map(::bounds)
+        boxes.forEachIndexed { index, box ->
+            assertEquals(boxes.first().top.value, box.top.value, 1f, "one secondary row")
+            assertTrue(box.right - box.left >= 48.dp - 0.001.dp && box.bottom - box.top >= 48.dp - 0.001.dp, "whole secondary target: $box")
+            assertInsideTheWindow(box)
+            compose.onNodeWithTag(tags[index]).assertHasClickAction()
+        }
+        boxes.zipWithNext { a, b -> assertTrue(a.right <= b.left, "separate secondary targets: $a $b") }
+        compose.onNodeWithTag("touch:open:Info").assertDoesNotExist()
+        compose.onNodeWithTag("touch:open:Chapters").assertDoesNotExist()
+        compose.onNodeWithTag("touch:stop").assertDoesNotExist()
     }
 
     private fun back() {
@@ -1476,6 +1476,7 @@ class TouchPlayerControlsTest {
     @Test
     fun aPlayerWithoutTheSenderOffersNoPlayOn() {
         launch(cast = null)
+        compose.onNodeWithTag("touch:more").performClick()
         compose.onNodeWithTag("touch:stop").assertHasClickAction()
         compose.onNodeWithTag("touch:play-on").assertDoesNotExist()
     }
@@ -1749,104 +1750,57 @@ class TouchPlayerControlsTest {
         assertTrue(target.width / density >= 47.5f && target.height / density >= 47.5f, "a 48 dp target: $target at $density")
     }
 
-    private fun assertMarkBesideStop() {
-        val toggle = bounds("touch:toggle")
-        val mark = bounds("touch:play-on")
-        val stop = bounds("touch:stop")
-        val line = (toggle.top + toggle.bottom).value / 2
-        assertEquals(line, (mark.top + mark.bottom).value / 2, 1f, "on the transport line")
-        assertEquals(line, (stop.top + stop.bottom).value / 2, 1f, "Stop on it too")
-        assertTrue(mark.left >= bounds("touch:forward10").right, "after the transport: $mark")
-        assertTrue(stop.left - mark.right >= 8.dp, "air before Stop, which exits at once: $mark $stop")
-        assertTrue(stop.left - mark.right <= 24.dp, "and beside it: $mark $stop")
-        assertMarkHasItsTarget()
-        val markNode = compose.onNodeWithTag("touch:play-on").fetchSemanticsNode()
-        val stopTarget = compose.onNodeWithTag("touch:stop").fetchSemanticsNode().touchBoundsInRoot
-        val gap = (stopTarget.left - markNode.touchBoundsInRoot.right) / markNode.layoutInfo.density.density
-        assertTrue(gap >= 7.5f, "the tap areas stay apart too: $gap dp")
-        assertInsideTheWindow(mark)
-        compose.onNodeWithContentDescription("Play on").assertHasClickAction()
-    }
-
     private fun assertInsideTheWindow(box: androidx.compose.ui.unit.DpRect) {
         val window = compose.onNodeWithTag("touch:player").getBoundsInRoot()
         val inside = box.left >= window.left && box.right <= window.right && box.top >= window.top && box.bottom <= window.bottom
         assertTrue(inside, "$box in $window")
     }
 
-    /** Text tops of the options, grouped into lines, as counts per line. */
-    private fun optionsPerLine(tags: List<String>): List<Int> {
-        val lines = tags.map(::bounds).groupBy { it.top.value.toInt() }
-        return lines.toSortedMap().values.map { it.size }
-    }
-
-    private val chaptered = (TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation")
-    private val withoutChapters = chaptered - "touch:open:Chapters"
-
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
-    fun playOnSitsBeforeStopInAPhonesLandscape() {
+    fun playOnIsANamedSecondaryIconInPhoneLandscape() {
         launch()
         settled()
-        assertMarkBesideStop()
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "sw800dp-w1280dp-h800dp-land-mdpi")
     @Test
-    fun playOnSitsBeforeStopOnATabletsOneLine() {
+    fun tabletKeepsPlayOnInTheSecondaryIconRow() {
         launch()
         settled()
-        assertMarkBesideStop()
-        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
-        TouchPlayerSheet.entries.map { bounds("touch:open:$it") }.forEach { assertEquals(row.value, ((it.top + it.bottom) / 2).value, 1f) }
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
     @Test
-    fun aChapteredPortraitPanelTakesTwoFullLinesOfOptions() {
+    fun chapteredPortraitHasOneSecondaryIconRow() {
         launch()
         settled()
-        assertMarkBesideStop()
-        assertEquals(listOf(3, 3), optionsPerLine(chaptered))
-        assertInsideTheWindow(bounds("touch:panel"))
-        // Same columns line after line, on Pause's edge.
-        val audio = bounds("touch:open:Audio")
-        assertEquals(audio.left.value, bounds("touch:open:${TouchPlayerSheet.entries[3]}").left.value, 1f)
-        assertEquals(bounds("touch:toggle").left.value, audio.left.value + 8f, 1f)
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
     @Test
-    fun aTitleWithoutChaptersTakesThreeThenTwo() {
+    fun withoutChaptersOverflowKeepsInfoAndStop() {
         launch()
+        settled()
+        val before = bounds("touch:secondary")
         compose.runOnIdle { host.metadata = host.item.copy(chapters = emptyList()) }
         settled()
-        assertEquals(listOf(3, 2), optionsPerLine(withoutChapters))
+        assertIconLayout()
+        assertEquals(before, bounds("touch:secondary"))
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.onNodeWithTag("touch:open:Chapters").assertDoesNotExist()
+        compose.onNodeWithTag("touch:open:Info").assertIsDisplayed()
+        compose.onNodeWithTag("touch:stop").assertIsDisplayed()
     }
 
     /** No label wraps: each stays one text line tall and ends before the next one in its line starts. */
-    private fun assertLabelsOnOneLine(columns: Int) {
-        val perLine = optionsPerLine(chaptered)
-        assertEquals(chaptered.size, perLine.sum())
-        assertEquals(columns, perLine.max(), "$columns columns: $perLine")
-        val audio = bounds("touch:open:Audio")
-        chaptered.forEach { tag ->
-            val box = bounds(tag)
-            assertEquals(audio.bottom.value - audio.top.value, (box.bottom - box.top).value, 0.5f, "$tag stays one line")
-        }
-        chaptered.map(::bounds).groupBy { it.top.value.toInt() }.values.forEach { line ->
-            line.sortedBy { it.left.value }.zipWithNext { a, b ->
-                // Each label's target hangs its 8 dp inset past the text on both sides, so this is text to text.
-                assertTrue((b.left + 8.dp) - (a.right - 8.dp) >= 7.5.dp, "8 dp of air between labels: $a $b")
-            }
-        }
-        chaptered.forEach { assertTrue(bounds(it).right - 8.dp <= bounds("touch:panel").right - 16.dp, "$it inside the panel's content") }
-        assertInsideTheWindow(bounds("touch:panel"))
-    }
 
     private fun chooseSpeed(tag: String) {
         compose.onNodeWithTag("touch:open:Speed").performClick()
@@ -1863,71 +1817,59 @@ class TouchPlayerControlsTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
     @Test
-    fun aLargerFontKeepsThreeColumnsOnThisPhoneWithNothingWrapped() {
+    fun largeFontKeepsOneSecondaryIconRow() {
         launch(fontScale = 1.3f)
         settled()
-        assertLabelsOnOneLine(3)
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
     @Test
-    fun eachWideSpeedStaysOnOneLineAtALargerFont() {
+    fun speedChangesItsSpokenStateWithoutMovingIcons() {
         launch(fontScale = 1.3f)
         settled()
-        listOf("touch:speed:175" to "Speed · 1.75×", "touch:speed:125" to "Speed · 1.25×").forEach { (tag, label) ->
+        val before = bounds("touch:secondary")
+        listOf("touch:speed:175" to "1.75×", "touch:speed:125" to "1.25×").forEach { (tag, label) ->
             chooseSpeed(tag)
-            compose.onNodeWithText(label).assertExists()
-            assertLabelsOnOneLine(3)
-            assertEquals(
-                textBounds("Audio").let { it.bottom - it.top }.value,
-                textBounds(label).let { it.bottom - it.top }.value,
-                0.5f,
-                "$label is one text line"
-            )
+            assertSpeed(label)
+            assertIconLayout()
+            assertEquals(before, bounds("touch:secondary"))
         }
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
     @Test
-    fun aNarrowPhoneKeepsThreeColumnsAtItsDefaultFont() {
+    fun narrowPhoneKeepsWholeSecondaryIcons() {
         launch()
         settled()
-        assertMarkBesideStop()
-        assertLabelsOnOneLine(3)
+        assertIconLayout()
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
     @Test
-    fun aNarrowPhoneDropsToTwoColumnsAtALargerFont() {
+    fun narrowPhoneAtLargeFontKeepsWholeSecondaryIcons() {
         launch(fontScale = 1.3f)
         settled()
-        assertLabelsOnOneLine(2)
-        // The mark and Stop leave together if the transport line can't hold them, and stay at the far end.
-        assertEquals(bounds("touch:panel").right.value - 8f, bounds("touch:stop").right.value, 1f)
-        val stop = bounds("touch:stop")
-        val mark = bounds("touch:play-on")
-        assertEquals((stop.top + stop.bottom).value / 2, (mark.top + mark.bottom).value / 2, 1f, "the pair stays together")
-        assertTrue(stop.left - mark.right >= 8.dp)
-        assertMarkHasItsTarget()
+        assertIconLayout()
     }
 
     // Android applies a font change in place here, so the same grid has to choose again.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
     @Test
-    fun aFontChangeInPlaceChoosesTheColumnsAgain() {
+    fun fontChangesInPlacePreserveIconTargets() {
         launch()
         settled()
-        assertLabelsOnOneLine(3)
+        assertIconLayout()
         compose.runOnIdle { liveFontScale = 1.3f }
         settled()
-        assertLabelsOnOneLine(2)
+        assertIconLayout()
         compose.runOnIdle { liveFontScale = 1f }
         settled()
-        assertLabelsOnOneLine(3)
+        assertIconLayout()
     }
 
     @Test fun columnsAreTheMostThatHoldEveryLabel() {
@@ -1985,8 +1927,214 @@ class TouchPlayerControlsTest {
         CastSenderHost::class.java.getDeclaredField("mutable").apply { isAccessible = true }.get(sender)
             as kotlinx.coroutines.flow.MutableStateFlow<CastUi>
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun centeredTransportLeavesNextEpisodeActionsUncoveredOnAShortPhone() {
+        launch(paused = true)
+        creditsCard()
+        val card = bounds("next:card")
+        listOf("touch:back10", "touch:toggle", "touch:forward10").map(::bounds).forEach { button ->
+            assertTrue(
+                button.right <= card.left || button.left >= card.right || button.bottom <= card.top || button.top >= card.bottom,
+                "transport and next-episode targets stay separate: $button $card"
+            )
+            assertInsideTheWindow(button)
+        }
+        compose.onNodeWithTag("next:cancel").performClick()
+        settled()
+        assertIconLayout()
+    }
+
+    @Test fun overflowHoldsTheCreditsCountdownAndBackOnlyClosesTheMenu() {
+        var advances = 0
+        launch(onNext = { advances++ })
+        creditsCard()
+        compose.onNodeWithTag("touch:more").performClick()
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(12_000)
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle {
+            assertEquals(0, advances)
+            assertTrue(!host.switching)
+            assertEquals(0, exits)
+        }
+        compose.onNodeWithTag("touch:stop").assertIsDisplayed()
+        back()
+        compose.onNodeWithTag("touch:stop").assertDoesNotExist()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun liveControlsUseMeasuredRangeAndProgramMetadata() {
+        launch(paused = true, live = true)
+        compose.runOnIdle {
+            host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
+            host.position = 10_000
+            host.liveNowMillis = 30_000
+            host.liveChannel = app.pictureshow.core.livetv.LiveChannel(
+                "movie",
+                "Generated channel",
+                currentProgram = app.pictureshow.core.livetv.LiveProgram(
+                    "now",
+                    "Current program",
+                    "movie",
+                    startDate = "1970-01-01T00:00:00Z",
+                    endDate = "1970-01-01T01:00:00Z"
+                )
+            )
+        }
+        settled()
+        compose.onNodeWithText("Current program").assertIsDisplayed()
+        compose.onNodeWithText("Generated channel", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Live playback status").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused · 17 sec behind live"))
+        assertEquals("−0:17", behindLiveClock(17_000))
+        compose.onNodeWithText("−0:17").assertDoesNotExist()
+        val range = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
+        assertEquals(
+            0f..27_000f,
+            range.range,
+            "Displayed buffer and seek gestures end at the measured live target, not its later duration tail"
+        )
+        assertEquals(10_000f, range.current)
+        compose.runOnIdle { host.position = 26_000 }
+        settled()
+        assertEquals(
+            27_000f,
+            compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current,
+            "The native thumb meets the custom fill inside the same measured live-edge tolerance"
+        )
+        compose.runOnIdle { host.position = 10_000 }
+        settled()
+        val spoken = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        compose.runOnIdle { host.position = 11_000 }
+        settled()
+        assertEquals(spoken, compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.onNodeWithText("Paused · 16 sec behind live").assertDoesNotExist()
+        compose.runOnIdle { host.liveWindow = host.liveWindow?.copy(durationMs = 32_000, defaultPositionMs = 29_000) }
+        settled()
+        assertEquals(spoken, compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.runOnIdle { host.liveWindow = host.liveWindow?.copy(durationMs = 30_000, defaultPositionMs = 27_000) }
+        settled()
+        assertEquals(
+            spoken,
+            compose.onNodeWithTag("touch:live-status").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        )
+        val slider = bounds("touch:scrubber")
+        val chip = bounds("touch:go-live")
+        assertTrue(slider.right < chip.left, "Go live beside measured slider")
+        assertEquals(((slider.top + slider.bottom) / 2).value, ((chip.top + chip.bottom) / 2).value, 1f)
+        compose.onNodeWithTag("touch:scrubber").performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(25_000f)) }
+        compose.runOnIdle { assertEquals(25_000, decoder.seeks.last()) }
+        compose.runOnIdle { host.position = 27_000 }
+        settled()
+        compose.onNodeWithText("Go live").assertIsDisplayed()
+        compose.onNodeWithTag("touch:go-live").assertIsEnabled()
+    }
+
+    @Test fun liveQualityMenuReturnsToTheSameMeasuredBufferAndTransport() {
+        launch(paused = true, live = true)
+        decided(PlayMethod.DirectPlay)
+        compose.runOnIdle {
+            host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
+            host.position = 10_000
+            host.liveNowMillis = 30_000
+        }
+        settled()
+        val range = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
+        compose.onNodeWithTag("touch:quality").performClick()
+        compose.onNodeWithTag("player:quality-choice:4").assertIsDisplayed()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        back()
+        compose.onNodeWithTag("player:quality-choice:4").assertDoesNotExist()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
+        compose.onNodeWithTag("touch:go-live").assertIsEnabled()
+        assertEquals(range, compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo])
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun unknownAndExpiredLiveBuffersDoNotOfferSeekActions() {
+        launch(paused = true, live = true)
+        compose.onNodeWithTag("touch:scrubber").assertDoesNotExist()
+        compose.onNodeWithTag("touch:back10").assertIsNotEnabled()
+        compose.onNodeWithTag("touch:forward10").assertIsNotEnabled()
+        compose.onNodeWithTag("touch:go-live").assertIsNotEnabled()
+        assertTrue(compose.onNodeWithTag("touch:gestures").fetchSemanticsNode().config[SemanticsActions.CustomActions].isEmpty())
+        compose.runOnIdle {
+            host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
+            host.liveBufferExpired = true
+        }
+        settled()
+        // An expired buffer keeps its honest static track, with no draggable thumb or seek action.
+        compose.onNodeWithTag("touch:scrubber").assertDoesNotExist()
+        compose.onNodeWithTag("touch:back10").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Live playback status").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused · Buffer expired. Go live to resume."))
+        compose.onNodeWithTag("touch:go-live").assertIsEnabled()
+        compose.runOnIdle { assertTrue(decoder.playWhenReady.not()) }
+    }
+
+    @Test fun liveEdgeDisablesWholePhoneForwardButtonGestureAndReaderAction() {
+        launch(paused = false, live = true)
+        compose.runOnIdle {
+            host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true)
+            host.position = 27_000
+        }
+        settled()
+        compose.onNodeWithTag("touch:forward10").assertIsNotEnabled()
+        compose.onNodeWithTag("touch:back10").assertIsEnabled()
+        val edge = compose.onNodeWithTag("touch:go-live").fetchSemanticsNode().config
+        assertTrue(!edge.contains(SemanticsActions.OnClick), "Playing edge is a status, not an inert action")
+        val gestures = compose.onNodeWithTag("touch:gestures")
+        assertTrue(gestures.fetchSemanticsNode().config[SemanticsActions.CustomActions].none { it.label == "Forward 10 seconds" })
+        val before = compose.runOnIdle { decoder.seeks.size }
+        gestures.performTouchInput { doubleClick(Offset(width * .8f, height * .5f)) }
+        compose.runOnIdle { assertEquals(before, decoder.seeks.size, "An edge double tap must not request an ineffective seek") }
+        compose.runOnIdle {
+            decoder.pause()
+            decoder.seekTo(10_000)
+            decoder.seeks.clear()
+            host.position = 10_000
+            host.seekPreview = null
+            assertEquals(10_000, decoder.currentPosition, "The decoder and displayed position must describe the same measured window")
+        }
+        settled()
+        compose.onNodeWithTag("touch:forward10").assertIsEnabled().performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(20_000L), decoder.seeks, "The enabled transport performs exactly one measured forward step")
+        }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun liveSecondaryControlsUseTheWholeContentColumn() {
+        launch(live = true)
+        settled()
+        val row = bounds("touch:secondary")
+        assertEquals(row.left, bounds("touch:open:Audio").left)
+        assertEquals(row.right, bounds("touch:more").right)
+        assertEquals(row.left, bounds("touch:title").left)
+        assertEquals(row.right, bounds("touch:quality").right)
+        val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(2, marks.size)
+        val toggle = compose.onNodeWithTag("touch:toggle")
+        val scale = toggle.fetchSemanticsNode().layoutInfo.density.density
+        val box = toggle.getBoundsInRoot()
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val scrim = pixels[((box.left.value + 8) * scale).toInt(), (((box.top.value + box.bottom.value) / 2) * scale).toInt()]
+        assertTrue(
+            scrim.red < .05f && scrim.green < .05f && scrim.blue < .05f,
+            "Live toggle paints its black scrim over the black video fixture: $scrim"
+        )
+    }
+
     private fun launch(
         paused: Boolean = false,
+        live: Boolean = false,
         fontScale: Float? = null,
         // What the touch app ships: its only player route provides the sender, so layout is proven with Play on in it.
         cast: TouchPlayerCast? = TouchPlayerCast(inertCastSender(), inertRemoteController()),
@@ -1996,7 +2144,10 @@ class TouchPlayerControlsTest {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
-            host = PlaybackHostState(MediaItem(itemId, "A film"), 20_000, output, onNext, { exits++ })
+            host =
+                PlaybackHostState(MediaItem(itemId, "A film", type = if (live) "TvChannel" else "Movie"), 20_000, output, onNext, {
+                    exits++
+                })
             host.playerSource = androidx.compose.runtime.mutableStateOf(decoder)
             host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false))
             host.duration = 60_000

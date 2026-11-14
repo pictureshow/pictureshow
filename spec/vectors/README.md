@@ -457,6 +457,21 @@ ceilings, the audio profile and the lossless claim. `music-playlists` refuses to
 answer until the list has been read back, and pins the create body: `IsPublic` is always sent and false unless the viewer chose
 otherwise, since the server's own default is public.
 
+## Live TV and DVR
+
+`live-guide.json`, `live-dvr.json` and `live-source.json` are schema-version-1 suites with the same per-case `id`,
+`operation`, `input`, `expected` contract. Android's `LiveVectorsTest` and `LiveSourceVectorsTest` execute them from
+`live-vectors`. Guide/DVR inputs use Jellyfin PascalCase DTO fields for programs/channels/provider defaults;
+normalized operation arguments use lower camel case. `create-trace` supplies a fake viewer policy and a server
+write/disconnect outcome, then checks production client outcomes and the exact number and resource of POSTs.
+It must never turn an accepted-but-lost response into a duplicate recording request. No mock trace proves a real
+tuner or recorder works. Apple, web and desktop owe equivalent runners and device/server evidence.
+
+`live-presentation.json` is the same version-1 envelope, executed by Android's `LivePresentationVectorsTest`.
+It fixes a shared half-hour tick/cell mapping and visual narrow-cell threshold, plus device-clock preference,
+locale, timezone, DST-fold offset and compact-date examples. Each case supplies explicit clock context; ordinary
+spaces normalize the locale's equivalent narrow/nonbreaking period separator. Other platforms owe native formatter
+and guide implementations and this runner. Native dimensions can adapt while the time mapping remains exact.
 
 Android settings UI checks distinguish the merged accessibility row from its rendered text. A row that replaces
 its accessibility semantics can still have visible text children in Compose's unmerged test tree. Geometry checks
@@ -466,3 +481,17 @@ Centering permits at most one physical pixel of glyph-position rounding; row hei
 The native settings layout suite also checks that a consequence stays inside its row's click target, multiline radio options align on their first label line at 1.3x font scale, and closing a group picker returns to the same scrolled opener. The first-line case runs against both settings and the actual player Quality menu; each platform supplies equivalent native geometry evidence.
 
 Android font and radio geometry checks use Robolectric native graphics so measured text uses Android's native font metrics; simplified legacy paint measurements are insufficient for these layout assertions. Native device captures remain a separate acceptance check.
+
+`live-presentation` also defines minimum-distance guide focus scrolling on each axis: fully visible programmes retain their saved position, clipped programmes reveal their nearest edge, and a programme spanning the viewport stays put. Native Back tests retain the selected key and both time/channel offsets under a parent catalog focus pivot.
+
+Live presentation additionally covers programme entry focus for existing timers and the TV programme48dp keyline (native16dp inset inside destination32dp); touch inset remains0.
+
+Live presentation also fixes bounded TV focus paint, visible-programme reconciliation after manual time scrolling, exact-tick whole-label ruler visibility and permanent Now geometry. Live transport vectors cover surface-only pause focus, measured-default buffer normalization, native thumb/track edge agreement, unknown/expired ranges, human behind-live units and separate programme recording status. The native guide/player regressions additionally exercise real focus, scrolling and large-font button geometry.
+
+Live recording review additionally freezes effective-change detection, read-only inspection versus edit review labels, and the busy/no-op confirmation guard. Native reference tests check warning-icon fallback, muted disabled channels, grouped receipt geometry, selected pickers, anchored destructive overflow and Quality-list scroll cues without changing ordinary playback defaults.
+
+The 357 Live presentation cases include explicit Now focus selection by visible channel (on-air → future → latest past), the always-useful TV Now action versus touch's at-current disabled state, stable reload focus, and transparent disabled quiet controls. The three core Live suites add51 cases (408 Live cases total, including the four live-source metadata cases). Native held-fetch tests verify the screen wiring/repeat-read guard, and image tests verify the disabled-control pixels; inventory registration alone is not execution of these presentation rules on another platform.
+
+Round 3 adds48 presentation cases for unified empty-state precedence/recovery, recording-now interval/status groups and section order, the Libraries parent on touch, shared episode labels, non-repeating relative airing time, review summaries that retain unknown defaults, and HTTP-free viewer errors. Every platform must execute these rules; Android inventory registration alone does not qualify other native UIs.
+
+Round3 director closure adds5live-presentation cases (362presentation +51core Live TV cases): short-height ruler, concise touch once review, in-place Favorites recovery, provider-neutral empty-guide navigation and management-denied navigation. Empty actions withAllChannels preserve destination/time; Channels actually navigates. Android native checks additionally exercise available-width resize, label visibility, three-row short-height layout, identical TV date-header geometry, recording-menu rows and the real once-review caller. Other platforms owe these presentation contracts as well as their native UI proof.

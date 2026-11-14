@@ -86,6 +86,11 @@ const pendingPortSuites = new Set([
     "cast-capability",
     "cast-session",
     "grid-navigation",
+    "live-guide",
+    "live-dvr",
+    "live-source",
+    "live-presentation",
+    "player-overlay-layout",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.

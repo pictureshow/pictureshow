@@ -169,6 +169,44 @@ private fun RowScope.TouchRowText(title: String, supporting: String?, enabled: B
 
 /** A setting's label, state and consequence share one target and one vertical rhythm. */
 @Composable
+internal fun TouchValueRow(
+    title: String,
+    value: String,
+    modifier: Modifier,
+    enabled: Boolean = true,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TouchRowText(title, value, enabled)
+        trailing?.invoke()
+    }
+}
+
+/** A recording receipt aligns labels and values horizontally, distinct from editable stacked rows. */
+@Composable
+internal fun TouchValueSummary(title: String, value: String, modifier: Modifier = Modifier, changed: Boolean = false) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            value,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            color = if (changed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
 private fun RowScope.TouchSettingText(title: String, value: String?, supporting: String?, enabled: Boolean) {
     val alpha = if (enabled) 1f else 0.6f
     Column(Modifier.weight(1f)) {

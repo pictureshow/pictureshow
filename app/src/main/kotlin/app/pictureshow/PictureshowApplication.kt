@@ -127,6 +127,14 @@ class PictureshowApplication : Application() {
                         val name = deviceDisplayName(this@PictureshowApplication)
                         PersistentIdentityService(get(), get(), name)
                     }
+                    single<app.pictureshow.core.livetv.LiveTvService> {
+                        app.pictureshow.core.livetv.LiveTvClient(
+                            get(),
+                            ClientIdentity(deviceDisplayName(this@PictureshowApplication), "live-tv", BuildConfig.VERSION_NAME),
+                            LivePendingStore(this@PictureshowApplication)
+                        )
+                    }
+                    viewModel { (account: Account) -> LiveTvViewModel(account, get()) }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
                     single<app.pictureshow.core.music.MusicService> { get<JellyfinService>() as app.pictureshow.core.music.MusicService }
                     single {

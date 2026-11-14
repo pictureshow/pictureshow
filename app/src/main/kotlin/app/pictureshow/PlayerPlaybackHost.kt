@@ -120,6 +120,21 @@ internal class PlaybackHostState(
     var setupError by mutableStateOf<String?>(null)
     var position by mutableLongStateOf(startMs)
     var duration by mutableLongStateOf(0)
+    val isLive get() = item.type == "TvChannel" || state.decision?.isLive == true
+    var liveWindow by mutableStateOf<app.pictureshow.core.playback.ObservedLiveWindow?>(null)
+    var liveChannel by mutableStateOf<app.pictureshow.core.livetv.LiveChannel?>(null)
+    var liveNowMillis by mutableLongStateOf(System.currentTimeMillis())
+    val liveProgram get() = app.pictureshow.core.playback.livePlayerProgram(liveChannel, liveNowMillis)
+    var liveBufferExpired by mutableStateOf(false)
+    val liveCanTimeShift get() = liveWindow?.canTimeShift == true
+    fun goLive() {
+        if (!isLive || !output.foreground.value) return
+        output.goLive()
+        liveBufferExpired = output.liveBufferExpired
+        pendingSeek = null
+        seekPreview = null
+        onSeekShown()
+    }
     var metadata by mutableStateOf(item)
     var segments by mutableStateOf(emptyList<MediaSegment>())
     internal var nextLookup by mutableStateOf<EpisodeLookup?>(null)
@@ -236,6 +251,10 @@ internal class PlaybackHostState(
     fun applyPendingSeek() {
         val active = player ?: return
         val requested = pendingSeek ?: return
+        if (isLive && (liveBufferExpired || liveWindow?.contains(requested) != true)) {
+            pendingSeek = null
+            return
+        }
         if (!active.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) return
         val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
         val target = requested.coerceIn(0, limit)
@@ -248,6 +267,7 @@ internal class PlaybackHostState(
 
     /** A relative step, accumulating against the last intended target (PLAY-07). */
     fun seek(delta: Long) {
+        if (isLive && (!liveCanTimeShift || liveBufferExpired)) return
         val serverTarget = controller?.stepSeek(delta)
         if (serverTarget != null) {
             position = serverTarget
@@ -266,6 +286,7 @@ internal class PlaybackHostState(
 
     /** An absolute target: a scrub, a chapter or a controller's seek. */
     fun seekTo(targetMs: Long) {
+        if (isLive && (liveBufferExpired || liveWindow?.contains(targetMs) != true)) return
         val current = state.decision
         if (current != null &&
             app.pictureshow.core.playback.TranscodeSeek.required(current) &&
@@ -422,6 +443,22 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
     host.remote?.let { RemoteTargetBinding(host, it, account, catalog, paused) }
+    if (host.item.type == "TvChannel" && offline == null) {
+        LaunchedEffect(host, account, foreground) {
+            if (!foreground) return@LaunchedEffect
+            val client = app.pictureshow.core.livetv.LiveTvClient(
+                http,
+                ClientIdentity(deviceDisplayName(context), account.deviceId ?: identity.getOrCreate(), BuildConfig.VERSION_NAME)
+            )
+            while (true) {
+                host.liveChannel = loadPlayerLiveChannel(client, account, host.item.id, System.currentTimeMillis())
+                val end = app.pictureshow.core.livetv.liveInstant(host.liveChannel?.currentProgram?.endDate)
+                val untilBoundary = end?.minus(System.currentTimeMillis())?.plus(25)?.coerceAtLeast(1_000) ?: 60_000
+                delay(minOf(60_000, untilBoundary))
+            }
+        }
+    }
+
     AndroidFrameRateMatch(host.player, host.localPreferences.tuning.matchFrameRate)
     with(host) {
         DisposableEffect(player) {
@@ -491,7 +528,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         localOwner.cleanupDone()
                         reportScope.cancel()
                     },
-                    diagnostic = PlaybackDiagnostics::write
+                    diagnostic = PlaybackDiagnostics::write,
+                    allowLiveCompletion = item.type != "TvChannel"
                 )
                 controller = session
                 output.onStop = { finish(reason = "system-stop") }
@@ -537,6 +575,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         LaunchedEffect(player, metadata) { player?.let { updatePlaybackMetadata(it, metadata) } }
         LaunchedEffect(extras, item.id) {
             val client = extras ?: return@LaunchedEffect
+            if (isLive) return@LaunchedEffect
             segments = (client.segments(account, item.id) as? ClientResult.Success)?.value.orEmpty()
         }
         LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
@@ -591,6 +630,10 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         controller?.routeChanged()
                     }
                     player?.let {
+                        output.observeLiveWindow()
+                        liveNowMillis = System.currentTimeMillis()
+                        liveWindow = output.liveWindow
+                        liveBufferExpired = output.liveBufferExpired
                         position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
                         duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
                     }

@@ -320,6 +320,14 @@ internal fun TouchPictureshow(
                 SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
                 TouchQuickConnect(screen, server, vm::start, { nav.popBackStack() }, state.snapshot.serverLabel(server))
             }
+            composable("live-tv") {
+                state.snapshot.currentAccount?.takeUnless { it.expired }?.let { account ->
+                    val vm: LiveTvViewModel = koinViewModel(key = "live:${account.key}", parameters = { parametersOf(account) })
+                    LiveTvScreen(vm, account, tv = false, onPlay = {
+                        nav.navigate(playerRoute(it, true))
+                    }, onRecording = { nav.navigate(itemRoute(it)) }, onBack = { nav.popBackStack() })
+                }
+            }
             listOf("home", "libraries").forEach { destination ->
                 composable(destination) {
                     state.snapshot.currentAccount?.let { account ->
@@ -356,6 +364,7 @@ internal fun TouchPictureshow(
                             },
                             onResume = vm::resumed,
                             librariesOnly = destination == "libraries",
+                            onLiveTv = { nav.navigate("live-tv") },
                             onCustomize = {
                                 if (app.pictureshow.core.canOpenHomeEditor(screen.preferencesReady)) {
                                     vm.customizationOpened()

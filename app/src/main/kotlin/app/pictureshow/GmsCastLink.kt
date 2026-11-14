@@ -288,52 +288,7 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 
     override fun load(request: CastLoadRequest, onResult: (Boolean) -> Unit) {
         val client = watched ?: return onResult(false)
-        val builder = MediaLoadRequestData.Builder()
-            .setAutoplay(request.autoplay)
-            .setCurrentTime(request.startMs)
-        if (request.items.size == 1) {
-            builder.setMediaInfo(mediaInfo(request.items.single()))
-        } else {
-            builder.setQueueData(
-                MediaQueueData.Builder()
-                    .setItems(
-                        request.items.map {
-                            MediaQueueItem.Builder(mediaInfo(it))
-                                .setCustomData(JSONObject(it.customData))
-                                .setAutoplay(true)
-                                .build()
-                        }
-                    )
-                    .setStartIndex(request.startIndex)
-                    .setStartTime(request.startMs)
-                    .build()
-            )
-        }
-        client.load(builder.build()).answer(onResult)
-    }
-
-    private fun mediaInfo(item: CastLoadItem): MediaInfo {
-        val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
-        metadata.putString(MediaMetadata.KEY_TITLE, item.title)
-        item.imageUrl?.let { metadata.addImage(WebImage(it.toUri())) }
-        val builder = MediaInfo.Builder(item.url)
-            .setContentType(item.contentType)
-            .setStreamType(if (item.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
-            .setMetadata(metadata)
-            .setCustomData(JSONObject(item.customData))
-            .setMediaTracks(
-                item.tracks.map { track ->
-                    MediaTrack.Builder(track.id, MediaTrack.TYPE_TEXT)
-                        .setContentId(track.url)
-                        .setContentType("text/vtt")
-                        .setName(track.name)
-                        .setLanguage(track.language)
-                        .setSubtype(MediaTrack.SUBTYPE_SUBTITLES)
-                        .build()
-                }
-            )
-        item.durationMs?.let(builder::setStreamDuration)
-        return builder.build()
+        client.load(castLoadData(request)).answer(onResult)
     }
 
     override fun play(onResult: (Boolean) -> Unit) = watched?.play().answer(onResult)
@@ -356,4 +311,53 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
             if (result.status.isSuccess && client === watched) publishStatus(answer = true)
         }
     }
+}
+
+internal fun castLoadData(request: CastLoadRequest): MediaLoadRequestData {
+    val builder = MediaLoadRequestData.Builder()
+        .setAutoplay(request.autoplay)
+    if (request.items.getOrNull(request.startIndex)?.live != true) builder.setCurrentTime(request.startMs)
+    if (request.items.size == 1) {
+        builder.setMediaInfo(mediaInfo(request.items.single()))
+    } else {
+        builder.setQueueData(
+            MediaQueueData.Builder()
+                .setItems(
+                    request.items.map {
+                        MediaQueueItem.Builder(mediaInfo(it))
+                            .setCustomData(JSONObject(it.customData))
+                            .setAutoplay(true)
+                            .build()
+                    }
+                )
+                .setStartIndex(request.startIndex)
+                .apply { if (request.items.getOrNull(request.startIndex)?.live != true) setStartTime(request.startMs) }
+                .build()
+        )
+    }
+    return builder.build()
+}
+
+private fun mediaInfo(item: CastLoadItem): MediaInfo {
+    val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
+    metadata.putString(MediaMetadata.KEY_TITLE, item.title)
+    item.imageUrl?.let { metadata.addImage(WebImage(it.toUri())) }
+    val builder = MediaInfo.Builder(item.url)
+        .setContentType(item.contentType)
+        .setStreamType(if (item.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
+        .setMetadata(metadata)
+        .setCustomData(JSONObject(item.customData))
+        .setMediaTracks(
+            item.tracks.map { track ->
+                MediaTrack.Builder(track.id, MediaTrack.TYPE_TEXT)
+                    .setContentId(track.url)
+                    .setContentType("text/vtt")
+                    .setName(track.name)
+                    .setLanguage(track.language)
+                    .setSubtype(MediaTrack.SUBTYPE_SUBTITLES)
+                    .build()
+            }
+        )
+    item.durationMs?.let(builder::setStreamDuration)
+    return builder.build()
 }

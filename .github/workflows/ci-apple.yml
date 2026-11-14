@@ -1,6 +1,7 @@
 name: Apple CI
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - apple/**

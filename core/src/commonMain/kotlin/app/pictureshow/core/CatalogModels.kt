@@ -70,7 +70,15 @@ data class MediaItem(
     @SerialName("AlbumArtists") val albumArtists: List<NamedItem> = emptyList(),
     @SerialName("ArtistItems") val artistItems: List<NamedItem> = emptyList(),
     @SerialName("PlaylistItemId") val playlistItemId: String? = null,
-    @SerialName("CanDownload") val canDownload: Boolean? = null
+    @SerialName("CanDownload") val canDownload: Boolean? = null,
+    @SerialName("CanDelete") val canDelete: Boolean? = null,
+    @SerialName("IsInProgress") val isInProgress: Boolean = false,
+    @SerialName("Status") val recordingStatus: String? = null,
+    @SerialName("PremiereDate") val premiereDate: String? = null,
+    @SerialName("EpisodeTitle") val episodeTitle: String? = null,
+    @SerialName("StartDate") val recordingStartDate: String? = null,
+    @SerialName("EndDate") val recordingEndDate: String? = null,
+    @SerialName("CompletionPercentage") val recordingCompletionPercentage: Double? = null
 )
 
 /** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */

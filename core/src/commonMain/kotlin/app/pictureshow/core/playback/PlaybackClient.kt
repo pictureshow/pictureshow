@@ -124,15 +124,61 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         }
         return when (val result = info) {
             is ClientResult.Failure -> result
-            is ClientResult.Success -> ClientResult.Success(
-                PlayDecisions.decide(
+            is ClientResult.Success -> {
+                var response = result.value
+                var ownedLiveStream: String? = null
+                if (response.errorCode == null) {
+                    val candidates = response.mediaSources.filter { boundSourceId == null || it.id == boundSourceId }
+                    val source = candidates.firstOrNull {
+                        it.requiresOpening || it.supportsDirectPlay || it.supportsDirectStream || !it.transcodingUrl.isNullOrBlank()
+                    }
+                    if (source?.requiresOpening == true && source.liveStreamId.isNullOrBlank()) {
+                        val token = source.openToken?.takeIf(String::isNotBlank)
+                            ?: return failure(ErrorKind.INVALID_RESPONSE, "The server did not supply a live source open token.")
+                        val opened = openLiveStream(
+                            account,
+                            OpenLiveStreamRequest(
+                                openToken = token,
+                                itemId = itemId,
+                                userId = account.user.id,
+                                playSessionId = response.playSessionId,
+                                deviceProfile = body.deviceProfile,
+                                maxStreamingBitrate = body.maxStreamingBitrate,
+                                startTimeTicks = body.startTimeTicks,
+                                audioStreamIndex = body.audioStreamIndex,
+                                subtitleStreamIndex = body.subtitleStreamIndex,
+                                maxAudioChannels = body.maxAudioChannels,
+                                enableDirectPlay = body.enableDirectPlay,
+                                enableDirectStream = body.enableDirectStream,
+                                alwaysBurnInSubtitleWhenTranscoding = body.alwaysBurnInSubtitleWhenTranscoding
+                            )
+                        )
+                        when (opened) {
+                            is ClientResult.Failure -> return opened
+                            is ClientResult.Success -> {
+                                val live = opened.value.mediaSource
+                                if (live.liveStreamId.isNullOrBlank()) {
+                                    return failure(ErrorKind.INVALID_RESPONSE, "The server did not return the opened live source identity.")
+                                }
+                                ownedLiveStream = live.liveStreamId?.takeIf { live.requiresClosing && it.isNotBlank() }
+                                // The opened source can have a different source id. It is the authoritative answer.
+                                response = response.copy(mediaSources = listOf(live))
+                                boundSourceId = live.id
+                            }
+                        }
+                    } else if (body.autoOpenLiveStream && source?.requiresClosing == true) {
+                        ownedLiveStream = source.liveStreamId
+                    }
+                }
+                val outcome = PlayDecisions.decide(
                     account.server,
                     itemId,
-                    result.value,
+                    response,
                     identity.forAccount(account),
                     account.accessToken,
                     boundSourceId,
-                    playback.audio
+                    playback.audio,
+                    ownedLiveStream
                 ).let { outcome ->
                     if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
                         AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)
@@ -140,9 +186,30 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                         outcome
                     }
                 }
-            )
+                if (outcome is PlayOutcome.Unplayable && ownedLiveStream != null) {
+                    val cleanup = closeLiveStream(account, ownedLiveStream)
+                    if (cleanup is ClientResult.Failure) {
+                        return failure(ErrorKind.SERVER, "${outcome.message} The live source could not be closed: ${cleanup.error.message}")
+                    }
+                }
+                ClientResult.Success(outcome)
+            }
         }
     }
+
+    suspend fun openLiveStream(account: Account, body: OpenLiveStreamRequest): ClientResult<OpenLiveStreamResponse> = request(
+        account,
+        "LiveStreams/Open",
+        PlaybackJson.encodeToString(OpenLiveStreamRequest.serializer(), body)
+    ) { PlaybackJson.decodeFromString(OpenLiveStreamResponse.serializer(), it) }
+
+    /** A stopped report may already have closed the source; only this endpoint treats 404 as success. */
+    suspend fun closeLiveStream(account: Account, liveStreamId: String): ClientResult<Unit> = request(
+        account,
+        "LiveStreams/Close?liveStreamId=${PlayDecisions.encode(liveStreamId)}",
+        null,
+        notFoundIsSuccess = true
+    ) { }
 
     suspend fun reportStart(
         account: Account,
@@ -187,6 +254,7 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         body: String?,
         method: HttpMethod = HttpMethod.Post,
         observe: ((PlaybackHttpOutcome) -> Unit)? = null,
+        notFoundIsSuccess: Boolean = false,
         decode: (String) -> T
     ): ClientResult<T> {
         var status: Int? = null
@@ -205,6 +273,13 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 if (response.status.value !in 200..299) failure = PlaybackReportFailure.Http
                 when (response.status.value) {
                     in 200..299 -> ClientResult.Success(decode(response.bodyAsText()))
+                    404 -> if (notFoundIsSuccess) {
+                        ClientResult.Success(
+                            decode("")
+                        )
+                    } else {
+                        failure(ErrorKind.SERVER, "The requested media is no longer available (404).")
+                    }
                     401 -> failure(ErrorKind.INVALID_CREDENTIALS, "The server no longer accepts this sign-in. Sign in again.")
                     else -> failure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
                 }

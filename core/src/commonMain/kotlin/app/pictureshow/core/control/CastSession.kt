@@ -73,7 +73,10 @@ data class CastViewedItem(
     /** DirectPlay, DirectStream or Transcode. */
     val method: String = "DirectPlay",
     /** The media URL without its query, so without the token. */
-    val url: String = ""
+    val url: String = "",
+    /** Live ownership is private sender state, never receiver custom data. */
+    val liveStreamId: String? = null,
+    val ownedLiveStreamId: String? = null
 )
 
 /**
@@ -158,4 +161,9 @@ fun castReattach(input: CastReattachInput): CastReattach {
 
 /** Private storage for the temporary sessions: their lifecycle, and each one's credential by reference. */
 @Serializable
-data class CastStoredSessions(val state: TemporaryState = TemporaryState(), val secrets: Map<String, Account> = emptyMap())
+data class CastStoredSessions(
+    val state: TemporaryState = TemporaryState(),
+    val secrets: Map<String, Account> = emptyMap(),
+    /** Owned live sources remain retryable even after the viewing record is cleared. Keyed by the credential reference. */
+    val liveSources: Map<String, List<CastViewedItem>> = emptyMap()
+)

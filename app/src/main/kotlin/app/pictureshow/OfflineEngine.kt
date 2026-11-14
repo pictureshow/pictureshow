@@ -33,6 +33,7 @@ import app.pictureshow.core.offline.offlineDurableOffset
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
+import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineSafePath
 import app.pictureshow.core.offline.offlineVerify
 import app.pictureshow.core.offline.reconcile
@@ -719,7 +720,9 @@ internal class OfflineEngine(
                 }
             }
             cleanup = { api.cleanup(current.server.url, offlineCleanupRequest(set.deviceId, session), set.deviceId, set.token) }
-            val fresh = runCatching { api.item(current, entryOrNull(key, entryId)?.itemId ?: return) }.getOrElse { error ->
+            val facts = runCatching {
+                api.item(current, entryOrNull(key, entryId)?.itemId ?: return) to api.policy(current)
+            }.getOrElse { error ->
                 when {
                     error is CancellationException -> throw error
                     error is OfflineApiException && error.status in 401..404 -> fail(key, entryId, attempt, "denied")
@@ -727,8 +730,14 @@ internal class OfflineEngine(
                 }
                 return
             }
-            val sourceNow = fresh.sources.firstOrNull()?.etag
+            val (fresh, policy) = facts
             val before = entryOrNull(key, entryId) ?: return
+            val eligibility = offlinePresets(policy, fresh.candidate(), OFFLINE_QUALIFIED_PRESETS).first { it.preset == before.preset }
+            if (!eligibility.available) {
+                fail(key, entryId, attempt, eligibility.reason ?: "denied")
+                return
+            }
+            val sourceNow = fresh.sources.firstOrNull()?.etag
             // The source changed since the entry was created: partials of the old one can't be reused (OFF-03d).
             if (before.sourceETag != null && sourceNow != null && before.sourceETag != sourceNow) {
                 mutex.withLock {
