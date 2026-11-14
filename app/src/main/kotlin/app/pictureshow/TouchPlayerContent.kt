@@ -1001,11 +1001,12 @@ internal fun TouchPlayerScrubber(
             enabled = duration > 0,
             interactionSource = sliderInteraction,
             thumb = {
-                SliderDefaults.Thumb(
-                    interactionSource = sliderInteraction,
-                    modifier = Modifier.height(48.dp),
-                    enabled = duration > 0
-                )
+                Box(Modifier.height(48.dp), contentAlignment = Alignment.Center) {
+                    SliderDefaults.Thumb(
+                        interactionSource = sliderInteraction,
+                        enabled = duration > 0
+                    )
+                }
             },
             modifier = modifier.heightIn(min = 48.dp).testTag("touch:scrubber").semantics {
                 contentDescription = "Playback position"
