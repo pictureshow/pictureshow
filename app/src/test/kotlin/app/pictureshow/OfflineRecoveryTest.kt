@@ -229,8 +229,6 @@ class OfflineRecoveryTest {
     }
 
     @Test
-    // This case advances virtual time; the permit factory's System clock must use it too.
-    @Config(instrumentedPackages = ["app.pictureshow"])
     fun `only a viewer return can renew authorization after Task Manager Stop`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         val permit = offlineRecoveryPermit(app)!!

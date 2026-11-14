@@ -479,9 +479,18 @@ class MusicHostTest {
     @Test fun aTrackPutNextIsHeardNextEvenWhenTheFollowingOneWasPrepared() {
         val music = host()
         ready(music)
+        // Hold negotiation until the queued pause commits: auto-advancing
+        // 100ms fixture media must still be on a when the insertion is made.
+        val prepared = kotlinx.coroutines.CompletableDeferred<Unit>().also { negotiateGate = it }
         music.request(album("a", "b"))
         music.pause()
-        until("the next track prepared") { lastPlayer?.mediaItemCount == 2 }
+        until("the committed pause") { music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true }
+        prepared.complete(Unit)
+        until("the next track prepared while paused") {
+            music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true &&
+                lastPlayer?.mediaItemCount == 2 &&
+                lastPlayer?.playbackState == androidx.media3.common.Player.STATE_READY && lastPlayer?.playWhenReady == false
+        }
         music.playNext(account, listOf(MusicTrack("c", "Title c")))
         until("the row") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
         music.play()
