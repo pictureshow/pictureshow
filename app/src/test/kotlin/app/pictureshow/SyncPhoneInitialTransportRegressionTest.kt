@@ -174,10 +174,15 @@ class SyncPhoneInitialTransportRegressionTest {
             when(step.getValue("action").jsonPrimitive.content) {
                 "scroll-to-start" -> {
                     val (owner,_)=lifecycleScrollOwner()
-                    val backToStart=-lifecycleScrollValue()
+                    // Semantics ScrollBy is shared with ancestor nested-scroll consumers.
+                    // Reserve one measured window allocation for the expanding app bar too.
+                    val panelHeightPx=compose.onNodeWithTag("sync:panel").fetchSemanticsNode().size.height.toFloat()
+                    val backToStart=-(lifecycleScrollValue()+panelHeightPx)
+                    recordManualScrollFixture("before",owner.id,backToStart)
                     compose.onNode(SemanticsMatcher("actual lifecycle scroll owner") { it.id==owner.id },useUnmergedTree=true)
                         .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f,backToStart) }
                     settleLifecycle()
+                    recordManualScrollFixture("after",owner.id,backToStart)
                     assertTrue(kotlin.math.abs(lifecycleScrollValue()-c.expected.getValue("manualScrollPx").jsonPrimitive.float)<=tolerance,
                         "Ordinary actual ScrollBy must return the viewer to the top")
                     manuallyPlacedGroup=compose.onNodeWithTag("sync:group").getUnclippedBoundsInRoot()
@@ -252,5 +257,35 @@ class SyncPhoneInitialTransportRegressionTest {
             val box=target.getUnclippedBoundsInRoot()
             assertTrue(box.bottom<=effectiveBottom,"Actual entire transport clears live20dp fade+8dp: $tag=$box bottom=$effectiveBottom")
         }
+    }
+
+    /** Observation only: leave evidence even if the following strict manual-zero prerequisite fails. */
+    private fun recordManualScrollFixture(stage:String,ownerId:Int,requestedDeltaPx:Float) {
+        fun rect(box:androidx.compose.ui.geometry.Rect)=org.json.JSONArray(listOf(box.left,box.top,box.right,box.bottom))
+        val bounds=org.json.JSONArray()
+        for(tag in listOf("sync:panel","sync:close","sync:group","sync:phase","sync:previous","sync:next","sync:fade-top","sync:fade-bottom")) {
+            val matches=compose.onAllNodesWithTag(tag,useUnmergedTree=true).fetchSemanticsNodes()
+            matches.forEach { node -> bounds.put(org.json.JSONObject().put("tag",tag).put("id",node.id)
+                .put("boundsInRootPxClipped",rect(node.boundsInRoot))
+                .put("positionInRootPx",org.json.JSONArray(listOf(node.positionInRoot.x,node.positionInRoot.y)))
+                .put("sizePx",org.json.JSONArray(listOf(node.size.width,node.size.height)))) }
+        }
+        val owner=lifecycleScrollOwner().first
+        val ancestors=org.json.JSONArray()
+        generateSequence(owner) { it.parent }.forEach { node ->
+            ancestors.put(org.json.JSONObject().put("id",node.id)
+                .put("tag",node.config.getOrNull(SemanticsProperties.TestTag)?:"")
+                .put("boundsInRootPxClipped",rect(node.boundsInRoot))
+                .put("sizePx",org.json.JSONArray(listOf(node.size.width,node.size.height))))
+        }
+        val data=org.json.JSONObject().put("stage",stage).put("ownerId",ownerId)
+            .put("requestedDeltaPx",requestedDeltaPx).put("actualInnerScrollPx",lifecycleScrollValue())
+            .put("actualInnerMaximumPx",lifecycleScrollMaximum())
+            .put("focusedNodeIds",org.json.JSONArray(lifecycleFocusedIds()))
+            .put("actualTaggedGeometry",bounds).put("scrollOwnerAncestors",ancestors)
+        val directory=File("build/reports/initial-reveal-manual-scroll")
+        check(directory.mkdirs()||directory.isDirectory)
+        File(directory,"$stage.json").writeText(data.toString(2)+"\n")
+        println("INITIAL_REVEAL_MANUAL_SCROLL "+data.toString())
     }
 }

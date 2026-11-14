@@ -91,6 +91,20 @@ const pendingPortSuites = new Set([
     "sync-state",
     "sync-queue",
     "sync-source",
+    // New Android reference adapters and native UI remain explicit Web port obligations.
+    "sync-chip-name",
+    "sync-departure",
+    "sync-local-display",
+    "sync-membership-registration",
+    "sync-phone-player-chrome",
+    "sync-phone-quality-cue",
+    "sync-phone-surfaces",
+    "sync-player-intent-presentation",
+    "sync-rate-presentation",
+    "sync-route-consent",
+    "sync-socket-readiness",
+    "sync-speed-intent-origin",
+    "sync-tv-surfaces",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.

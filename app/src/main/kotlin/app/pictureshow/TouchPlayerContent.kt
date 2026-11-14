@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
@@ -37,11 +39,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -543,6 +548,15 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
+                    IconButton(
+                        onClick = {
+                            host.sync?.show()
+                            ui.interact()
+                        },
+                        modifier = Modifier.size(48.dp).testTag("touch:syncplay")
+                    ) {
+                        Icon(syncIcon("group"), stringResource(R.string.sync_title), tint = Color.White)
+                    }
                 }
                 val qualityNotice = if (offlineQuality) {
                     "Quality is fixed for this download."
@@ -606,14 +620,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     }
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
-                    add { placement ->
-                        TouchBarButton({
-                            host.sync?.show()
-                            ui.interact()
-                        }, placement.testTag("touch:syncplay")) {
-                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title), maxLines = 1)
-                        }
-                    }
                     TouchPlayerSheet.entries.forEach { sheet ->
                         if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
                             add { placement ->
@@ -949,6 +955,7 @@ private fun TouchWideControls(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TouchPlayerScrubber(
     position: Long,
@@ -984,6 +991,7 @@ internal fun TouchPlayerScrubber(
             Text(it, color = Color.White, style = clockStyle, modifier = Modifier.clearAndSetSemantics {})
         }
     }
+    val sliderInteraction = remember { MutableInteractionSource() }
     val slider: @Composable (Modifier) -> Unit = { modifier ->
         Slider(
             value = shown.coerceIn(0, limit).toFloat(),
@@ -991,6 +999,14 @@ internal fun TouchPlayerScrubber(
             onValueChangeFinished = onSeek,
             valueRange = 0f..limit.toFloat(),
             enabled = duration > 0,
+            interactionSource = sliderInteraction,
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = sliderInteraction,
+                    modifier = Modifier.height(48.dp),
+                    enabled = duration > 0
+                )
+            },
             modifier = modifier.heightIn(min = 48.dp).testTag("touch:scrubber").semantics {
                 contentDescription = "Playback position"
                 stateDescription = spoken

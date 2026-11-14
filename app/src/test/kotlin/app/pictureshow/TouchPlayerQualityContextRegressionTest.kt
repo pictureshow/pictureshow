@@ -153,8 +153,70 @@ class TouchPlayerQualityContextRegressionTest {
     }
     private fun changeBandwidth(value: Long?, settleMs: Long) {
         compose.runOnIdle { host.estimatedBandwidth = value }
-        advance(settleMs)
+        settleNativeFrames("bandwidth", settleMs)
     }
+    // Setup clock budgets stay unchanged; native Dialog/layout work runs between actual frames.
+    private var nativeSettleIndex = 0
+    private fun settleNativeFrames(reason: String, milliseconds: Long) {
+        require(milliseconds > 0)
+        val index = ++nativeSettleIndex
+        val start = compose.mainClock.currentTime
+        val clocks = org.json.JSONArray().put(start)
+        compose.waitForIdle()
+        recordNativeSettle(index, reason, "before", start, milliseconds, clocks)
+        var frames = 0L
+        while (compose.mainClock.currentTime - start < milliseconds) {
+            val previous = compose.mainClock.currentTime
+            compose.mainClock.advanceTimeByFrame()
+            check(compose.mainClock.currentTime > previous) { "Native setup clock must advance" }
+            clocks.put(compose.mainClock.currentTime)
+            compose.waitForIdle()
+            frames++
+            check(frames <= milliseconds) { "Native setup exceeded its finite frame budget" }
+        }
+        recordNativeSettle(index, reason, "after", start, milliseconds, clocks)
+    }
+    private fun recordNativeSettle(index: Int, reason: String, stage: String, start: Long,
+                                   budget: Long, clocks: org.json.JSONArray) {
+        fun rect(box: androidx.compose.ui.geometry.Rect) =
+            org.json.JSONArray(listOf(box.left, box.top, box.right, box.bottom))
+        val geometry = org.json.JSONArray()
+        val roots = linkedMapOf<Int, androidx.compose.ui.semantics.SemanticsNode>()
+        for (tag in listOf("touch:player", "touch:panel", "touch:actions", "touch:conversion-notice",
+                           "touch:open:Speed", "touch:quality-cue", "touch:quality-cue-text",
+                           "touch:sheet:Speed", "touch:sheet:done")) {
+            val nodes = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
+            for (node in nodes) {
+                geometry.put(org.json.JSONObject().put("tag", tag).put("id", node.id)
+                    .put("parentId", node.parent?.id ?: org.json.JSONObject.NULL)
+                    .put("boundsInRootPxClipped", rect(node.boundsInRoot))
+                    .put("touchBoundsInRootPx", rect(node.touchBoundsInRoot))
+                    .put("positionInRootPx", org.json.JSONArray(listOf(node.positionInRoot.x, node.positionInRoot.y)))
+                    .put("nativeSizePx", org.json.JSONArray(listOf(node.size.width, node.size.height)))
+                    .put("density", node.layoutInfo.density.density)
+                    .put("fontScale", node.layoutInfo.density.fontScale))
+                generateSequence(node) { it.parent }.last().let { roots[it.id] = it }
+            }
+        }
+        val rootGeometry = org.json.JSONArray()
+        roots.values.forEach { root -> rootGeometry.put(org.json.JSONObject().put("id", root.id)
+            .put("boundsInRootPxClipped", rect(root.boundsInRoot))
+            .put("nativeSizePx", org.json.JSONArray(listOf(root.size.width, root.size.height)))) }
+        val observation = org.json.JSONObject().put("index", index).put("reason", reason).put("stage", stage)
+            .put("startClockMs", start).put("actualClockMs", compose.mainClock.currentTime)
+            .put("requestedSetupBudgetMs", budget).put("frameClockMs", clocks)
+            .put("actualFact", host.adaptiveQualityNotice ?: org.json.JSONObject.NULL)
+            .put("factA", factA).put("factB", factB)
+            .put("decisionMethod", host.state.decision?.method?.name ?: org.json.JSONObject.NULL)
+            .put("foreground", output.foreground.value).put("preparing", host.state.preparing)
+            .put("error", host.error ?: org.json.JSONObject.NULL)
+            .put("actualTaggedGeometry", geometry).put("actualRootGeometry", rootGeometry)
+        val directory = File("build/reports/quality-native-settle")
+        check(directory.mkdirs() || directory.isDirectory)
+        File(directory, "$index-$reason-$stage.json").writeText(observation.toString(2) + "\n")
+        println("QUALITY_NATIVE_SETTLE " + observation.toString())
+    }
+
     private fun assertNoCue() {
         val texts = compose.onAllNodes(cueTree, useUnmergedTree = true).fetchSemanticsNodes()
             .filter { it.boundsInRoot.width > 0f && it.boundsInRoot.height > 0f }
@@ -273,7 +335,7 @@ class TouchPlayerQualityContextRegressionTest {
         assertNativeProfile(sheet)
         val sheetName = sheetInput.getValue("sheet").jsonPrimitive.content
         compose.onNodeWithTag("touch:open:$sheetName").performScrollTo().performClick()
-        advance(sheetInput.number("sheetSettleMs"))
+        settleNativeFrames("sheet-open", sheetInput.number("sheetSettleMs"))
         assertTrue(sheetExpected.flag("sheetVisible"))
         compose.onNodeWithTag("touch:sheet:$sheetName").assertIsDisplayed()
         changeBandwidth(sheetInput.number("pendingBandwidth"), sheetInput.number("settleMs"))
@@ -281,7 +343,7 @@ class TouchPlayerQualityContextRegressionTest {
         assertCue(sheetExpected.flag("blockedCueVisible"), factA)
         compose.onNodeWithTag("touch:sheet:$sheetName").assertIsDisplayed()
         compose.onNodeWithTag("touch:sheet:done").performClick()
-        advance(sheetInput.number("sheetSettleMs"))
+        settleNativeFrames("sheet-close", sheetInput.number("sheetSettleMs"))
         assertCue(sheetExpected.flag("resumedCueVisible"), factA)
         compose.runOnIdle {
             assertEquals(factA, host.adaptiveQualityNotice)
