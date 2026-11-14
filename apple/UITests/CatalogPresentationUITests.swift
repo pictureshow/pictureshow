@@ -1219,7 +1219,11 @@ private final class CatalogPresentationHTTPFixture {
             if hold { episodes.append((connection, body)) }; lock.unlock()
             if hold { return }
         case "/Items":
-            if let ids = query["ids"] {
+            if query["sortby"] == "DateCreated", query["limit"] == "24" {
+                // Home's authoritative latest query is separate from the
+                // paginated library requests measured by this fixture.
+                body = ["Items": [series()], "TotalRecordCount": 1]
+            } else if let ids = query["ids"] {
                 body = ["Items": ids.split(separator: ",").map { String($0) == "catalog-series" ? series() : movie(String($0)) }]
             } else {
                 let start = Int(query["startindex"] ?? "0") ?? 0

@@ -125,7 +125,7 @@ public final class JellyfinClient: @unchecked Sendable {
     public func logout(account: Account) async throws {
         _ = try await request(account: account, path: "Sessions/Logout", method: "POST")
     }
-    public func views(account: Account) async throws -> [MediaItem] { try await page(account: account, path: "UserViews").items }
+    public func views(account: Account) async throws -> [MediaItem] { try await page(account: account, path: "UserViews", query: [URLQueryItem(name: "includeHidden", value: "true")]).items }
     public func resume(account: Account) async throws -> [MediaItem] {
         try await page(account: account, path: "UserItems/Resume", query: [URLQueryItem(name: "mediaTypes", value: "Video"), URLQueryItem(name: "limit", value: "24")]).items
     }
@@ -133,7 +133,10 @@ public final class JellyfinClient: @unchecked Sendable {
         try await page(account: account, path: "Shows/NextUp", query: [URLQueryItem(name: "limit", value: "24"), URLQueryItem(name: "seriesId", value: seriesID)].filter { $0.value != nil }).items
     }
     public func latest(account: Account, parentID: String) async throws -> [MediaItem] {
-        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/Latest", query: [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "limit", value: "24"), URLQueryItem(name: "fields", value: fields)]))
+        // Match the merged server-authoritative browse contract: Items/Latest
+        // can include children from an inaccessible parent on Jellyfin 12.
+        try await browsePage(account: account, parentID: parentID, limit: 24, sortBy: "DateCreated", descending: true,
+                             recursive: true, includeItemTypes: "Movie,Series").items
     }
     public func home(account: Account) async throws -> [HomeRow] {
         try await homeContent(account: account).rows

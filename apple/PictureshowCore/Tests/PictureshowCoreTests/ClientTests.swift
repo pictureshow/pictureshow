@@ -158,7 +158,7 @@ final class ClientTests: XCTestCase {
             case "UserViews": return (200, self.json(#"{"Items":[{"Id":"library","Name":"Movies","CollectionType":"movies"}]}"#))
             case "Resume": return (503, Data())
             case "NextUp": return (200, self.json(#"{"Items":[{"Id":"episode","Name":"Episode"}]}"#))
-            case "Latest": return (200, self.json(#"[{"Id":"movie","Name":"Movie"}]"#))
+            case "Items": return (200, self.json(#"{"Items":[{"Id":"movie","Name":"Movie"}]}"#))
             default: XCTFail("Unexpected endpoint"); return (500, Data())
             }
         }
