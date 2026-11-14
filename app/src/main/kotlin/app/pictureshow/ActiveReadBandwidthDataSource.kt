@@ -34,6 +34,12 @@ internal class ActiveReadBandwidthDataSource(
     private val sample: (Long, Long) -> Unit
 ) : DataSource by source {
     private val meter = ActiveReadBandwidth()
+
+    // EBML cue parsing can ask for one byte at a time. Coalesce below the meter so clock calls,
+    // transfer listeners and transport bookkeeping follow network fills rather than extractor calls.
+    private val readAhead = ByteArray(32 * 1024)
+    private var readPosition = 0
+    private var readLimit = 0
     private var network = false
     private var fullSpeed = false
 
@@ -53,12 +59,30 @@ internal class ActiveReadBandwidthDataSource(
 
     override fun open(dataSpec: DataSpec): Long {
         meter.reset()
+        readPosition = 0
+        readLimit = 0
         network = false
         fullSpeed = false
         return source.open(dataSpec)
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (length == 0) return 0
+        if (readPosition == readLimit) {
+            // Sample buffers already arrive in bulk: avoid an extra copy on that path.
+            if (length >= readAhead.size) return readUpstream(buffer, offset, length)
+            readPosition = 0
+            val count = readUpstream(readAhead, 0, readAhead.size)
+            readLimit = count.coerceAtLeast(0)
+            if (count <= 0) return count
+        }
+        val count = minOf(length, readLimit - readPosition)
+        readAhead.copyInto(buffer, offset, readPosition, readPosition + count)
+        readPosition += count
+        return count
+    }
+
+    private fun readUpstream(buffer: ByteArray, offset: Int, length: Int): Int {
         val began = clockNanos()
         val count = source.read(buffer, offset, length)
         val elapsed = (clockNanos() - began).coerceAtLeast(0)
@@ -71,6 +95,8 @@ internal class ActiveReadBandwidthDataSource(
             source.close()
         } finally {
             meter.reset()
+            readPosition = 0
+            readLimit = 0
             network = false
             fullSpeed = false
         }

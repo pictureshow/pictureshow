@@ -88,6 +88,76 @@ class ActiveReadBandwidthDataSourceTest {
             closed = true
         }
     }
+
+    /** A real DataSource contract: tiny extractor reads must preserve the bytes while avoiding per-byte instrumentation. */
+    private class CueBody(private val bytes: ByteArray, private val clock: Clock) : BaseDataSource(true) {
+        var reads = 0
+        private var cursor = 0
+        private var end = 0
+        override fun open(dataSpec: DataSpec): Long {
+            transferInitializing(dataSpec)
+            cursor = dataSpec.position.toInt()
+            end = if (dataSpec.length == C.LENGTH_UNSET.toLong()) bytes.size else minOf(bytes.size, cursor + dataSpec.length.toInt())
+            transferStarted(dataSpec)
+            return (end - cursor).toLong()
+        }
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            reads++
+            clock.nanos += 50_000_000
+            if (cursor == end) return C.RESULT_END_OF_INPUT
+            val count = minOf(length, 16_384, end - cursor)
+            bytes.copyInto(buffer, offset, cursor, cursor + count)
+            cursor += count
+            bytesTransferred(count)
+            return count
+        }
+        override fun getUri(): Uri = Uri.parse("https://example.test/film.mkv")
+        override fun close() = transferEnded()
+    }
+
+    @Test fun tinyCueReadsPreserveEveryByteWithoutTimingEveryExtractorCall() {
+        val clock = Clock()
+        val payload = ByteArray(262_144) { (it % 251).toByte() }
+        val body = CueBody(payload, clock)
+        var clockCalls = 0
+        val source = ActiveReadBandwidthDataSource(body, {
+            clockCalls++
+            clock.nanos
+        }) { _, _ -> }
+        assertEquals(payload.size.toLong(), source.open(spec))
+        val one = ByteArray(1)
+        for (expected in payload) {
+            assertEquals(1, source.read(one, 0, 1))
+            assertEquals(expected, one[0])
+        }
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(one, 0, 1))
+        source.close()
+        assertTrue(body.reads <= 32, "Cue parsing must not turn 256 KiB into ${body.reads} upstream reads")
+        assertTrue(clockCalls <= 64, "Clock work must follow network fills, not $clockCalls tiny extractor calls")
+    }
+
+    @Test fun closingPartlyConsumedReadAheadDoesNotLeakBytesIntoANewRange() {
+        val clock = Clock()
+        val payload = ByteArray(256) { it.toByte() }
+        val source = ActiveReadBandwidthDataSource(CueBody(payload, clock), { clock.nanos }) { _, _ -> }
+        val small = ByteArray(5) { -1 }
+        source.open(spec)
+        assertEquals(1, source.read(small, 2, 1))
+        assertEquals(0.toByte(), small[2])
+        source.close()
+        val range = spec.buildUpon().setPosition(100).setLength(3).build()
+        assertEquals(3L, source.open(range))
+        assertEquals(0, source.read(small, 0, 0), "Zero-length requests must not consume read-ahead")
+        repeat(3) { index ->
+            assertEquals(1, source.read(small, 2, 1))
+            assertEquals((100 + index).toByte(), small[2])
+        }
+        assertEquals((-1).toByte(), small[0])
+        assertEquals((-1).toByte(), small[4])
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(small, 2, 1))
+        source.close()
+    }
+
     private class Output : PlaybackOutput {
         var moment = PlaybackPosition(0, false)
         override fun position() = moment
