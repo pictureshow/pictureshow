@@ -14,8 +14,20 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
@@ -26,7 +38,13 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.session.MediaSession
-import app.pictureshow.core.*
+import app.pictureshow.core.Account
+import app.pictureshow.core.AccountStore
+import app.pictureshow.core.ClientResult
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.Server
+import app.pictureshow.core.TextPersistence
+import app.pictureshow.core.User
 import app.pictureshow.core.sync.SyncGroup
 import app.pictureshow.core.sync.SyncRequest
 import app.pictureshow.core.sync.SyncUtcTime
@@ -49,7 +67,16 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -67,7 +94,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncTvPlayerIntentRegressionTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val scheduler = TestCoroutineScheduler()
     private val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
@@ -83,7 +112,9 @@ class SyncTvPlayerIntentRegressionTest {
     private lateinit var http: HttpClient
     private lateinit var native: Player
     private val nativeListener = object : Player.Listener {
-        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { nativeChanges += playWhenReady }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            nativeChanges += playWhenReady
+        }
     }
 
     @After fun close() {
@@ -104,15 +135,26 @@ class SyncTvPlayerIntentRegressionTest {
         return Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
             .map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == id }
     }
-    private fun update(type: String, data: JsonObject) = group.receive(buildJsonObject {
-        put("MessageType", "SyncPlayGroupUpdate")
-        put("Data", buildJsonObject { put("GroupId", "g"); put("Type", type); put("Data", data) })
-    }.toString())
-    private fun expectedLabel(case: JsonObject): String = when (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content) {
-        "pause" -> "Pause"
-        "play" -> "Play"
-        else -> error("This case has no enabled primary action")
-    }
+    private fun update(type: String, data: JsonObject) = group.receive(
+        buildJsonObject {
+            put("MessageType", "SyncPlayGroupUpdate")
+            put(
+                "Data",
+                buildJsonObject {
+                    put("GroupId", "g")
+                    put("Type", type)
+                    put("Data", data)
+                }
+            )
+        }.toString()
+    )
+    private fun expectedLabel(case: JsonObject): String =
+        when (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content) {
+            "pause" -> "Pause"
+            "play" -> "Play"
+            else -> error("This case has no enabled primary action")
+        }
+
     /** Find the actual primary independently of which of its two labels the product chose. */
     private fun primary() = compose.onNode(
         hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
@@ -133,25 +175,53 @@ class SyncTvPlayerIntentRegressionTest {
             }
             override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
             override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
-            override suspend fun send(account: Account, request: SyncRequest): Int { sent += request.operation; return 204 }
+            override suspend fun send(account: Account, request: SyncRequest): Int {
+                sent += request.operation
+                return 204
+            }
         }
         compose.runOnIdle {
             group = SyncPlayHost(scope, gateway, { epoch + scheduler.currentTime }, { scheduler.currentTime })
-            group.bind(account); group.socket(true); group.refresh(); scheduler.runCurrent()
+            group.bind(account)
+            group.socket(true)
+            group.refresh()
+            scheduler.runCurrent()
             if (participating) {
-                group.join("g"); scheduler.runCurrent()
-                update("GroupJoined", buildJsonObject {
-                    put("GroupId", "g"); put("GroupName", "Friday films"); put("State", phase)
-                    put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                })
-                update("PlayQueue", buildJsonObject {
-                    put("Reason", "NewPlaylist"); put("LastUpdate", syncUtcTimestamp(epoch))
-                    put("Playlist", JsonArray((0 until entries).map {
-                        buildJsonObject { put("ItemId", "film"); put("PlaylistItemId", "entry-a") }
-                    }))
-                    put("PlayingItemIndex", 0); put("StartPositionTicks", 200_000_000L)
-                    put("IsPlaying", phase == "Playing"); put("RepeatMode", "RepeatNone"); put("ShuffleMode", "Sorted")
-                })
+                group.join("g")
+                scheduler.runCurrent()
+                update(
+                    "GroupJoined",
+                    buildJsonObject {
+                        put("GroupId", "g")
+                        put("GroupName", "Friday films")
+                        put("State", phase)
+                        put("Participants", JsonArray(emptyList()))
+                        put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                    }
+                )
+                update(
+                    "PlayQueue",
+                    buildJsonObject {
+                        put("Reason", "NewPlaylist")
+                        put("LastUpdate", syncUtcTimestamp(epoch))
+                        put(
+                            "Playlist",
+                            JsonArray(
+                                (0 until entries).map {
+                                    buildJsonObject {
+                                        put("ItemId", "film")
+                                        put("PlaylistItemId", "entry-a")
+                                    }
+                                }
+                            )
+                        )
+                        put("PlayingItemIndex", 0)
+                        put("StartPositionTicks", 200_000_000L)
+                        put("IsPlaying", phase == "Playing")
+                        put("RepeatMode", "RepeatNone")
+                        put("ShuffleMode", "Sorted")
+                    }
+                )
                 scheduler.runCurrent()
             }
         }
@@ -160,29 +230,42 @@ class SyncTvPlayerIntentRegressionTest {
             override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
                 transform(data.value).also { data.value = it }
         }
-        http = HttpClient(MockEngine) { engine { addHandler { request ->
-            val json = when {
-                request.url.encodedPath.endsWith("/PlaybackInfo") ->
-                    """{"PlaySessionId":"viewing","MediaSources":[{"Id":"source","RunTimeTicks":600000000,"SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls","TranscodingUrl":"/Videos/film/master.m3u8","MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"}]}]}"""
-                request.url.encodedPath == "/Items/film" -> """{"Id":"film","Name":"A film","Type":"Movie"}"""
-                request.url.encodedPath.startsWith("/MediaSegments") -> """{"Items":[]}"""
-                else -> return@addHandler respond("", HttpStatusCode.NoContent)
+        http = HttpClient(MockEngine) {
+            engine {
+                addHandler { request ->
+                    val json = when {
+                        request.url.encodedPath.endsWith("/PlaybackInfo") ->
+                            """{"PlaySessionId":"viewing","MediaSources":[{"Id":"source","RunTimeTicks":600000000,"SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls","TranscodingUrl":"/Videos/film/master.m3u8","MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"}]}]}"""
+                        request.url.encodedPath == "/Items/film" -> """{"Id":"film","Name":"A film","Type":"Movie"}"""
+                        request.url.encodedPath.startsWith("/MediaSegments") -> """{"Items":[]}"""
+                        else -> return@addHandler respond("", HttpStatusCode.NoContent)
+                    }
+                    respond(json, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                }
             }
-            respond(json, headers = headersOf(HttpHeaders.ContentType, "application/json"))
-        } } }
-        startKoin { modules(module {
-            single { group }; single { inertRemoteTarget() }; single { http }
-            single { DeviceIdentityStore(store) }; single { PlaybackPreferencesStore(store) }
-        }) }
+        }
+        startKoin {
+            modules(
+                module {
+                    single { group }
+                    single { inertRemoteTarget() }
+                    single { http }
+                    single { DeviceIdentityStore(store) }
+                    single { PlaybackPreferencesStore(store) }
+                }
+            )
+        }
         val accounts = AccountStore(object : TextPersistence {
             override suspend fun read(): String? = null
             override suspend fun write(value: String) = Unit
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        compose.setContent { PictureshowTheme {
-            PlayerItemScreen(account, MediaItem("film", "A film", "Movie"), 0, catalog, {}, {}, providedOutput = output)
-        } }
+        compose.setContent {
+            PictureshowTheme {
+                PlayerItemScreen(account, MediaItem("film", "A film", "Movie"), 0, catalog, {}, {}, providedOutput = output)
+            }
+        }
         compose.waitUntil(10_000) {
             shadowOf(Looper.getMainLooper()).idle()
             output.player.value?.playbackState == Player.STATE_BUFFERING
@@ -198,7 +281,11 @@ class SyncTvPlayerIntentRegressionTest {
         compose.onNodeWithTag("player:surface").performClick()
         compose.waitForIdle()
         compose.runOnIdle {
-            if (!usable) { holdRefresh = true; group.refresh(); scheduler.runCurrent() }
+            if (!usable) {
+                holdRefresh = true
+                group.refresh()
+                scheduler.runCurrent()
+            }
         }
         compose.waitForIdle()
         compose.runOnIdle {
@@ -213,9 +300,14 @@ class SyncTvPlayerIntentRegressionTest {
             assertTrue(native === output.player.value, "Fixture must retain the actual mounted output player")
             assertEquals(localShowPlay, Util.shouldShowPlayButton(native), "Fixture local native projection")
             val feedback = output.onSyncPauseRequested
-            output.onSyncPauseRequested = { pauseFeedback++; feedback() }
+            output.onSyncPauseRequested = {
+                pauseFeedback++
+                feedback()
+            }
             native.addListener(nativeListener)
-            sent.clear(); nativeChanges.clear(); pauseFeedback = 0
+            sent.clear()
+            nativeChanges.clear()
+            pauseFeedback = 0
         }
         primary().assertIsDisplayed()
         return case
@@ -238,43 +330,79 @@ class SyncTvPlayerIntentRegressionTest {
         val case = launch("group-playing-local-True")
         primary().assertTextContains(expectedLabel(case))
     }
+
     @Test fun groupedPlayingNativeHoldRequestsPauseWithoutNativeFlipAndShowsImmediateFeedback() {
-        launch("group-playing-local-True"); remoteClick(); assertGroupedRequest("Pause", false, 1)
+        launch("group-playing-local-True")
+        remoteClick()
+        assertGroupedRequest("Pause", false, 1)
     }
+
     @Test fun groupedPausedNativeRunningOffersPlay() {
         val case = launch("group-paused-local-False")
         primary().assertTextContains(expectedLabel(case))
     }
+
     @Test fun groupedPausedNativeRunningRequestsUnpauseWithoutNativeFlip() {
-        launch("group-paused-local-False"); remoteClick(); assertGroupedRequest("Unpause", true, 0)
+        launch("group-paused-local-False")
+        remoteClick()
+        assertGroupedRequest("Unpause", true, 0)
     }
+
     @Test fun unusableGroupDisablesActualTvPrimaryAction() {
-        launch("group-unavailable-False-1"); primary().assertIsNotEnabled()
+        launch("group-unavailable-False-1")
+        primary().assertIsNotEnabled()
     }
+
     @Test fun emptyGroupQueueDisablesActualTvPrimaryAction() {
-        launch("group-unavailable-True-0"); primary().assertIsNotEnabled()
+        launch("group-unavailable-True-0")
+        primary().assertIsNotEnabled()
     }
+
     /** Inspect the already opened output handle; never open a replacement session or install a fake resolver. */
     private fun mediaToggle(action: Int = KeyEvent.ACTION_DOWN, repeat: Int = 0) {
         compose.runOnIdle {
             val handle = Media3PlaybackOutput::class.java.getDeclaredField("mediaSession")
                 .apply { isAccessible = true }.get(output) as PlaybackMediaSession.Handle
-            assertEquals(native.playWhenReady, handle.session.player.playWhenReady, "Actual session wrapper must expose the mounted output intent")
-            val caller = MediaSession.ControllerInfo.createTestOnlyControllerInfo(
-                MediaSession.ControllerInfo.LEGACY_CONTROLLER_PACKAGE_NAME, 123, 2000,
-                MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION, 0, false, Bundle.EMPTY, false
+            assertEquals(
+                native.playWhenReady,
+                handle.session.player.playWhenReady,
+                "Actual session wrapper must expose the mounted output intent"
             )
-            assertTrue(AnonymousMediaButtons.onMediaButtonEvent(handle.session, caller,
-                Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT,
-                    KeyEvent(0, 0, action, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, repeat))))
+            val caller = MediaSession.ControllerInfo.createTestOnlyControllerInfo(
+                MediaSession.ControllerInfo.LEGACY_CONTROLLER_PACKAGE_NAME,
+                123,
+                2000,
+                MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION,
+                0,
+                false,
+                Bundle.EMPTY,
+                false
+            )
+            assertTrue(
+                AnonymousMediaButtons.onMediaButtonEvent(
+                    handle.session,
+                    caller,
+                    Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(
+                        Intent.EXTRA_KEY_EVENT,
+                        KeyEvent(0, 0, action, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, repeat)
+                    )
+                )
+            )
         }
     }
+
     @Test fun actualMediaTogglePlayingNativeHoldRequestsPause() {
-        launch("group-playing-local-True"); mediaToggle(); assertGroupedRequest("Pause", false, 1)
+        launch("group-playing-local-True")
+        mediaToggle()
+        assertGroupedRequest("Pause", false, 1)
     }
+
     @Test fun actualMediaTogglePausedNativeRunningRequestsUnpause() {
-        launch("group-paused-local-False"); mediaToggle(); assertGroupedRequest("Unpause", true, 0)
+        launch("group-paused-local-False")
+        mediaToggle()
+        assertGroupedRequest("Unpause", true, 0)
     }
+
     /** Real decoder intentionally remains buffering, independently of the authoritative group timeline. */
     private class WaitingSource : DataSource {
         private var uri: android.net.Uri? = null
@@ -283,15 +411,26 @@ class SyncTvPlayerIntentRegressionTest {
         override fun getUri(): android.net.Uri? = uri
         override fun open(dataSpec: DataSpec): Long {
             uri = dataSpec.uri
-            manifest = if (dataSpec.uri.path?.endsWith(".m3u8") == true)
-                ("#EXTM3U\n#EXT-X-TARGETDURATION:61\n#EXT-X-MEDIA-SEQUENCE:0\n" +
-                    "#EXTINF:60.008,\nsegment.ts\n#EXT-X-ENDLIST\n").byteInputStream() else null
+            manifest = if (dataSpec.uri.path?.endsWith(".m3u8") == true) {
+                (
+                    "#EXTM3U\n#EXT-X-TARGETDURATION:61\n#EXT-X-MEDIA-SEQUENCE:0\n" +
+                        "#EXTINF:60.008,\nsegment.ts\n#EXT-X-ENDLIST\n"
+                    ).byteInputStream()
+            } else {
+                null
+            }
             return C.LENGTH_UNSET.toLong()
         }
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             manifest?.let { return it.read(buffer, offset, length) }
-            return try { Thread.sleep(Long.MAX_VALUE); C.RESULT_END_OF_INPUT }
-            catch (_: InterruptedException) { throw InterruptedIOException() }
+            return try {
+                Thread.sleep(Long.MAX_VALUE)
+                C.RESULT_END_OF_INPUT
+            } catch (
+                _: InterruptedException
+            ) {
+                throw InterruptedIOException()
+            }
         }
         override fun close() = Unit
     }

@@ -35,8 +35,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -49,19 +49,19 @@ import androidx.core.graphics.ColorUtils
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import java.io.File
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.float
-import kotlinx.serialization.json.int
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -119,12 +119,14 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         CompositionLocalProvider(LocalConfiguration provides config) {
             PictureshowTheme {
                 if (theme != null && theme.getValue("kind").jsonPrimitive.content == "alternate") {
-                    MaterialTheme(colorScheme = darkColorScheme(
-                        primary = color(theme.getValue("primary").jsonPrimitive.content),
-                        onPrimary = color(theme.getValue("onPrimary").jsonPrimitive.content),
-                        surface = color(theme.getValue("surface").jsonPrimitive.content),
-                        onSurface = color(theme.getValue("onSurface").jsonPrimitive.content)
-                    )) { RecordTheme(content) }
+                    MaterialTheme(
+                        colorScheme = darkColorScheme(
+                            primary = color(theme.getValue("primary").jsonPrimitive.content),
+                            onPrimary = color(theme.getValue("onPrimary").jsonPrimitive.content),
+                            surface = color(theme.getValue("surface").jsonPrimitive.content),
+                            onSurface = color(theme.getValue("onSurface").jsonPrimitive.content)
+                        )
+                    ) { RecordTheme(content) }
                 } else {
                     RecordTheme(content)
                 }
@@ -141,14 +143,20 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val sizes = mapOf("bodyMedium" to size, "bodyLarge" to MaterialTheme.typography.bodyLarge.fontSize)
         val colors = mapOf("onSurfaceVariant" to quiet, "onSurface" to ink)
         SideEffect {
-            density = scale; onSurface = ink
-            surface = panelSurface; styleSizes = sizes; themeColors = colors
+            density = scale
+            onSurface = ink
+            surface = panelSurface
+            styleSizes = sizes
+            themeColors = colors
         }
         content()
     }
 
     private fun chooser() = SyncPlayPresentation(
-        server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups"
+        server = "Cinema",
+        viewer = "Viewer",
+        policyKnown = true,
+        policy = "CreateAndJoinGroups"
     )
     private fun showChooser(case: SurfaceVector) {
         RuntimeEnvironment.setFontScale(case.number("fontScale"))
@@ -176,6 +184,7 @@ class SyncPlayTvPrimaryPaintRegressionTest {
     }
 
     @Test fun enabledCreateHasABroadVisibleFocusMarkInDefaultTheme() = verifyCreateFocus("create-visible-focus-default")
+
     @Test fun enabledCreateHasABroadVisibleFocusMarkInAlternateTheme() = verifyCreateFocus("create-visible-focus-alternate")
     private fun verifyCreateFocus(id: String) {
         val case = vector(id, "create-focus")
@@ -193,8 +202,11 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         compose.onNodeWithTag("sync:create").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         settle()
         compose.onNodeWithTag("sync:create").assertIsFocused()
-        assertEquals(case.flag("stableBounds"), button == bounds("sync:create"),
-            "Vector stable-bounds outcome must match actual geometry")
+        assertEquals(
+            case.flag("stableBounds"),
+            button == bounds("sync:create"),
+            "Vector stable-bounds outcome must match actual geometry"
+        )
         assertEquals(button, bounds("sync:create"), "Focus must preserve the full-width body grid and scale1")
         val focused = compose.onNodeWithTag("sync:panel").captureToImage().asAndroidBitmap()
         assertBroadFocusChange(resting, focused, panel, button, case)
@@ -219,7 +231,8 @@ class SyncPlayTvPrimaryPaintRegressionTest {
                     false
                 } else {
                     val changed = (left until right).count { x ->
-                        ColorUtils.calculateContrast(focus.getPixel(x, y), rest.getPixel(x, y)) >= case.metric("focusMarkMinContrast").toDouble()
+                        ColorUtils.calculateContrast(focus.getPixel(x, y), rest.getPixel(x, y)) >=
+                            case.metric("focusMarkMinContrast").toDouble()
                     }
                     consecutive = if (changed >= (right - left) * case.metric("focusMarkChangedWidthFraction")) consecutive + 1 else 0
                     consecutive >= requiredRows
@@ -230,8 +243,8 @@ class SyncPlayTvPrimaryPaintRegressionTest {
     }
 
     @Test fun selectKeepsTvCreateAndFooterDividerMounted() = verifyFooter("create-footer-during-edit")
-    @Test fun modeledImeConsumedBackKeepsDraftNameFocusAndFooterWithoutFocusMove() =
-        verifyFooter("create-footer-after-platform-dismissal")
+
+    @Test fun modeledImeConsumedBackKeepsDraftNameFocusAndFooterWithoutFocusMove() = verifyFooter("create-footer-after-platform-dismissal")
     private fun verifyFooter(id: String) {
         val case = vector(id, "create-footer")
         showChooser(case)
@@ -239,10 +252,16 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val before = bounds("sync:name")
         key(Key.DirectionCenter)
         val imm = compose.activity.getSystemService(InputMethodManager::class.java)
-        assertTrue(shadowOf(imm).isSoftInputVisible,
-            "Existing explicit Select-to-editor path must still request platform input")
-        assertEquals(case.token("retainedDraft"), compose.onNodeWithTag("sync:name").fetchSemanticsNode()
-            .config[SemanticsProperties.EditableText].text, "Editing must retain the actual editable draft")
+        assertTrue(
+            shadowOf(imm).isSoftInputVisible,
+            "Existing explicit Select-to-editor path must still request platform input"
+        )
+        assertEquals(
+            case.token("retainedDraft"),
+            compose.onNodeWithTag("sync:name").fetchSemanticsNode()
+                .config[SemanticsProperties.EditableText].text,
+            "Editing must retain the actual editable draft"
+        )
         when (case.text("keyboardState")) {
             "requested" -> Unit
             "platform-hidden" -> {
@@ -251,14 +270,21 @@ class SyncPlayTvPrimaryPaintRegressionTest {
                 compose.runOnIdle { imm.hideSoftInputFromWindow(compose.activity.window.decorView.windowToken, 0) }
                 settle()
                 assertFalse(shadowOf(imm).isSoftInputVisible)
-                assertEquals(case.token("retainedDraft"), compose.onNodeWithTag("sync:name").fetchSemanticsNode()
-                    .config[SemanticsProperties.EditableText].text, "Dismissal must retain the actual editable draft")
+                assertEquals(
+                    case.token("retainedDraft"),
+                    compose.onNodeWithTag("sync:name").fetchSemanticsNode()
+                        .config[SemanticsProperties.EditableText].text,
+                    "Dismissal must retain the actual editable draft"
+                )
             }
             else -> error("Unsupported keyboardState in TV render profile")
         }
         compose.onNodeWithTag("sync:name").assertIsFocused()
-        assertEquals(case.flag("stableEditorBounds"), before == bounds("sync:name"),
-            "Vector stable-editor outcome must match actual geometry")
+        assertEquals(
+            case.flag("stableEditorBounds"),
+            before == bounds("sync:name"),
+            "Vector stable-editor outcome must match actual geometry"
+        )
         assertEquals(before, bounds("sync:name"), "Select/dismissal must preserve stable editor geometry")
         assertFooterPainted(case)
     }
@@ -267,8 +293,11 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val createNodes = compose.onAllNodesWithTag("sync:create").fetchSemanticsNodes()
         assertEquals(case.flag("footerVisible"), createNodes.isNotEmpty(), "Vector footer visibility must match actual mounted action")
         compose.onNodeWithTag("sync:create").assertIsDisplayed().assertIsEnabled()
-        assertEquals(case.flag("createEnabled"), !createNodes.single().config.contains(SemanticsProperties.Disabled),
-            "Vector enabled outcome must match actual Create semantics")
+        assertEquals(
+            case.flag("createEnabled"),
+            !createNodes.single().config.contains(SemanticsProperties.Disabled),
+            "Vector enabled outcome must match actual Create semantics"
+        )
         val bitmap = compose.onNodeWithTag("tv-settings:footer").captureToImage().asAndroidBitmap()
         val inset = (case.metric("dividerProbeInsetDp") * density).roundToInt().coerceAtLeast(1)
         val divider = bitmap.getPixel(bitmap.width / 2, 0)
@@ -276,11 +305,15 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         assertTrue(distance(divider, background) >= case.count("dividerChannelDeltaMin"), "Mounted footer must also paint its divider")
         for (x in (bitmap.width * case.metric("dividerSideExcludedFraction")).roundToInt() until
             (bitmap.width * (1f - case.metric("dividerSideExcludedFraction"))).roundToInt()) {
-            assertTrue(distance(divider, bitmap.getPixel(x, 0)) <= case.count("dividerChannelTolerance"), "Footer divider must span the body column")
+            assertTrue(
+                distance(divider, bitmap.getPixel(x, 0)) <= case.count("dividerChannelTolerance"),
+                "Footer divider must span the body column"
+            )
         }
     }
 
     @Test fun whollyVisibleEnabledRestRowRetainsFullLabelPaintAtFont10() = verifyWholeRowPaint("whole-row-full-ink-font-1-0")
+
     @Test fun whollyVisibleEnabledRestRowRetainsFullLabelPaintAtFont13() = verifyWholeRowPaint("whole-row-full-ink-font-1-3")
     private fun verifyWholeRowPaint(id: String) {
         val case = vector(id, "whole-row-ink")
@@ -308,15 +341,19 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val measuredView = bounds("tv-settings:viewport")
         val measuredRow = bounds("paint:whole")
         val exactWholeRowHeight = measuredRow.bottom - measuredView.top
-        assertTrue(exactWholeRowHeight > 0.dp && exactWholeRowHeight < largeViewport,
-            "Initial viewport must be large enough to measure the complete real row")
+        assertTrue(
+            exactWholeRowHeight > 0.dp && exactWholeRowHeight < largeViewport,
+            "Initial viewport must be large enough to measure the complete real row"
+        )
         compose.runOnIdle { viewportHeight = exactWholeRowHeight }
         settle()
         val view = bounds("tv-settings:viewport")
         val row = bounds("paint:whole")
         val tolerance = (1f / density).dp
-        assertTrue(row.top >= view.top && row.bottom <= view.bottom + tolerance,
-            "The production control must be wholly inside the viewport, not a cut-row case: row=$row viewport=$view")
+        assertTrue(
+            row.top >= view.top && row.bottom <= view.bottom + tolerance,
+            "The production control must be wholly inside the viewport, not a cut-row case: row=$row viewport=$view"
+        )
         compose.onNodeWithTag("paint:whole").assertIsEnabled()
         compose.onNodeWithTag("tv-settings:scroll-indicator").assertExists()
         val text = layout("tv-settings:label:${labels[1]}")
@@ -336,8 +373,10 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         assertEquals(glyph.bottom - glyph.top, clearGlyph.bottom - clearGlyph.top)
         val fades = compose.onAllNodesWithTag("tv-settings:fade-bottom").fetchSemanticsNodes()
         if (fades.isNotEmpty()) {
-            assertTrue(clearGlyph.bottom <= bounds("tv-settings:fade-bottom").top,
-                "The production reference must clear the actual fade")
+            assertTrue(
+                clearGlyph.bottom <= bounds("tv-settings:fade-bottom").top,
+                "The production reference must clear the actual fade"
+            )
         }
         val subjectX = ((glyph.left - view.left).value * density).roundToInt()
         val subjectY = ((glyph.top - view.top).value * density).roundToInt()
@@ -345,19 +384,33 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val referenceY = ((clearGlyph.top - clearView.top).value * density).roundToInt()
         val width = ((glyph.right - glyph.left).value * density).roundToInt()
         val height = ((glyph.bottom - glyph.top).value * density).roundToInt()
-        assertTrue(subjectX >= 0 && subjectY >= 0 && subjectX + width <= bitmap.width && subjectY + height <= bitmap.height,
-            "Inspect a real wholly visible glyph box, never a clipped or empty crop")
+        assertTrue(
+            subjectX >= 0 && subjectY >= 0 && subjectX + width <= bitmap.width && subjectY + height <= bitmap.height,
+            "Inspect a real wholly visible glyph box, never a clipped or empty crop"
+        )
         var solidInk = 0
         var attenuatedInk = 0
-        for (y in 0 until height) for (x in 0 until width) {
-            if (distance(onSurface, reference.getPixel(referenceX + x, referenceY + y)) <= case.count("solidGlyphChannelTolerance")) {
-                solidInk++
-                if (distance(onSurface, bitmap.getPixel(subjectX + x, subjectY + y)) > case.count("solidGlyphChannelTolerance")) attenuatedInk++
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (distance(onSurface, reference.getPixel(referenceX + x, referenceY + y)) <= case.count("solidGlyphChannelTolerance")) {
+                    solidInk++
+                    if (distance(onSurface, bitmap.getPixel(subjectX + x, subjectY + y)) >
+                        case.count("solidGlyphChannelTolerance")
+                    ) {
+                        attenuatedInk++
+                    }
+                }
             }
         }
-        assertTrue(solidInk >= case.count("minReferenceSolidGlyphPixels"), "The unobscured real row must actually paint onSurface glyph strokes")
-        assertEquals(case.count("maxAttenuatedSolidGlyphPixels"), attenuatedInk,
-            "Every solid glyph stroke of a wholly visible enabled row must retain full onSurface ink; solid=$solidInk row=$row viewport=$view")
+        assertTrue(
+            solidInk >= case.count("minReferenceSolidGlyphPixels"),
+            "The unobscured real row must actually paint onSurface glyph strokes"
+        )
+        assertEquals(
+            case.count("maxAttenuatedSolidGlyphPixels"),
+            attenuatedInk,
+            "Every solid glyph stroke of a wholly visible enabled row must retain full onSurface ink; solid=$solidInk row=$row viewport=$view"
+        )
     }
 
     @Test fun emptyStatusHasTwelveDpClearanceFromRefresh() {
@@ -366,22 +419,31 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val refresh = bounds("sync:refresh")
         val empty = bounds("sync:empty")
         val gap = if (empty.top >= refresh.bottom) empty.top - refresh.bottom else refresh.top - empty.bottom
-        assertTrue(gap >= case.metric("minimumGapDp").dp - (1f / density).dp,
-            "Status and Refresh need12dp separation in either permitted order: refresh=$refresh empty=$empty")
+        assertTrue(
+            gap >= case.metric("minimumGapDp").dp - (1f / density).dp,
+            "Status and Refresh need12dp separation in either permitted order: refresh=$refresh empty=$empty"
+        )
     }
 
     @Test fun emptyStatusUsesQuietBodyMediumTypography() {
         val case = vector("empty-status-hierarchy", "empty-status-style")
         showChooser(case)
         val text = layout("sync:empty")
-        assertEquals(styleSizes.getValue(case.token("textStyle")), text.layoutInput.style.fontSize, "No-groups status must not compete with bodyLarge action labels")
-        assertEquals(themeColors.getValue(case.token("textColor")), text.layoutInput.style.color.toArgb(), "No-groups status needs actual onSurfaceVariant ink")
+        assertEquals(
+            styleSizes.getValue(case.token("textStyle")),
+            text.layoutInput.style.fontSize,
+            "No-groups status must not compete with bodyLarge action labels"
+        )
+        assertEquals(
+            themeColors.getValue(case.token("textColor")),
+            text.layoutInput.style.color.toArgb(),
+            "No-groups status needs actual onSurfaceVariant ink"
+        )
     }
 
-    @Test fun cutRegisteredRowKeepsFortyDpMaskAndEightDpOpaqueBandAtFont10() =
-        verifyCutRow("cut-row-full-mask-font-1-0")
-    @Test fun cutRegisteredRowKeepsFortyDpMaskAndEightDpOpaqueBandAtFont13() =
-        verifyCutRow("cut-row-full-mask-font-1-3")
+    @Test fun cutRegisteredRowKeepsFortyDpMaskAndEightDpOpaqueBandAtFont10() = verifyCutRow("cut-row-full-mask-font-1-0")
+
+    @Test fun cutRegisteredRowKeepsFortyDpMaskAndEightDpOpaqueBandAtFont13() = verifyCutRow("cut-row-full-mask-font-1-3")
     private fun verifyCutRow(id: String) {
         val case = vector(id, "cut-row-mask")
         assertEquals("cut", case.text("rowVisibility"))
@@ -404,9 +466,11 @@ class SyncPlayTvPrimaryPaintRegressionTest {
                     // The bright trailing visual is real content inside that row, not an
                     // unregistered giant fallback Box; no new production test hook is required.
                     TvSettingsRow(labels[1], null, Modifier.testTag("cut:row"), onClick = {}, trailing = {
-                        Box(Modifier.width(case.number("brightContentWidthDp").dp)
-                            .height(case.number("brightContentHeightDp").dp).background(underlay)
-                            .testTag("cut:bright"))
+                        Box(
+                            Modifier.width(case.number("brightContentWidthDp").dp)
+                                .height(case.number("brightContentHeightDp").dp).background(underlay)
+                                .testTag("cut:bright")
+                        )
                     })
                     TvSettingsToggleRow(labels[2], false, Modifier.testTag("cut:following")) {}
                 }
@@ -421,13 +485,18 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         settle()
         val view = bounds("tv-settings:viewport")
         val row = bounds("cut:row")
-        assertTrue(row.top < view.bottom && row.bottom > view.bottom,
-            "Real registered row must cross the edge in UNCLIPPED geometry: row=$row viewport=$view")
+        assertTrue(
+            row.top < view.bottom && row.bottom > view.bottom,
+            "Real registered row must cross the edge in UNCLIPPED geometry: row=$row viewport=$view"
+        )
         compose.onNodeWithTag("cut:row").assertIsEnabled()
         assertEquals(font, layout("tv-settings:label:${labels[1]}").layoutInput.density.fontScale, .01f)
         val fade = bounds("tv-settings:fade-bottom")
-        assertEquals(case.metric("bottomFadeExtentDp").dp, fade.bottom - fade.top,
-            "A cut registered row must keep the complete40dp mask")
+        assertEquals(
+            case.metric("bottomFadeExtentDp").dp,
+            fade.bottom - fade.top,
+            "A cut registered row must keep the complete40dp mask"
+        )
         assertEquals(view.bottom, fade.bottom, "Mask must end at the actual viewport edge")
         compose.onNodeWithTag("tv-settings:scroll-indicator").assertExists()
         val bright = compose.onNodeWithTag("cut:bright", useUnmergedTree = true).getUnclippedBoundsInRoot()
@@ -435,23 +504,33 @@ class SyncPlayTvPrimaryPaintRegressionTest {
         val right = ((bright.right - view.left - (bright.right - bright.left) / 4).value * density).roundToInt()
         val probeX = (left + right) / 2
         val probeY = ((fade.top - view.top - 4.dp).value * density).roundToInt()
-        assertTrue(probeY >= ((bright.top - view.top).value * density).roundToInt(),
-            "Bright adversarial source must visibly extend above the fade for a non-vacuous check")
+        assertTrue(
+            probeY >= ((bright.top - view.top).value * density).roundToInt(),
+            "Bright adversarial source must visibly extend above the fade for a non-vacuous check"
+        )
         val strip = (case.metric("opaqueBandDp") * density).roundToInt()
         var first: Bitmap? = null
         for (paint in colors) {
             compose.runOnIdle { underlay = paint }
             settle()
             val bitmap = compose.onNodeWithTag("tv-settings:viewport").captureToImage().asAndroidBitmap()
-            assertTrue(distance(paint.toArgb(), bitmap.getPixel(probeX, probeY)) <= case.count("opaqueChannelTolerance"),
-                "The registered row's adversarial source must actually render before inspecting its covered edge")
-            for (y in bitmap.height - strip until bitmap.height) for (x in left until right) {
-                val actual = bitmap.getPixel(x, y)
-                assertTrue(distance(surface, actual) <= case.count("opaqueChannelTolerance"),
-                    "Final8dp must completely hide cut-row bright content at($x,$y)")
-                first?.let { original ->
-                    assertTrue(distance(original.getPixel(x, y), actual) <= case.count("opaqueChannelTolerance"),
-                        "Opaque edge must be independent of two bright registered-row underlays")
+            assertTrue(
+                distance(paint.toArgb(), bitmap.getPixel(probeX, probeY)) <= case.count("opaqueChannelTolerance"),
+                "The registered row's adversarial source must actually render before inspecting its covered edge"
+            )
+            for (y in bitmap.height - strip until bitmap.height) {
+                for (x in left until right) {
+                    val actual = bitmap.getPixel(x, y)
+                    assertTrue(
+                        distance(surface, actual) <= case.count("opaqueChannelTolerance"),
+                        "Final8dp must completely hide cut-row bright content at($x,$y)"
+                    )
+                    first?.let { original ->
+                        assertTrue(
+                            distance(original.getPixel(x, y), actual) <= case.count("opaqueChannelTolerance"),
+                            "Opaque edge must be independent of two bright registered-row underlays"
+                        )
+                    }
                 }
             }
             first = bitmap

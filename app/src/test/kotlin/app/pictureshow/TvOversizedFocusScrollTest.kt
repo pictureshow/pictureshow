@@ -24,6 +24,7 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class TvOversizedFocusScrollTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
     @Test fun oversizedFocusTargetStaysStableAcrossEitherSingleEdge() {
         lateinit var policy: BringIntoViewSpec
         compose.setContent {
@@ -36,8 +37,16 @@ class TvOversizedFocusScrollTest {
         }
         compose.waitForIdle()
         compose.runOnIdle {
-            assertEquals(0f, policy.calculateScrollDistance(10f, 120f, 100f), "Oversized target crossing only the bottom edge must remain stable")
-            assertEquals(0f, policy.calculateScrollDistance(-30f, 120f, 100f), "Oversized target crossing only the top edge must remain stable")
+            assertEquals(
+                0f,
+                policy.calculateScrollDistance(10f, 120f, 100f),
+                "Oversized target crossing only the bottom edge must remain stable"
+            )
+            assertEquals(
+                0f,
+                policy.calculateScrollDistance(-30f, 120f, 100f),
+                "Oversized target crossing only the top edge must remain stable"
+            )
             assertEquals(15f, policy.calculateScrollDistance(85f, 30f, 100f), "Ordinary bottom overflow must still scroll minimally")
             assertEquals(-10f, policy.calculateScrollDistance(-10f, 30f, 100f), "Ordinary top overflow must still scroll minimally")
             assertEquals(0f, policy.calculateScrollDistance(20f, 30f, 100f), "A fully visible target must remain stable")

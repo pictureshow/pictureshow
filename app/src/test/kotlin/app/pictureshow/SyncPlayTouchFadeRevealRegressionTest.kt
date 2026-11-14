@@ -9,8 +9,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
@@ -50,7 +50,10 @@ class SyncPlayTouchFadeRevealRegressionTest {
                 SyncTouchBody(Modifier.width(320.dp).height(300.dp), compactHeight = false) {
                     val current = LocalBringIntoViewSpec.current
                     val currentDensity = LocalDensity.current.density
-                    SideEffect { policy = current; density = currentDensity }
+                    SideEffect {
+                        policy = current
+                        density = currentDensity
+                    }
                     Box(Modifier.fillMaxWidth().height(40.dp).testTag("reveal-probe:start"))
                     Box(Modifier.height(1600.dp))
                     Box(Modifier.fillMaxWidth().height(40.dp).testTag("reveal-probe:end"))
@@ -74,8 +77,12 @@ class SyncPlayTouchFadeRevealRegressionTest {
         assertEquals(20.dp, fade.bottom - fade.top, "Keep the real20dp bottom scroll affordance")
         // A50dp control at240..290 is inside the physical300dp viewport, but crosses its
         // effective272dp boundary (20dp actual fade +8dp breathing room).
-        assertEquals(18f, distanceInDp(240f, 50f), .01f,
-            "Actual touch descendant policy must reveal a focused control above fade+8dp")
+        assertEquals(
+            18f,
+            distanceInDp(240f, 50f),
+            .01f,
+            "Actual touch descendant policy must reveal a focused control above fade+8dp"
+        )
     }
 
     @Test fun actualTouchPolicyRevealsBelowActiveTopFadePlusEightDp() {
@@ -84,8 +91,12 @@ class SyncPlayTouchFadeRevealRegressionTest {
         val fade = compose.onNodeWithTag("sync:fade-top").getUnclippedBoundsInRoot()
         assertEquals(16.dp, fade.bottom - fade.top, "Keep the real16dp top scroll affordance")
         // A40dp control starting4dp down crosses the24dp effective top edge.
-        assertEquals(-20f, distanceInDp(4f, 40f), .01f,
-            "Actual touch descendant policy must reveal below the active top fade+8dp")
+        assertEquals(
+            -20f,
+            distanceInDp(4f, 40f),
+            .01f,
+            "Actual touch descendant policy must reveal below the active top fade+8dp"
+        )
     }
 
     @Test fun visibleControlsStayStableAndAbsentFadesReserveNoInvisibleInset() {

@@ -46,14 +46,21 @@ import org.robolectric.annotation.LooperMode
 class SyncPlayChipPhraseAndNameRegressionTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun state(name: String = "Friday films with friends from every time zone", phase: String = "Paused", quality: SyncQuality = SyncQuality.IN_SYNC, count: Int = 6) =
-        SyncPlayPresentation(groupId = "g", groupName = name, phase = phase, quality = quality, participants = List(count) { "Person $it" })
+    private fun state(
+        name: String = "Friday films with friends from every time zone",
+        phase: String = "Paused",
+        quality: SyncQuality = SyncQuality.IN_SYNC,
+        count: Int = 6
+    ) = SyncPlayPresentation(groupId = "g", groupName = name, phase = phase, quality = quality, participants = List(count) { "Person $it" })
 
     private fun show(state: SyncPlayPresentation, widthDp: Int = 360, fontScale: Float = 1.3f) {
         RuntimeEnvironment.setFontScale(fontScale)
         compose.setContent {
-            assertEquals(IntSize(widthDp * 2, 1280), LocalWindowInfo.current.containerSize,
-                "Actual native window must match the claimed logical chip width at320dpi")
+            assertEquals(
+                IntSize(widthDp * 2, 1280),
+                LocalWindowInfo.current.containerSize,
+                "Actual native window must match the claimed logical chip width at320dpi"
+            )
             app.pictureshow.ui.PictureshowTheme {
                 Box(Modifier.fillMaxSize()) {
                     // Same16dp outer inset and440dp cap used by the real touch player and fixture.
@@ -72,7 +79,9 @@ class SyncPlayChipPhraseAndNameRegressionTest {
         val nodes = compose.onAllNodes(matcher, useUnmergedTree = true)
         val semantics = nodes.fetchSemanticsNodes()
         return semantics.flatMapIndexed { index, node ->
-            if (!node.config.contains(SemanticsActions.GetTextLayoutResult)) emptyList() else {
+            if (!node.config.contains(SemanticsActions.GetTextLayoutResult)) {
+                emptyList()
+            } else {
                 val layouts = mutableListOf<TextLayoutResult>()
                 nodes[index].performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                 layouts.map { it to node.boundsInRoot }
@@ -88,9 +97,13 @@ class SyncPlayChipPhraseAndNameRegressionTest {
             (0 until layout.lineCount).map { line ->
                 val start = layout.getLineStart(line)
                 val end = layout.getLineEnd(line, visibleEnd = true)
-                PaintedLine(clean(layout.layoutInput.text.text.substring(start, end)),
-                    bounds.top + layout.getLineTop(line), bounds.left + layout.getLineLeft(line),
-                    layout.isLineEllipsized(line), layout.layoutInput.density.fontScale)
+                PaintedLine(
+                    clean(layout.layoutInput.text.text.substring(start, end)),
+                    bounds.top + layout.getLineTop(line),
+                    bounds.left + layout.getLineLeft(line),
+                    layout.isLineEllipsized(line),
+                    layout.layoutInput.density.fontScale
+                )
             }
         }.filter { it.text.isNotEmpty() }
     }
@@ -104,7 +117,10 @@ class SyncPlayChipPhraseAndNameRegressionTest {
             .joinToString(" ") { it.text }
         assertTrue(first.startsWith(expectedPhase), "First painted status line must contain the entire phase; lines=$lines")
         val all = lines.joinToString(" ") { it.text }
-        assertTrue(all.contains(compose.activity.getString(R.string.sync_quality_in_sync)), "Known quality must remain visible; lines=$lines")
+        assertTrue(
+            all.contains(compose.activity.getString(R.string.sync_quality_in_sync)),
+            "Known quality must remain visible; lines=$lines"
+        )
         assertTrue(lines.none { it.text.startsWith("·") }, "A separator must not lead a visual row; lines=$lines")
         assertTrue(lines.none { it.ellipsized }, "These fixtures have room for both facts across two lines; lines=$lines")
     }
@@ -130,8 +146,10 @@ class SyncPlayChipPhraseAndNameRegressionTest {
         if (names.isEmpty()) {
             val count = countNode.getUnclippedBoundsInRoot()
             val status = compose.onNodeWithTag("sync:chip-status", useUnmergedTree = true).getUnclippedBoundsInRoot()
-            assertTrue(abs((count.left - status.left).value) <= .5f,
-                "Omitting the name must also omit its separator/slack, leaving count at the text-column edge: count=$count status=$status")
+            assertTrue(
+                abs((count.left - status.left).value) <= .5f,
+                "Omitting the name must also omit its separator/slack, leaving count at the text-column edge: count=$count status=$status"
+            )
         } else {
             val layout = textLayouts(hasTestTag("sync:chip-name")).single().first
             val rendered = layout.layoutInput.text.text
@@ -139,17 +157,23 @@ class SyncPlayChipPhraseAndNameRegressionTest {
             if (rendered != expected) {
                 assertTrue(rendered.endsWith("…"), "Name must remain whole or an exact original prefix plus ellipsis: '$rendered'")
                 val suppliedPrefix = rendered.removeSuffix("…")
-                assertTrue(suppliedPrefix.length >= 6 && suppliedPrefix.length < expected.length && expected.startsWith(suppliedPrefix),
-                    "Measured truncation must retain6+ original ASCII graphemes, not invent an abbreviation: rendered='$rendered' original='$expected'")
+                assertTrue(
+                    suppliedPrefix.length >= 6 && suppliedPrefix.length < expected.length && expected.startsWith(suppliedPrefix),
+                    "Measured truncation must retain6+ original ASCII graphemes, not invent an abbreviation: rendered='$rendered' original='$expected'"
+                )
             }
             if (layout.isLineEllipsized(0)) {
                 // Official visibleEnd excludes naturally ellipsized characters. This also accepts
                 // a measured prefix run if a renderer applies another ellipsis, provided6+ remain.
                 val visible = rendered.substring(0, layout.getLineEnd(0, visibleEnd = true)).trimEnd().removeSuffix("…")
-                assertTrue(expected.startsWith(visible) && visible.codePointCount(0, visible.length) >= 6,
-                    "An ellipsized name needs6+ actually visible original graphemes, otherwise omit it; visible='$visible' full='$expected'")
-                assertTrue(layout.getLineLeft(0) >= -1f && layout.getLineRight(0) <= layout.size.width + 1f,
-                    "The visible prefix must stay within the actual line box")
+                assertTrue(
+                    expected.startsWith(visible) && visible.codePointCount(0, visible.length) >= 6,
+                    "An ellipsized name needs6+ actually visible original graphemes, otherwise omit it; visible='$visible' full='$expected'"
+                )
+                assertTrue(
+                    layout.getLineLeft(0) >= -1f && layout.getLineRight(0) <= layout.size.width + 1f,
+                    "The visible prefix must stay within the actual line box"
+                )
             } else {
                 // Both natural full-name rendering and explicitly measured prefix+… are valid.
                 assertWholeOneLine(layout, rendered, "Displayed name or useful prefix must fit its actual line box")
@@ -177,8 +201,12 @@ class SyncPlayChipPhraseAndNameRegressionTest {
         assertEquals(1, layout.lineCount, context)
         assertEquals(expected.length, layout.getLineEnd(0, visibleEnd = true), "$context: full text must be laid out")
         assertFalse(layout.isLineEllipsized(0), "$context: no hidden tail")
-        assertTrue(layout.getLineLeft(0) >= -1f && layout.getLineRight(0) <= layout.size.width + 1f,
-            "$context: actual line must fit its measured box; size=${layout.size} left=${layout.getLineLeft(0)} right=${layout.getLineRight(0)}")
+        assertTrue(
+            layout.getLineLeft(0) >= -1f && layout.getLineRight(0) <= layout.size.width + 1f,
+            "$context: actual line must fit its measured box; size=${layout.size} left=${layout.getLineLeft(
+                0
+            )} right=${layout.getLineRight(0)}"
+        )
     }
 
     @Test fun ordinaryWidthKeepsTheWholeShortNameAndSingularCount() {
@@ -193,7 +221,10 @@ class SyncPlayChipPhraseAndNameRegressionTest {
         show(state(name = "Films", quality = SyncQuality.UNKNOWN, count = 1))
         val lines = statusLines()
         assertTrue(lines.isNotEmpty())
-        assertEquals(compose.activity.getString(R.string.sync_group_paused), lines.joinToString(" ") { it.text },
-            "Actual rendered chip must still omit UNKNOWN quality, not merely the pure quality helper")
+        assertEquals(
+            compose.activity.getString(R.string.sync_group_paused),
+            lines.joinToString(" ") { it.text },
+            "Actual rendered chip must still omit UNKNOWN quality, not merely the pure quality helper"
+        )
     }
 }

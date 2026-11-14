@@ -198,8 +198,10 @@ data class SyncMembership(
     val hasSnapshot: Boolean get() = group != null && queue != null
 
     // A missing recovery snapshot is never evidence that the viewer selected another title.
-    val canSelectSource: Boolean get() = active && group != null &&
-        phase !in setOf("Joining", "Reconnecting") && (hasSnapshot || phase == "Idle")
+    val canSelectSource: Boolean get() = active &&
+        group != null &&
+        phase !in setOf("Joining", "Reconnecting") &&
+        (hasSnapshot || phase == "Idle")
 }
 
 /**
@@ -296,7 +298,8 @@ fun reduceSyncEvent(state: SyncMembership, event: SyncEvent, generation: Long): 
                     // Readiness replies may arrive out of emission order. An exact repeat adds no
                     // timeline information: ignore it without replaying it or losing the snapshot.
                     val previous = state.lastAcceptedCommand
-                    if (state.hasSnapshot && previous != null &&
+                    if (state.hasSnapshot &&
+                        previous != null &&
                         command.copy(emittedAtTicks = previous.emittedAtTicks) == previous
                     ) {
                         next

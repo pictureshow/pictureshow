@@ -14,8 +14,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -35,7 +35,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
-import androidx.compose.ui.unit.dp
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Before
@@ -139,14 +138,16 @@ class SyncPlayDirectorRegressionTest {
         repeat(24) {
             for (index in 0..3) {
                 if (compose.onNodeWithTag("sync:participant:$index").fetchSemanticsNode().config
-                        .getOrNull(SemanticsProperties.Focused) == true) {
+                        .getOrNull(SemanticsProperties.Focused) == true
+                ) {
                     reached += index
                     compose.onNodeWithTag("sync:participant:$index").assertIsDisplayed()
                     key(Key.DirectionCenter)
                 }
             }
             if (compose.onNodeWithText("+1 more person").fetchSemanticsNode().config
-                    .getOrNull(SemanticsProperties.Focused) == true) {
+                    .getOrNull(SemanticsProperties.Focused) == true
+            ) {
                 overflowReached = true
                 compose.onNodeWithText("+1 more person").assertIsDisplayed()
                 key(Key.DirectionCenter)
@@ -162,8 +163,10 @@ class SyncPlayDirectorRegressionTest {
 
     private fun readOnlyFact() = SemanticsMatcher("focusable fact without action role, click, disabled, selected or switch semantics") {
         it.config.contains(SemanticsProperties.Focused) &&
-            !it.config.contains(SemanticsActions.OnClick) && !it.config.contains(SemanticsProperties.Disabled) &&
-            !it.config.contains(SemanticsProperties.Selected) && !it.config.contains(SemanticsProperties.ToggleableState) &&
+            !it.config.contains(SemanticsActions.OnClick) &&
+            !it.config.contains(SemanticsProperties.Disabled) &&
+            !it.config.contains(SemanticsProperties.Selected) &&
+            !it.config.contains(SemanticsProperties.ToggleableState) &&
             !it.config.contains(SemanticsProperties.Role)
     }
 
@@ -179,13 +182,19 @@ class SyncPlayDirectorRegressionTest {
     }
 
     @Test fun removingMiddleQueueEntryKeepsFocusOnItsNextNeighbour() = removeAndExpect(
-        listOf(SyncPlayQueueRow("a", "First film", true), SyncPlayQueueRow("b", "Second film", false), SyncPlayQueueRow("c", "Third film", false)),
-        "b", "c"
+        listOf(
+            SyncPlayQueueRow("a", "First film", true),
+            SyncPlayQueueRow("b", "Second film", false),
+            SyncPlayQueueRow("c", "Third film", false)
+        ),
+        "b",
+        "c"
     )
 
     @Test fun removingLastQueueEntryKeepsFocusOnItsPreviousNeighbour() = removeAndExpect(
         listOf(SyncPlayQueueRow("a", "First film", true), SyncPlayQueueRow("b", "Second film", false)),
-        "b", "a"
+        "b",
+        "a"
     )
 
     private fun removeAndExpect(queue: List<SyncPlayQueueRow>, removed: String, neighbour: String) {
@@ -227,7 +236,10 @@ class SyncPlayDirectorRegressionTest {
         compose.onNodeWithTag("sync:play").assertIsFocused()
         val title = compose.onNodeWithText("Watch together").getUnclippedBoundsInRoot()
         val scope = compose.onNodeWithText("Cinema · Viewer").getUnclippedBoundsInRoot()
-        assertTrue(scope.top >= title.bottom, "Focus bring-into-view must not hide initial scope behind fixed title: scope=$scope title=$title")
+        assertTrue(
+            scope.top >= title.bottom,
+            "Focus bring-into-view must not hide initial scope behind fixed title: scope=$scope title=$title"
+        )
         compose.onNodeWithText("Cinema · Viewer").assertIsDisplayed()
         compose.onNodeWithTag("tv-settings:fade-top").assertDoesNotExist()
     }
@@ -269,7 +281,8 @@ class SyncPlayDirectorRegressionTest {
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun enabledCreateUsesQuietThemeTonalSurfaceAtRest() {
+    @Test
+    fun enabledCreateUsesQuietThemeTonalSurfaceAtRest() {
         var tonal = 0
         var onTonal = 0
         compose.setContent {
@@ -285,7 +298,11 @@ class SyncPlayDirectorRegressionTest {
         compose.onNodeWithTag("sync:name").performTextInput("Friday films")
         compose.onNodeWithTag("sync:create").assertIsEnabled()
         val enabled = dominantCreateColor()
-        assertEquals(tonal, enabled, "Enabled resting Create must visibly use quiet theme secondaryContainer; disabled=$disabled enabled=$enabled tonal=$tonal")
+        assertEquals(
+            tonal,
+            enabled,
+            "Enabled resting Create must visibly use quiet theme secondaryContainer; disabled=$disabled enabled=$enabled tonal=$tonal"
+        )
         assertTrue(disabled != enabled, "Typing a usable name must visibly distinguish Create from its disabled appearance")
         val bitmap = compose.onNodeWithTag("sync:create").captureToImage().asAndroidBitmap()
         var exactTextInk = 0

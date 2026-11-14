@@ -2,6 +2,7 @@
  * Copyright (c) Legitimate LLC.
  */
 @file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package app.pictureshow
 
 import android.app.Application
@@ -71,7 +72,9 @@ import org.robolectric.shadows.ShadowDialog
 @Config(sdk = [30], application = Application::class, qualifiers = "w411dp-h891dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncDepartureUiBindingTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val fixtures = mutableListOf<HostFixture>()
 
@@ -79,14 +82,19 @@ class SyncDepartureUiBindingTest {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java))
             .setCurrentModeType(compose.activity.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK)
     }
+
     @After fun closeFixtureScopes() {
         compose.runOnIdle { fixtures.forEach { it.close() } }
     }
+
     @Composable private fun Theme(content: @Composable () -> Unit) {
         app.pictureshow.ui.PictureshowTheme(content = content)
     }
     private fun change(fixture: HostFixture, block: () -> Unit) {
-        compose.runOnIdle { block(); fixture.scheduler.runCurrent() }
+        compose.runOnIdle {
+            block()
+            fixture.scheduler.runCurrent()
+        }
         compose.waitForIdle()
     }
     private fun fixture(): HostFixture = HostFixture().also { fixtures += it }
@@ -134,8 +142,10 @@ class SyncDepartureUiBindingTest {
         val acknowledgements = mutableListOf<Long>()
         compose.setContent {
             Box(Modifier.size(viewport).clipToBounds()) {
-                Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.roundToPx(), 0) }.requiredSize(20.dp)
-                    .syncDeparturePresentation(95L, { acknowledgements += it }))
+                Box(
+                    Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.roundToPx(), 0) }.requiredSize(20.dp)
+                        .syncDeparturePresentation(95L, { acknowledgements += it })
+                )
             }
         }
         compose.waitForIdle()
@@ -163,14 +173,27 @@ class SyncDepartureUiBindingTest {
 
     private fun panelSelection() {
         val fact = SyncDeparture(147L, "Evening", SyncDepartureCause.PLAYBACK_STOPPED)
-        var state by mutableStateOf(SyncPlayPresentation(
-            server = "Cinema", viewer = "Ana", policyKnown = true, policy = "CreateAndJoinGroups",
-            departure = fact, notice = SyncNotice(SyncNoticeKind.ACCESS_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.REFRESH)
-        ))
+        var state by mutableStateOf(
+            SyncPlayPresentation(
+                server = "Cinema",
+                viewer = "Ana",
+                policyKnown = true,
+                policy = "CreateAndJoinGroups",
+                departure = fact,
+                notice = SyncNotice(SyncNoticeKind.ACCESS_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.REFRESH)
+            )
+        )
         val acknowledgements = mutableListOf<Long>()
         compose.setContent {
-            Theme { SyncPlayPanel(state, { _, _ -> }, {}, fixtureLabel = null,
-                onDeparturePresented = { acknowledgements += it }) }
+            Theme {
+                SyncPlayPanel(
+                    state,
+                    { _, _ -> },
+                    {},
+                    fixtureLabel = null,
+                    onDeparturePresented = { acknowledgements += it }
+                )
+            }
         }
         compose.onNodeWithTag("sync:recovery").assertIsDisplayed()
         compose.runOnIdle {
@@ -236,7 +259,10 @@ class SyncDepartureUiBindingTest {
 
     private fun coveredDismissalRetains(useBack: Boolean) {
         val rig = fixture()
-        change(rig) { rig.prepareHiddenStop(); rig.failAccess = true }
+        change(rig) {
+            rig.prepareHiddenStop()
+            rig.failAccess = true
+        }
         val fact = assertNotNull(rig.host.state.value.departure)
         compose.setContent { Theme { SyncPlayChooser(rig.host) } }
         change(rig) { rig.host.show() }
@@ -250,7 +276,10 @@ class SyncDepartureUiBindingTest {
             assertFalse(rig.host.panelOpen)
             assertEquals(fact, rig.host.state.value.departure, "Unshown fact survives an actual Close/Back dismissal")
         }
-        change(rig) { rig.failAccess = false; rig.host.show() }
+        change(rig) {
+            rig.failAccess = false
+            rig.host.show()
+        }
         compose.onNodeWithTag("sync:status").assertIsDisplayed()
         compose.runOnIdle { assertEquals(rig.host.chooserSession, rig.host.departureState.presentedIn) }
         if (useBack) compose.onNodeWithTag("sync:close").performClick() else dialogBack()
@@ -267,7 +296,8 @@ class SyncDepartureUiBindingTest {
         }
         change(rig) { rig.host.show() }
         val fact = assertNotNull(rig.host.state.value.departure)
-        val scope = rig.host.departureState.scope; val session = rig.host.chooserSession
+        val scope = rig.host.departureState.scope
+        val session = rig.host.chooserSession
         compose.onNodeWithTag("sync:status").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(session, rig.host.departureState.presentedIn)
@@ -331,8 +361,11 @@ class SyncDepartureUiBindingTest {
             assertTrue(rig.host.departureState.scope > oldScope)
             assertTrue(second.id > first.id)
             assertEquals(second, rig.host.departureState.pending)
-            assertEquals(rig.host.chooserSession, rig.host.departureState.presentedIn,
-                "Actual binding must capture the new scope/id/session, not remember the old closure")
+            assertEquals(
+                rig.host.chooserSession,
+                rig.host.departureState.presentedIn,
+                "Actual binding must capture the new scope/id/session, not remember the old closure"
+            )
         }
         compose.onNodeWithTag("sync:close").performClick()
         compose.runOnIdle { assertEquals(null, rig.host.state.value.departure) }
@@ -348,31 +381,58 @@ class SyncDepartureUiBindingTest {
         private val sent = mutableListOf<String>()
         private val gateway = object : SyncPlayGateway {
             override suspend fun groups(account: Account) = ClientResult.Success(
-                listOf(SyncGroup("g", "Evening", "Paused", emptyList(), epoch * 10_000)))
+                listOf(SyncGroup("g", "Evening", "Paused", emptyList(), epoch * 10_000))
+            )
             override suspend fun access(account: Account): ClientResult<String> = if (failAccess) {
                 ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Access check unavailable"))
-            } else ClientResult.Success("CreateAndJoinGroups")
+            } else {
+                ClientResult.Success("CreateAndJoinGroups")
+            }
             override suspend fun time(account: Account) = ClientResult.Success(
-                SyncUtcTime(epoch + scheduler.currentTime, epoch + scheduler.currentTime))
-            override suspend fun send(account: Account, request: SyncRequest): Int { sent += request.operation; return 204 }
+                SyncUtcTime(epoch + scheduler.currentTime, epoch + scheduler.currentTime)
+            )
+            override suspend fun send(account: Account, request: SyncRequest): Int {
+                sent += request.operation
+                return 204
+            }
         }
         val host = SyncPlayHost(scope, gateway, { epoch + scheduler.currentTime }, { scheduler.currentTime })
         fun prepareHiddenStop() {
-            host.bind(account); host.socket(true); host.refresh(); scheduler.runCurrent()
-            host.join("g"); scheduler.runCurrent()
-            host.receive(buildJsonObject {
-                put("MessageType", "SyncPlayGroupUpdate")
-                put("Data", buildJsonObject {
-                    put("GroupId", "g"); put("Type", "GroupJoined")
-                    put("Data", buildJsonObject {
-                        put("GroupId", "g"); put("GroupName", "Evening"); put("State", "Paused")
-                        put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                    })
-                })
-            }.toString())
-            host.leave(SyncDepartureCause.PLAYBACK_STOPPED); scheduler.runCurrent()
+            host.bind(account)
+            host.socket(true)
+            host.refresh()
+            scheduler.runCurrent()
+            host.join("g")
+            scheduler.runCurrent()
+            host.receive(
+                buildJsonObject {
+                    put("MessageType", "SyncPlayGroupUpdate")
+                    put(
+                        "Data",
+                        buildJsonObject {
+                            put("GroupId", "g")
+                            put("Type", "GroupJoined")
+                            put(
+                                "Data",
+                                buildJsonObject {
+                                    put("GroupId", "g")
+                                    put("GroupName", "Evening")
+                                    put("State", "Paused")
+                                    put("Participants", JsonArray(emptyList()))
+                                    put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                                }
+                            )
+                        }
+                    )
+                }.toString()
+            )
+            host.leave(SyncDepartureCause.PLAYBACK_STOPPED)
+            scheduler.runCurrent()
         }
         fun departureRequests() = sent.filter { it == "Leave" }
-        fun close() { scope.cancel(); scheduler.runCurrent() }
+        fun close() {
+            scope.cancel()
+            scheduler.runCurrent()
+        }
     }
 }

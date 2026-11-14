@@ -12,19 +12,17 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.text.TextLayoutResult
-import org.robolectric.RuntimeEnvironment
-import org.robolectric.annotation.GraphicsMode
-import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
@@ -39,8 +37,8 @@ import app.pictureshow.core.sync.syncUtcTimestamp
 import com.google.common.util.concurrent.Futures
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -60,7 +58,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Real TouchPlayerContent → bound player → real interception → group gateway recorder. */
@@ -68,7 +68,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w640dp-h360dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncTouchPlayerIntentRegressionTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = StandardTestDispatcher())
     private val scheduler = TestCoroutineScheduler()
     private val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
@@ -98,9 +100,12 @@ class SyncTouchPlayerIntentRegressionTest {
     }
     private fun launch(case: JsonObject, state: Int = Player.STATE_READY) {
         val input = case.getValue("input").jsonObject
-        launch(input.getValue("participating").jsonPrimitive.boolean,
+        launch(
+            input.getValue("participating").jsonPrimitive.boolean,
             input.getValue("phase").jsonPrimitive.content,
-            !input.getValue("localShowPlayButton").jsonPrimitive.boolean, state)
+            !input.getValue("localShowPlayButton").jsonPrimitive.boolean,
+            state
+        )
     }
     private fun launch(grouped: Boolean, phase: String, nativePlaying: Boolean, state: Int = Player.STATE_READY) {
         compose.runOnIdle {
@@ -108,29 +113,80 @@ class SyncTouchPlayerIntentRegressionTest {
             decoder = Decoder(state, nativePlaying)
             if (grouped) {
                 val gateway = object : SyncPlayGateway {
-                    override suspend fun groups(account: Account) = ClientResult.Success(listOf(SyncGroup("g", "Friday films", phase, emptyList(), epoch * 10_000)))
+                    override suspend fun groups(account: Account) = ClientResult.Success(
+                        listOf(
+                            SyncGroup(
+                                "g",
+                                "Friday films",
+                                phase,
+                                emptyList(),
+                                epoch * 10_000
+                            )
+                        )
+                    )
                     override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
                     override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
-                    override suspend fun send(account: Account, request: SyncRequest): Int { sent += request.operation; return 204 }
+                    override suspend fun send(account: Account, request: SyncRequest): Int {
+                        sent += request.operation
+                        return 204
+                    }
                 }
                 val group = SyncPlayHost(scope, gateway, { epoch + scheduler.currentTime }, { scheduler.currentTime })
                 sync = group
-                group.bind(account); group.socket(true); group.refresh(); scheduler.runCurrent()
-                group.join("g"); scheduler.runCurrent()
+                group.bind(account)
+                group.socket(true)
+                group.refresh()
+                scheduler.runCurrent()
+                group.join("g")
+                scheduler.runCurrent()
                 fun update(type: String, data: JsonObject) = buildJsonObject {
                     put("MessageType", "SyncPlayGroupUpdate")
-                    put("Data", buildJsonObject { put("GroupId", "g"); put("Type", type); put("Data", data) })
+                    put(
+                        "Data",
+                        buildJsonObject {
+                            put("GroupId", "g")
+                            put("Type", type)
+                            put("Data", data)
+                        }
+                    )
                 }.toString()
-                group.receive(update("GroupJoined", buildJsonObject {
-                    put("GroupId", "g"); put("GroupName", "Friday films"); put("State", phase)
-                    put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                }))
-                group.receive(update("PlayQueue", buildJsonObject {
-                    put("Reason", "NewPlaylist"); put("LastUpdate", syncUtcTimestamp(epoch))
-                    put("Playlist", JsonArray(listOf(buildJsonObject { put("ItemId", "film"); put("PlaylistItemId", "entry-a") })))
-                    put("PlayingItemIndex", 0); put("StartPositionTicks", 200_000_000L)
-                    put("IsPlaying", phase == "Playing"); put("RepeatMode", "RepeatNone"); put("ShuffleMode", "Sorted")
-                }))
+                group.receive(
+                    update(
+                        "GroupJoined",
+                        buildJsonObject {
+                            put("GroupId", "g")
+                            put("GroupName", "Friday films")
+                            put("State", phase)
+                            put("Participants", JsonArray(emptyList()))
+                            put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                        }
+                    )
+                )
+                group.receive(
+                    update(
+                        "PlayQueue",
+                        buildJsonObject {
+                            put("Reason", "NewPlaylist")
+                            put("LastUpdate", syncUtcTimestamp(epoch))
+                            put(
+                                "Playlist",
+                                JsonArray(
+                                    listOf(
+                                        buildJsonObject {
+                                            put("ItemId", "film")
+                                            put("PlaylistItemId", "entry-a")
+                                        }
+                                    )
+                                )
+                            )
+                            put("PlayingItemIndex", 0)
+                            put("StartPositionTicks", 200_000_000L)
+                            put("IsPlaying", phase == "Playing")
+                            put("RepeatMode", "RepeatNone")
+                            put("ShuffleMode", "Sorted")
+                        }
+                    )
+                )
                 scheduler.runCurrent()
                 assertTrue(group.participating, "Fixture must establish actual production membership")
                 assertEquals(phase, group.state.value.phase, "Fixture must supply authoritative group phase")
@@ -151,13 +207,20 @@ class SyncTouchPlayerIntentRegressionTest {
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(400)
     }
-    private fun expectedLabel(case: JsonObject) = if (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content == "pause") "Pause" else "Play"
+    private fun expectedLabel(case: JsonObject) = if (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content ==
+        "pause"
+    ) {
+        "Pause"
+    } else {
+        "Play"
+    }
 
     @Test fun groupedPlayingNativeHoldLabelOffersPause() {
         val case = vector("group-playing-local-True")
         launch(case, Player.STATE_BUFFERING)
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed().assertContentDescriptionEquals(expectedLabel(case))
     }
+
     @Test fun groupedPlayingNativeHoldClickRequestsPauseWithoutNativeFlip() {
         val case = vector("group-playing-local-True")
         launch(case, Player.STATE_BUFFERING)
@@ -170,6 +233,7 @@ class SyncTouchPlayerIntentRegressionTest {
             assertEquals(1, pauseFeedback, "Retain output interception's immediate viewer Pause feedback")
         }
     }
+
     @Test fun groupedPausedNativeRunningOffersAndRequestsPlay() {
         val case = vector("group-paused-local-False")
         launch(case)
@@ -181,7 +245,9 @@ class SyncTouchPlayerIntentRegressionTest {
             assertEquals(0, decoder.nativeIntentChanges)
         }
     }
+
     @Test fun standalonePausedStillPlaysLocally() = verifyStandalone("standalone-local-True")
+
     @Test fun standaloneRunningStillPausesLocally() = verifyStandalone("standalone-local-False")
     private fun verifyStandalone(id: String) {
         val case = vector(id)
@@ -194,15 +260,25 @@ class SyncTouchPlayerIntentRegressionTest {
             assertTrue(sent.isEmpty())
         }
     }
+
     @Test fun standaloneIdleStillPreparesAtSavedPosition() {
         launch(false, "Playing", true, Player.STATE_IDLE)
         compose.onNodeWithTag("touch:toggle").assertContentDescriptionEquals("Play").performClick()
-        compose.runOnIdle { assertEquals(1, decoder.prepares); assertEquals(20_000L, decoder.currentPosition); assertEquals(true, decoder.playWhenReady) }
+        compose.runOnIdle {
+            assertEquals(1, decoder.prepares)
+            assertEquals(20_000L, decoder.currentPosition)
+            assertEquals(true, decoder.playWhenReady)
+        }
     }
+
     @Test fun standaloneEndedStillRestartsAtDefaultPosition() {
         launch(false, "Playing", true, Player.STATE_ENDED)
         compose.onNodeWithTag("touch:toggle").assertContentDescriptionEquals("Play").performClick()
-        compose.runOnIdle { assertEquals(1, decoder.defaultSeeks); assertEquals(0L, decoder.currentPosition); assertEquals(true, decoder.playWhenReady) }
+        compose.runOnIdle {
+            assertEquals(1, decoder.defaultSeeks)
+            assertEquals(0L, decoder.currentPosition)
+            assertEquals(true, decoder.playWhenReady)
+        }
     }
 
     // Actual native geometry after the centered transport merge; no placement-helper oracle.
@@ -211,9 +287,11 @@ class SyncTouchPlayerIntentRegressionTest {
         val input = case.getValue("input").jsonObject
         val font = input.getValue("fontScale").jsonPrimitive.content.toFloat()
         RuntimeEnvironment.setFontScale(font)
-        launch(input.getValue("participating").jsonPrimitive.boolean,
+        launch(
+            input.getValue("participating").jsonPrimitive.boolean,
             input.getValue("phase").jsonPrimitive.content,
-            input.getValue("nativePlaying").jsonPrimitive.boolean)
+            input.getValue("nativePlaying").jsonPrimitive.boolean
+        )
         val frame = compose.onNodeWithTag("touch:player").getUnclippedBoundsInRoot()
         assertEquals(input.getValue("widthDp").jsonPrimitive.content.toFloat(), (frame.right - frame.left).value, 1f)
         assertEquals(input.getValue("heightDp").jsonPrimitive.content.toFloat(), (frame.bottom - frame.top).value, 1f)
@@ -222,33 +300,46 @@ class SyncTouchPlayerIntentRegressionTest {
         assertTrue(layouts.isNotEmpty())
         layouts.forEach { assertEquals(font, it.layoutInput.density.fontScale, .01f) }
         compose.onNodeWithTag("sync:player-chip").assertIsDisplayed()
-        compose.runOnIdle { assertTrue(requireNotNull(sync).participating); assertEquals("Playing", requireNotNull(sync).state.value.phase) }
+        compose.runOnIdle {
+            assertTrue(requireNotNull(sync).participating)
+            assertEquals("Playing", requireNotNull(sync).state.value.phase)
+        }
         return case
     }
+
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w640dp-h280dp-land-xhdpi")
-    @Test fun centeredTransportDoesNotOverlapActualJoinedSyncChip() {
+    @Test
+    fun centeredTransportDoesNotOverlapActualJoinedSyncChip() {
         val case = groupedGeometryProfile()
         val expected = case.getValue("expected").jsonObject
         val transport = compose.onNodeWithTag("touch:transport").assertIsDisplayed().getUnclippedBoundsInRoot()
         val chip = compose.onNodeWithTag("sync:player-chip").getUnclippedBoundsInRoot()
         val frame = compose.onNodeWithTag("touch:player").getUnclippedBoundsInRoot()
-        assertEquals(expected.getValue("transportOverlapsChip").jsonPrimitive.boolean,
+        assertEquals(
+            expected.getValue("transportOverlapsChip").jsonPrimitive.boolean,
             transport.left < chip.right && chip.left < transport.right && transport.top < chip.bottom && chip.top < transport.bottom,
-            "Whole actual native transport must clear the live joined chip: transport=$transport chip=$chip")
-        assertTrue(transport.left >= frame.left && transport.right <= frame.right && transport.top >= frame.top && transport.bottom <= frame.bottom)
+            "Whole actual native transport must clear the live joined chip: transport=$transport chip=$chip"
+        )
+        assertTrue(
+            transport.left >= frame.left && transport.right <= frame.right && transport.top >= frame.top && transport.bottom <= frame.bottom
+        )
     }
+
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w640dp-h280dp-land-xhdpi")
-    @Test fun changedQualityCueNeverOverlapsActualCenteredTransport() {
+    @Test
+    fun changedQualityCueNeverOverlapsActualCenteredTransport() {
         val case = groupedGeometryProfile()
         val input = case.getValue("input").jsonObject
         val expected = case.getValue("expected").jsonObject
         compose.runOnIdle { playback.estimatedBandwidth = input.getValue("bandwidthA").jsonPrimitive.content.toLong() }
-        compose.mainClock.advanceTimeBy(input.getValue("settleMs").jsonPrimitive.content.toLong()); compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(input.getValue("settleMs").jsonPrimitive.content.toLong())
+        compose.waitForIdle()
         val factA = assertNotNull(playback.adaptiveQualityNotice, "Real bandwidth A must produce adaptive quality context")
         compose.runOnIdle { playback.estimatedBandwidth = input.getValue("bandwidthB").jsonPrimitive.content.toLong() }
-        compose.mainClock.advanceTimeBy(input.getValue("settleMs").jsonPrimitive.content.toLong()); compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(input.getValue("settleMs").jsonPrimitive.content.toLong())
+        compose.waitForIdle()
         val factB = assertNotNull(playback.adaptiveQualityNotice, "Real bandwidth B must produce adaptive quality context")
         assertTrue(factA != factB, "The real Host must receive a changed, truthful adaptive quality fact")
         // A measured but unplaced native Layout can have nonzero semantics bounds.
@@ -266,25 +357,40 @@ class SyncTouchPlayerIntentRegressionTest {
             val panel = compose.onNodeWithTag("touch:panel").getUnclippedBoundsInRoot()
             val frame = compose.onNodeWithTag("touch:player").getUnclippedBoundsInRoot()
             val gap = expected.getValue("minimumRoleGapDp").jsonPrimitive.content.toFloat()
-            assertTrue(cue.right.value + gap <= transport.left.value || transport.right.value + gap <= cue.left.value ||
-                cue.bottom.value + gap <= transport.top.value || transport.bottom.value + gap <= cue.top.value,
-                "Visible actual cue must clear transport by8dp: cue=$cue transport=$transport")
-            assertTrue(cue.top.value >= chip.bottom.value + gap && cue.bottom.value + gap <= panel.top.value,
-                "Cue must retain priority/clearance of actual chip and bottom panel: cue=$cue chip=$chip panel=$panel")
+            assertTrue(
+                cue.right.value + gap <= transport.left.value ||
+                    transport.right.value + gap <= cue.left.value ||
+                    cue.bottom.value + gap <= transport.top.value ||
+                    transport.bottom.value + gap <= cue.top.value,
+                "Visible actual cue must clear transport by8dp: cue=$cue transport=$transport"
+            )
+            assertTrue(
+                cue.top.value >= chip.bottom.value + gap && cue.bottom.value + gap <= panel.top.value,
+                "Cue must retain priority/clearance of actual chip and bottom panel: cue=$cue chip=$chip panel=$panel"
+            )
             assertTrue(cue.left >= frame.left && cue.right <= frame.right && cue.top >= frame.top && cue.bottom <= frame.bottom)
         }
-        compose.runOnIdle { assertEquals(factB, playback.adaptiveQualityNotice); assertTrue(sent.isEmpty()) }
+        compose.runOnIdle {
+            assertEquals(factB, playback.adaptiveQualityNotice)
+            assertTrue(sent.isEmpty())
+        }
     }
 
     private class Decoder(state: Int, playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {
         var nativeIntentChanges = 0
         var prepares = 0
         var defaultSeeks = 0
-        private var value = State.Builder().setAvailableCommands(Player.Commands.Builder().addAll(
-            Player.COMMAND_PLAY_PAUSE, Player.COMMAND_PREPARE, Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
-            Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, Player.COMMAND_RELEASE,
-            Player.COMMAND_GET_CURRENT_MEDIA_ITEM, Player.COMMAND_GET_TIMELINE
-        ).build()).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
+        private var value = State.Builder().setAvailableCommands(
+            Player.Commands.Builder().addAll(
+                Player.COMMAND_PLAY_PAUSE,
+                Player.COMMAND_PREPARE,
+                Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
+                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_RELEASE,
+                Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_GET_TIMELINE
+            ).build()
+        ).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
             .setPlaybackState(state).setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(20_000).build()
         override fun getState(): State = value
@@ -293,10 +399,12 @@ class SyncTouchPlayerIntentRegressionTest {
             value = value.buildUpon().setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST).build()
         }
         override fun handlePrepare() = Futures.immediateVoidFuture().also {
-            prepares++; value = value.buildUpon().setPlaybackState(Player.STATE_READY).build()
+            prepares++
+            value = value.buildUpon().setPlaybackState(Player.STATE_READY).build()
         }
         override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int) = Futures.immediateVoidFuture().also {
-            defaultSeeks++; value = value.buildUpon().setContentPositionMs(positionMs).setPlaybackState(Player.STATE_READY).build()
+            defaultSeeks++
+            value = value.buildUpon().setContentPositionMs(positionMs).setPlaybackState(Player.STATE_READY).build()
         }
         override fun handleRelease() = Futures.immediateVoidFuture()
     }

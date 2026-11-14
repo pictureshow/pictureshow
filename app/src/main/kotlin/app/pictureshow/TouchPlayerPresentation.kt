@@ -30,17 +30,14 @@ internal fun Modifier.touchPlayerScrim(): Modifier = drawWithCache {
     onDrawBehind { drawRect(brush) }
 }
 
-internal fun touchPlayerPrimaryAction(
-    sync: SyncPlayHost?,
-    state: SyncPlayPresentation?,
-    localShowPlayButton: Boolean
-): String? = syncPlayerPrimaryAction(
-    participating = sync?.participating == true,
-    usable = state?.let { it.groupId != null && !it.busy && it.phase !in setOf("Joining", "Reconnecting", "Leaving", "Error") } == true,
-    queueEntries = state?.queue?.size ?: 0,
-    phase = state?.phase.orEmpty(),
-    localShowPlayButton = localShowPlayButton
-)
+internal fun touchPlayerPrimaryAction(sync: SyncPlayHost?, state: SyncPlayPresentation?, localShowPlayButton: Boolean): String? =
+    syncPlayerPrimaryAction(
+        participating = sync?.participating == true,
+        usable = state?.let { it.groupId != null && !it.busy && it.phase !in setOf("Joining", "Reconnecting", "Leaving", "Error") } == true,
+        queueEntries = state?.queue?.size ?: 0,
+        phase = state?.phase.orEmpty(),
+        localShowPlayButton = localShowPlayButton
+    )
 
 /** Re-read membership and group phase at the click, then send the explicit intent through the wrapper.
  * Standalone retains Media3's complete idle/end policy.

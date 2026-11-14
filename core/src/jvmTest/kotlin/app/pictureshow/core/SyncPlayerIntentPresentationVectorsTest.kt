@@ -18,16 +18,27 @@ import kotlinx.serialization.json.jsonPrimitive
 /** Every portable case executes the actual production-used core projection, not an inventory. */
 class SyncPlayerIntentPresentationVectorsTest {
     @Test fun groupPlayingNativeHold() = verify("group-playing-local-True")
+
     @Test fun groupPlayingLocalRunning() = verify("group-playing-local-False")
+
     @Test fun groupPausedNativeHold() = verify("group-paused-local-True")
+
     @Test fun groupPausedLocalRunning() = verify("group-paused-local-False")
+
     @Test fun groupWaitingNativeHold() = verify("group-waiting-local-True")
+
     @Test fun groupWaitingLocalRunning() = verify("group-waiting-local-False")
+
     @Test fun standaloneNativeHold() = verify("standalone-local-True")
+
     @Test fun standaloneLocalRunning() = verify("standalone-local-False")
+
     @Test fun groupUnavailable() = verify("group-unavailable-False-1")
+
     @Test fun groupQueueEmpty() = verify("group-unavailable-True-0")
+
     @Test fun groupedSpeedSelection() = verify("speed-selection-grouped-True")
+
     @Test fun standaloneSpeedSelection() = verify("speed-selection-grouped-False")
 
     private fun verify(id: String) {

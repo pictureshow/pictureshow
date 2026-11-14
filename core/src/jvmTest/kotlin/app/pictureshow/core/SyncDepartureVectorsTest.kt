@@ -44,23 +44,39 @@ class SyncDepartureVectorsTest {
     private fun nullableString(e: JsonElement): String? = if (e is JsonNull) null else e.jsonPrimitive.content
     private fun state(v: JsonObject): SyncDepartureState {
         val pending = v.getValue("pending").takeUnless { it is JsonNull }?.jsonObject?.let {
-            SyncDeparture(it.getValue("id").jsonPrimitive.long, nullableString(it.getValue("groupName")),
-                SyncDepartureCause.valueOf(it.getValue("cause").jsonPrimitive.content))
+            SyncDeparture(
+                it.getValue("id").jsonPrimitive.long,
+                nullableString(it.getValue("groupName")),
+                SyncDepartureCause.valueOf(it.getValue("cause").jsonPrimitive.content)
+            )
         }
-        return SyncDepartureState(v.getValue("scope").jsonPrimitive.long, v.getValue("revision").jsonPrimitive.long,
-            pending, nullableLong(v.getValue("presentedIn")))
+        return SyncDepartureState(
+            v.getValue("scope").jsonPrimitive.long,
+            v.getValue("revision").jsonPrimitive.long,
+            pending,
+            nullableLong(v.getValue("presentedIn"))
+        )
     }
     private fun event(v: JsonObject): SyncDepartureEvent {
         val scope = v.getValue("scope").jsonPrimitive.long
         return when (v.getValue("kind").jsonPrimitive.content) {
             "ScopeChanged" -> SyncDepartureEvent.ScopeChanged(scope)
             "MembershipStarted" -> SyncDepartureEvent.MembershipStarted(scope)
-            "Recorded" -> SyncDepartureEvent.Recorded(scope, nullableString(v.getValue("name")),
-                SyncDepartureCause.valueOf(v.getValue("cause").jsonPrimitive.content))
-            "Presented" -> SyncDepartureEvent.Presented(scope, v.getValue("id").jsonPrimitive.long,
-                v.getValue("chooserSession").jsonPrimitive.long)
-            "Dismissed" -> SyncDepartureEvent.Dismissed(scope, v.getValue("id").jsonPrimitive.long,
-                v.getValue("chooserSession").jsonPrimitive.long)
+            "Recorded" -> SyncDepartureEvent.Recorded(
+                scope,
+                nullableString(v.getValue("name")),
+                SyncDepartureCause.valueOf(v.getValue("cause").jsonPrimitive.content)
+            )
+            "Presented" -> SyncDepartureEvent.Presented(
+                scope,
+                v.getValue("id").jsonPrimitive.long,
+                v.getValue("chooserSession").jsonPrimitive.long
+            )
+            "Dismissed" -> SyncDepartureEvent.Dismissed(
+                scope,
+                v.getValue("id").jsonPrimitive.long,
+                v.getValue("chooserSession").jsonPrimitive.long
+            )
             else -> error("Unknown departure event; do not silently skip a portable trace: $v")
         }
     }

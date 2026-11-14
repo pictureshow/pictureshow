@@ -4,10 +4,10 @@
 package app.pictureshow.core
 
 import app.pictureshow.core.sync.SyncQuality
-import app.pictureshow.core.sync.syncChipShowsQuality
-import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.SyncTitleScope
 import app.pictureshow.core.sync.syncAcceptTitle
+import app.pictureshow.core.sync.syncChipShowsQuality
+import app.pictureshow.core.sync.syncPanelQuality
 import app.pictureshow.core.sync.syncPeople
 import app.pictureshow.core.sync.syncPhase
 import app.pictureshow.core.sync.syncQuality

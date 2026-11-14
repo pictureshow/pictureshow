@@ -19,7 +19,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,20 +43,29 @@ class SyncAudioOutputMaintenanceRegressionTest {
     @get:Rule val timeLimit = PerTestTimeLimit(180)
 
     private fun decision() = PlayDecision(
-        "film", MediaSourceInfo(runTimeTicks = 9_000_000_000), PlayMethod.DirectPlay,
-        "https://example.test/Videos/film/stream.ts", emptyMap(), "session"
+        "film",
+        MediaSourceInfo(runTimeTicks = 9_000_000_000),
+        PlayMethod.DirectPlay,
+        "https://example.test/Videos/film/stream.ts",
+        emptyMap(),
+        "session"
     )
 
     private class Fixture : Closeable {
         val output = Media3PlaybackOutput(
-            RuntimeEnvironment.getApplication(), Server("s", "Fixture", "https://example.test", "12"),
+            RuntimeEnvironment.getApplication(),
+            Server("s", "Fixture", "https://example.test", "12"),
             upstream = androidx.media3.datasource.DataSource.Factory {
                 androidx.media3.datasource.ByteArrayDataSource(byteArrayOf(0))
             }
         )
         val decision = PlayDecision(
-            "film", MediaSourceInfo(runTimeTicks = 9_000_000_000), PlayMethod.DirectPlay,
-            "https://example.test/Videos/film/stream.ts", emptyMap(), "session"
+            "film",
+            MediaSourceInfo(runTimeTicks = 9_000_000_000),
+            PlayMethod.DirectPlay,
+            "https://example.test/Videos/film/stream.ts",
+            emptyMap(),
+            "session"
         )
         var grouped = false
         val groupRequests = mutableListOf<String>()
@@ -70,6 +86,7 @@ class SyncAudioOutputMaintenanceRegressionTest {
                 grouped
             }
         }
+
         // Read one already-owned native identity rather than add a test constructor or replace the production player.
         private fun nativePlayer(): ExoPlayer = Media3PlaybackOutput::class.java
             .getDeclaredField("activePlayer").apply { isAccessible = true }.get(output) as ExoPlayer
@@ -83,7 +100,9 @@ class SyncAudioOutputMaintenanceRegressionTest {
             source = nativePlayer()
             generation = requireNotNull(output.syncNativeSnapshot()).generation
         }
-        override fun close() { output.release() }
+        override fun close() {
+            output.release()
+        }
     }
 
     private fun originCases(): List<JsonObject> {
@@ -117,8 +136,11 @@ class SyncAudioOutputMaintenanceRegressionTest {
 
     // Separate methods let a negative baseline execute all four JSON cases even if the first one fails.
     @Test fun groupedMaintenanceDoesNotCreateViewerSpeedIntent() = originCase("grouped-audio-output-maintenance")
+
     @Test fun groupedViewerSelectionStillRequestsSharedSpeedPolicy() = originCase("grouped-viewer")
+
     @Test fun standaloneMaintenanceKeepsSelectedSpeed() = originCase("standalone-audio-output-maintenance")
+
     @Test fun standaloneViewerSelectionStillChangesNativeSpeed() = originCase("standalone-viewer")
 
     private fun assertRejectedCallback(f: Fixture, callback: () -> Unit) {

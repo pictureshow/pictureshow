@@ -107,22 +107,33 @@ class SyncPlayDirectorSpacingRegressionTest {
         val wait = compose.onNodeWithTag("sync:ignore-wait").getUnclippedBoundsInRoot()
         val top = controls.minOf { it.top }
         val bottom = controls.maxOf { it.bottom }
-        assertTrue(top - local.bottom >= 12.dp - onePixel(), "Transport needs12dp above its actual controls: local=$local controls=$controls")
-        assertTrue(wait.top - bottom >= 12.dp - onePixel(), "Wait needs12dp below the tallest actual control: controls=$controls wait=$wait")
+        assertTrue(
+            top - local.bottom >= 12.dp - onePixel(),
+            "Transport needs12dp above its actual controls: local=$local controls=$controls"
+        )
+        assertTrue(
+            wait.top - bottom >= 12.dp - onePixel(),
+            "Wait needs12dp below the tallest actual control: controls=$controls wait=$wait"
+        )
     }
 
     @Test fun leftAcknowledgementIsVisibleAbovePinnedNameWithoutTakingFocusOrOpeningIme() {
-        show(SyncPlayPresentation(
-            policyKnown = true, policy = "CreateAndJoinGroups",
-            notice = SyncNotice(SyncNoticeKind.LEFT, SyncNoticeTone.INFO)
-        ))
+        show(
+            SyncPlayPresentation(
+                policyKnown = true,
+                policy = "CreateAndJoinGroups",
+                notice = SyncNotice(SyncNoticeKind.LEFT, SyncNoticeTone.INFO)
+            )
+        )
         compose.onNodeWithText("You left the group. This device is paused.").assertIsDisplayed()
         compose.onNodeWithTag("sync:name").assertIsFocused().assertIsDisplayed()
         val notice = compose.onNodeWithTag("sync:status").getUnclippedBoundsInRoot()
         val name = compose.onNodeWithTag("sync:name").getUnclippedBoundsInRoot()
         assertTrue(notice.bottom <= name.top, "Leave acknowledgement must precede the new form: notice=$notice name=$name")
-        assertFalse(shadowOf(compose.activity.getSystemService(InputMethodManager::class.java)).isSoftInputVisible,
-            "Acknowledgement placement must preserve the no-IME-on-focus contract")
+        assertFalse(
+            shadowOf(compose.activity.getSystemService(InputMethodManager::class.java)).isSoftInputVisible,
+            "Acknowledgement placement must preserve the no-IME-on-focus contract"
+        )
     }
 
     @Test fun busyPlaceholdersMatchActualTwoLineGroupRowsInHeightPitchAndNeutralSemantics() {
@@ -143,7 +154,8 @@ class SyncPlayDirectorSpacingRegressionTest {
         }
         compose.runOnIdle {
             state = SyncPlayPresentation(
-                policyKnown = true, policy = "JoinGroups",
+                policyKnown = true,
+                policy = "JoinGroups",
                 groups = listOf(SyncPlayGroupRow("a", "Friday films", 2), SyncPlayGroupRow("b", "Saturday films", 3))
             )
         }
@@ -151,15 +163,24 @@ class SyncPlayDirectorSpacingRegressionTest {
         // These are the real group row compositions, including their supporting membership line.
         val realFirst = compose.onNodeWithTag("sync:join:a").getUnclippedBoundsInRoot()
         val realSecond = compose.onNodeWithTag("sync:join:b").getUnclippedBoundsInRoot()
-        assertSameDp((realFirst.bottom - realFirst.top), (first.bottom - first.top), "First skeleton must reserve the real two-line row height")
-        assertSameDp((realSecond.bottom - realSecond.top), (second.bottom - second.top), "Second skeleton must reserve the real two-line row height")
+        assertSameDp(
+            (realFirst.bottom - realFirst.top),
+            (first.bottom - first.top),
+            "First skeleton must reserve the real two-line row height"
+        )
+        assertSameDp(
+            (realSecond.bottom - realSecond.top),
+            (second.bottom - second.top),
+            "Second skeleton must reserve the real two-line row height"
+        )
         assertSameDp(realSecond.top - realFirst.top, second.top - first.top, "Skeleton pitch must match loaded group-row pitch")
         assertSameDp(realSecond.top - realFirst.bottom, second.top - first.bottom, "Sibling row gap must survive loading unchanged")
         assertSameDp((realFirst.right - realFirst.left), (first.right - first.left), "Skeleton and loaded group share the surface width")
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun finalEightDpOfBottomFadeFullyHidesAdversarialBrightContent() {
+    @Test
+    fun finalEightDpOfBottomFadeFullyHidesAdversarialBrightContent() {
         var surface = 0
         var stripPixels = 0
         var insetPixels = 0
@@ -191,7 +212,11 @@ class SyncPlayDirectorSpacingRegressionTest {
         val left = bitmap.width / 4
         val right = bitmap.width * 3 / 4
         // Confirm the bright source actually rendered; an empty/black screenshot cannot pass.
-        assertColorNear(Color.Magenta.toArgb(), bitmap.getPixel(bitmap.width / 2, bitmap.height / 2), "Bright adversarial content did not render")
+        assertColorNear(
+            Color.Magenta.toArgb(),
+            bitmap.getPixel(bitmap.width / 2, bitmap.height / 2),
+            "Bright adversarial content did not render"
+        )
         for (y in bitmap.height - stripPixels until bitmap.height) {
             for (x in left until right) {
                 assertColorNear(surface, bitmap.getPixel(x, y), "Final8dp leaks underlying pixels at($x,$y)")
@@ -204,7 +229,8 @@ class SyncPlayDirectorSpacingRegressionTest {
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun pinnedFooterStartsWithAVisibleFullWidthDivider() {
+    @Test
+    fun pinnedFooterStartsWithAVisibleFullWidthDivider() {
         show(joined())
         // Tag belongs to existing OUTER footer Box, before its padding; no divider-only test hook.
         val footer = compose.onNodeWithTag("tv-settings:footer")
@@ -213,8 +239,10 @@ class SyncPlayDirectorSpacingRegressionTest {
         val middle = bitmap.width / 2
         val line = bitmap.getPixel(middle, 0)
         val background = bitmap.getPixel(middle, fourDp)
-        assertTrue(channelDistance(line, background) >= 16,
-            "A visible divider must separate the viewport from the pinned footer; line=$line background=$background")
+        assertTrue(
+            channelDistance(line, background) >= 16,
+            "A visible divider must separate the viewport from the pinned footer; line=$line background=$background"
+        )
         // Sample the broad centre, excluding rounded panel edges and the scroll-indicator column.
         for (x in bitmap.width / 10 until bitmap.width * 9 / 10) {
             assertColorNear(line, bitmap.getPixel(x, 0), "Footer divider must span the content column at x=$x")
@@ -250,7 +278,9 @@ class SyncPlayDirectorSpacingRegressionTest {
     }
 
     private fun assertColorNear(expected: Int, actual: Int, context: String) {
-        assertTrue(channelDistance(expected, actual) <= 1,
-            "$context: expected=${Integer.toHexString(expected)} actual=${Integer.toHexString(actual)}")
+        assertTrue(
+            channelDistance(expected, actual) <= 1,
+            "$context: expected=${Integer.toHexString(expected)} actual=${Integer.toHexString(actual)}"
+        )
     }
 }

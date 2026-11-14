@@ -2,6 +2,7 @@
  * Copyright (c) Legitimate LLC.
  */
 @file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package app.pictureshow
 
 import android.app.Application
@@ -15,11 +16,11 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,9 +33,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
+import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import com.google.common.util.concurrent.Futures
@@ -73,7 +74,9 @@ import org.robolectric.annotation.LooperMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchPlayerQualityContextRegressionTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = StandardTestDispatcher())
     private val account = Account(Server("server", "Cinema", "https://media.example.test", "12"), User("viewer", "Viewer"), "fake")
     private lateinit var output: Media3PlaybackOutput
@@ -94,7 +97,12 @@ class TouchPlayerQualityContextRegressionTest {
         }
     }
     private fun decision(method: PlayMethod) = PlayDecision(
-        "film", MediaSourceInfo(id = "source"), method, "https://media.example.test/video", emptyMap(), "session",
+        "film",
+        MediaSourceInfo(id = "source"),
+        method,
+        "https://media.example.test/video",
+        emptyMap(),
+        "session",
         if (method == PlayMethod.Transcode) listOf("VideoCodecNotSupported") else emptyList()
     )
     private fun vector(id: String): JsonObject {
@@ -116,7 +124,10 @@ class TouchPlayerQualityContextRegressionTest {
         compose.mainClock.autoAdvance = false
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
-            output.syncRequest = { _, _ -> requests++; false }
+            output.syncRequest = { _, _ ->
+                requests++
+                false
+            }
             decoder = Decoder()
             host = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
             host.playerSource = mutableStateOf(decoder)
@@ -155,6 +166,7 @@ class TouchPlayerQualityContextRegressionTest {
         compose.runOnIdle { host.estimatedBandwidth = value }
         settleNativeFrames("bandwidth", settleMs)
     }
+
     // Setup clock budgets stay unchanged; native Dialog/layout work runs between actual frames.
     private var nativeSettleIndex = 0
     private fun settleNativeFrames(reason: String, milliseconds: Long) {
@@ -176,32 +188,38 @@ class TouchPlayerQualityContextRegressionTest {
         }
         recordNativeSettle(index, reason, "after", start, milliseconds, clocks)
     }
-    private fun recordNativeSettle(index: Int, reason: String, stage: String, start: Long,
-                                   budget: Long, clocks: org.json.JSONArray) {
-        fun rect(box: androidx.compose.ui.geometry.Rect) =
-            org.json.JSONArray(listOf(box.left, box.top, box.right, box.bottom))
+    private fun recordNativeSettle(index: Int, reason: String, stage: String, start: Long, budget: Long, clocks: org.json.JSONArray) {
+        fun rect(box: androidx.compose.ui.geometry.Rect) = org.json.JSONArray(listOf(box.left, box.top, box.right, box.bottom))
         val geometry = org.json.JSONArray()
         val roots = linkedMapOf<Int, androidx.compose.ui.semantics.SemanticsNode>()
-        for (tag in listOf("touch:player", "touch:panel", "touch:actions", "touch:conversion-notice",
-                           "touch:open:Speed", "touch:quality-cue", "touch:quality-cue-text",
-                           "touch:sheet:Speed", "touch:sheet:done")) {
+        for (tag in listOf(
+            "touch:player", "touch:panel", "touch:actions", "touch:conversion-notice",
+            "touch:open:Speed", "touch:quality-cue", "touch:quality-cue-text",
+            "touch:sheet:Speed", "touch:sheet:done"
+        )) {
             val nodes = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
             for (node in nodes) {
-                geometry.put(org.json.JSONObject().put("tag", tag).put("id", node.id)
-                    .put("parentId", node.parent?.id ?: org.json.JSONObject.NULL)
-                    .put("boundsInRootPxClipped", rect(node.boundsInRoot))
-                    .put("touchBoundsInRootPx", rect(node.touchBoundsInRoot))
-                    .put("positionInRootPx", org.json.JSONArray(listOf(node.positionInRoot.x, node.positionInRoot.y)))
-                    .put("nativeSizePx", org.json.JSONArray(listOf(node.size.width, node.size.height)))
-                    .put("density", node.layoutInfo.density.density)
-                    .put("fontScale", node.layoutInfo.density.fontScale))
+                geometry.put(
+                    org.json.JSONObject().put("tag", tag).put("id", node.id)
+                        .put("parentId", node.parent?.id ?: org.json.JSONObject.NULL)
+                        .put("boundsInRootPxClipped", rect(node.boundsInRoot))
+                        .put("touchBoundsInRootPx", rect(node.touchBoundsInRoot))
+                        .put("positionInRootPx", org.json.JSONArray(listOf(node.positionInRoot.x, node.positionInRoot.y)))
+                        .put("nativeSizePx", org.json.JSONArray(listOf(node.size.width, node.size.height)))
+                        .put("density", node.layoutInfo.density.density)
+                        .put("fontScale", node.layoutInfo.density.fontScale)
+                )
                 generateSequence(node) { it.parent }.last().let { roots[it.id] = it }
             }
         }
         val rootGeometry = org.json.JSONArray()
-        roots.values.forEach { root -> rootGeometry.put(org.json.JSONObject().put("id", root.id)
-            .put("boundsInRootPxClipped", rect(root.boundsInRoot))
-            .put("nativeSizePx", org.json.JSONArray(listOf(root.size.width, root.size.height)))) }
+        roots.values.forEach { root ->
+            rootGeometry.put(
+                org.json.JSONObject().put("id", root.id)
+                    .put("boundsInRootPxClipped", rect(root.boundsInRoot))
+                    .put("nativeSizePx", org.json.JSONArray(listOf(root.size.width, root.size.height)))
+            )
+        }
         val observation = org.json.JSONObject().put("index", index).put("reason", reason).put("stage", stage)
             .put("startClockMs", start).put("actualClockMs", compose.mainClock.currentTime)
             .put("requestedSetupBudgetMs", budget).put("frameClockMs", clocks)
@@ -224,7 +242,10 @@ class TouchPlayerQualityContextRegressionTest {
         assertTrue(texts.none { it.text.isNotBlank() }, "No pending/initial/expired quality fact may be emitted in the cue")
     }
     private fun assertCue(visible: Boolean, fact: String, polite: Boolean = true) {
-        if (!visible) { assertNoCue(); return }
+        if (!visible) {
+            assertNoCue()
+            return
+        }
         assertVisibleCue(fact, polite)
     }
     private fun assertVisibleCue(fact: String, polite: Boolean = true) {
@@ -245,18 +266,21 @@ class TouchPlayerQualityContextRegressionTest {
         val bitmap = text.captureToImage().asAndroidBitmap()
         var darkest = 765
         var lightest = 0
-        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
-            val pixel = bitmap.getPixel(x, y)
-            val light = ((pixel ushr 16) and 255) + ((pixel ushr 8) and 255) + (pixel and 255)
-            darkest = minOf(darkest, light)
-            lightest = maxOf(lightest, light)
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                val pixel = bitmap.getPixel(x, y)
+                val light = ((pixel ushr 16) and 255) + ((pixel ushr 8) and 255) + (pixel and 255)
+                darkest = minOf(darkest, light)
+                lightest = maxOf(lightest, light)
+            }
         }
         assertTrue(lightest - darkest >= 96, "An invisible alpha-zero Text cannot replace visibly painted native message glyphs")
     }
 
     @Test fun actualQualityMenuRetainsTruthfulAutomaticContextAndReductionDetail() {
         val case = vector("quality-detail-reachable")
-        val input = case.input(); val expected = case.expected()
+        val input = case.input()
+        val expected = case.expected()
         show(case)
         val context = host.automaticQualityContext
         val position = host.position
@@ -280,7 +304,8 @@ class TouchPlayerQualityContextRegressionTest {
 
     @Test fun actualVisibleCueIsChangedOnlyExpiresAndCanAnnounceANewReductionEpisode() {
         val case = vector("quality-changed-fact-lifetime-and-no-replay")
-        val input = case.input(); val expected = case.expected()
+        val input = case.input()
+        val expected = case.expected()
         show(case)
         assertCue(expected.flag("initialVisible"), factA)
         changeBandwidth(input.number("bandwidthB"), input.number("settleMs"))
@@ -302,7 +327,8 @@ class TouchPlayerQualityContextRegressionTest {
         compose.onNodeWithTag("touch:panel").assertIsDisplayed()
         assertCue(expected.flag("controlsRevealReplay"), factB)
         val reset = vector("quality-null-resets-reduction-episode")
-        val resetInput = reset.input(); val resetExpected = reset.expected()
+        val resetInput = reset.input()
+        val resetExpected = reset.expected()
         assertNativeProfile(reset)
         assertEquals(JsonNull, resetInput.getValue("clearBandwidth"))
         changeBandwidth(null, resetInput.number("settleMs"))
@@ -315,7 +341,8 @@ class TouchPlayerQualityContextRegressionTest {
 
     @Test fun actualConversionAndMountedSheetDeferTheVisibleCueWithoutConsumingItsFact() {
         val conversion = vector("quality-conversion-priority-defers")
-        val input = conversion.input(); val expected = conversion.expected()
+        val input = conversion.input()
+        val expected = conversion.expected()
         show(conversion, PlayMethod.Transcode)
         assertEquals(CONVERSION_NOTICE_MS, input.number("blockingDurationMs"))
         assertTrue(expected.flag("conversionVisibleBeforeExpiry"))
@@ -331,7 +358,8 @@ class TouchPlayerQualityContextRegressionTest {
         advance(input.number("cueExpiryAdvanceMs"))
         assertNoCue()
         val sheet = vector("quality-sheet-priority-defers")
-        val sheetInput = sheet.input(); val sheetExpected = sheet.expected()
+        val sheetInput = sheet.input()
+        val sheetExpected = sheet.expected()
         assertNativeProfile(sheet)
         val sheetName = sheetInput.getValue("sheet").jsonPrimitive.content
         compose.onNodeWithTag("touch:open:$sheetName").performScrollTo().performClick()
@@ -352,10 +380,15 @@ class TouchPlayerQualityContextRegressionTest {
     }
 
     private class Decoder : SimpleBasePlayer(Looper.getMainLooper()) {
-        private val value = State.Builder().setAvailableCommands(Player.Commands.Builder().addAll(
-            Player.COMMAND_PLAY_PAUSE, Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, Player.COMMAND_RELEASE,
-            Player.COMMAND_GET_CURRENT_MEDIA_ITEM, Player.COMMAND_GET_TIMELINE
-        ).build()).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
+        private val value = State.Builder().setAvailableCommands(
+            Player.Commands.Builder().addAll(
+                Player.COMMAND_PLAY_PAUSE,
+                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_RELEASE,
+                Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_GET_TIMELINE
+            ).build()
+        ).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
             .setPlaybackState(Player.STATE_READY).setPlayWhenReady(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(20_000).build()
         override fun getState(): State = value

@@ -85,8 +85,11 @@ internal data class SyncPlayPresentation(
 /** One banner owns recovery; a retained departure is shown only in a non-recovery chooser. */
 internal fun effectiveSyncNotice(state: SyncPlayPresentation): SyncNotice? = when {
     state.notice?.tone != null && (state.notice.tone != SyncNoticeTone.INFO || state.notice.action != null) -> state.notice
-    state.phase == "Reconnecting" -> SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.ERROR,
-        if (state.groupId == null) SyncNoticeAction.LEAVE else SyncNoticeAction.REJOIN)
+    state.phase == "Reconnecting" -> SyncNotice(
+        SyncNoticeKind.REJOIN,
+        SyncNoticeTone.ERROR,
+        if (state.groupId == null) SyncNoticeAction.LEAVE else SyncNoticeAction.REJOIN
+    )
     state.phase == "Error" -> SyncNotice(SyncNoticeKind.PLAYBACK_FAILED, SyncNoticeTone.ERROR, SyncNoticeAction.LEAVE)
     state.groupId != null && state.quality == app.pictureshow.core.sync.SyncQuality.OUT_OF_SYNC ->
         SyncNotice(SyncNoticeKind.REJOIN, SyncNoticeTone.WARNING, SyncNoticeAction.REJOIN)

@@ -300,7 +300,8 @@ internal fun SyncPlayChooser(sync: SyncPlayHost) {
         val session = sync.chooserSession
         val departureId = presentation.departure?.id
         SyncPlayPanel(
-            presentation, sync::action,
+            presentation,
+            sync::action,
             { sync.dismissChooser(accountScope, departureId, session) },
             fixtureLabel = null,
             onDeparturePresented = { id -> sync.departurePresented(accountScope, id, session) }

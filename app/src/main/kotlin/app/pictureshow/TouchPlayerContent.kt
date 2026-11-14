@@ -38,9 +38,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -241,7 +241,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val speed by host.output.speed.collectAsState()
     val paused = playback.paused || pauseIntent
     val groupPresentation = host.sync?.state?.collectAsState()?.value
-    val primaryAction = if (host.deferredNext != null) "play" else touchPlayerPrimaryAction(host.sync, groupPresentation, playback.showPlayButton)
+    val primaryAction = if (host.deferredNext !=
+        null
+    ) {
+        "play"
+    } else {
+        touchPlayerPrimaryAction(host.sync, groupPresentation, playback.showPlayButton)
+    }
     val playLabel = stringResource(R.string.sync_play)
     val pauseLabel = stringResource(R.string.sync_pause)
     val primaryState = if (host.sync?.participating == true && host.deferredNext == null && groupPresentation != null) {
@@ -254,7 +260,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     DisposableEffect(host.player) {
         val player = host.player
         val listener = object : Player.Listener {
-            override fun onCues(cueGroup: CueGroup) { captionsPresent = cueGroup.cues.isNotEmpty() }
+            override fun onCues(cueGroup: CueGroup) {
+                captionsPresent = cueGroup.cues.isNotEmpty()
+            }
         }
         player?.addListener(listener)
         onDispose { player?.removeListener(listener) }
@@ -456,9 +464,16 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         var announcedQuality by remember(host) { mutableStateOf(adaptiveNotice) }
         var qualityCue by remember(host) { mutableStateOf<String?>(null) }
         val chipExpected = groupPresentation?.let { it.groupId != null || it.phase == "Reconnecting" } == true
-        val qualityCueAllowed = foreground && controlsVisible && !host.state.preparing &&
-            !topCues && !captionsPresent && noticeBounds == null && (conversionNotice == null || conversionCardReleased) &&
-            topActionsMeasured && transportBounds != null && (!chipExpected || chipBounds != null)
+        val qualityCueAllowed = foreground &&
+            controlsVisible &&
+            !host.state.preparing &&
+            !topCues &&
+            !captionsPresent &&
+            noticeBounds == null &&
+            (conversionNotice == null || conversionCardReleased) &&
+            topActionsMeasured &&
+            transportBounds != null &&
+            (!chipExpected || chipBounds != null)
         LaunchedEffect(host, adaptiveNotice, qualityCueAllowed) {
             if (adaptiveNotice == null) announcedQuality = null
             if (!qualityCueAllowed || adaptiveNotice != qualityCue) qualityCue = null
@@ -474,8 +489,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             val safeTop = WindowInsets.safeDrawing.getTop(density)
             val safeLeft = WindowInsets.safeDrawing.getLeft(density, layoutDirection)
             val safeRight = WindowInsets.safeDrawing.getRight(density, layoutDirection)
-            val cueTop = maxOf(safeTop + with(density) { TOUCH_PLAYER_EDGE.roundToPx() },
-                chipBounds?.bottom?.toInt()?.minus(playerTop) ?: 0, topActionsBottom - playerTop)
+            val cueTop = maxOf(
+                safeTop + with(density) { TOUCH_PLAYER_EDGE.roundToPx() },
+                chipBounds?.bottom?.toInt()?.minus(playerTop) ?: 0,
+                topActionsBottom - playerTop
+            )
             val cueBottom = requireNotNull(controlsTop) - playerTop
             // Measure the native message once. No space means defer; never draw over another role.
             Layout(
@@ -498,8 +516,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val gap = 8.dp.roundToPx()
                 val x = safeLeft + (constraints.maxWidth - safeLeft - safeRight - message.width) / 2
                 val transport = transportBounds?.translate(-playerLeft.toFloat(), -playerTop.toFloat())
-                fun messageBounds(bottom: Int) = Rect(x.toFloat(), (bottom - message.height).toFloat(),
-                    (x + message.width).toFloat(), bottom.toFloat())
+                fun messageBounds(bottom: Int) = Rect(
+                    x.toFloat(),
+                    (bottom - message.height).toFloat(),
+                    (x + message.width).toFloat(),
+                    bottom.toFloat()
+                )
                 val paddedTransport = transport?.let {
                     Rect(it.left - gap, it.top - gap, it.right + gap, it.bottom + gap)
                 }
@@ -509,7 +531,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 } else {
                     panelBottom
                 }
-                val fits = bottom - message.height >= cueTop + gap && paddedTransport != null &&
+                val fits = bottom - message.height >= cueTop + gap &&
+                    paddedTransport != null &&
                     !paddedTransport.overlaps(messageBounds(bottom))
                 layout(constraints.maxWidth, constraints.maxHeight) {
                     if (fits && noticeBounds == null && !captionsPresent && (conversionNotice == null || conversionCardReleased)) {
@@ -669,7 +692,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
-
                 }
                 val qualityNotice = if (offlineQuality) {
                     "Quality is fixed for this download."
@@ -1079,8 +1101,10 @@ internal fun TouchPlayerScrubber(
     val clockStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
     val clockWidth = with(LocalDensity.current) {
-        (measurer.measure(elapsed, clockStyle).size.width +
-            (total?.let { measurer.measure(it, clockStyle).size.width } ?: 0)).toDp()
+        (
+            measurer.measure(elapsed, clockStyle).size.width +
+                (total?.let { measurer.measure(it, clockStyle).size.width } ?: 0)
+            ).toDp()
     }
     val elapsedClock: @Composable () -> Unit = {
         Text(
@@ -1121,7 +1145,11 @@ internal fun TouchPlayerScrubber(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Keep a usable track when large clocks no longer fit beside it; the panel still scrolls.
         if (maxWidth >= clockWidth + 16.dp + 96.dp) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 elapsedClock()
                 slider(Modifier.weight(1f))
                 totalClock()

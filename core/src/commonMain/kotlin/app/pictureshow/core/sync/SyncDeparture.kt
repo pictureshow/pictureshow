@@ -5,7 +5,12 @@ package app.pictureshow.core.sync
 
 /** Facts about this viewer's departure; never infer kick/dissolution/everyone-left. */
 enum class SyncDepartureCause {
-    MANUAL_LEAVE, PLAYBACK_STOPPED, PLAYBACK_ENDED, PLAYBACK_CLOSED, EXTERNAL_ROUTE, MEMBERSHIP_LOST
+    MANUAL_LEAVE,
+    PLAYBACK_STOPPED,
+    PLAYBACK_ENDED,
+    PLAYBACK_CLOSED,
+    EXTERNAL_ROUTE,
+    MEMBERSHIP_LOST
 }
 
 data class SyncDeparture(val id: Long, val groupName: String?, val cause: SyncDepartureCause)
@@ -28,18 +33,46 @@ sealed interface SyncDepartureEvent {
 
 /** Pending facts survive hidden time and refresh; only a matching visible chooser dismissal consumes. */
 fun reduceSyncDeparture(state: SyncDepartureState, event: SyncDepartureEvent): SyncDepartureState = when (event) {
-    is SyncDepartureEvent.ScopeChanged -> if (event.scope == state.scope) state else state.copy(
-        scope = event.scope, pending = null, presentedIn = null
-    )
-    is SyncDepartureEvent.MembershipStarted -> if (event.scope != state.scope) state else state.copy(pending = null, presentedIn = null)
-    is SyncDepartureEvent.Recorded -> if (event.scope != state.scope) state else {
-        val revision = state.revision + 1
-        state.copy(revision = revision, pending = SyncDeparture(revision, event.name?.takeUnless { it.isBlank() }, event.cause), presentedIn = null)
+    is SyncDepartureEvent.ScopeChanged -> if (event.scope == state.scope) {
+        state
+    } else {
+        state.copy(
+            scope = event.scope,
+            pending = null,
+            presentedIn = null
+        )
     }
-    is SyncDepartureEvent.Presented -> if (event.scope != state.scope || event.id != state.pending?.id ||
+    is SyncDepartureEvent.MembershipStarted -> if (event.scope != state.scope) state else state.copy(pending = null, presentedIn = null)
+    is SyncDepartureEvent.Recorded -> if (event.scope != state.scope) {
+        state
+    } else {
+        val revision = state.revision + 1
+        state.copy(
+            revision = revision,
+            pending = SyncDeparture(
+                revision,
+                event.name?.takeUnless {
+                    it.isBlank()
+                },
+                event.cause
+            ),
+            presentedIn = null
+        )
+    }
+    is SyncDepartureEvent.Presented -> if (event.scope != state.scope ||
+        event.id != state.pending?.id ||
         event.chooserSession < (state.presentedIn ?: Long.MIN_VALUE)
-    ) state else state.copy(presentedIn = event.chooserSession)
-    is SyncDepartureEvent.Dismissed -> if (event.scope != state.scope || event.id != state.pending?.id ||
+    ) {
+        state
+    } else {
+        state.copy(presentedIn = event.chooserSession)
+    }
+    is SyncDepartureEvent.Dismissed -> if (event.scope != state.scope ||
+        event.id != state.pending?.id ||
         event.chooserSession != state.presentedIn
-    ) state else state.copy(pending = null, presentedIn = null)
+    ) {
+        state
+    } else {
+        state.copy(pending = null, presentedIn = null)
+    }
 }

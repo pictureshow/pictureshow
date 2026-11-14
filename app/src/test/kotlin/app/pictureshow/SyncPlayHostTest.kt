@@ -2443,7 +2443,8 @@ class SyncPlayHostTest {
 
     @Test fun departureStopSurvivesHiddenDelayRefreshAndChooserOpen() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot()
+        rig.join()
+        rig.snapshot()
         val accountScope = rig.host.departureState.scope
         rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
         runCurrent()
@@ -2451,16 +2452,21 @@ class SyncPlayHostTest {
         assertEquals("Evening", fact.groupName)
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED, fact.cause)
         assertFalse(rig.host.panelOpen)
-        advanceTimeBy(5_001); runCurrent()
+        advanceTimeBy(5_001)
+        runCurrent()
         assertEquals(fact, rig.host.state.value.departure)
         rig.refresh() // actual successful access/groups while hidden, not a fake Refresh event
         assertEquals(fact, rig.host.state.value.departure)
-        rig.host.show(); runCurrent()
-        rig.host.bind(account.copy()); runCurrent() // same account+token is not a scope reset
+        rig.host.show()
+        runCurrent()
+        rig.host.bind(account.copy())
+        runCurrent() // same account+token is not a scope reset
         assertEquals(fact, rig.host.state.value.departure)
         val chooser = rig.host.chooserSession
-        rig.host.refresh(); runCurrent()
-        rig.host.show(); runCurrent() // already open is not another chooser session
+        rig.host.refresh()
+        runCurrent()
+        rig.host.show()
+        runCurrent() // already open is not another chooser session
         assertEquals(chooser, rig.host.chooserSession)
         assertEquals(fact, rig.host.state.value.departure)
         assertEquals(accountScope, rig.host.departureState.scope, "Leave's request/membership generations are not account scope")
@@ -2469,52 +2475,69 @@ class SyncPlayHostTest {
 
     @Test fun departureManualPausedLeaveAndStopKeepDistinctTruthfulCauses() = runTest {
         val manual = Rig(this)
-        manual.join(); manual.snapshot()
+        manual.join()
+        manual.snapshot()
         manual.renderer.value = manual.renderer.value.copy(playing = false)
-        manual.host.leave(); runCurrent()
+        manual.host.leave()
+        runCurrent()
         val fact = assertNotNull(manual.host.state.value.departure)
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE, fact.cause)
         assertEquals("Evening", fact.groupName)
         assertEquals("Left Watch together. This device is paused; the group can keep playing.", manual.host.state.value.status)
         val stop = Rig(this)
-        stop.join(); stop.snapshot()
-        stop.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED); runCurrent()
+        stop.join()
+        stop.snapshot()
+        stop.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
+        runCurrent()
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED, assertNotNull(stop.host.state.value.departure).cause)
         assertEquals("Evening", stop.host.state.value.departure?.groupName)
     }
 
     @Test fun departureCoveredByActualAccessErrorCannotBeAcknowledgedOrConsumed() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.host.leave(); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.host.leave()
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         rig.failAccess = true
-        rig.host.show(); runCurrent()
+        rig.host.show()
+        runCurrent()
         assertEquals(SyncNoticeTone.ERROR, rig.host.state.value.notice?.tone)
-        val scope = rig.host.departureState.scope; val session = rig.host.chooserSession
+        val scope = rig.host.departureState.scope
+        val session = rig.host.chooserSession
         // Defense against a stale/faulty layout callback: the selected banner is the real error.
         rig.host.departurePresented(scope, fact.id, session)
         assertEquals(null, rig.host.departureState.presentedIn)
-        rig.host.dismissChooser(scope, fact.id, session); runCurrent()
+        rig.host.dismissChooser(scope, fact.id, session)
+        runCurrent()
         assertEquals(fact, rig.host.state.value.departure)
         rig.failAccess = false
-        rig.host.show(); runCurrent()
+        rig.host.show()
+        runCurrent()
         rig.host.departurePresented(scope, fact.id, rig.host.chooserSession)
-        rig.host.dismissChooser(scope, fact.id, rig.host.chooserSession); runCurrent()
+        rig.host.dismissChooser(scope, fact.id, rig.host.chooserSession)
+        runCurrent()
         assertEquals(null, rig.host.state.value.departure)
     }
 
     @Test fun departureHiddenAndWrongScopeIdSessionCallbacksCannotConsume() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.host.leave(); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.host.leave()
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         val scope = rig.host.departureState.scope
         rig.host.departurePresented(scope, fact.id, rig.host.chooserSession) // hidden
         assertEquals(null, rig.host.departureState.presentedIn)
-        rig.host.show(); runCurrent()
+        rig.host.show()
+        runCurrent()
         val session = rig.host.chooserSession
         rig.host.dismissChooser(scope, fact.id, session) // never presented
         assertEquals(fact, rig.host.state.value.departure)
-        rig.host.show(); runCurrent()
+        rig.host.show()
+        runCurrent()
         val open = rig.host.chooserSession
         rig.host.departurePresented(scope - 1, fact.id, open)
         rig.host.departurePresented(scope, fact.id + 1, open)
@@ -2528,31 +2551,45 @@ class SyncPlayHostTest {
 
     @Test fun departureVisibleLayoutThenMatchingDismissConsumesOnceAndDoesNotRepeat() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.host.leave(); runCurrent()
-        rig.host.show(); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.host.leave()
+        runCurrent()
+        rig.host.show()
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
-        val scope = rig.host.departureState.scope; val session = rig.host.chooserSession
+        val scope = rig.host.departureState.scope
+        val session = rig.host.chooserSession
         rig.host.departurePresented(scope, fact.id, session)
         assertEquals(session, rig.host.departureState.presentedIn)
-        rig.host.dismissChooser(scope, fact.id, session); runCurrent()
+        rig.host.dismissChooser(scope, fact.id, session)
+        runCurrent()
         assertEquals(null, rig.host.state.value.departure)
         assertFalse(rig.host.panelOpen)
         rig.host.dismissChooser(scope, fact.id, session)
-        rig.host.show(); runCurrent()
+        rig.host.show()
+        runCurrent()
         assertTrue(rig.host.chooserSession > session)
         assertEquals(null, rig.host.state.value.departure)
     }
 
     @Test fun departureNewFactSurvivesOldCapturedLayoutAndDismissCallbacks() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.host.leave(); runCurrent()
-        rig.host.show(); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.host.leave()
+        runCurrent()
+        rig.host.show()
+        runCurrent()
         val first = assertNotNull(rig.host.state.value.departure)
-        val scope = rig.host.departureState.scope; val oldSession = rig.host.chooserSession
+        val scope = rig.host.departureState.scope
+        val oldSession = rig.host.chooserSession
         rig.host.departurePresented(scope, first.id, oldSession)
-        rig.join(); rig.snapshot() // accepted membership clears the old pending fact
+        rig.join()
+        rig.snapshot() // accepted membership clears the old pending fact
         assertEquals(null, rig.host.state.value.departure)
-        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED); runCurrent()
+        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
+        runCurrent()
         val second = assertNotNull(rig.host.state.value.departure)
         assertTrue(second.id > first.id)
         rig.host.departurePresented(scope, first.id, oldSession)
@@ -2564,11 +2601,17 @@ class SyncPlayHostTest {
     @Test fun departureAccountOrTokenEpochResetCannotLeakNameOrAcceptOldAcknowledgement() = runTest {
         for (replacement in listOf(other, account.copy(accessToken = "rotated-test-token"), null)) {
             val rig = Rig(this)
-            rig.join(); rig.snapshot(); rig.host.leave(); runCurrent()
-            rig.host.show(); runCurrent()
+            rig.join()
+            rig.snapshot()
+            rig.host.leave()
+            runCurrent()
+            rig.host.show()
+            runCurrent()
             val fact = assertNotNull(rig.host.state.value.departure)
-            val oldScope = rig.host.departureState.scope; val oldSession = rig.host.chooserSession
-            rig.host.bind(replacement); runCurrent()
+            val oldScope = rig.host.departureState.scope
+            val oldSession = rig.host.chooserSession
+            rig.host.bind(replacement)
+            runCurrent()
             assertTrue(rig.host.departureState.scope > oldScope)
             assertEquals(null, rig.host.state.value.departure)
             rig.host.departurePresented(oldScope, fact.id, oldSession)
@@ -2579,40 +2622,57 @@ class SyncPlayHostTest {
 
     @Test fun departureFailedJoinIntentRetainsButAcceptedCurrentMembershipClears() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot()
+        rig.join()
+        rig.snapshot()
         val oldGeneration = rig.host.membership.generation
-        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED); runCurrent()
+        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         rig.httpStatus = 403
-        rig.host.join("g"); runCurrent()
+        rig.host.join("g")
+        runCurrent()
         assertEquals(fact, rig.host.state.value.departure)
-        rig.host.receive(rig.update("GroupJoined", buildJsonObject {
-            put("GroupId", "g"); put("GroupName", "Old group"); put("State", "Paused")
-            put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(rig.epoch))
-        }), oldGeneration)
+        rig.host.receive(
+            rig.update(
+                "GroupJoined",
+                buildJsonObject {
+                    put("GroupId", "g")
+                    put("GroupName", "Old group")
+                    put("State", "Paused")
+                    put("Participants", JsonArray(emptyList()))
+                    put("LastUpdatedAt", syncUtcTimestamp(rig.epoch))
+                }
+            ),
+            oldGeneration
+        )
         assertEquals(fact, rig.host.state.value.departure, "Rejected stale Joined cannot acknowledge new membership")
         rig.httpStatus = 204
-        rig.host.join("g"); runCurrent()
+        rig.host.join("g")
+        runCurrent()
         assertEquals(fact, rig.host.state.value.departure, "HTTP intent/success alone is not accepted GroupJoined")
-        rig.joined(); runCurrent()
+        rig.joined()
+        runCurrent()
         assertEquals(null, rig.host.state.value.departure)
     }
 
     @Test fun departureOnlyAcceptedCurrentGroupLeftRecordsNeutralMembershipLoss() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot()
+        rig.join()
+        rig.snapshot()
         val generation = rig.host.membership.generation
         rig.host.receive(rig.update("GroupLeft"), generation - 1)
         rig.host.receive(rig.update("GroupLeft").replace("\"GroupId\":\"g\"", "\"GroupId\":\"wrong-group\""), generation)
         assertEquals(null, rig.host.state.value.departure)
         assertTrue(rig.host.participating)
-        rig.host.receive(rig.update("GroupLeft"), generation); runCurrent()
+        rig.host.receive(rig.update("GroupLeft"), generation)
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         assertEquals("Evening", fact.groupName)
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.MEMBERSHIP_LOST, fact.cause)
         rig.host.receive(rig.update("GroupLeft"), generation)
         assertEquals(fact, rig.host.state.value.departure)
-        rig.join(); rig.snapshot()
+        rig.join()
+        rig.snapshot()
         assertEquals(null, rig.host.state.value.departure)
         rig.host.receive(rig.update("GroupLeft"), generation)
         assertTrue(rig.host.participating)
@@ -2621,10 +2681,15 @@ class SyncPlayHostTest {
 
     @Test fun departureRepeatedLeaveSendsOnceAndNeverReplacesStopIdentity() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear()
-        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
-        rig.host.leave(); rig.host.leave(); runCurrent()
+        rig.host.leave()
+        rig.host.leave()
+        runCurrent()
         assertEquals(listOf("Leave"), rig.operations())
         assertEquals(fact, rig.host.state.value.departure)
         assertFalse(rig.renderer.value.playing)
@@ -2632,67 +2697,99 @@ class SyncPlayHostTest {
 
     @Test fun departureUnconfirmedLeaveRetryRetainsOriginalIdentityAndCause() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear(); rig.httpStatus = 503
-        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED); runCurrent()
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.httpStatus = 503
+        rig.host.leave(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED)
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         assertEquals(SyncNoticeKind.LEAVE_UNCONFIRMED, rig.host.state.value.notice?.kind)
         rig.httpStatus = 204
-        rig.host.leave(); runCurrent()
+        rig.host.leave()
+        runCurrent()
         assertEquals(listOf("Leave", "Leave"), rig.operations(), "One request per deliberate retry, no automatic storm")
         assertEquals(fact, rig.host.state.value.departure)
     }
 
     @Test fun departureCastCancelHasNoFactAndConfirmedRouteHasDistinctCauseOnce() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear()
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
         var routes = 0
         assertTrue(rig.host.confirmExternalRoute { routes++ })
         assertEquals(null, rig.host.state.value.departure)
-        rig.host.cancelExternalRoute(); runCurrent()
+        rig.host.cancelExternalRoute()
+        runCurrent()
         assertEquals(null, rig.host.state.value.departure)
-        assertEquals(0, routes); assertTrue(rig.sent.isEmpty()); assertTrue(rig.host.participating)
+        assertEquals(0, routes)
+        assertTrue(rig.sent.isEmpty())
+        assertTrue(rig.host.participating)
         rig.sendGate = CompletableDeferred()
         assertTrue(rig.host.confirmExternalRoute { routes++ })
-        rig.host.leaveForExternalRoute(); runCurrent()
+        rig.host.leaveForExternalRoute()
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.EXTERNAL_ROUTE, fact.cause)
         assertEquals("Evening", fact.groupName)
-        assertEquals(listOf("Leave"), rig.operations()); assertEquals(0, routes)
-        rig.sendGate!!.complete(Unit); runCurrent()
+        assertEquals(listOf("Leave"), rig.operations())
+        assertEquals(0, routes)
+        rig.sendGate!!.complete(Unit)
+        runCurrent()
         assertEquals(1, routes)
-        rig.host.leaveForExternalRoute(); runCurrent()
-        assertEquals(1, routes); assertEquals(listOf("Leave"), rig.operations())
+        rig.host.leaveForExternalRoute()
+        runCurrent()
+        assertEquals(1, routes)
+        assertEquals(listOf("Leave"), rig.operations())
         assertEquals(fact, rig.host.state.value.departure)
     }
 
     @Test fun departureFailedCastLeaveKeepsErrorAndNeverStartsRoute() = runTest {
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear(); rig.httpStatus = 503
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.httpStatus = 503
         var routes = 0
         assertTrue(rig.host.confirmExternalRoute { routes++ })
-        rig.host.leaveForExternalRoute(); runCurrent()
+        rig.host.leaveForExternalRoute()
+        runCurrent()
         val fact = assertNotNull(rig.host.state.value.departure)
         assertEquals(app.pictureshow.core.sync.SyncDepartureCause.EXTERNAL_ROUTE, fact.cause)
         assertEquals(SyncNoticeKind.LEAVE_UNCONFIRMED, rig.host.state.value.notice?.kind)
-        assertEquals(0, routes); assertEquals(listOf("Leave"), rig.operations())
-        rig.host.leaveForExternalRoute(); runCurrent()
-        assertEquals(0, routes); assertEquals(listOf("Leave"), rig.operations())
+        assertEquals(0, routes)
+        assertEquals(listOf("Leave"), rig.operations())
+        rig.host.leaveForExternalRoute()
+        runCurrent()
+        assertEquals(0, routes)
+        assertEquals(listOf("Leave"), rig.operations())
         assertEquals(fact, rig.host.state.value.departure)
     }
 
     @Test fun departureNoParticipationAndBlankFormerNameNeverFabricateFactsOrRawIds() = runTest {
         val solo = Rig(this)
-        solo.host.leave(); runCurrent()
+        solo.host.leave()
+        runCurrent()
         assertEquals(null, solo.host.state.value.departure)
         assertFalse(solo.operations().contains("Leave"))
         val joined = Rig(this)
         joined.join()
-        joined.host.receive(joined.update("GroupJoined", buildJsonObject {
-            put("GroupId", "g"); put("GroupName", "  "); put("State", "Paused")
-            put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(joined.epoch))
-        }))
+        joined.host.receive(
+            joined.update(
+                "GroupJoined",
+                buildJsonObject {
+                    put("GroupId", "g")
+                    put("GroupName", "  ")
+                    put("State", "Paused")
+                    put("Participants", JsonArray(emptyList()))
+                    put("LastUpdatedAt", syncUtcTimestamp(joined.epoch))
+                }
+            )
+        )
         runCurrent()
-        joined.host.leave(); runCurrent()
+        joined.host.leave()
+        runCurrent()
         val fact = assertNotNull(joined.host.state.value.departure)
         assertEquals(null, fact.groupName, "Do not fall back to raw group ID g")
     }
@@ -2707,7 +2804,9 @@ class SyncPlayHostTest {
         assertEquals(4, cases.size)
         val case = cases.single { it.jsonObject.getValue("id").jsonPrimitive.content == id }.jsonObject
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear()
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
         var routes = 0
         assertTrue(rig.host.confirmExternalRoute { routes++ })
         val replacement = when (case.getValue("rebind").jsonPrimitive.content) {
@@ -2717,17 +2816,27 @@ class SyncPlayHostTest {
             "same" -> account.copy()
             else -> error("Unknown consent scope case")
         }
-        rig.host.bind(replacement); runCurrent()
-        assertEquals(case.getValue("expectedPending").jsonPrimitive.boolean,
-            rig.host.pendingExternalRoute != null, id + " pending consent")
-        rig.host.leaveForExternalRoute(); runCurrent()
+        rig.host.bind(replacement)
+        runCurrent()
+        assertEquals(
+            case.getValue("expectedPending").jsonPrimitive.boolean,
+            rig.host.pendingExternalRoute != null,
+            id + " pending consent"
+        )
+        rig.host.leaveForExternalRoute()
+        runCurrent()
         assertEquals(case.getValue("expectedRoutes").jsonPrimitive.int, routes, id + " route callbacks")
-        rig.host.leaveForExternalRoute(); runCurrent()
+        rig.host.leaveForExternalRoute()
+        runCurrent()
         assertEquals(case.getValue("expectedRoutes").jsonPrimitive.int, routes, id + " no repeated route")
     }
+
     @Test fun routeConsentDifferentAccountInvalidatesOldConsent() = runTest { routeConsentScopeCase("consent-account") }
+
     @Test fun routeConsentTokenRotationInvalidatesOldConsent() = runTest { routeConsentScopeCase("consent-token") }
+
     @Test fun routeConsentLogoutInvalidatesOldConsent() = runTest { routeConsentScopeCase("consent-logout") }
+
     @Test fun routeConsentSameAccountAndTokenRetainsConsent() = runTest { routeConsentScopeCase("consent-same") }
 
     private suspend fun TestScope.routeConsentIdentityCase(id: String) {
@@ -2739,22 +2848,29 @@ class SyncPlayHostTest {
         assertEquals(6, cases.size)
         val case = cases.single { it.jsonObject.getValue("id").jsonPrimitive.content == id }.jsonObject
         val rig = Rig(this)
-        rig.join(); rig.snapshot(); rig.sent.clear()
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
         var oldRoutes = 0
         var newRoutes = 0
         assertTrue(rig.host.confirmExternalRoute { oldRoutes++ })
         val old = assertNotNull(rig.host.externalRouteConsent)
         when (id) {
             "duplicate" -> {
-                rig.host.leaveForExternalRoute(old.scope, old.id); runCurrent()
-                rig.host.leaveForExternalRoute(old.scope, old.id); runCurrent()
+                rig.host.leaveForExternalRoute(old.scope, old.id)
+                runCurrent()
+                rig.host.leaveForExternalRoute(old.scope, old.id)
+                runCurrent()
             }
             "scope-change-during-leave" -> {
                 rig.sendGate = CompletableDeferred()
-                rig.host.leaveForExternalRoute(old.scope, old.id); runCurrent()
+                rig.host.leaveForExternalRoute(old.scope, old.id)
+                runCurrent()
                 assertEquals(0, oldRoutes)
-                rig.host.bind(account.copy(accessToken = "rotated-inflight-test-token")); runCurrent()
-                rig.sendGate!!.complete(Unit); runCurrent()
+                rig.host.bind(account.copy(accessToken = "rotated-inflight-test-token"))
+                runCurrent()
+                rig.sendGate!!.complete(Unit)
+                runCurrent()
             }
             else -> {
                 assertTrue(rig.host.confirmExternalRoute { newRoutes++ })
@@ -2768,12 +2884,16 @@ class SyncPlayHostTest {
                     else -> error("Unknown consent identity case")
                 }
                 runCurrent()
-                assertEquals(case.getValue("expectedPendingAfterObsolete").jsonPrimitive.boolean,
-                    rig.host.pendingExternalRoute != null, id + " obsolete callback must retain fresh consent")
+                assertEquals(
+                    case.getValue("expectedPendingAfterObsolete").jsonPrimitive.boolean,
+                    rig.host.pendingExternalRoute != null,
+                    id + " obsolete callback must retain fresh consent"
+                )
                 assertEquals(case.getValue("expectedRoutesAfterObsolete").jsonPrimitive.int, oldRoutes + newRoutes, id)
                 assertTrue(rig.host.participating, id + " obsolete callback must not Leave")
                 assertTrue(rig.sent.isEmpty(), id + " obsolete callback must send nothing")
-                rig.host.leaveForExternalRoute(fresh.scope, fresh.id); runCurrent()
+                rig.host.leaveForExternalRoute(fresh.scope, fresh.id)
+                runCurrent()
                 assertEquals(0, oldRoutes)
             }
         }
@@ -2782,11 +2902,16 @@ class SyncPlayHostTest {
         assertEquals(null, rig.host.pendingExternalRoute)
         assertEquals(null, rig.host.externalRouteConsent)
     }
-    @Test fun routeConsentIdentityStaleConfirm() = runTest { routeConsentIdentityCase("stale-confirm") }
-    @Test fun routeConsentIdentityStaleCancel() = runTest { routeConsentIdentityCase("stale-cancel") }
-    @Test fun routeConsentIdentityWrongScopeConfirm() = runTest { routeConsentIdentityCase("wrong-scope-confirm") }
-    @Test fun routeConsentIdentityWrongScopeCancel() = runTest { routeConsentIdentityCase("wrong-scope-cancel") }
-    @Test fun routeConsentIdentityDuplicate() = runTest { routeConsentIdentityCase("duplicate") }
-    @Test fun routeConsentIdentityScopeChangeDuringLeave() = runTest { routeConsentIdentityCase("scope-change-during-leave") }
 
+    @Test fun routeConsentIdentityStaleConfirm() = runTest { routeConsentIdentityCase("stale-confirm") }
+
+    @Test fun routeConsentIdentityStaleCancel() = runTest { routeConsentIdentityCase("stale-cancel") }
+
+    @Test fun routeConsentIdentityWrongScopeConfirm() = runTest { routeConsentIdentityCase("wrong-scope-confirm") }
+
+    @Test fun routeConsentIdentityWrongScopeCancel() = runTest { routeConsentIdentityCase("wrong-scope-cancel") }
+
+    @Test fun routeConsentIdentityDuplicate() = runTest { routeConsentIdentityCase("duplicate") }
+
+    @Test fun routeConsentIdentityScopeChangeDuringLeave() = runTest { routeConsentIdentityCase("scope-change-during-leave") }
 }

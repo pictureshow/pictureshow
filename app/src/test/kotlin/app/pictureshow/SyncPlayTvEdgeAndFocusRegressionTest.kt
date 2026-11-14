@@ -43,7 +43,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -96,7 +95,10 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
             PictureshowTheme {
                 val scale = LocalDensity.current.density
                 val color = MaterialTheme.colorScheme.surface.toArgb()
-                SideEffect { density = scale; surface = color }
+                SideEffect {
+                    density = scale
+                    surface = color
+                }
                 content()
             }
         }
@@ -106,12 +108,19 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups",
         groupId = "g", groupName = "Friday films", phase = "Paused", localPlayback = SyncLocalPlayback.READY,
         groups = listOf(SyncPlayGroupRow("g", "Friday films", 2)),
-        queue = listOf(SyncPlayQueueRow("a", "Big Buck Bunny", true), SyncPlayQueueRow("b", "Elephants Dream", false), SyncPlayQueueRow("c", "Sintel", false)),
+        queue = listOf(
+            SyncPlayQueueRow("a", "Big Buck Bunny", true),
+            SyncPlayQueueRow("b", "Elephants Dream", false),
+            SyncPlayQueueRow("c", "Sintel", false)
+        ),
         participants = listOf("Morgan", "Sam", "Riley", "Taylor", "Jordan", "Casey")
     )
     private fun longJoined() = joined().copy(queue = (1..9).map { SyncPlayQueueRow("e$it", "Film $it", it == 1) })
     private fun leftChooser() = SyncPlayPresentation(
-        server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups",
+        server = "Cinema",
+        viewer = "Viewer",
+        policyKnown = true,
+        policy = "CreateAndJoinGroups",
         notice = SyncNotice(SyncNoticeKind.LEFT, SyncNoticeTone.INFO)
     )
     private fun show(state: SyncPlayPresentation) {
@@ -150,7 +159,10 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         var underlay by mutableStateOf(Color.Magenta)
         compose.setContent {
             TvEnvironment {
-                TvSettingsList(Modifier.width(300.dp).height(240.dp).background(MaterialTheme.colorScheme.surface), minimalFocusScroll = true) {
+                TvSettingsList(
+                    Modifier.width(300.dp).height(240.dp).background(MaterialTheme.colorScheme.surface),
+                    minimalFocusScroll = true
+                ) {
                     Box(Modifier.fillMaxWidth().height(2000.dp).background(underlay))
                     Box(Modifier.fillMaxWidth().height(1.dp).testTag("edge-probe:end"))
                 }
@@ -169,14 +181,18 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         assertColorNear(Color.Cyan.toArgb(), second.getPixel(second.width / 2, second.height / 2), "Cyan source really rendered")
         val band = (8f * density).roundToInt()
         val possibleDivider = density.roundToInt().coerceAtLeast(1)
-        for (y in 0 until band) for (x in first.width / 4 until first.width * 3 / 4) {
-            assertColorNear(first.getPixel(x, y), second.getPixel(x, y), "Top8dp must not depend on bright content at($x,$y)")
-            // A1dp opaque divider at the exact boundary is allowed; the rest is surface mask.
-            if (y >= possibleDivider) assertColorNear(surface, second.getPixel(x, y), "Opaque band must use surface")
+        for (y in 0 until band) {
+            for (x in first.width / 4 until first.width * 3 / 4) {
+                assertColorNear(first.getPixel(x, y), second.getPixel(x, y), "Top8dp must not depend on bright content at($x,$y)")
+                // A1dp opaque divider at the exact boundary is allowed; the rest is surface mask.
+                if (y >= possibleDivider) assertColorNear(surface, second.getPixel(x, y), "Opaque band must use surface")
+            }
         }
         val blendingY = (30f * density).roundToInt()
-        assertTrue(colorDistance(first.getPixel(first.width / 2, blendingY), second.getPixel(second.width / 2, blendingY)) > 32,
-            "Retain a blended lower fade rather than hiding32dp under a solid slab")
+        assertTrue(
+            colorDistance(first.getPixel(first.width / 2, blendingY), second.getPixel(second.width / 2, blendingY)) > 32,
+            "Retain a blended lower fade rather than hiding32dp under a solid slab"
+        )
     }
 
     @Test fun headerDividerIsVisibleOnlyAfterTheActualPanelScrolls() {
@@ -231,11 +247,14 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         compose.onNodeWithTag("tv-settings:scroll-indicator").assertExists()
         val bitmap = compose.onNodeWithTag("tv-settings:viewport").captureToImage().asAndroidBitmap()
         val y = (6f * density).roundToInt()
-        assertTrue(colorDistance(bitmap.getPixel(bitmap.width / 2, y), surface) > 8,
-            "The accepted opt-in fix must not silently replace the ordinary caller's existing blended top edge")
+        assertTrue(
+            colorDistance(bitmap.getPixel(bitmap.width / 2, y), surface) > 8,
+            "The accepted opt-in fix must not silently replace the ordinary caller's existing blended top edge"
+        )
     }
 
     @Test fun returningUpToPlayRestoresWholeStatusAtFont10() = verifyPlayReturn(1f)
+
     @Test fun returningUpToPlayRestoresWholeStatusAtFont13() = verifyPlayReturn(1.3f)
     private fun verifyPlayReturn(font: Float) {
         RuntimeEnvironment.setFontScale(font)
@@ -250,16 +269,23 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         for (tag in listOf("sync:group", "sync:now-playing", "sync:phase", "sync:local")) {
             compose.onNodeWithTag(tag).assertIsDisplayed()
             val row = bounds(tag)
-            assertTrue(row.top >= view.top && row.bottom <= view.bottom,
-                "Returning to first useful control must restore its entire context: $tag=$row viewport=$view")
+            assertTrue(
+                row.top >= view.top && row.bottom <= view.bottom,
+                "Returning to first useful control must restore its entire context: $tag=$row viewport=$view"
+            )
         }
     }
 
     @Test fun removeLastAtFont10RevealsPreviousNeighbour() = verifyRemoval("c", "b", 1f)
+
     @Test fun removeLastAtFont13RevealsPreviousNeighbour() = verifyRemoval("c", "b", 1.3f)
+
     @Test fun removeMiddleAtFont10RevealsNextNeighbour() = verifyRemoval("b", "c", 1f)
+
     @Test fun removeMiddleAtFont13RevealsNextNeighbour() = verifyRemoval("b", "c", 1.3f)
+
     @Test fun removeCurrentAtFont10RevealsNextNeighbour() = verifyRemoval("a", "b", 1f)
+
     @Test fun removeCurrentAtFont13RevealsNextNeighbour() = verifyRemoval("a", "b", 1.3f)
     private fun verifyRemoval(removed: String, neighbour: String, font: Float) {
         RuntimeEnvironment.setFontScale(font)
@@ -291,19 +317,28 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         val top = if (exists("tv-settings:fade-top")) bounds("tv-settings:fade-top").bottom + 8.dp else view.top
         val bottom = if (exists("tv-settings:fade-bottom")) bounds("tv-settings:fade-bottom").top - 8.dp else view.bottom
         val tolerance = (1f / density).dp
-        assertTrue(row.top >= top - tolerance && row.bottom <= bottom + tolerance,
-            "Programmatic neighbour focus must clear both actual fade masks: row=$row effective=[$top,$bottom] viewport=$view")
+        assertTrue(
+            row.top >= top - tolerance && row.bottom <= bottom + tolerance,
+            "Programmatic neighbour focus must clear both actual fade masks: row=$row effective=[$top,$bottom] viewport=$view"
+        )
     }
 
     @Test fun repeatOffIsEnteredFromWaitWithoutChangingSelection() = verifyRepeatEntry("RepeatNone", false)
+
     @Test fun repeatOneIsEnteredFromWaitWithoutChangingSelection() = verifyRepeatEntry("RepeatOne", false)
+
     @Test fun repeatAllIsEnteredFromWaitWithoutChangingSelection() = verifyRepeatEntry("RepeatAll", false)
+
     @Test fun repeatOffIsEnteredFromShuffleWithoutChangingSelection() = verifyRepeatEntry("RepeatNone", true)
+
     @Test fun repeatOneIsEnteredFromShuffleWithoutChangingSelection() = verifyRepeatEntry("RepeatOne", true)
+
     @Test fun repeatAllIsEnteredFromShuffleWithoutChangingSelection() = verifyRepeatEntry("RepeatAll", true)
     private fun verifyRepeatEntry(selected: String, fromShuffle: Boolean) {
         val actions = mutableListOf<Pair<String, String?>>()
-        compose.setContent { TvEnvironment { SyncPlayPanel(joined().copy(repeat = selected), { op, value -> actions += op to value }, {}) } }
+        compose.setContent {
+            TvEnvironment { SyncPlayPanel(joined().copy(repeat = selected), { op, value -> actions += op to value }, {}) }
+        }
         settle()
         if (fromShuffle) {
             remoteTo("sync:shuffle", Key.DirectionDown)
@@ -336,8 +371,19 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
             TvEnvironment {
                 SyncPlayPanel(state, { op, value ->
                     actions += op to value
-                    if (op == "leave") state = state.copy(groupId = null, groupName = null, phase = "Idle", queue = emptyList(), participants = emptyList(),
-                        notice = SyncNotice(SyncNoticeKind.LEFT, SyncNoticeTone.INFO)) // cached groups deliberately retained
+                    if (op ==
+                        "leave"
+                    ) {
+                        state =
+                            state.copy(
+                                groupId = null,
+                                groupName = null,
+                                phase = "Idle",
+                                queue = emptyList(),
+                                participants = emptyList(),
+                                notice = SyncNotice(SyncNoticeKind.LEFT, SyncNoticeTone.INFO)
+                            ) // cached groups deliberately retained
+                    }
                 }, {})
             }
         }
@@ -378,13 +424,26 @@ class SyncPlayTvEdgeAndFocusRegressionTest {
         compose.setContent { TvEnvironment { SyncPlayPanel(state, { _, _ -> }, {}) } }
         settle()
         compose.onNodeWithTag("sync:refresh").assertIsFocused()
-        compose.runOnIdle { state = state.copy(busy = false, policyKnown = true, policy = "CreateAndJoinGroups", groups = listOf(SyncPlayGroupRow("g", "Friday films", 2))) }
+        compose.runOnIdle {
+            state =
+                state.copy(
+                    busy = false,
+                    policyKnown = true,
+                    policy = "CreateAndJoinGroups",
+                    groups = listOf(SyncPlayGroupRow("g", "Friday films", 2))
+                )
+        }
         settle()
         compose.onNodeWithTag("sync:refresh").assertIsFocused()
     }
 
-    private fun colorDistance(a: Int, b: Int) = (0..3).maxOf { shift -> abs(((a ushr (shift * 8)) and 255) - ((b ushr (shift * 8)) and 255)) }
+    private fun colorDistance(a: Int, b: Int) = (0..3).maxOf { shift ->
+        abs(((a ushr (shift * 8)) and 255) - ((b ushr (shift * 8)) and 255))
+    }
     private fun assertColorNear(expected: Int, actual: Int, message: String) {
-        assertTrue(colorDistance(expected, actual) <= 1, "$message expected=${Integer.toHexString(expected)} actual=${Integer.toHexString(actual)}")
+        assertTrue(
+            colorDistance(expected, actual) <= 1,
+            "$message expected=${Integer.toHexString(expected)} actual=${Integer.toHexString(actual)}"
+        )
     }
 }

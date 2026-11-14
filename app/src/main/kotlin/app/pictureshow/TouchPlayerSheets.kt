@@ -84,7 +84,14 @@ internal fun TouchPlayerSheetContent(
 }
 
 @Composable
-private fun TouchChoiceRow(label: String, selected: Boolean, tag: String, description: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
+private fun TouchChoiceRow(
+    label: String,
+    selected: Boolean,
+    tag: String,
+    description: String? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
     TouchRadioRow(selected, Modifier.testTag(tag), enabled = enabled, description = description, onClick = onClick) {
         Text(label, Modifier.weight(1f))
     }

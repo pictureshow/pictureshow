@@ -10,15 +10,11 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.test.performSemanticsAction
-import app.pictureshow.core.sync.SyncQuality
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -33,6 +29,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
+import app.pictureshow.core.sync.SyncQuality
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Before
@@ -49,7 +49,8 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncPlayTvDesignTest {
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
-    @Test fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
+    @Test
+    fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
         val state = SyncPlayPresentation(groupId = "g", groupName = "Films", phase = "Idle", participants = listOf("Sam"))
         compose.setContent {
             PictureshowTheme {
@@ -84,7 +85,10 @@ class SyncPlayTvDesignTest {
         }
         // Refresh still exists: async access completion must not move a resting OK onto Join.
         compose.onNodeWithTag("sync:refresh").assertIsFocused()
-        compose.runOnIdle { state = state.copy(groupId = "g", groupName = "Film night", phase = "Paused", queue = listOf(SyncPlayQueueRow("e", "Film", true))) }
+        compose.runOnIdle {
+            state =
+                state.copy(groupId = "g", groupName = "Film night", phase = "Paused", queue = listOf(SyncPlayQueueRow("e", "Film", true)))
+        }
         compose.onNodeWithTag("sync:play").assertIsFocused()
         compose.runOnIdle { state = state.copy(groupId = null, groupName = null, phase = "Idle", groups = emptyList()) }
         compose.onNodeWithTag("sync:name").assertIsFocused()
@@ -92,7 +96,8 @@ class SyncPlayTvDesignTest {
 
     @Test fun initiallyLoadedChooserStillStartsOnItsFirstJoin() {
         val state = SyncPlayPresentation(
-            policyKnown = true, policy = "CreateAndJoinGroups",
+            policyKnown = true,
+            policy = "CreateAndJoinGroups",
             groups = listOf(SyncPlayGroupRow("g", "Film night", 2))
         )
         compose.setContent { PictureshowTheme { SyncPlayPanel(state, { _, _ -> }, {}) } }
@@ -130,7 +135,8 @@ class SyncPlayTvDesignTest {
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncPlayTouchDesignTest {
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
-    @Test fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
+    @Test
+    fun shortStatusChipWrapsContentWithinItsProductionWidthCap() {
         val state = SyncPlayPresentation(groupId = "g", groupName = "Films", phase = "Idle", participants = listOf("Sam"))
         compose.setContent {
             app.pictureshow.ui.PictureshowTheme {
@@ -152,11 +158,15 @@ class SyncPlayTouchDesignTest {
     }
 
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
-    @Test fun narrowChipSeparatesContextAndKeepsIconAndCountClear() {
+    @Test
+    fun narrowChipSeparatesContextAndKeepsIconAndCountClear() {
         var opened = 0
         val state = SyncPlayPresentation(
-            groupId = "g", groupName = "Friday films with friends from every time zone", phase = "Paused",
-            participants = List(12) { "Person $it" }, quality = SyncQuality.IN_SYNC
+            groupId = "g",
+            groupName = "Friday films with friends from every time zone",
+            phase = "Paused",
+            participants = List(12) { "Person $it" },
+            quality = SyncQuality.IN_SYNC
         )
         compose.setContent {
             app.pictureshow.ui.PictureshowTheme {

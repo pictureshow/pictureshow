@@ -93,13 +93,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.boundsInWindow
@@ -157,8 +157,11 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
 @OptIn(ExperimentalMaterial3Api::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun SyncPlayPanel(
-    state: SyncPlayPresentation, onAction: (String, String?) -> Unit, onDismiss: () -> Unit,
-    fixtureLabel: String?, onDeparturePresented: ((Long) -> Unit)? = null
+    state: SyncPlayPresentation,
+    onAction: (String, String?) -> Unit,
+    onDismiss: () -> Unit,
+    fixtureLabel: String?,
+    onDeparturePresented: ((Long) -> Unit)? = null
 ) {
     val tv = usesTvInterface(LocalContext.current)
     val pane = stringResource(R.string.sync_title)
@@ -207,10 +210,19 @@ internal fun SyncPlayPanel(
         }
     }
     val chooserInput = Modifier.onPreviewKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown && event.key in setOf(
-                Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
-                Key.DirectionCenter, Key.Enter, Key.NumPadEnter
-            )) chooserUserMoved = true
+        if (event.type == KeyEventType.KeyDown &&
+            event.key in setOf(
+                Key.DirectionUp,
+                Key.DirectionDown,
+                Key.DirectionLeft,
+                Key.DirectionRight,
+                Key.DirectionCenter,
+                Key.Enter,
+                Key.NumPadEnter
+            )
+        ) {
+            chooserUserMoved = true
+        }
         false
     }.pointerInput(state.server, state.viewer, joined, uncertain) {
         awaitPointerEventScope {
@@ -229,7 +241,9 @@ internal fun SyncPlayPanel(
     }
     val departureModifier = if (notice?.kind == SyncNoticeKind.DEPARTURE && onDeparturePresented != null) {
         state.departure?.let { Modifier.syncDeparturePresentation(it.id, onDeparturePresented) } ?: Modifier
-    } else Modifier
+    } else {
+        Modifier
+    }
 
     // Async populated data preserves focus. An untouched empty chooser gets one settled-data promotion.
     // Membership, usable transport and newly offered recovery do change the useful primary.
@@ -357,17 +371,35 @@ internal fun SyncPlayPanel(
             }
         }
         if (!tv && !compactIme) SyncText(scope, false, small = true)
-        if (!compactIme && !(tv && !joined && !uncertain)) notice?.takeUnless {
-            !tv && it.kind == SyncNoticeKind.SPEED && it.tone == SyncNoticeTone.INFO && it.action == null
-        }?.let {
-            SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null, modifier = departureModifier)
+        if (!compactIme && !(tv && !joined && !uncertain)) {
+            notice?.takeUnless {
+                !tv && it.kind == SyncNoticeKind.SPEED && it.tone == SyncNoticeTone.INFO && it.action == null
+            }?.let {
+                SyncNoticeBanner(state, it, action, tv, if (recovery != null) first else null, modifier = departureModifier)
+            }
         }
         if (joined) {
-            SyncJoined(state, action, tv, first, waitFocus, queueFocus, usable, transport, recovery != null, notice, compactHeight, bodyScroll, touchWindowSize)
+            SyncJoined(
+                state,
+                action,
+                tv,
+                first,
+                waitFocus,
+                queueFocus,
+                usable,
+                transport,
+                recovery != null,
+                notice,
+                compactHeight,
+                bodyScroll,
+                touchWindowSize
+            )
         } else if (uncertain) {
             if (notice?.kind != SyncNoticeKind.LEAVE_UNCONFIRMED) SyncText(stringResource(R.string.sync_leave_unconfirmed), tv)
         } else {
-            SyncGroups(state, action, tv, first, name, { touchName = it.take(200) }, compactHeight, compactIme, create, refreshFocus, joinFocus)
+            SyncGroups(state, action, tv, first, name, {
+                touchName = it.take(200)
+            }, compactHeight, compactIme, create, refreshFocus, joinFocus)
         }
     }
     if (tv) {
@@ -394,9 +426,29 @@ internal fun SyncPlayPanel(
                         )
                     }
                 },
-                pinnedNotice = if (!joined && !uncertain && notice != null) ({
-                    SyncNoticeBanner(state, notice, action, true, if (recovery != null) first else null, pinned = true, modifier = departureModifier)
-                }) else null,
+                pinnedNotice = if (!joined && !uncertain && notice != null) {
+                    (
+                        {
+                            SyncNoticeBanner(
+                                state,
+                                notice,
+                                action,
+                                true,
+                                if (recovery !=
+                                    null
+                                ) {
+                                    first
+                                } else {
+                                    null
+                                },
+                                pinned = true,
+                                modifier = departureModifier
+                            )
+                        }
+                        )
+                } else {
+                    null
+                },
                 pinnedEditor = if (canCreate) {
                     (
                         {
@@ -424,7 +476,9 @@ internal fun SyncPlayPanel(
                 footer = if (joined || uncertain || canCreate) ({ footer(false) }) else null,
                 contentFocusKey = focusKey, panelWidth = 560.dp, footerHorizontalPadding = 12.dp,
                 footerBottomPadding = 28.dp, edgeToEdge = true,
-                minimalFocusScroll = true, repairLostContentFocus = true, bodyScrollState = bodyScroll, footerDivider = true, content = { body(false, false) }
+                minimalFocusScroll = true, repairLostContentFocus = true, bodyScrollState = bodyScroll, footerDivider = true, content = {
+                    body(false, false)
+                }
             )
         }
     } else {
@@ -527,17 +581,22 @@ internal fun SyncTouchBody(modifier: Modifier, compactHeight: Boolean, body: @Co
         CompositionLocalProvider(LocalBringIntoViewSpec provides reveal) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(scroll).padding(top = if (compactHeight) 4.dp else 12.dp, bottom = endPadding),
-                verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 12.dp), content = body
+                verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 12.dp),
+                content = body
             )
         }
-        if (scroll.canScrollBackward) Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().height(topFade)
-                .background(Brush.verticalGradient(listOf(surface, Color.Transparent))).testTag("sync:fade-top")
-        )
-        if (showBottomFade) Box(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomFade)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
-        )
+        if (scroll.canScrollBackward) {
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(topFade)
+                    .background(Brush.verticalGradient(listOf(surface, Color.Transparent))).testTag("sync:fade-top")
+            )
+        }
+        if (showBottomFade) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomFade)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, surface))).testTag("sync:fade-bottom")
+            )
+        }
     }
 }
 
@@ -663,9 +722,11 @@ private fun SyncGroups(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             content = {
                 OutlinedTextField(
-                    name, onName,
+                    name,
+                    onName,
                     label = { Text(stringResource(R.string.sync_group_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    singleLine = true, enabled = !state.busy,
+                    singleLine = true,
+                    enabled = !state.busy,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { if (!state.busy && name.isNotBlank()) action("create", name.trim()) }),
                     modifier = Modifier.testTag("sync:name").bringIntoViewRequester(fieldReveal)
@@ -682,10 +743,26 @@ private fun SyncGroups(
             val editorWidth = if (inline) width - actionWidth - gap else width
             val editor = children[0].measure(Constraints.fixedWidth(editorWidth))
             val button = children.getOrNull(1)?.measure(Constraints.fixedWidth(if (inline) actionWidth else width))
-            val height = if (button == null) editor.height else if (inline) maxOf(editor.height, button.height) else editor.height + gap + button.height
+            val height = if (button ==
+                null
+            ) {
+                editor.height
+            } else if (inline) {
+                maxOf(editor.height, button.height)
+            } else {
+                editor.height + gap + button.height
+            }
             layout(width, constraints.constrainHeight(height)) {
                 editor.placeRelative(0, if (inline) (height - editor.height) / 2 else 0)
-                button?.placeRelative(if (inline) editorWidth + gap else 0, if (inline) (height - button.height) / 2 else editor.height + gap)
+                button?.placeRelative(
+                    if (inline) editorWidth + gap else 0,
+                    if (inline) {
+                        (height - button.height) / 2
+                    } else {
+                        editor.height +
+                            gap
+                    }
+                )
             }
         }
     }
@@ -810,7 +887,9 @@ private fun SyncJoined(
     }
     var touchTransportPlaced by remember(touchReveal) { mutableStateOf(false) }
     var initiallyRevealed by remember(touchReveal) { mutableStateOf(false) }
-    val initialRevealAllowed = !tv && transport && !hasRecovery &&
+    val initialRevealAllowed = !tv &&
+        transport &&
+        !hasRecovery &&
         (notice == null || (notice.tone == SyncNoticeTone.INFO && notice.action == null))
     LaunchedEffect(touchReveal, touchTransportPlaced, initialRevealAllowed) {
         if (initialRevealAllowed && touchTransportPlaced && touchWindowSize != IntSize.Zero && !initiallyRevealed) {
@@ -873,7 +952,13 @@ private fun SyncJoined(
         Text(
             currentTitle,
             titleModifier,
-            style = if (compactHeight) MaterialTheme.typography.bodyMedium else if (titlePlaceholder) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+            style = if (compactHeight) {
+                MaterialTheme.typography.bodyMedium
+            } else if (titlePlaceholder) {
+                MaterialTheme.typography.bodyLarge
+            } else {
+                MaterialTheme.typography.titleMedium
+            },
             color = if (titlePlaceholder) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
@@ -890,12 +975,20 @@ private fun SyncJoined(
         SyncText(status, tv, Modifier.testTag("sync:phase").semantics { liveRegion = LiveRegionMode.Polite }, small = compactHeight)
     }
     if (tv && state.queue.isEmpty()) {
-        SyncText(stringResource(R.string.sync_empty_next_step), true,
-            Modifier.padding(top = 8.dp).testTag("sync:empty-next-step"), small = true)
+        SyncText(
+            stringResource(R.string.sync_empty_next_step),
+            true,
+            Modifier.padding(top = 8.dp).testTag("sync:empty-next-step"),
+            small = true
+        )
     }
     if (tv) {
-        SyncText(stringResource(R.string.sync_personal), true,
-            Modifier.padding(top = 8.dp).testTag("sync:personal"), small = true)
+        SyncText(
+            stringResource(R.string.sync_personal),
+            true,
+            Modifier.padding(top = 8.dp).testTag("sync:personal"),
+            small = true
+        )
     }
     val local = stringResource(
         when (state.localPlayback) {
@@ -905,10 +998,14 @@ private fun SyncJoined(
             SyncLocalPlayback.READY -> R.string.sync_local_ready
         }
     )
-    if (syncShowsLocalPlayback(state.queue.size)) SyncText(
-        stringResource(R.string.sync_local_fact, stringResource(R.string.sync_this_device), local),
-        tv, Modifier.testTag("sync:local"), small = compactHeight
-    )
+    if (syncShowsLocalPlayback(state.queue.size)) {
+        SyncText(
+            stringResource(R.string.sync_local_fact, stringResource(R.string.sync_this_device), local),
+            tv,
+            Modifier.testTag("sync:local"),
+            small = compactHeight
+        )
+    }
     if (!compactHeight &&
         state.quality != SyncQuality.UNKNOWN
     ) {
@@ -923,8 +1020,12 @@ private fun SyncJoined(
     }
     Row(
         Modifier.fillMaxWidth().then(
-            if (tv) Modifier.tvSettingsVisualBlock().padding(vertical = 8.dp) else Modifier.bringIntoViewRequester(touchReveal)
-                .onPlaced { touchTransportPlaced = true }
+            if (tv) {
+                Modifier.tvSettingsVisualBlock().padding(vertical = 8.dp)
+            } else {
+                Modifier.bringIntoViewRequester(touchReveal)
+                    .onPlaced { touchTransportPlaced = true }
+            }
         ),
         horizontalArrangement = if (tv) Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally) else Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -938,7 +1039,9 @@ private fun SyncJoined(
             stringResource(if (play) R.string.sync_play else R.string.sync_pause),
             { action(if (play) "play" else "pause", null) },
             tv,
-            Modifier.testTag(if (play) "sync:play" else "sync:pause").onFocusChanged { if (transport) topControlFocused = it.isFocused }.then(
+            Modifier.testTag(if (play) "sync:play" else "sync:pause").onFocusChanged {
+                if (transport) topControlFocused = it.isFocused
+            }.then(
                 if (transport &&
                     !hasRecovery
                 ) {
@@ -964,7 +1067,13 @@ private fun SyncJoined(
             !state.ignoreWait,
             { action("ignore-wait", (!state.ignoreWait).toString()) },
             tv,
-            Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).onFocusChanged { if (!transport && usable) topControlFocused = it.hasFocus }.then(
+            Modifier.testTag("sync:ignore-wait").focusRequester(waitFocus).onFocusChanged {
+                if (!transport &&
+                    usable
+                ) {
+                    topControlFocused = it.hasFocus
+                }
+            }.then(
                 if (usable &&
                     !transport &&
                     !hasRecovery
@@ -987,16 +1096,26 @@ private fun SyncJoined(
         )
         if (tv) {
             val repeatFocus = remember { List(3) { FocusRequester() } }
-            Row(Modifier.tvSettingsVisualBlock().fillMaxWidth().focusProperties {
-                onEnter = { if (usable) repeatFocus[repeats.indexOfFirst { it.first == state.repeat }.coerceAtLeast(0)].requestFocus() }
-            }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.tvSettingsVisualBlock().fillMaxWidth().focusProperties {
+                    onEnter = { if (usable) repeatFocus[repeats.indexOfFirst { it.first == state.repeat }.coerceAtLeast(0)].requestFocus() }
+                }.focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 repeats.forEach { (value, label) ->
                     androidx.tv.material3.FilterChip(
                         selected = state.repeat == value,
                         onClick = { action("repeat", value) },
                         enabled = usable,
                         scale = androidx.tv.material3.FilterChipDefaults.scale(focusedScale = 1f),
-                        modifier = Modifier.testTag("sync:repeat:$value").focusRequester(repeatFocus[repeats.indexOfFirst { it.first == value }]),
+                        modifier = Modifier.testTag("sync:repeat:$value").focusRequester(
+                            repeatFocus[
+                                repeats.indexOfFirst {
+                                    it.first ==
+                                        value
+                                }
+                            ]
+                        ),
                         leadingIcon = if (state.repeat ==
                             value
                         ) {
@@ -1309,28 +1428,32 @@ private fun SyncNoticeBanner(
     modifier: Modifier = Modifier,
     pinned: Boolean = false
 ) {
-    val message = if (notice.kind == SyncNoticeKind.DEPARTURE) syncDepartureText(state) else stringResource(
-        when (notice.kind) {
-            SyncNoticeKind.ACCESS_FAILED -> R.string.sync_access_failed
-            SyncNoticeKind.GROUPS_FAILED -> R.string.sync_groups_failed
-            SyncNoticeKind.REJOIN -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
-            SyncNoticeKind.PREPARING -> R.string.sync_local_preparing
-            SyncNoticeKind.LIBRARY_DENIED -> R.string.sync_library_denied
-            SyncNoticeKind.CONNECTION -> R.string.sync_connection
-            SyncNoticeKind.SOURCE_UNAVAILABLE -> R.string.sync_source_unavailable
-            SyncNoticeKind.CHECK_ACCESS -> R.string.sync_check_access
-            SyncNoticeKind.ACCESS_DENIED -> R.string.sync_access_denied
-            SyncNoticeKind.REQUEST_FAILED -> R.string.sync_request_failed
-            SyncNoticeKind.SNAPSHOT -> R.string.sync_snapshot
-            SyncNoticeKind.LEFT, SyncNoticeKind.DEPARTURE -> R.string.sync_left
-            SyncNoticeKind.LEAVE_UNCONFIRMED -> R.string.sync_leave_unconfirmed
-            SyncNoticeKind.SPEED -> R.string.sync_speed
-            SyncNoticeKind.CLOCK -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
-            SyncNoticeKind.QUEUE_PENDING -> R.string.sync_queue_pending
-            SyncNoticeKind.GROUP_UNAVAILABLE -> R.string.sync_group_unavailable
-            SyncNoticeKind.PLAYBACK_FAILED -> R.string.sync_playback_error
-        }
-    )
+    val message = if (notice.kind == SyncNoticeKind.DEPARTURE) {
+        syncDepartureText(state)
+    } else {
+        stringResource(
+            when (notice.kind) {
+                SyncNoticeKind.ACCESS_FAILED -> R.string.sync_access_failed
+                SyncNoticeKind.GROUPS_FAILED -> R.string.sync_groups_failed
+                SyncNoticeKind.REJOIN -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
+                SyncNoticeKind.PREPARING -> R.string.sync_local_preparing
+                SyncNoticeKind.LIBRARY_DENIED -> R.string.sync_library_denied
+                SyncNoticeKind.CONNECTION -> R.string.sync_connection
+                SyncNoticeKind.SOURCE_UNAVAILABLE -> R.string.sync_source_unavailable
+                SyncNoticeKind.CHECK_ACCESS -> R.string.sync_check_access
+                SyncNoticeKind.ACCESS_DENIED -> R.string.sync_access_denied
+                SyncNoticeKind.REQUEST_FAILED -> R.string.sync_request_failed
+                SyncNoticeKind.SNAPSHOT -> R.string.sync_snapshot
+                SyncNoticeKind.LEFT, SyncNoticeKind.DEPARTURE -> R.string.sync_left
+                SyncNoticeKind.LEAVE_UNCONFIRMED -> R.string.sync_leave_unconfirmed
+                SyncNoticeKind.SPEED -> R.string.sync_speed
+                SyncNoticeKind.CLOCK -> if (notice.tone == SyncNoticeTone.WARNING) R.string.sync_out_of_sync else R.string.sync_lost
+                SyncNoticeKind.QUEUE_PENDING -> R.string.sync_queue_pending
+                SyncNoticeKind.GROUP_UNAVAILABLE -> R.string.sync_group_unavailable
+                SyncNoticeKind.PLAYBACK_FAILED -> R.string.sync_playback_error
+            }
+        )
+    }
     val isError = notice.tone == SyncNoticeTone.ERROR
     val background = if (tv) {
         if (isError) TvMaterialTheme.colorScheme.errorContainer else TvMaterialTheme.colorScheme.surfaceVariant
@@ -1358,11 +1481,16 @@ private fun SyncNoticeBanner(
         if (notice.tone != SyncNoticeTone.INFO) Icon(syncIcon("warning"), null, tint = foreground, modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (tv) androidx.tv.material3.Text(message, color = foreground) else Text(message, color = foreground)
-            if (notice.kind == SyncNoticeKind.DEPARTURE && state.departure?.cause == app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE) {
+            if (notice.kind == SyncNoticeKind.DEPARTURE &&
+                state.departure?.cause == app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE
+            ) {
                 state.departure.groupName?.let { name ->
                     val context = stringResource(R.string.sync_departure_context, name)
-                    if (tv) androidx.tv.material3.Text(context, color = foreground, style = TvMaterialTheme.typography.bodyMedium)
-                    else Text(context, color = foreground, style = MaterialTheme.typography.bodySmall)
+                    if (tv) {
+                        androidx.tv.material3.Text(context, color = foreground, style = TvMaterialTheme.typography.bodyMedium)
+                    } else {
+                        Text(context, color = foreground, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             notice.action?.takeUnless { it == SyncNoticeAction.LEAVE }?.let { recovery ->
@@ -1488,7 +1616,8 @@ private fun SyncChipStatus(phase: String, quality: String?, tv: Boolean) {
     val measurer = rememberTextMeasurer()
     SubcomposeLayout { constraints ->
         val inline = if (quality == null) phase else "$phase · $quality"
-        val fits = quality == null || measurer.measure(inline, style = style, maxLines = 1, softWrap = false).size.width <= constraints.maxWidth
+        val fits =
+            quality == null || measurer.measure(inline, style = style, maxLines = 1, softWrap = false).size.width <= constraints.maxWidth
         val text = if (fits) inline else "$phase\n$quality"
         val status = subcompose("status") {
             SyncChipText(text, tv, style, color, Modifier.testTag("sync:chip-status"), maxLines = 2, softWrap = quality == null)
@@ -1501,11 +1630,27 @@ private fun SyncChipStatus(phase: String, quality: String?, tv: Boolean) {
 
 @Composable
 private fun SyncChipText(
-    text: String, tv: Boolean, style: androidx.compose.ui.text.TextStyle, color: Color, modifier: Modifier = Modifier,
-    maxLines: Int = 1, softWrap: Boolean = false
+    text: String,
+    tv: Boolean,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 1,
+    softWrap: Boolean = false
 ) {
-    if (tv) androidx.tv.material3.Text(text, modifier, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = TextOverflow.Ellipsis)
-    else Text(text, modifier, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = TextOverflow.Ellipsis)
+    if (tv) {
+        androidx.tv.material3.Text(
+            text,
+            modifier,
+            color = color,
+            style = style,
+            maxLines = maxLines,
+            softWrap = softWrap,
+            overflow = TextOverflow.Ellipsis
+        )
+    } else {
+        Text(text, modifier, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 /** Reserve the count, then measure a useful name instead of exposing a weighted ellipsis box. */
@@ -1516,14 +1661,20 @@ private fun SyncChipContext(name: String, count: String, tv: Boolean, color: Col
     val boundaries = remember(name) { syncNameGraphemeEnds(name) }
     SubcomposeLayout { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val countRun = subcompose("count") { SyncChipText(count, tv, style, color, Modifier.testTag("sync:chip-count")) }.single().measure(loose)
-        val separator = subcompose("separator") { SyncChipText("·", tv, style, color, Modifier.clearAndSetSemantics {}) }.single().measure(loose)
+        val countRun = subcompose("count") {
+            SyncChipText(count, tv, style, color, Modifier.testTag("sync:chip-count"))
+        }.single().measure(loose)
+        val separator = subcompose("separator") {
+            SyncChipText("·", tv, style, color, Modifier.clearAndSetSemantics {})
+        }.single().measure(loose)
         val gap = 8.dp.roundToPx()
         val budget = (constraints.maxWidth - countRun.width - separator.width - gap * 2).coerceAtLeast(0)
         fun fits(text: String): Boolean = measurer.measure(text, style = style, maxLines = 1, softWrap = false).size.width <= budget
         val shown = syncChipName(name, boundaries, ::fits)
         val nameRun = shown?.let { visible ->
-            subcompose("name") { SyncChipText(visible, tv, style, color, Modifier.testTag("sync:chip-name")) }.single().measure(Constraints(maxWidth = budget))
+            subcompose("name") {
+                SyncChipText(visible, tv, style, color, Modifier.testTag("sync:chip-name"))
+            }.single().measure(Constraints(maxWidth = budget))
         }
         val width = countRun.width + if (nameRun == null) 0 else nameRun.width + separator.width + gap * 2
         val height = maxOf(countRun.height, nameRun?.height ?: 0, if (nameRun == null) 0 else separator.height)

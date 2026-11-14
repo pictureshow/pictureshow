@@ -57,8 +57,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -696,7 +696,11 @@ internal fun PlayerItemScreen(
                 }
                 LaunchedEffect(error) { errorFocus.requestFocus() }
             }
-            SyncPlayerChip(host.sync, Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 28.dp).widthIn(max = 640.dp), tv = true)
+            SyncPlayerChip(
+                host.sync,
+                Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 28.dp).widthIn(max = 640.dp),
+                tv = true
+            )
             // Keep opener nodes composed while the sibling modal hides this player tree.
             if (controlsVisible || (controls && extraPanel != null && error == null && !switching)) {
                 Column(

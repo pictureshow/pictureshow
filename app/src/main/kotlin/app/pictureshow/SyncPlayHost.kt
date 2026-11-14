@@ -271,7 +271,12 @@ internal class SyncPlayHost(
 
     /** Layout acknowledgement is accepted only for the currently selected, visible chooser banner. */
     fun departurePresented(scope: Long, id: Long, chooserSession: Long) {
-        if (!panelOpen || chooserSession != this.chooserSession || effectiveSyncNotice(mutable.value)?.kind != SyncNoticeKind.DEPARTURE) return
+        if (!panelOpen ||
+            chooserSession != this.chooserSession ||
+            effectiveSyncNotice(mutable.value)?.kind != SyncNoticeKind.DEPARTURE
+        ) {
+            return
+        }
         departure(SyncDepartureEvent.Presented(scope, id, chooserSession))
     }
 
@@ -381,7 +386,11 @@ internal class SyncPlayHost(
         if (after === before || after == before) return
         membership = after
         if (event is SyncEvent.Joined) departure(SyncDepartureEvent.MembershipStarted(departureState.scope))
-        if (event is SyncEvent.Left) departure(SyncDepartureEvent.Recorded(departureState.scope, before.group?.name, SyncDepartureCause.MEMBERSHIP_LOST))
+        if (event is SyncEvent.Left) {
+            departure(
+                SyncDepartureEvent.Recorded(departureState.scope, before.group?.name, SyncDepartureCause.MEMBERSHIP_LOST)
+            )
+        }
         if (event is SyncEvent.Joined || after.generation != before.generation || !after.active) waitReason = null
         if (event is SyncEvent.State) waitReason = event.reason
         if (after.phase !in setOf("Error", "Reconnecting") && event is SyncEvent.State) {

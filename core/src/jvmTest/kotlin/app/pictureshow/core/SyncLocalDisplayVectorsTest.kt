@@ -20,9 +20,11 @@ class SyncLocalDisplayVectorsTest {
         assertEquals(4, cases.size)
         cases.forEach { row ->
             val c = row.jsonObject
-            assertEquals(c.getValue("expectedVisible").jsonPrimitive.boolean,
+            assertEquals(
+                c.getValue("expectedVisible").jsonPrimitive.boolean,
                 syncShowsLocalPlayback(c.getValue("queueEntries").jsonPrimitive.int),
-                c.getValue("id").jsonPrimitive.content + ": " + c.getValue("localState").jsonPrimitive.content)
+                c.getValue("id").jsonPrimitive.content + ": " + c.getValue("localState").jsonPrimitive.content
+            )
         }
     }
 }

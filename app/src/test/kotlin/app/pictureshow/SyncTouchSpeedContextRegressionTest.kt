@@ -12,15 +12,14 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
@@ -63,7 +62,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w640dp-h360dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SyncTouchSpeedContextRegressionTest {
-    @get:Rule(order = -2) val timeLimit = PerTestTimeLimit(180)
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = StandardTestDispatcher())
     private val scheduler = TestCoroutineScheduler()
     private val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
@@ -93,9 +94,12 @@ class SyncTouchSpeedContextRegressionTest {
     }
     private fun launch(case: JsonObject, state: Int = Player.STATE_READY) {
         val input = case.getValue("input").jsonObject
-        launch(input.getValue("participating").jsonPrimitive.boolean,
+        launch(
+            input.getValue("participating").jsonPrimitive.boolean,
             input.getValue("phase").jsonPrimitive.content,
-            !input.getValue("localShowPlayButton").jsonPrimitive.boolean, state)
+            !input.getValue("localShowPlayButton").jsonPrimitive.boolean,
+            state
+        )
     }
     private fun launch(grouped: Boolean, phase: String, nativePlaying: Boolean, state: Int = Player.STATE_READY) {
         compose.runOnIdle {
@@ -103,29 +107,80 @@ class SyncTouchSpeedContextRegressionTest {
             decoder = Decoder(state, nativePlaying)
             if (grouped) {
                 val gateway = object : SyncPlayGateway {
-                    override suspend fun groups(account: Account) = ClientResult.Success(listOf(SyncGroup("g", "Friday films", phase, emptyList(), epoch * 10_000)))
+                    override suspend fun groups(account: Account) = ClientResult.Success(
+                        listOf(
+                            SyncGroup(
+                                "g",
+                                "Friday films",
+                                phase,
+                                emptyList(),
+                                epoch * 10_000
+                            )
+                        )
+                    )
                     override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
                     override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
-                    override suspend fun send(account: Account, request: SyncRequest): Int { sent += request.operation; return 204 }
+                    override suspend fun send(account: Account, request: SyncRequest): Int {
+                        sent += request.operation
+                        return 204
+                    }
                 }
                 val group = SyncPlayHost(scope, gateway, { epoch + scheduler.currentTime }, { scheduler.currentTime })
                 sync = group
-                group.bind(account); group.socket(true); group.refresh(); scheduler.runCurrent()
-                group.join("g"); scheduler.runCurrent()
+                group.bind(account)
+                group.socket(true)
+                group.refresh()
+                scheduler.runCurrent()
+                group.join("g")
+                scheduler.runCurrent()
                 fun update(type: String, data: JsonObject) = buildJsonObject {
                     put("MessageType", "SyncPlayGroupUpdate")
-                    put("Data", buildJsonObject { put("GroupId", "g"); put("Type", type); put("Data", data) })
+                    put(
+                        "Data",
+                        buildJsonObject {
+                            put("GroupId", "g")
+                            put("Type", type)
+                            put("Data", data)
+                        }
+                    )
                 }.toString()
-                group.receive(update("GroupJoined", buildJsonObject {
-                    put("GroupId", "g"); put("GroupName", "Friday films"); put("State", phase)
-                    put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                }))
-                group.receive(update("PlayQueue", buildJsonObject {
-                    put("Reason", "NewPlaylist"); put("LastUpdate", syncUtcTimestamp(epoch))
-                    put("Playlist", JsonArray(listOf(buildJsonObject { put("ItemId", "film"); put("PlaylistItemId", "entry-a") })))
-                    put("PlayingItemIndex", 0); put("StartPositionTicks", 200_000_000L)
-                    put("IsPlaying", phase == "Playing"); put("RepeatMode", "RepeatNone"); put("ShuffleMode", "Sorted")
-                }))
+                group.receive(
+                    update(
+                        "GroupJoined",
+                        buildJsonObject {
+                            put("GroupId", "g")
+                            put("GroupName", "Friday films")
+                            put("State", phase)
+                            put("Participants", JsonArray(emptyList()))
+                            put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                        }
+                    )
+                )
+                group.receive(
+                    update(
+                        "PlayQueue",
+                        buildJsonObject {
+                            put("Reason", "NewPlaylist")
+                            put("LastUpdate", syncUtcTimestamp(epoch))
+                            put(
+                                "Playlist",
+                                JsonArray(
+                                    listOf(
+                                        buildJsonObject {
+                                            put("ItemId", "film")
+                                            put("PlaylistItemId", "entry-a")
+                                        }
+                                    )
+                                )
+                            )
+                            put("PlayingItemIndex", 0)
+                            put("StartPositionTicks", 200_000_000L)
+                            put("IsPlaying", phase == "Playing")
+                            put("RepeatMode", "RepeatNone")
+                            put("ShuffleMode", "Sorted")
+                        }
+                    )
+                )
                 scheduler.runCurrent()
                 assertTrue(group.participating, "Fixture must establish actual production membership")
                 assertEquals(phase, group.state.value.phase, "Fixture must supply authoritative group phase")
@@ -146,51 +201,83 @@ class SyncTouchSpeedContextRegressionTest {
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(400)
     }
-    private fun expectedLabel(case: JsonObject) = if (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content == "pause") "Pause" else "Play"
+    private fun expectedLabel(case: JsonObject) = if (case.getValue("expected").jsonObject.getValue("action").jsonPrimitive.content ==
+        "pause"
+    ) {
+        "Pause"
+    } else {
+        "Play"
+    }
 
     private fun openSpeed(id: String): JsonObject {
         val case = vector(id)
-        launch(case.getValue("input").jsonObject.getValue("participating").jsonPrimitive.boolean,
-            "Playing", false)
+        launch(
+            case.getValue("input").jsonObject.getValue("participating").jsonPrimitive.boolean,
+            "Playing",
+            false
+        )
         compose.onNodeWithTag("touch:open:Speed").performScrollTo().performClick()
         compose.waitForIdle()
         return case.getValue("expected").jsonObject
     }
+
     @Test fun realGroupedSpeedContextDisablesSelectionAndExplainsAtPointOfUse() {
         val expected = openSpeed("speed-selection-grouped-True")
         assertEquals(false, expected.getValue("selectionAllowed").jsonPrimitive.boolean)
         assertEquals(true, expected.getValue("explanationRequired").jsonPrimitive.boolean)
         compose.onNodeWithTag("touch:speed:150").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithText(compose.activity.getString(R.string.sync_speed)).assertIsDisplayed()
-        compose.runOnIdle { scheduler.runCurrent(); assertTrue(sent.isEmpty()); assertEquals(1f, output.speed.value.speed) }
+        compose.runOnIdle {
+            scheduler.runCurrent()
+            assertTrue(sent.isEmpty())
+            assertEquals(1f, output.speed.value.speed)
+        }
     }
+
     @Test fun realStandaloneSpeedContextStillSelectsAndDismisses() {
         val expected = openSpeed("speed-selection-grouped-False")
         assertEquals(true, expected.getValue("selectionAllowed").jsonPrimitive.boolean)
         compose.onNodeWithTag("touch:speed:150").assertIsDisplayed().assertIsEnabled().performClick()
-        compose.runOnIdle { assertEquals(1.5f, output.speed.value.speed); assertTrue(sent.isEmpty()) }
+        compose.runOnIdle {
+            assertEquals(1.5f, output.speed.value.speed)
+            assertTrue(sent.isEmpty())
+        }
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
     }
+
     @Test fun mountedSpeedContextTracksActualMembershipLeaving() {
         openSpeed("speed-selection-grouped-True")
         compose.onNodeWithTag("touch:speed:150").assertIsNotEnabled()
-        compose.runOnIdle { requireNotNull(sync).leave(); scheduler.runCurrent(); sent.clear() }
+        compose.runOnIdle {
+            requireNotNull(sync).leave()
+            scheduler.runCurrent()
+            sent.clear()
+        }
         compose.waitForIdle()
         val expected = vector("speed-selection-grouped-False").getValue("expected").jsonObject
         assertEquals(true, expected.getValue("selectionAllowed").jsonPrimitive.boolean)
         compose.onNodeWithTag("touch:speed:150").assertIsEnabled().performClick()
-        compose.runOnIdle { assertEquals(1.5f, output.speed.value.speed); assertTrue(sent.isEmpty()) }
+        compose.runOnIdle {
+            assertEquals(1.5f, output.speed.value.speed)
+            assertTrue(sent.isEmpty())
+        }
     }
 
     private class Decoder(state: Int, playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {
         var nativeIntentChanges = 0
         var prepares = 0
         var defaultSeeks = 0
-        private var value = State.Builder().setAvailableCommands(Player.Commands.Builder().addAll(
-            Player.COMMAND_PLAY_PAUSE, Player.COMMAND_PREPARE, Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
-            Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, Player.COMMAND_RELEASE,
-            Player.COMMAND_GET_CURRENT_MEDIA_ITEM, Player.COMMAND_GET_TIMELINE
-        ).build()).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
+        private var value = State.Builder().setAvailableCommands(
+            Player.Commands.Builder().addAll(
+                Player.COMMAND_PLAY_PAUSE,
+                Player.COMMAND_PREPARE,
+                Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
+                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_RELEASE,
+                Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_GET_TIMELINE
+            ).build()
+        ).setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(60_000_000).setIsSeekable(true).build()))
             .setPlaybackState(state).setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(20_000).build()
         override fun getState(): State = value
@@ -199,10 +286,12 @@ class SyncTouchSpeedContextRegressionTest {
             value = value.buildUpon().setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST).build()
         }
         override fun handlePrepare() = Futures.immediateVoidFuture().also {
-            prepares++; value = value.buildUpon().setPlaybackState(Player.STATE_READY).build()
+            prepares++
+            value = value.buildUpon().setPlaybackState(Player.STATE_READY).build()
         }
         override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int) = Futures.immediateVoidFuture().also {
-            defaultSeeks++; value = value.buildUpon().setContentPositionMs(positionMs).setPlaybackState(Player.STATE_READY).build()
+            defaultSeeks++
+            value = value.buildUpon().setContentPositionMs(positionMs).setPlaybackState(Player.STATE_READY).build()
         }
         override fun handleRelease() = Futures.immediateVoidFuture()
     }

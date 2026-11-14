@@ -12,8 +12,8 @@ import androidx.activity.ComponentDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -33,10 +33,10 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.tv.material3.MaterialTheme
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -89,10 +89,12 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         assertEquals(profile, case.getValue("profile").jsonPrimitive.content)
         return Profile(case.getValue("input").jsonObject, case.getValue("expected").jsonObject)
     }
+
     @Before fun tvMode() {
         shadowOf(compose.activity.getSystemService(UiModeManager::class.java))
             .setCurrentModeType(Configuration.UI_MODE_TYPE_TELEVISION)
     }
+
     @Composable private fun TvEnvironment(content: @Composable () -> Unit) {
         val config = Configuration(LocalConfiguration.current).apply {
             uiMode = (uiMode and Configuration.UI_MODE_TYPE_MASK.inv()) or Configuration.UI_MODE_TYPE_TELEVISION
@@ -101,7 +103,10 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
             PictureshowTheme {
                 val scale = LocalDensity.current.density
                 val background = MaterialTheme.colorScheme.surface.toArgb()
-                SideEffect { density = scale; surface = background }
+                SideEffect {
+                    density = scale
+                    surface = background
+                }
                 content()
             }
         }
@@ -117,7 +122,9 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         settle()
         compose.onNodeWithTag(tag).assertIsFocused()
     }
+
     @Test fun repeatPaintStaysOnItsRestingGridAtFont10() = verifyRepeat("repeat-stable-paint-font-1-0")
+
     @Test fun repeatPaintStaysOnItsRestingGridAtFont13() = verifyRepeat("repeat-stable-paint-font-1-3")
     private fun verifyRepeat(id: String) {
         val case = vector(id, "repeat-paint")
@@ -125,11 +132,15 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         val commands = mutableListOf<Pair<String, String?>>()
         compose.setContent {
             TvEnvironment {
-                SyncPlayPanel(SyncPlayPresentation(
-                    server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups",
-                    groupId = "g", groupName = "Friday films", phase = "Paused", localPlayback = SyncLocalPlayback.READY,
-                    repeat = case.text("selectedRepeat"), queue = listOf(SyncPlayQueueRow("a", "First film", true))
-                ), { op, value -> commands += op to value }, {})
+                SyncPlayPanel(
+                    SyncPlayPresentation(
+                        server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups",
+                        groupId = "g", groupName = "Friday films", phase = "Paused", localPlayback = SyncLocalPlayback.READY,
+                        repeat = case.text("selectedRepeat"), queue = listOf(SyncPlayQueueRow("a", "First film", true))
+                    ),
+                    { op, value -> commands += op to value },
+                    {}
+                )
             }
         }
         settle()
@@ -150,8 +161,11 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
             focusRepeat(mode, case)
             assertPaintProbeInsideViewport(tag, case)
             val focusedNode = bounds(tag)
-            assertEquals(case.flag("unchangedSemanticBounds"), restingNode == focusedNode,
-                "Semantic geometry must stay fixed, but it alone cannot prove scale1 paint")
+            assertEquals(
+                case.flag("unchangedSemanticBounds"),
+                restingNode == focusedNode,
+                "Semantic geometry must stay fixed, but it alone cannot prove scale1 paint"
+            )
             assertEquals(restingPanel, bounds("sync:panel"))
             assertClearOfFades(tag)
             val focused = compose.onNodeWithTag("sync:panel").captureToImage().asAndroidBitmap()
@@ -164,15 +178,23 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
                 ((restingNode.bottom - restingPanel.top).value * density).roundToInt() - 1
             )
             for (edge in 0..3) {
-                assertTrue(abs(restPaint[edge] - expected[edge]) <= case.count("paintEdgeTolerancePx"),
-                    "Rest chip paint must establish the real body grid: mode=$mode edge=$edge paint=${restPaint.toList()} node=${expected.toList()}")
-                assertTrue(abs(focusPaint[edge] - restPaint[edge]) <= case.count("paintEdgeTolerancePx"),
-                    "Focused Repeat paint must not expand beyond rest: mode=$mode edge=$edge rest=${restPaint.toList()} focused=${focusPaint.toList()}")
+                assertTrue(
+                    abs(restPaint[edge] - expected[edge]) <= case.count("paintEdgeTolerancePx"),
+                    "Rest chip paint must establish the real body grid: mode=$mode edge=$edge paint=${restPaint.toList()} node=${expected.toList()}"
+                )
+                assertTrue(
+                    abs(focusPaint[edge] - restPaint[edge]) <= case.count("paintEdgeTolerancePx"),
+                    "Focused Repeat paint must not expand beyond rest: mode=$mode edge=$edge rest=${restPaint.toList()} focused=${focusPaint.toList()}"
+                )
             }
         }
-        assertEquals(case.count("repeatRequests"), commands.count { it.first == "repeat" },
-            "Paint inspection/focus must not change the selected shared Repeat value")
+        assertEquals(
+            case.count("repeatRequests"),
+            commands.count { it.first == "repeat" },
+            "Paint inspection/focus must not change the selected shared Repeat value"
+        )
     }
+
     /** Match actual remote entry: the focus group first targets the checked value.
      * Unchecked chips are reached with native D-pad movement inside that group. */
     private fun focusRepeat(mode: String, case: Profile) {
@@ -211,8 +233,10 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
             it.config.contains(SemanticsActions.ScrollBy) &&
                 it.config.contains(SemanticsProperties.VerticalScrollAxisRange)
         } ?: error("Repeat fixture must use its actual vertical scrolling ancestor")
-        compose.onNode(SemanticsMatcher("actual Repeat vertical scroll owner") { it.id == owner.id },
-            useUnmergedTree = true).performSemanticsAction(SemanticsActions.ScrollBy) {
+        compose.onNode(
+            SemanticsMatcher("actual Repeat vertical scroll owner") { it.id == owner.id },
+            useUnmergedTree = true
+        ).performSemanticsAction(SemanticsActions.ScrollBy) {
             it(0f, distance.value * density)
         }
         settle()
@@ -222,22 +246,34 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         val row = bounds(tag)
         val viewport = bounds("tv-settings:viewport")
         val probe = case.number("probeOutsetDp").dp
-        assertTrue(row.left - probe > viewport.left && row.right + probe < viewport.right &&
-            row.top - probe > viewport.top && row.bottom + probe < viewport.bottom,
+        assertTrue(
+            row.left - probe > viewport.left &&
+                row.right + probe < viewport.right &&
+                row.top - probe > viewport.top &&
+                row.bottom + probe < viewport.bottom,
             "Fixture paint probe must be strictly inside the actual viewport before comparing paint; " +
-                "pinned footer/divider is unrelated ink: tag=$tag row=$row viewport=$viewport probe=$probe")
+                "pinned footer/divider is unrelated ink: tag=$tag row=$row viewport=$viewport probe=$probe"
+        )
     }
 
     private fun assertClearOfFades(tag: String) {
         val row = bounds(tag)
         val viewport = bounds("tv-settings:viewport")
-        val top = if (compose.onAllNodesWithTag("tv-settings:fade-top").fetchSemanticsNodes().isNotEmpty())
-            bounds("tv-settings:fade-top").bottom + 8.dp else viewport.top
-        val bottom = if (compose.onAllNodesWithTag("tv-settings:fade-bottom").fetchSemanticsNodes().isNotEmpty())
-            bounds("tv-settings:fade-bottom").top - 8.dp else viewport.bottom
+        val top = if (compose.onAllNodesWithTag("tv-settings:fade-top").fetchSemanticsNodes().isNotEmpty()) {
+            bounds("tv-settings:fade-top").bottom + 8.dp
+        } else {
+            viewport.top
+        }
+        val bottom = if (compose.onAllNodesWithTag("tv-settings:fade-bottom").fetchSemanticsNodes().isNotEmpty()) {
+            bounds("tv-settings:fade-bottom").top - 8.dp
+        } else {
+            viewport.bottom
+        }
         val tolerance = (1f / density).dp
-        assertTrue(row.top >= top - tolerance && row.bottom <= bottom + tolerance,
-            "Inspect unobscured chip paint, not a fade-induced silhouette: $row clear=[$top,$bottom]")
+        assertTrue(
+            row.top >= top - tolerance && row.bottom <= bottom + tolerance,
+            "Inspect unobscured chip paint, not a fade-induced silhouette: $row clear=[$top,$bottom]"
+        )
     }
     private fun paintBounds(bitmap: Bitmap, panel: DpRect, node: DpRect, case: Profile): IntArray {
         val left = ((node.left - panel.left).value * density).roundToInt()
@@ -264,9 +300,16 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         var dismissed = 0
         compose.setContent {
             TvEnvironment {
-                SyncPlayPanel(SyncPlayPresentation(
-                    server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups"
-                ), { _, _ -> }, { dismissed++ })
+                SyncPlayPanel(
+                    SyncPlayPresentation(
+                        server = "Cinema",
+                        viewer = "Viewer",
+                        policyKnown = true,
+                        policy = "CreateAndJoinGroups"
+                    ),
+                    { _, _ -> },
+                    { dismissed++ }
+                )
             }
         }
         settle()
@@ -283,22 +326,31 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
                 .build()
             // Validate the public input, then deliver it through the actual Dialog view tree.
             // No app edit flag, direct requestKeyboard callback or IME shadow is modified.
-            assertEquals(visible, insets.isVisible(WindowInsetsCompat.Type.ime()),
-                "Harness must support explicit zero-height IME visibility independently of bottom inset")
+            assertEquals(
+                visible,
+                insets.isVisible(WindowInsetsCompat.Type.ime()),
+                "Harness must support explicit zero-height IME visibility independently of bottom inset"
+            )
             assertEquals(bottomPx, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
             compose.runOnIdle { ViewCompat.dispatchApplyWindowInsets(requireNotNull(dialog.window).decorView, insets) }
             settle()
         }
         compose.onNodeWithTag("sync:name").assertIsFocused()
-        assertEquals(case.token("draftBeforeBack"), compose.onNodeWithTag("sync:name").fetchSemanticsNode()
-            .config[SemanticsProperties.EditableText].text)
+        assertEquals(
+            case.token("draftBeforeBack"),
+            compose.onNodeWithTag("sync:name").fetchSemanticsNode()
+                .config[SemanticsProperties.EditableText].text
+        )
         assertEquals(case.flag("stableEditorBounds"), editor == bounds("sync:name"))
         assertEquals(case.count("panelDismissalsBeforeBack"), dismissed)
         // Existing project pattern for the actual public Compose Dialog Back dispatch path.
         compose.runOnIdle { dialog.onBackPressedDispatcher.onBackPressed() }
         settle()
-        assertEquals(case.count("panelDismissalsAfterBack"), dismissed,
-            "After a platform-delivered zero-inset IME hide, the next app Back must dismiss exactly once")
+        assertEquals(
+            case.count("panelDismissalsAfterBack"),
+            dismissed,
+            "After a platform-delivered zero-inset IME hide, the next app Back must dismiss exactly once"
+        )
     }
 
     @Test fun zeroInsetVisibleImeBackRetainsChooserAndDraft() {
@@ -307,9 +359,16 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
         var dismissed = 0
         compose.setContent {
             TvEnvironment {
-                SyncPlayPanel(SyncPlayPresentation(
-                    server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups"
-                ), { _, _ -> }, { dismissed++ })
+                SyncPlayPanel(
+                    SyncPlayPresentation(
+                        server = "Cinema",
+                        viewer = "Viewer",
+                        policyKnown = true,
+                        policy = "CreateAndJoinGroups"
+                    ),
+                    { _, _ -> },
+                    { dismissed++ }
+                )
             }
         }
         settle()
@@ -324,20 +383,29 @@ class SyncPlayTvRepeatPaintAndBackRegressionTest {
             .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, bottomPx))
             .setVisible(WindowInsetsCompat.Type.ime(), visible)
             .build()
-        assertEquals(visible, insets.isVisible(WindowInsetsCompat.Type.ime()),
-            "Public input must represent visible IME independently of its zero bottom inset")
+        assertEquals(
+            visible,
+            insets.isVisible(WindowInsetsCompat.Type.ime()),
+            "Public input must represent visible IME independently of its zero bottom inset"
+        )
         assertEquals(bottomPx, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
         compose.runOnIdle { ViewCompat.dispatchApplyWindowInsets(requireNotNull(dialog.window).decorView, insets) }
         settle()
         assertEquals(case.count("panelDismissalsBeforeBack"), dismissed)
         compose.runOnIdle { dialog.onBackPressedDispatcher.onBackPressed() }
         settle()
-        assertEquals(case.count("panelDismissalsAfterBack"), dismissed,
-            "An app Back while a zero-inset IME is visible must retain the chooser")
+        assertEquals(
+            case.count("panelDismissalsAfterBack"),
+            dismissed,
+            "An app Back while a zero-inset IME is visible must retain the chooser"
+        )
         compose.onNodeWithTag("sync:panel").assertExists()
         compose.onNodeWithTag("sync:name").assertIsFocused()
-        assertEquals(case.token("retainedDraft"), compose.onNodeWithTag("sync:name").fetchSemanticsNode()
-            .config[SemanticsProperties.EditableText].text)
+        assertEquals(
+            case.token("retainedDraft"),
+            compose.onNodeWithTag("sync:name").fetchSemanticsNode()
+                .config[SemanticsProperties.EditableText].text
+        )
         assertEquals(case.flag("stableEditorBounds"), editor == bounds("sync:name"))
         // A hide request need not synchronously deliver a new WindowInsets frame in Robolectric.
         // No immediate invisible-insets or InputMethodManager shadow-count assertion is made.

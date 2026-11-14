@@ -22,9 +22,15 @@ class SyncChipNameVectorsTest {
             val c = row.jsonObject
             val fits = c.getValue("fittingCandidates").jsonArray.map { it.jsonPrimitive.content }.toSet()
             val expected = c.getValue("expected").takeUnless { it is JsonNull }?.jsonPrimitive?.content
-            assertEquals(expected, syncChipName(c.getValue("name").jsonPrimitive.content,
-                c.getValue("graphemeEnds").jsonArray.map { it.jsonPrimitive.int }, fits::contains),
-                c.getValue("id").jsonPrimitive.content)
+            assertEquals(
+                expected,
+                syncChipName(
+                    c.getValue("name").jsonPrimitive.content,
+                    c.getValue("graphemeEnds").jsonArray.map { it.jsonPrimitive.int },
+                    fits::contains
+                ),
+                c.getValue("id").jsonPrimitive.content
+            )
         }
     }
 }

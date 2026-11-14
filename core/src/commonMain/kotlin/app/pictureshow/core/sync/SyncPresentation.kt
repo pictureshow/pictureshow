@@ -60,7 +60,9 @@ fun syncChipName(name: String, graphemeEnds: List<Int>, fits: (String) -> Boolea
     if (fits(name)) return name
     if (graphemeEnds.size < 6) return null
     return graphemeEnds.indices.reversed().firstNotNullOfOrNull { index ->
-        if (index < 5 || graphemeEnds[index] == name.length) null else {
+        if (index < 5 || graphemeEnds[index] == name.length) {
+            null
+        } else {
             (name.substring(0, graphemeEnds[index]) + "…").takeIf(fits)
         }
     }

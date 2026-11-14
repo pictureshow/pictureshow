@@ -185,8 +185,7 @@ private fun Modifier.tvSettingsContentBounds(item: TvSettingsVisualItem?): Modif
 
 /** Marks an existing custom block conservatively; adds no layout, semantics or focus target. */
 @Composable
-internal fun Modifier.tvSettingsVisualBlock(): Modifier =
-    tvSettingsItemBounds(rememberTvSettingsVisualItem(protectWholeItem = true))
+internal fun Modifier.tvSettingsVisualBlock(): Modifier = tvSettingsItemBounds(rememberTvSettingsVisualItem(protectWholeItem = true))
 
 /** One focus target per row. The trailing control is a state indicator, never a second button. */
 @Composable
@@ -242,7 +241,14 @@ internal fun TvSettingsSectionHeader(title: String, modifier: Modifier = Modifie
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleSmall
         )
-        supportingText?.let { Text(it, Modifier.tvSettingsContentBounds(visual), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
+        supportingText?.let {
+            Text(
+                it,
+                Modifier.tvSettingsContentBounds(visual),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
@@ -622,7 +628,20 @@ internal fun TvSettingsPanel(
                 preview?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { it() } }
                 pinnedNotice?.let { Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) { it() } }
                 pinnedEditor?.let {
-                    Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (pinnedNotice == null) 8.dp else 0.dp, bottom = 8.dp)) { it() }
+                    Box(
+                        Modifier.fillMaxWidth().padding(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = if (pinnedNotice ==
+                                null
+                            ) {
+                                8.dp
+                            } else {
+                                0.dp
+                            },
+                            bottom = 8.dp
+                        )
+                    ) { it() }
                 }
                 Column(
                     Modifier.weight(1f).then(
@@ -634,7 +653,12 @@ internal fun TvSettingsPanel(
                     )
                 ) {
                     if (scrollContent) {
-                        TvSettingsList(Modifier.weight(1f), minimalFocusScroll = minimalFocusScroll, scrollState = bodyScrollState, content = content)
+                        TvSettingsList(
+                            Modifier.weight(1f),
+                            minimalFocusScroll = minimalFocusScroll,
+                            scrollState = bodyScrollState,
+                            content = content
+                        )
                     } else {
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             Column(Modifier.fillMaxSize(), content = content)
@@ -657,11 +681,21 @@ internal fun TvSettingsPanel(
                     }
                     footer?.let {
                         Box(Modifier.fillMaxWidth().testTag("tv-settings:footer")) {
-                            Box(Modifier.fillMaxWidth().padding(
-                                start = footerHorizontalPadding, end = footerHorizontalPadding,
-                                top = 12.dp, bottom = footerBottomPadding
-                            )) { it() }
-                            if (footerDivider) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant))
+                            Box(
+                                Modifier.fillMaxWidth().padding(
+                                    start = footerHorizontalPadding,
+                                    end = footerHorizontalPadding,
+                                    top = 12.dp,
+                                    bottom = footerBottomPadding
+                                )
+                            ) { it() }
+                            if (footerDivider) {
+                                Box(
+                                    Modifier.align(
+                                        Alignment.TopCenter
+                                    ).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant)
+                                )
+                            }
                         }
                     }
                 }
@@ -721,9 +755,11 @@ internal fun TvSettingsList(
         }
     }
     val bottomFade = bottomFadeExtent()
-    Box(modifier.fillMaxWidth().testTag("tv-settings:viewport").then(
-        if (visuals == null) Modifier else Modifier.onGloballyPositioned { visuals.viewport = visuals.measure(it)?.bounds }
-    )) {
+    Box(
+        modifier.fillMaxWidth().testTag("tv-settings:viewport").then(
+            if (visuals == null) Modifier else Modifier.onGloballyPositioned { visuals.viewport = visuals.measure(it)?.bounds }
+        )
+    ) {
         CompositionLocalProvider(
             LocalBringIntoViewSpec provides if (minimalFocusScroll) minimalScroll else platformScroll,
             LocalTvSettingsVisuals provides visuals
@@ -738,17 +774,39 @@ internal fun TvSettingsList(
         if (scroll.canScrollBackward) {
             Box(
                 Modifier.fillMaxWidth().height(32.dp).align(Alignment.TopCenter).testTag("tv-settings:fade-top")
-                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to surface, .25f to surface, 1f to Color.Transparent)
-                        else Brush.verticalGradient(listOf(surface, Color.Transparent)))
+                    .background(
+                        if (minimalFocusScroll) {
+                            Brush.verticalGradient(0f to surface, .25f to surface, 1f to Color.Transparent)
+                        } else {
+                            Brush.verticalGradient(listOf(surface, Color.Transparent))
+                        }
+                    )
             )
-            if (minimalFocusScroll) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant))
+            if (minimalFocusScroll) {
+                Box(
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.borderVariant)
+                )
+            }
         }
         if (bottomFade > 0f) {
             val opaqueStart = ((bottomFade - edgeGap) / bottomFade).coerceIn(0f, 1f)
             Box(
-                Modifier.fillMaxWidth().height(with(density) { bottomFade.toDp() }).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
-                    .background(if (minimalFocusScroll) Brush.verticalGradient(0f to Color.Transparent, opaqueStart to surface, 1f to surface)
-                        else Brush.verticalGradient(listOf(Color.Transparent, surface)))
+                Modifier.fillMaxWidth().height(
+                    with(density) {
+                        bottomFade.toDp()
+                    }
+                ).align(Alignment.BottomCenter).testTag("tv-settings:fade-bottom")
+                    .background(
+                        if (minimalFocusScroll) {
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                opaqueStart to surface,
+                                1f to surface
+                            )
+                        } else {
+                            Brush.verticalGradient(listOf(Color.Transparent, surface))
+                        }
+                    )
             )
         }
         if (scroll.canScrollBackward || scroll.canScrollForward) {
@@ -781,7 +839,21 @@ internal fun TvSettingsRowPlaceholder(modifier: Modifier = Modifier) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Loading", Modifier.clearAndSetSemantics {}, color = Color.Transparent, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-        Text("Loading", Modifier.clearAndSetSemantics {}, color = Color.Transparent, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(
+            "Loading",
+            Modifier.clearAndSetSemantics {
+            },
+            color = Color.Transparent,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1
+        )
+        Text(
+            "Loading",
+            Modifier.clearAndSetSemantics {
+            },
+            color = Color.Transparent,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1
+        )
     }
 }

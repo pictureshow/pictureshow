@@ -108,7 +108,10 @@ class SyncPlayTvChooserAttentionRegressionTest {
         return Case(row.getValue("input").jsonObject, row.getValue("expected").jsonObject)
     }
     private fun allowedEmpty() = SyncPlayPresentation(
-        server = "Cinema", viewer = "Viewer", policyKnown = true, policy = "CreateAndJoinGroups"
+        server = "Cinema",
+        viewer = "Viewer",
+        policyKnown = true,
+        policy = "CreateAndJoinGroups"
     )
     private fun checking() = SyncPlayPresentation(server = "Cinema", viewer = "Viewer", busy = true)
     private fun settle() {
@@ -128,14 +131,15 @@ class SyncPlayTvChooserAttentionRegressionTest {
         return layouts.single()
     }
     private fun assertNoImplicitIme() {
-        assertFalse(shadowOf(compose.activity.getSystemService(InputMethodManager::class.java)).isSoftInputVisible,
-            "Automatic focus selection must not request the software keyboard; native IME proof is separate")
+        assertFalse(
+            shadowOf(compose.activity.getSystemService(InputMethodManager::class.java)).isSoftInputVisible,
+            "Automatic focus selection must not request the software keyboard; native IME proof is separate"
+        )
     }
 
-    @Test fun enabledCreateHasQuietRestAndUnmistakableFocusedFillAtFont10() =
-        verifyCreatePaint("create-quiet-rest-focus-font10")
-    @Test fun enabledCreateHasQuietRestAndUnmistakableFocusedFillAtFont13() =
-        verifyCreatePaint("create-quiet-rest-focus-font13")
+    @Test fun enabledCreateHasQuietRestAndUnmistakableFocusedFillAtFont10() = verifyCreatePaint("create-quiet-rest-focus-font10")
+
+    @Test fun enabledCreateHasQuietRestAndUnmistakableFocusedFillAtFont13() = verifyCreatePaint("create-quiet-rest-focus-font13")
     private fun verifyCreatePaint(id: String) {
         val c = case(id)
         RuntimeEnvironment.setFontScale(c.number("fontScale"))
@@ -146,21 +150,37 @@ class SyncPlayTvChooserAttentionRegressionTest {
         settle()
         compose.onNodeWithTag("sync:name").assertIsFocused()
         compose.onNodeWithTag("sync:create").assertIsEnabled()
-        assertEquals(c.number("fontScale"), layout(compose.onNodeWithText(text(R.string.sync_create_join), useUnmergedTree = true))
-            .layoutInput.density.fontScale, .01f, "Read actual Dialog text scale")
+        assertEquals(
+            c.number("fontScale"),
+            layout(compose.onNodeWithText(text(R.string.sync_create_join), useUnmergedTree = true))
+                .layoutInput.density.fontScale,
+            .01f,
+            "Read actual Dialog text scale"
+        )
         val restBounds = compose.onNodeWithTag("sync:create").fetchSemanticsNode().boundsInRoot
         val rest = broadInteriorColor(compose.onNodeWithTag("sync:create").captureToImage().asAndroidBitmap())
         // Native Down path, not a future helper or forced focus request.
         key(Key.DirectionDown)
         compose.onNodeWithTag("sync:create").assertIsFocused().assertIsEnabled()
-        assertEquals(restBounds, compose.onNodeWithTag("sync:create").fetchSemanticsNode().boundsInRoot,
-            "Quiet-rest fix must preserve pinned full-width scale1 geometry")
+        assertEquals(
+            restBounds,
+            compose.onNodeWithTag("sync:create").fetchSemanticsNode().boundsInRoot,
+            "Quiet-rest fix must preserve pinned full-width scale1 geometry"
+        )
         val focus = broadInteriorColor(compose.onNodeWithTag("sync:create").captureToImage().asAndroidBitmap())
         val contrast = ColorUtils.calculateContrast(focus, rest)
-        assertTrue(contrast >= c.metric("focusFillMinContrast").toDouble(),
-            "Actual Create fills need3:1 rest-to-focus contrast: rest=${Integer.toHexString(rest)} focus=${Integer.toHexString(focus)} contrast=$contrast")
-        if (c.flag("focusedBrighterThanRest")) assertTrue(ColorUtils.calculateLuminance(focus) > ColorUtils.calculateLuminance(rest),
-            "Rest must be quieter; light fill must identify focus")
+        assertTrue(
+            contrast >= c.metric("focusFillMinContrast").toDouble(),
+            "Actual Create fills need3:1 rest-to-focus contrast: rest=${Integer.toHexString(
+                rest
+            )} focus=${Integer.toHexString(focus)} contrast=$contrast"
+        )
+        if (c.flag("focusedBrighterThanRest")) {
+            assertTrue(
+                ColorUtils.calculateLuminance(focus) > ColorUtils.calculateLuminance(rest),
+                "Rest must be quieter; light fill must identify focus"
+            )
+        }
         assertTrue(actions.isEmpty(), "Moving focus must not create a group")
         assertNoImplicitIme()
     }
@@ -227,10 +247,14 @@ class SyncPlayTvChooserAttentionRegressionTest {
         val privacyBounds = privacy.fetchSemanticsNode().boundsInRoot
         val field = compose.onNodeWithTag("sync:name").fetchSemanticsNode().boundsInRoot
         val viewport = compose.onNodeWithTag("tv-settings:viewport").fetchSemanticsNode().boundsInRoot
-        assertTrue(titleBounds.bottom <= privacyBounds.top && privacyBounds.bottom <= field.top,
-            "Read task heading, privacy context, then editor: heading=$titleBounds privacy=$privacyBounds field=$field")
-        assertTrue(privacyBounds.top - titleBounds.bottom <= c.metric("headingPrivacyMaxGapDp") * density,
-            "Privacy must read as the heading's supporting context")
+        assertTrue(
+            titleBounds.bottom <= privacyBounds.top && privacyBounds.bottom <= field.top,
+            "Read task heading, privacy context, then editor: heading=$titleBounds privacy=$privacyBounds field=$field"
+        )
+        assertTrue(
+            privacyBounds.top - titleBounds.bottom <= c.metric("headingPrivacyMaxGapDp") * density,
+            "Privacy must read as the heading's supporting context"
+        )
         assertTrue(field.bottom <= viewport.top + 1f, "Creation remains pinned above the scrolling groups body")
         compose.onNodeWithText(text(R.string.sync_groups), useUnmergedTree = true)
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
@@ -250,14 +274,18 @@ class SyncPlayTvChooserAttentionRegressionTest {
         val transport = listOf("sync:previous", "sync:play", "sync:next").map {
             compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot
         }
-        assertTrue(fact.bottom <= transport.minOf { it.top },
-            "Group-wide shared/personal fact must precede transport, never read as Wait's caption: fact=$fact controls=$transport")
+        assertTrue(
+            fact.bottom <= transport.minOf { it.top },
+            "Group-wide shared/personal fact must precede transport, never read as Wait's caption: fact=$fact controls=$transport"
+        )
         val factInk = actualInkBounds(personal)
         // Select the actual nearest visible predecessor, rather than measuring across phase
         // or empty-queue guidance and accidentally counting their height as block spacing.
         val precedingInk = listOf("sync:now-playing", "sync:phase", "sync:empty-next-step").flatMap { tag ->
             val nodes = compose.onAllNodesWithTag(tag).fetchSemanticsNodes()
-            if (nodes.isEmpty()) emptyList() else {
+            if (nodes.isEmpty()) {
+                emptyList()
+            } else {
                 assertEquals(1, nodes.size, "Each status/context line must have one rendered identity: $tag")
                 val node = compose.onNodeWithTag(tag)
                 node.assertIsDisplayed()
@@ -267,21 +295,43 @@ class SyncPlayTvChooserAttentionRegressionTest {
         assertTrue(precedingInk.isNotEmpty(), "The group-context fact needs a real preceding status/context line")
         val nearestPrecedingInk = precedingInk.maxBy { it.bottom }
         val minimum = c.metric("minimumBlockGapDp") * density
-        assertTrue(factInk.top - nearestPrecedingInk.bottom >= minimum - 1f,
-            "Adjacent painted status/context and group fact need12dp block clearance: preceding=$nearestPrecedingInk fact=$factInk density=$density")
-        assertTrue(transport.minOf { it.top } - factInk.bottom >= minimum - 1f,
-            "Group context needs breathing room before controls: fact=$factInk controls=$transport")
+        assertTrue(
+            factInk.top - nearestPrecedingInk.bottom >= minimum - 1f,
+            "Adjacent painted status/context and group fact need12dp block clearance: preceding=$nearestPrecedingInk fact=$factInk density=$density"
+        )
+        assertTrue(
+            transport.minOf { it.top } - factInk.bottom >= minimum - 1f,
+            "Group context needs breathing room before controls: fact=$factInk controls=$transport"
+        )
     }
     private fun actualInkBounds(node: SemanticsNodeInteraction): Rect {
         val ink = layout(node).layoutInput.style.color
-        val target = android.graphics.Color.argb((ink.alpha * 255).toInt(), (ink.red * 255).toInt(), (ink.green * 255).toInt(), (ink.blue * 255).toInt())
+        val target = android.graphics.Color.argb(
+            (ink.alpha * 255).toInt(),
+            (ink.red * 255).toInt(),
+            (ink.green * 255).toInt(),
+            (
+                ink.blue *
+                    255
+                ).toInt()
+        )
         val bounds = node.fetchSemanticsNode().boundsInRoot
         val bitmap = node.captureToImage().asAndroidBitmap()
-        var left = bitmap.width; var top = bitmap.height; var right = -1; var bottom = -1
-        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
-            val color = bitmap.getPixel(x, y)
-            val difference = (0..3).maxOf { shift -> abs(((color ushr (shift * 8)) and 255) - ((target ushr (shift * 8)) and 255)) }
-            if (difference <= 8) { left = minOf(left, x); top = minOf(top, y); right = maxOf(right, x); bottom = maxOf(bottom, y) }
+        var left = bitmap.width
+        var top = bitmap.height
+        var right = -1
+        var bottom = -1
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                val color = bitmap.getPixel(x, y)
+                val difference = (0..3).maxOf { shift -> abs(((color ushr (shift * 8)) and 255) - ((target ushr (shift * 8)) and 255)) }
+                if (difference <= 8) {
+                    left = minOf(left, x)
+                    top = minOf(top, y)
+                    right = maxOf(right, x)
+                    bottom = maxOf(bottom, y)
+                }
+            }
         }
         assertTrue(right >= left && bottom >= top, "Actual native glyph ink must render; style metadata alone is insufficient")
         return Rect(bounds.left + left, bounds.top + top, bounds.left + right + 1, bounds.top + bottom + 1)

@@ -3,6 +3,7 @@
  */
 @file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package app.pictureshow
 
 import android.app.Application
@@ -56,37 +57,59 @@ class PlaybackHostDepartureTest {
             val epoch = 1_762_776_000_000L
             val gateway = object : SyncPlayGateway {
                 override suspend fun groups(account: Account) = ClientResult.Success(
-                    listOf(SyncGroup("g", "Evening", "Paused", emptyList(), epoch * 10_000)))
+                    listOf(SyncGroup("g", "Evening", "Paused", emptyList(), epoch * 10_000))
+                )
                 override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
                 override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
-                override suspend fun send(account: Account, request: SyncRequest): Int { sent += request.operation; return 204 }
+                override suspend fun send(account: Account, request: SyncRequest): Int {
+                    sent += request.operation
+                    return 204
+                }
             }
             val sync = SyncPlayHost(backgroundScope, gateway, { epoch + testScheduler.currentTime }, { testScheduler.currentTime })
             val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), account.server)
             var exits = 0
             val playback = PlaybackHostState(MediaItem("film", "Film"), 0, output, {}, { exits++ }).also { it.sync = sync }
             try {
-                sync.bind(account); sync.socket(true); sync.refresh(); runCurrent()
-                sync.join("g"); runCurrent()
-                sync.receive(buildJsonObject {
-                    put("MessageType", "SyncPlayGroupUpdate")
-                    put("Data", buildJsonObject {
-                        put("GroupId", "g"); put("Type", "GroupJoined")
-                        put("Data", buildJsonObject {
-                            put("GroupId", "g"); put("GroupName", "Evening"); put("State", "Paused")
-                            put("Participants", JsonArray(emptyList())); put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                        })
-                    })
-                }.toString())
+                sync.bind(account)
+                sync.socket(true)
+                sync.refresh()
+                runCurrent()
+                sync.join("g")
+                runCurrent()
+                sync.receive(
+                    buildJsonObject {
+                        put("MessageType", "SyncPlayGroupUpdate")
+                        put(
+                            "Data",
+                            buildJsonObject {
+                                put("GroupId", "g")
+                                put("Type", "GroupJoined")
+                                put(
+                                    "Data",
+                                    buildJsonObject {
+                                        put("GroupId", "g")
+                                        put("GroupName", "Evening")
+                                        put("State", "Paused")
+                                        put("Participants", JsonArray(emptyList()))
+                                        put("LastUpdatedAt", syncUtcTimestamp(epoch))
+                                    }
+                                )
+                            }
+                        )
+                    }.toString()
+                )
                 assertTrue(sync.participating)
                 sent.clear()
-                playback.finish(reason = reason); runCurrent()
+                playback.finish(reason = reason)
+                runCurrent()
                 val fact = assertNotNull(sync.state.value.departure, reason)
                 assertEquals(expected, fact.cause, reason)
                 assertEquals("Evening", fact.groupName, reason)
                 assertEquals(1, exits, reason)
                 assertEquals(listOf("Leave"), sent, reason)
-                playback.finish(reason = reason); runCurrent()
+                playback.finish(reason = reason)
+                runCurrent()
                 assertEquals(fact, sync.state.value.departure, reason)
                 assertEquals(1, exits, reason)
                 assertEquals(listOf("Leave"), sent, reason)
