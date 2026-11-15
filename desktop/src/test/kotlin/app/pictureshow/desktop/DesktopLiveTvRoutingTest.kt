@@ -15,9 +15,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/** D-5 interim: opening the Live TV view never runs a library browse that can only come back empty. */
+/** D-5: opening the Live TV view never runs a library browse that can only come back empty. */
 class DesktopLiveTvRoutingTest {
-    @Test fun liveTvViewOpensTheInterimLibraryRouteWithoutAnItemsQuery(): Unit = runBlocking {
+    @Test fun liveTvViewOpensItsOwnRouteWithoutAnItemsQuery(): Unit = runBlocking {
         val queries = CopyOnWriteArrayList<String>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { e ->
@@ -39,11 +39,11 @@ class DesktopLiveTvRoutingTest {
                 queries.clear()
                 val live = MediaItem("live", "Live TV", "UserView", collectionType = "livetv", isFolder = true)
                 c.open(live)
-                val state = withTimeout(10_000) { c.state.first { it.route == DesktopRoute.Library && !it.busy } }
+                val state = withTimeout(10_000) { c.state.first { it.route == DesktopRoute.LiveTv && !it.busy } }
                 assertEquals(live, state.library)
-                assertFalse(queries.any { it.contains("live") }, "No browse of the Live TV view: $queries")
+                assertFalse(queries.any { it.contains("parentId=live") }, "No browse of the Live TV view: $queries")
                 c.loadMore()
-                assertFalse(queries.any { it.contains("live") }, "No paging of the Live TV view: $queries")
+                assertFalse(queries.any { it.contains("parentId=live") }, "No paging of the Live TV view: $queries")
                 // An ordinary library still browses.
                 c.open(MediaItem("films", "Films", "CollectionFolder", collectionType = "movies", isFolder = true))
                 withTimeout(10_000) { c.state.first { it.route == DesktopRoute.Library && it.library?.id == "films" && !it.busy } }

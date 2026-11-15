@@ -1,0 +1,185 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+package app.pictureshow.desktop
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.*
+import app.pictureshow.core.*
+import app.pictureshow.core.livetv.*
+import app.pictureshow.core.playback.*
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.nio.file.Files
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import kotlin.test.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.*
+
+class DesktopLiveTvTest {
+    private class Fixture : AutoCloseable {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val executor = Executors.newCachedThreadPool()
+        val requests = CopyOnWriteArrayList<Triple<String, String, String>>()
+        val start = System.currentTimeMillis() - 120_000
+        val end = start + 1_800_000
+        var access = true; var manage = true; var failGuide = false; var channels = true
+        var denyPolicy = false
+        val channel = """{"Id":"channel","Name":"Demo One","ChannelNumber":"2","CurrentProgram":{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}}"""
+        val program = """{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}"""
+        val account get() = Account(Server("server", "Demo", "http://127.0.0.1:${server.address.port}", "12.4.0"), User("viewer", "Viewer"), "token")
+        init {
+            server.executor = executor
+            server.createContext("/") { e ->
+                val path = e.requestURI.path
+                val body = e.requestBody.bufferedReader().readText()
+                requests.add(Triple(e.requestMethod, path, body))
+                var status = 200
+                val response = when {
+                    path == "/Users/Me" -> """{"Id":"viewer","Name":"Viewer"}"""
+                    path == "/Users/viewer" -> if (denyPolicy) { status = 403; "" } else """{"Policy":{"EnableLiveTvAccess":$access,"EnableLiveTvManagement":$manage,"EnableContentDeletion":true,"EnableUserPreferenceAccess":true}}"""
+                    path == "/LiveTv/Info" -> """{"IsEnabled":true}"""
+                    path == "/LiveTv/Channels" -> if (channels) """{"Items":[$channel],"TotalRecordCount":1}""" else """{"Items":[],"TotalRecordCount":0}"""
+                    path == "/LiveTv/Channels/channel" -> channel
+                    path == "/LiveTv/Programs" -> if (failGuide) { status = 500; "" } else """{"Items":[$program],"TotalRecordCount":1}"""
+                    path == "/LiveTv/Programs/program" -> program
+                    path == "/LiveTv/Timers/Defaults" -> """{"PrePaddingSeconds":0,"PostPaddingSeconds":60,"Priority":0,"RecordNewOnly":true,"ProviderOpaque":"keep"}"""
+                    path.startsWith("/LiveTv/Timers") || path == "/LiveTv/SeriesTimers" -> """{"Items":[],"TotalRecordCount":0}"""
+                    path.endsWith("/PlaybackInfo") -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","IsInfiniteStream":true,"LiveStreamId":"owned-live","RequiresClosing":true,"SupportsDirectPlay":true,"Container":"ts","MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"}]}]}"""
+                    path == "/LiveStreams/Close" -> ""
+                    path.startsWith("/Sessions/") || path.startsWith("/Videos/ActiveEncodings") -> ""
+                    else -> """{"Items":[],"TotalRecordCount":0}"""
+                }
+                e.responseHeaders.set("Content-Type", "application/json")
+                if (response.isEmpty()) e.sendResponseHeaders(status, -1) else {
+                    val bytes = response.toByteArray(); e.sendResponseHeaders(status, bytes.size.toLong()); e.responseBody.write(bytes)
+                }
+                e.close()
+            }
+            server.start()
+        }
+        override fun close() { server.stop(0); executor.shutdownNow() }
+    }
+    private class Engine : DesktopPlaybackEngine {
+        var opened = false; var closed = false; var position = 110.0; var paused = false; var ended = false
+        var window: ObservedLiveWindow? = null
+        val seeks = CopyOnWriteArrayList<Double>()
+        override fun attach(window: java.awt.Window) {}
+        override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true }
+        override fun snapshot() = EngineSnapshot(position, 99999.0, paused, opened && !closed, ended, liveWindow = window)
+        override fun togglePause() { paused = !paused }
+        override fun seek(seconds: Double) { seeks += seconds; position = seconds }
+        override fun volume(value: Int) {}
+        override fun fullscreen(enabled: Boolean) {}
+        override fun close() { closed = true }
+    }
+    private fun dir() = Files.createTempDirectory("pictureshow-live-").toFile()
+    private suspend fun controller(f: Fixture, engine: Engine = Engine()): DesktopController {
+        val store = AccountStore(object : TextPersistence {
+            var text: String? = null
+            override suspend fun read() = text
+            override suspend fun write(value: String) { text = value }
+        })
+        store.remember(f.account)
+        val c = DesktopController(dir(), store = store, playbackFactory = { engine })
+        c.start(); withTimeout(10_000) { c.state.first { it.route == DesktopRoute.Home && !it.busy } }
+        c.open(MediaItem("tv", "Live TV", "UserView", collectionType = "LiVeTv", isFolder = true))
+        withTimeout(10_000) { c.liveTv.state.first { !it.loading } }
+        return c
+    }
+    @Test fun channelsGuideAndTypedRouteUseLiveApiAndNoLibraryBrowse(): Unit = runBlocking {
+        Fixture().use { f -> controller(f).use { c ->
+            assertEquals(DesktopRoute.LiveTv, c.state.value.route)
+            assertEquals("Demo One", c.liveTv.state.value.channels.single().name)
+            assertEquals("Morning show", c.liveTv.state.value.programs.single().name)
+            assertTrue(c.liveTv.state.value.actionsAvailable(System.currentTimeMillis()))
+            assertFalse(f.requests.any { it.second == "/Items/tv" })
+            c.liveTv.tab(DesktopLiveTab.Guide); c.liveTv.favorites(); c.liveTv.search("missing")
+            c.liveTv.clearFilters()
+            assertEquals(DesktopLiveTab.Guide, c.liveTv.state.value.tab)
+            assertEquals("", c.liveTv.state.value.search)
+        } }
+    }
+    @Test fun cachedGuideIsReadableButCannotTuneAfterFailureAndDeniedPolicyPurgesIt(): Unit = runBlocking {
+        Fixture().use { f -> controller(f).use { c ->
+            val channel = c.liveTv.state.value.channels.single()
+            f.failGuide = true; c.liveTv.refresh()
+            withTimeout(10_000) { c.liveTv.state.first { !it.loading && it.offline } }
+            assertEquals(1, c.liveTv.state.value.programs.size)
+            assertFalse(c.liveTv.state.value.actionsAvailable(System.currentTimeMillis()))
+            c.tuneChannel(channel); delay(100)
+            assertFalse(f.requests.any { it.second.endsWith("/PlaybackInfo") })
+            f.denyPolicy = true; c.liveTv.refresh()
+            withTimeout(10_000) { c.liveTv.state.first { !it.loading && it.policy?.access == false } }
+            assertTrue(c.liveTv.state.value.channels.isEmpty()); assertTrue(c.liveTv.state.value.programs.isEmpty())
+        } }
+    }
+    @Test fun tuneNegotiatesLiveSourceClampsToObservedEdgeAndClosesWithoutWatchedCompletion(): Unit = runBlocking {
+        Fixture().use { f ->
+            val e = Engine(); e.window = ObservedLiveWindow(100_000, 20_000, 20_000, true)
+            controller(f, e).use { c ->
+                c.tuneChannel(c.liveTv.state.value.channels.single())
+                withTimeout(10_000) { c.state.first { it.playback?.ready == true } }
+                assertEquals("Demo One", c.state.value.playback?.liveChannel?.name)
+                c.seek(5000.0); assertEquals(120.0, e.seeks.last())
+                c.seek(-100.0); assertEquals(100.0, e.seeks.last())
+                e.window = null; val before = e.seeks.size; c.seek(115.0); c.playerToggle()
+                assertEquals(before, e.seeks.size); assertFalse(e.paused)
+                e.ended = true
+                withTimeout(10_000) { while (!e.closed) delay(25) }
+                assertNull(c.state.value.playback?.end, "A live stream end must not create a VOD Finished card")
+                c.stopPlayback()
+                withTimeout(10_000) { c.state.first { it.route == DesktopRoute.LiveTv && !it.busy } }
+                assertTrue(f.requests.any { it.second == "/LiveStreams/Close" })
+                assertTrue(f.requests.any { it.second == "/Sessions/Playing/Stopped" && it.third.contains("owned-live") })
+                assertFalse(f.requests.any { it.second.contains("PlayedItems") })
+            }
+        }
+    }
+    @Test fun durablePendingJournalSurvivesNewInstance(): Unit = runBlocking {
+        val directory = dir()
+        DesktopLivePendingWrites(directory).add("account:program")
+        assertTrue(DesktopLivePendingWrites(directory).contains("account:program"))
+        DesktopLivePendingWrites(directory).remove("account:program")
+        assertFalse(DesktopLivePendingWrites(directory).contains("account:program"))
+    }
+    @Test fun measuredMpvRangesNeverUseScheduledDuration() {
+        val w = desktopLiveWindow("""{"seekable-ranges":[{"start":100,"end":120}]}""", true)!!
+        assertEquals(100_000, w.offsetMs); assertEquals(20_000, w.durationMs); assertEquals(20_000, w.goLivePosition())
+        assertNull(desktopLiveWindow("{}", true))
+        assertNull(desktopLiveWindow("""{"seekable-ranges":[{"start":120,"end":100}]}""", true))
+        assertFalse(desktopLiveWindow("""{"seekable-ranges":[{"start":100,"end":120}]}""", false)!!.canTimeShift)
+    }
+    @Test fun nativeGuideCellsKeepGapsAndOverlaps() {
+        val a = LiveProgram("a", channelId = "one", startDate = iso(0), endDate = iso(60000))
+        val b = LiveProgram("b", channelId = "one", startDate = iso(30000), endDate = iso(90000))
+        val cells = desktopGuideCells(listOf(a,b,a), 0, 120000)
+        assertEquals(2, cells.size); assertEquals(listOf(0,1), cells.map { it.lane })
+        assertEquals(.5f, cells[0].widthFraction); assertEquals(.25f, cells[1].startFraction)
+    }
+    @Test fun recordingEditorReviewsBeforeAnyWriteAndPreservesUnknownDefaults() = runComposeUiTest {
+        var saves = 0
+        var saved: LiveSchedule? = null
+        val original = LiveSchedule(buildJsonObject { put("Name", "Morning show"); put("PrePaddingSeconds", 0); put("ProviderOpaque", "keep") })
+        setContent { MaterialTheme { DesktopLiveScheduleEditor(original, false, false, false, true, {}, { saves++; saved = it }) } }
+        onNodeWithTag("live:option:PrePaddingSeconds").performTextReplacement("30")
+        onNodeWithTag("live:editor:review").performClick()
+        runOnIdle { assertEquals(0, saves) }
+        onNodeWithText("Records this airing once.").assertExists()
+        onNodeWithTag("live:editor:confirm").performClick()
+        runOnIdle { assertEquals(1, saves); assertEquals("keep", saved?.string("ProviderOpaque")); assertEquals("30", saved?.string("PrePaddingSeconds")) }
+    }
+    @Test fun disabledAccessHidesSearchAndShowsRecovery() = runComposeUiTest {
+        val scope = CoroutineScope(SupervisorJob())
+        val api = LiveTvClient(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp), ClientIdentity("Test", "device"))
+        val owner = DesktopLiveTv(api, scope, { null })
+        setContent { MaterialTheme { LiveTvPage(DesktopLiveState(loading = false, policy = LivePolicy()), null, owner, {}, {}, {}) } }
+        onNodeWithText("Live TV access is disabled").assertExists()
+        onNodeWithTag("live:search").assertDoesNotExist()
+        onNodeWithTag("live:refresh").assertDoesNotExist()
+        scope.cancel()
+    }
+}

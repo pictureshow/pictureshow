@@ -83,7 +83,7 @@ class DesktopLiveTv internal constructor(
     fun dismissProgram() { mutable.update { it.copy(selected = null) } }
     fun dismissDraft() { if (!mutable.value.writing) mutable.update { it.copy(draft = null) } }
     fun moveWindow(start: Long) { refresh(start) }
-    fun now() { refresh(desktopGuideStart(now())) }
+    fun jumpNow() { refresh(desktopGuideStart(now())) }
 
     @Synchronized fun refresh(start: Long = mutable.value.start) {
         val a = owner ?: return

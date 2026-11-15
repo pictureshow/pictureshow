@@ -48,7 +48,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
         (s.search.isBlank() || it.name.contains(s.search, true) || it.number?.contains(s.search, true) == true) }
     var confirmation by remember { mutableStateOf<LiveConfirmation?>(null) }
     val scroll = rememberLazyListState()
-    LaunchedEffect(s.loading, s.tab) {
+    LaunchedEffect(s.loading, s.tab, s.selected == null, s.draft == null) {
         if (!s.loading && s.selected == null && s.draft == null) {
             withFrameNanos { }
             val key = s.focusKey ?: when (s.tab) {
@@ -74,14 +74,14 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                     singleLine = true, modifier = Modifier.weight(1f).widthIn(max = 400.dp).controlFocus().probe("live:search"))
                 if (s.tab in listOf(DesktopLiveTab.Channels, DesktopLiveTab.Guide)) FilterChip(s.favorites, owner::favorites,
                     label = { Text("Favorites") }, modifier = Modifier.controlFocus().probe("live:favorites"))
-                OutlinedButton(owner::refresh, enabled = !s.loading && !s.writing, modifier = Modifier.controlFocus().probe("live:refresh")) { Text("Refresh") }
+                OutlinedButton({ owner.refresh() }, enabled = !s.loading && !s.writing, modifier = Modifier.controlFocus().probe("live:refresh")) { Text("Refresh") }
             }
             if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp).semantics { contentDescription = "Loading Live TV" })
             val stale = s.fetchedAt != null && !s.actionsAvailable(now)
             if (s.error != null || stale) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(8.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(s.error ?: "Guide is out of date. Refresh before tuning or scheduling.", Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(owner::refresh, enabled = !s.loading && !s.writing) { Text("Retry") }
+                    TextButton({ owner.refresh() }, enabled = !s.loading && !s.writing) { Text("Retry") }
                 }
             }
             s.notice?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium) }
@@ -100,7 +100,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                     s.offline -> "Check the connection to your server, then retry."
                     filtered -> if (s.favorites) "Star channels to find them here." else "Try another channel name or number."
                     else -> "Your server administrator can add a tuner and channel source in Jellyfin’s Live TV settings."
-                }, if (filtered) "Show all channels" else "Retry", if (filtered) owner::clearFilters else owner::refresh)
+                }, if (filtered) "Show all channels" else "Retry", if (filtered) owner::clearFilters else { owner.refresh() })
             } else when (s.tab) {
                 DesktopLiveTab.Channels -> LiveScroll(scroll) {
                     items(channels, key = { "channel:${it.id}" }) { channel ->
@@ -172,7 +172,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             }
         }
     }
-    s.selected?.let { program ->
+    s.selected?.takeIf { s.draft == null }?.let { program ->
         val channel = s.channels.firstOrNull { it.id == program.channelId }
         AlertDialog(onDismissRequest = owner::dismissProgram,
             title = { Text(program.name) },
@@ -243,7 +243,7 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         OutlinedButton({ owner.moveWindow(s.start - DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Earlier") }
         TextButton({ datePicker = true }, modifier = Modifier.controlFocus()) { Text(liveDay(s.start) + " · " + liveClock(s.start)) }
         OutlinedButton({ owner.moveWindow(s.start + DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Later") }
-        Button(owner::now, enabled = !s.loading, modifier = Modifier.controlFocus().probe("live:now")) { Text("Now") }
+        Button(owner::jumpNow, enabled = !s.loading, modifier = Modifier.controlFocus().probe("live:now")) { Text("Now") }
         FilterChip(linear, { linear = !linear }, label = { Text("List view") }, modifier = Modifier.controlFocus().probe("live:guide:list"))
     }
     val programs = guidePrograms(s.programs, channels.map { it.id }.toSet(), iso(s.start), iso(s.start + DesktopLiveTv.WINDOW))
