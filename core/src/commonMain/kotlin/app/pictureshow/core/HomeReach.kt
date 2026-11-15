@@ -21,19 +21,18 @@ const val HOME_UNREACHABLE_DOWNLOADS_TEXT = "Could not reach the server. Your do
  * so in one line, naming the server, with the way to downloads when this viewer has ready ones. With nothing left on
  * the page, ready downloads lead. Anything else is the read's own error.
  */
-fun homeNotice(unreachable: Boolean, error: String?, hasContent: Boolean, hasDownloads: Boolean, serverName: String?): HomeNotice =
-    when {
-        unreachable && hasContent -> HomeNotice(
-            HomeNoticeKind.ShowingEarlier,
-            "Can't reach ${serverName?.trim()?.takeIf(String::isNotEmpty) ?: "the server"}. Showing what was loaded earlier.",
-            watchDownloads = hasDownloads,
-            retry = true
-        )
-        unreachable && hasDownloads ->
-            HomeNotice(HomeNoticeKind.DownloadsFirst, HOME_UNREACHABLE_DOWNLOADS_TEXT, watchDownloads = true, retry = true)
-        error != null -> HomeNotice(HomeNoticeKind.Error, error, retry = true)
-        else -> HomeNotice(HomeNoticeKind.None)
-    }
+fun homeNotice(unreachable: Boolean, error: String?, hasContent: Boolean, hasDownloads: Boolean, serverName: String?): HomeNotice = when {
+    unreachable && hasContent -> HomeNotice(
+        HomeNoticeKind.ShowingEarlier,
+        "Can't reach ${serverName?.trim()?.takeIf(String::isNotEmpty) ?: "the server"}. Showing what was loaded earlier.",
+        watchDownloads = hasDownloads,
+        retry = true
+    )
+    unreachable && hasDownloads ->
+        HomeNotice(HomeNoticeKind.DownloadsFirst, HOME_UNREACHABLE_DOWNLOADS_TEXT, watchDownloads = true, retry = true)
+    error != null -> HomeNotice(HomeNoticeKind.Error, error, retry = true)
+    else -> HomeNotice(HomeNoticeKind.None)
+}
 
 /**
  * HOME-10: a Home row whose heading leads somewhere. The Libraries row opens the Libraries root and a library's Latest
