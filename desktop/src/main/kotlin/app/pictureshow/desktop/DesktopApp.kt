@@ -516,7 +516,7 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
 internal fun SignOutConfirmation(name: String, onCancel: () -> Unit, onConfirm: () -> Unit) {
     val cancelFocus = remember { FocusRequester() }
     AlertDialog(onDismissRequest = onCancel, title = { Text("Sign out of $name?") },
-        text = { Text("Sign out of $name? You'll need the password to sign in again.") },
+        text = { Text("Sign out of $name? $SIGN_OUT_PASSWORD_COPY") },
         dismissButton = { TextButton(onCancel, Modifier.focusRequester(cancelFocus).controlFocus(allowInModal = true).probe("sign-out-cancel")) { Text("Cancel") } },
         confirmButton = { TextButton(onConfirm, Modifier.controlFocus(allowInModal = true).probe("sign-out-confirm")) { Text("Sign out") } })
     LaunchedEffect(Unit) { withFrameNanos { }; cancelFocus.requestFocus() }

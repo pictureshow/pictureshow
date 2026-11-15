@@ -42,7 +42,9 @@ class AccountSignOutVectorsTest {
             var persisted = Json.encodeToString(initial)
             val persistence = object : TextPersistence {
                 override suspend fun read() = persisted
-                override suspend fun write(value: String) { persisted = value }
+                override suspend fun write(value: String) {
+                    persisted = value
+                }
             }
             var store = AccountStore(persistence)
             store.load()
@@ -52,7 +54,10 @@ class AccountSignOutVectorsTest {
                 when (s.getValue("action").jsonPrimitive.content) {
                     "sign-out" -> store.signOutKeepingAccount(assertNotNull(key))
                     "remove" -> store.removeAccount(assertNotNull(key))
-                    "reload" -> { store = AccountStore(persistence); store.load() }
+                    "reload" -> {
+                        store = AccountStore(persistence)
+                        store.load()
+                    }
                     "sign-in" -> {
                         val id = s.getValue("account").jsonPrimitive.content
                         store.remember(Account(server, User(id, id), "fresh-$id"))
@@ -63,13 +68,18 @@ class AccountSignOutVectorsTest {
             val result = AccountStore(persistence).load()
             fun ids(keys: Collection<String>) = JsonArray(keys.map { JsonPrimitive(it.substringAfter(':')) })
             val actual = buildJsonObject {
-                put("accounts", JsonArray(result.accounts.map { a ->
-                    buildJsonObject {
-                        put("id", a.user.id)
-                        put("token", a.accessToken)
-                        put("expired", a.expired)
-                    }
-                }))
+                put(
+                    "accounts",
+                    JsonArray(
+                        result.accounts.map { a ->
+                            buildJsonObject {
+                                put("id", a.user.id)
+                                put("token", a.accessToken)
+                                put("expired", a.expired)
+                            }
+                        }
+                    )
+                )
                 put("current", result.currentKey?.substringAfter(':')?.let(::JsonPrimitive) ?: JsonNull)
                 put("searches", ids(result.recentSearches.keys))
                 put("preferences", ids(result.homePreferences.keys))

@@ -104,6 +104,7 @@ internal fun DesktopController.authActions(): AuthActions {
 }
 
 /** AUTH-04: the copy for a username and password the server refused at sign-in. */
+internal const val SIGN_OUT_PASSWORD_COPY = "You'll need the password to sign in again."
 internal const val WRONG_CREDENTIALS_COPY = "That username and password didn't work. Check them and try again."
 /** AUTH-04: how many public users the picker shows before "Show all N users". */
 internal const val PUBLIC_USERS_SHOWN = 8
@@ -301,7 +302,7 @@ internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Accoun
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Signed in as ${current.user.name} on ${serverLabel(current.server, servers)}.")
-                    Text("Signing out also removes ${current.user.name} from this computer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$SIGN_OUT_PASSWORD_COPY Your account stays saved on this computer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = c::signOut, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("accounts-sign-out")) { Text("Sign out") }
             }

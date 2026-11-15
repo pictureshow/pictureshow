@@ -88,6 +88,8 @@ class ReferenceParityVectorsTest {
                     setOf(
                         "reference",
                         "application",
+                        // Real account persistence traces run in AccountSignOutVectorsTest.
+                        "account-sign-out",
                         "recovery",
                         "playback-information",
                         "playback-formats", "catalog-return",

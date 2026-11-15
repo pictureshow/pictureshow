@@ -155,6 +155,8 @@ class DesktopAuthPagesTest {
         val tom = account(cabin, "t", "ux-tom")
         setContent { PictureshowTheme { AccountsList(DesktopState(route = DesktopRoute.Accounts, account = mei, accounts = listOf(mei, tom), rememberedServers = listOf(home, cabin)), r) { r.calls += "remove:${it.key}" } } }
         onNodeWithText("Signed in as ux-mei on Home Media.").assertExists()
+        onNodeWithText("You'll need the password to sign in again. Your account stays saved on this computer.").assertExists()
+        onNodeWithText("Signing out also removes ux-mei from this computer.").assertDoesNotExist()
         onNodeWithText("Watching now").assertExists()
         onNodeWithText("Saved on this computer").assertExists()
         onNodeWithText("Sign in another user on Home Media").performClick()

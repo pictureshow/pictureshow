@@ -133,6 +133,8 @@ class DesktopRoundThreeTest {
             onNodeWithText("Play now").assertDoesNotExist()
             onNodeWithText("Play next").assertExists()
             onNodeWithText("Back to title").assertExists()
+            assertTrue(onNodeWithText("First episode finished").fetchSemanticsNode().boundsInRoot.top <
+                onNodeWithText("Next: Episode · Second episode").fetchSemanticsNode().boundsInRoot.top, "Finished title leads the secondary next suggestion")
         } finally { controller.close(); directory.deleteRecursively() }
     }
 

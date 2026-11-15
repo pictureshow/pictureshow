@@ -66,7 +66,7 @@ class DesktopShellTest {
 
     @Test fun mouseWheelOverSidebarMovesLibrariesAndShowsMoreBelow() = runDesktopComposeUiTest(800, 600) {
         shell(views = 12, livingRoom = false)
-        onNodeWithTag("sidebar-more-below").assertExists()
+        onNodeWithTag("sidebar-more-below").assertExists().assertHeightIsEqualTo(48.dp)
         val before = unclipped("nav:library:lib4").top
         onNodeWithTag("sidebar-list").performMouseInput { moveTo(center); scroll(4f) }
         waitForIdle()
