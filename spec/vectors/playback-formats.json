@@ -217,7 +217,7 @@
       "input": {
         "profile": "Main 10"
       },
-      "expected": "MAIN 10"
+      "expected": "Main 10"
     },
     {
       "id": "format-profile-missing",

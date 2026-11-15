@@ -475,6 +475,7 @@ class DesktopController(
             viewingMutex.withLock {
                 currentCoroutineContext().ensureActive()
                 if (viewing !== v) return
+                player.informationQuality(mutable.value.settings.bitrateMbps)
                 player.open(a, decision, start, ai, si, mutable.value.settings.volume)
             }
             currentCoroutineContext().ensureActive()

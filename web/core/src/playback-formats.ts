@@ -47,5 +47,5 @@ export function decoder(hwdec?: string | null): string {
 }
 
 export function profile(value?: string | null): string {
-    return value && /^[A-Za-z0-9_. ()-]{1,48}$/.test(value) ? value.toUpperCase() : "Not reported";
+    return value && /^[A-Za-z0-9_. ()-]{1,48}$/.test(value) ? value : "Not reported";
 }

@@ -193,12 +193,15 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(p.item.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(p.item.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val video = p.decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
                     val sourceRange = PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile)
-                    AssistChip(onClick = { infoOpener = "format-badge"; menu = "info" },
+                    DesktopTooltip("$sourceRange source · ${PlaybackFormatInformation.display(p.received.transfer, p.received.output)} · Playback info", above = true) {
+                    AssistChip(onClick = { infoOpener = "format-badge"; menu = "info" }, border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         label = { Text(if (sourceRange == "Not reported") PlaybackInformation.codec(video?.codec) else sourceRange, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 240.dp).controlFocus().probe("format-badge").semantics { contentDescription = "Source format: $sourceRange. Open Playback info" })
+                    }
                     flash?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                 }
                 Row(Modifier.onGloballyPositioned { seekTop = it.positionInWindow().y.toInt() }, verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -223,8 +226,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                             chipValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off",
                             note = if (p.subtitleTracks.isEmpty()) "No subtitles in this file" else null,
                             open = menu == "subtitles", onOpen = { menu = "subtitles" }, onDismiss = { menu = null }, ceiling = seekTop, onChoose = c::selectSubtitle)
-                        TextButton(onClick = { infoOpener = "playback-info"; menu = "info" }, enabled = p.ready,
-                            modifier = Modifier.controlFocus().probe("playback-info")) { Text("Playback info") }
+                        OutlinedButton(onClick = { infoOpener = "playback-info"; menu = "info" }, enabled = p.ready,
+                            shape = RoundedCornerShape(50), modifier = Modifier.heightIn(min = 40.dp).controlFocus().probe("playback-info")) { Text("Playback info") }
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
                         if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
                         DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier = Modifier.controlFocus().probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }

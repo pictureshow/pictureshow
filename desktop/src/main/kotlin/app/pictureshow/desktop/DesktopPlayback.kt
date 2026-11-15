@@ -47,6 +47,7 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun volume(value: Int)
     /** PLAY-29's M key. Engines without a mute control ignore it. */
     fun mute(muted: Boolean) {}
+    fun informationQuality(mbps: Int?) {}
     fun fullscreen(enabled: Boolean)
     fun viewport(topRatio: Double, bottomRatio: Double) {}
     fun viewportReceipt(): String? = null
@@ -178,6 +179,11 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var initialSubtitleIndex: Int? = null
     @Volatile private var selectedAudioIndex = -1
     @Volatile private var selectedSubtitleIndex = -1
+    @Volatile private var informationQualityMbps: Int? = null
+    override fun informationQuality(mbps: Int?) { informationQualityMbps = mbps }
+    internal fun informationSections(decision: PlayDecision, received: DesktopReceivedFormats): List<PlaybackInfoSection> =
+        playbackInfoSections(DesktopPlaybackState(app.pictureshow.core.MediaItem(decision.itemId), decision,
+            audioIndex = selectedAudioIndex, subtitleIndex = selectedSubtitleIndex, received = received), informationQualityMbps)
     @Volatile private var pendingExternalSubtitle: String? = null
     override fun profile(settings: DesktopSettings): DeviceProfile {
         // decoder-list is a documented read-only native property; query the loaded bytes,
@@ -217,7 +223,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             player.option("video-timing-offset", "0")
             player.initialize()
             linux = LinuxPlayerWindow(player, directory, hdr, ::togglePause, { seek(snapshot().positionSeconds + it) }, playerRelease::release, info = {
-                playbackInfoSections(DesktopPlaybackState(app.pictureshow.core.MediaItem(decision.itemId), decision, audioIndex = selectedAudioIndex, subtitleIndex = selectedSubtitleIndex, received = receivedFormats(player::get, linux?.hdrOutput() ?: HdrOutput.Unknown)), null)
+                informationSections(decision, receivedFormats(player::get, linux?.hdrOutput() ?: HdrOutput.Unknown))
             })
             linux!!.start()
         } else {
@@ -536,6 +542,13 @@ private class LinuxPlayerWindow(
                                                 sections.forEach { section ->
                                                     androidx.compose.material.Text(section.title, style = androidx.compose.material.MaterialTheme.typography.subtitle1)
                                                     section.lines.forEach { androidx.compose.material.Text(it) }
+                                                    section.note?.let { androidx.compose.material.Text(it, color = androidx.compose.ui.graphics.Color.LightGray) }
+                                                    section.fields.forEach { (label, value) ->
+                                                        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                                                            androidx.compose.material.Text(label, androidx.compose.ui.Modifier.width(140.dp), color = androidx.compose.ui.graphics.Color.LightGray)
+                                                            androidx.compose.material.Text(value, androidx.compose.ui.Modifier.weight(1f))
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }

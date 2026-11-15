@@ -45,7 +45,10 @@ internal fun nativeHdrOutput(platform: String, receipt: String?): HdrOutput = ru
     }
 }.getOrDefault(HdrOutput.Unknown)
 
-internal data class PlaybackInfoSection(val title: String, val lines: List<String>)
+internal data class PlaybackInfoSection(
+    val title: String, val lines: List<String> = emptyList(),
+    val fields: List<Pair<String, String>> = emptyList(), val note: String? = null
+)
 
 internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): List<PlaybackInfoSection> {
     val source = p.decision.mediaSource
@@ -57,25 +60,28 @@ internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): L
     return buildList {
         add(PlaybackInfoSection(explanation.method, listOf(explanation.summary) + explanation.remedies))
         if (p.decision.method == PlayMethod.Transcode) add(PlaybackInfoSection(explanation.heading ?: "Why the server converts", PlaybackInformation.reasons(p.decision, qualityMbps)))
-        add(PlaybackInfoSection("Source · server metadata", listOf(
-            "Container: ${PlaybackInformation.codec(source.container)} · Total bitrate: ${PlaybackInformation.bitrate(source.bitrate)}",
-            "Video: ${PlaybackInformation.codec(video?.codec)} · ${PlaybackInformation.resolution(video?.width, video?.height)}",
-            "Source range: ${PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile)}",
-            "Video bitrate: ${PlaybackInformation.bitrate(video?.bitRate)} · Profile: ${PlaybackFormatInformation.profile(video?.profile)}",
-            if (p.audioIndex < 0) "Audio: Off" else "Audio: ${PlaybackInformation.codec(audio?.codec)} · ${number(audio?.channels, "channels")} · ${PlaybackInformation.bitrate(audio?.bitRate)}",
-            "Subtitles: ${PlaybackInformation.subtitle(source, p.subtitleIndex)}",
-            "Server metadata may describe the converted stream. Received formats below come from mpv."
+        add(PlaybackInfoSection("Display output", listOf(PlaybackFormatInformation.display(f.transfer, f.output)),
+            note = "Reported by the operating system and mpv, not measured from the screen."))
+        add(PlaybackInfoSection("Source · server metadata", fields = listOf(
+            "Container" to PlaybackInformation.codec(source.container),
+            "Total bitrate" to PlaybackInformation.bitrate(source.bitrate),
+            "Video" to "${PlaybackInformation.codec(video?.codec)} · ${PlaybackInformation.resolution(video?.width, video?.height)}",
+            "Source range" to PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile),
+            "Video bitrate" to PlaybackInformation.bitrate(video?.bitRate),
+            "Profile" to PlaybackFormatInformation.profile(video?.profile),
+            "Audio" to if (p.audioIndex < 0) "Off" else "${PlaybackInformation.codec(audio?.codec)} · ${number(audio?.channels, "channels")} · ${PlaybackInformation.bitrate(audio?.bitRate)}",
+            "Subtitles" to PlaybackInformation.subtitle(source, p.subtitleIndex)
+        ), note = if (p.decision.method == PlayMethod.DirectPlay) null else
+            "Server metadata may describe the converted stream. Received formats below come from mpv."))
+        add(PlaybackInfoSection("Received by this computer", fields = listOf(
+            "Video" to "${PlaybackInformation.codec(f.videoCodec)} · ${PlaybackInformation.resolution(f.width, f.height)}",
+            "Range" to PlaybackFormatInformation.transfer(f.transfer),
+            "Primaries" to PlaybackInformation.codec(f.primaries),
+            "Pixel format / surface" to PlaybackInformation.codec(f.pixelFormat),
+            "Audio" to if (p.audioIndex < 0) "Off" else "${PlaybackInformation.codec(f.audioCodec)} · ${number(f.audioChannels, "channels")} · ${number(f.audioSampleRate, "Hz")}",
+            "Video decoder" to PlaybackFormatInformation.decoder(f.hwdec),
+            "Audio decoder" to if (p.audioIndex < 0) "Off" else if (f.audioCodec != null) "Software (mpv)" else "Not reported"
         )))
-        add(PlaybackInfoSection("Received by mpv", listOf(
-            "Video: ${PlaybackInformation.codec(f.videoCodec)} · ${PlaybackInformation.resolution(f.width, f.height)}",
-            "Range: ${PlaybackFormatInformation.transfer(f.transfer)} · Primaries: ${PlaybackInformation.codec(f.primaries)}",
-            "Pixel format: ${PlaybackInformation.codec(f.pixelFormat)}",
-            if (p.audioIndex < 0) "Audio: Off" else "Audio: ${PlaybackInformation.codec(f.audioCodec)} · ${number(f.audioChannels, "channels")} · ${number(f.audioSampleRate, "Hz")}",
-            "Video decoder: ${PlaybackFormatInformation.decoder(f.hwdec)}",
-            "Audio decoder: " + if (p.audioIndex < 0) "Off" else if (f.audioCodec != null) "Software (mpv)" else "Not reported"
-        )))
-        add(PlaybackInfoSection("Display output", listOf(PlaybackFormatInformation.display(f.transfer, f.output),
-            "Output state is reported by the player and operating system; it is not a measurement of panel light.")))
     }
 }
 

@@ -29,16 +29,25 @@ internal fun DesktopPlaybackInfoDialog(sections: List<PlaybackInfoSection>, clos
         }
     }, title = { Text("Playback info") }, text = {
         Box(Modifier.heightIn(max = 360.dp)) {
-            Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(top = 12.dp, bottom = 12.dp, end = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 sections.forEachIndexed { i, section ->
                     if (i > 0) HorizontalDivider()
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(section.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         section.lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        section.fields.forEach { (label, value) ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Text(label, Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(value, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"))
+                            }
+                        }
                     }
                 }
             }
             VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+            if (scroll.value > 0) HorizontalDivider(Modifier.align(Alignment.TopCenter))
+            if (scroll.value < scroll.maxValue) HorizontalDivider(Modifier.align(Alignment.BottomCenter))
         }
     }, confirmButton = {
         TextButton(onClick = close, modifier = Modifier.focusRequester(focus).controlFocus(allowInModal = true).probe("playback-info-close")) { Text("Close") }
