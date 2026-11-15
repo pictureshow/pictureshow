@@ -296,7 +296,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 }
                             }
                         }
-                        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
+                        if (state.busy && state.route != DesktopRoute.Search) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
                         Box(Modifier.fillMaxSize()) {
                             savedPages.SaveableStateProvider(pageKey) {
                             CompositionLocalProvider(LocalDesktopPage provides pageKey) {
