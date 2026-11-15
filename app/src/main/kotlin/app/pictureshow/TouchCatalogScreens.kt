@@ -194,7 +194,7 @@ internal fun TouchCatalogHome(
                     "libraries" -> onLibraries
                     else -> state.libraries.firstOrNull { "library:${it.id}" == destination }?.let { library -> { onOpen(library) } }
                 }
-                TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onOpen, onTitle)
+                TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onTitle, onOpen)
             }
         }
     }
@@ -985,8 +985,8 @@ internal fun TouchCatalogShelf(
     account: Account,
     wide: Boolean,
     reserveLines: Boolean = true,
-    onOpen: (MediaItem) -> Unit,
-    onTitle: (() -> Unit)? = null
+    onTitle: (() -> Unit)? = null,
+    onOpen: (MediaItem) -> Unit
 ) {
     val shortWindow = isShortTouchWindow()
     Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
