@@ -4,13 +4,11 @@
 package app.pictureshow
 
 import app.pictureshow.core.livetv.LiveSchedule
-import java.time.Instant
 
 internal data class LiveScheduleGroup(val title: String, val seriesRule: Boolean, val schedules: List<LiveSchedule>)
 
 /** Group airings by observed timestamps; an absent/invalid interval cannot establish that an airing is upcoming or past. */
-internal fun liveScheduleGroup(schedule: LiveSchedule, now: Long): String =
-    app.pictureshow.core.livetv.liveScheduleGroup(schedule, now)
+internal fun liveScheduleGroup(schedule: LiveSchedule, now: Long): String = app.pictureshow.core.livetv.liveScheduleGroup(schedule, now)
 
 /** Preserve every server row and its relative order, including ended cancelled/error rows. Rules remain a separate section. */
 internal fun liveScheduleGroups(series: List<LiveSchedule>, timers: List<LiveSchedule>, now: Long): List<LiveScheduleGroup> =

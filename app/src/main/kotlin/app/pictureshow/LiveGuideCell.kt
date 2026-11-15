@@ -4,8 +4,6 @@
 package app.pictureshow
 
 import app.pictureshow.core.livetv.LiveProgram
-import app.pictureshow.core.livetv.canTune
-import app.pictureshow.core.livetv.liveInstant
 
 internal typealias LiveGuideCell = app.pictureshow.core.livetv.LiveGuideCell
 internal fun liveGuideCells(programs: List<LiveProgram>, start: Long, end: Long): List<LiveGuideCell> =
