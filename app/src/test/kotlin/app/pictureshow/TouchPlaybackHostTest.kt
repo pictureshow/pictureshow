@@ -425,7 +425,8 @@ class TouchPlaybackHostTest {
                 "The actual session's Stopped request must precede Played despite immediate navigation cleanup"
             )
             assertEquals(listOf(Triple("played", "episode", true)), catalogApi.actions.toList())
-            assertEquals(listOf("SetIgnoreWait"), requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation })
+            val controls = requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation }
+            assertEquals(listOf("SetIgnoreWait"), controls)
             assertEquals(null, sync.state.value.departure, "A stay records no departure")
             assertEquals(true, sync.participating)
             assertEquals(1, exits)

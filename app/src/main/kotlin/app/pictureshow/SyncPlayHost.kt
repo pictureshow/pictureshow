@@ -530,9 +530,8 @@ internal class SyncPlayHost(
             trace("apply-after", "source=prepared-queue " + stateFields())
         }
         val needsOpen = entry != null && !reusePrepared && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
-        if (entry != null && needsOpen && requestedOpen != entry.playlistItemId &&
-            app.pictureshow.core.sync.syncOpensGroupEntry(following)
-        ) {
+        val opensEntry = app.pictureshow.core.sync.syncOpensGroupEntry(following)
+        if (entry != null && needsOpen && requestedOpen != entry.playlistItemId && opensEntry) {
             pause("queue-opening")
             requestedOpen = entry.playlistItemId
             openingEntry = entry.playlistItemId

@@ -27,11 +27,7 @@ enum class SyncCloseOutcome { NONE, STAY, LEAVE }
  * (Jellyfin marks members buffering on joins and new queues; only Ready or IgnoreWait releases them).
  * [departure] is the retained cause for a Leave; a stay records none.
  */
-data class SyncCloseDecision(
-    val outcome: SyncCloseOutcome,
-    val ignoreWait: Boolean = false,
-    val departure: SyncDepartureCause? = null
-)
+data class SyncCloseDecision(val outcome: SyncCloseOutcome, val ignoreWait: Boolean = false, val departure: SyncDepartureCause? = null)
 
 /** [following] is true while this device renders, or is opening, the group's current entry. */
 fun syncCloseDecision(reason: SyncCloseReason, participating: Boolean, following: Boolean): SyncCloseDecision {
@@ -80,8 +76,7 @@ fun syncStayReminder(facts: SyncStayFacts): SyncStayReminder? {
  * The server saying this session is in no group (NotInGroup, GroupDoesNotExist) ends a stayed membership
  * locally with no Leave request; an open player keeps its existing error and Leave recovery.
  */
-fun syncStayEndsOnDenial(reason: String, playerOpen: Boolean): Boolean =
-    !playerOpen && reason in setOf("NotInGroup", "GroupDoesNotExist")
+fun syncStayEndsOnDenial(reason: String, playerOpen: Boolean): Boolean = !playerOpen && reason in setOf("NotInGroup", "GroupDoesNotExist")
 
 /** A stayed device never opens a new group entry by itself; Watch on the reminder starts following again. */
 fun syncOpensGroupEntry(following: Boolean): Boolean = following

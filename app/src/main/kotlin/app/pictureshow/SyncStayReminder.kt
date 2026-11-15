@@ -26,8 +26,7 @@ import app.pictureshow.core.sync.SyncStayReminder
 import org.koin.compose.koinInject
 
 /** SYN-08 reminder routes: Home, Libraries and title pages. */
-internal fun syncStayRoute(route: String?): Boolean =
-    route == "home" || route == "libraries" || route?.startsWith("item?") == true
+internal fun syncStayRoute(route: String?): Boolean = route == "home" || route == "libraries" || route?.startsWith("item?") == true
 
 /** One-line hook for the phone shell: shows nothing outside a group or off its routes. */
 @Composable
@@ -64,8 +63,7 @@ private fun syncStayLine(reminder: SyncStayReminder): String = when {
 }
 
 @Composable
-private fun syncStayGroup(reminder: SyncStayReminder): String =
-    reminder.groupName ?: stringResource(R.string.sync_departure_group)
+private fun syncStayGroup(reminder: SyncStayReminder): String = reminder.groupName ?: stringResource(R.string.sync_departure_group)
 
 @Composable
 internal fun TouchSyncStayBar(reminder: SyncStayReminder, onWatch: () -> Unit, onLeave: () -> Unit) {

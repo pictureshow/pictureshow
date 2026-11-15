@@ -80,5 +80,8 @@ class SyncStayVectorsTest {
 
     private fun JsonObject.str(key: String) = getValue(key).jsonPrimitive.content
     private fun JsonObject.bool(key: String) = getValue(key).jsonPrimitive.boolean
-    private fun JsonObject.optStr(key: String): String? = getValue(key).let { v: JsonElement -> if (v is JsonNull) null else v.jsonPrimitive.content }
+    private fun JsonObject.optStr(key: String): String? {
+        val value: JsonElement = getValue(key)
+        return if (value is JsonNull) null else value.jsonPrimitive.content
+    }
 }
