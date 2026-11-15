@@ -15,9 +15,12 @@ object PlaybackQualityPresentation {
         PlaybackNetwork.Metered -> "on mobile data or a metered hotspot"
     }}"
 
-    fun reductionNotice(overrideMbps: Int?, activeBitrate: Int, configuredBitrate: Int): String? =
-        if (overrideMbps == null && activeBitrate < configuredBitrate) {
-            "Quality limit reduced to ${bitrate(activeBitrate)} to avoid buffering."
+    fun affectsStream(activeBitrate: Int, streamBitrate: Int?): Boolean =
+        streamBitrate != null && streamBitrate > 0 && activeBitrate < streamBitrate
+
+    fun reductionNotice(overrideMbps: Int?, activeBitrate: Int, configuredBitrate: Int, streamBitrate: Int? = null): String? =
+        if (overrideMbps == null && activeBitrate < configuredBitrate && affectsStream(activeBitrate, streamBitrate)) {
+            "Lowered to ${bitrate(activeBitrate)} because the connection slowed. Choose Quality → Auto to try again."
         } else {
             null
         }

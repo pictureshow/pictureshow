@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "suite": "quality-auto-floor",
+  "cases": [
+    {
+      "id": "quality-auto-floor.tiny-estimate",
+      "input": {
+        "estimate": 427500,
+        "streamBitrate": 8000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": true,
+        "notice": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
+      "id": "quality-auto-floor.floor",
+      "input": {
+        "estimate": 1,
+        "streamBitrate": 8000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": true,
+        "notice": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    },
+    {
+      "id": "quality-auto-floor.above-short-clip",
+      "input": {
+        "estimate": 150000000,
+        "streamBitrate": 1430000,
+        "ceiling": 200000000
+      },
+      "expected": {
+        "cap": 120000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.equal-stream",
+      "input": {
+        "estimate": 6000000,
+        "streamBitrate": 4000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.unknown-stream",
+      "input": {
+        "estimate": 6000000,
+        "streamBitrate": null,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.at-floor",
+      "input": {
+        "estimate": 100000,
+        "streamBitrate": 8000000,
+        "ceiling": 4000000
+      },
+      "expected": {
+        "cap": 4000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.server-ceiling",
+      "input": {
+        "estimate": 100000,
+        "streamBitrate": 3000000,
+        "ceiling": 2000000
+      },
+      "expected": {
+        "cap": 2000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.invalid-estimate",
+      "input": {
+        "estimate": 0,
+        "streamBitrate": 30000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 20000000,
+        "reroute": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "quality-auto-floor.ladder-rounding",
+      "input": {
+        "estimate": 18000000,
+        "streamBitrate": 16000000,
+        "ceiling": 20000000
+      },
+      "expected": {
+        "cap": 10000000,
+        "reroute": true,
+        "notice": "Lowered to 10 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
+      }
+    }
+  ]
+}

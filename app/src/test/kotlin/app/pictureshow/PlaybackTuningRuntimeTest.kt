@@ -57,7 +57,7 @@ class PlaybackTuningRuntimeTest {
         assertEquals(4_000_000L, guard.reduction(20_000_000, 4_000_000, 262_144, 2))
         assertNull(guard.reduction(4_000_000, 2_000_000, 262_144, 1_000))
         assertNull(guard.reduction(4_000_000, 2_000_000, 262_144, 2_000))
-        assertEquals(2_000_000L, guard.reduction(4_000_000, 2_000_000, 262_144, 30_002))
+        assertNull(guard.reduction(4_000_000, 2_000_000, 262_144, 30_002))
         assertNull(guard.reduction(2_000_000, 40_000_000, 262_144, 70_000))
         assertNull(guard.reduction(2_000_000, 40_000_000, 262_144, 71_000))
     }

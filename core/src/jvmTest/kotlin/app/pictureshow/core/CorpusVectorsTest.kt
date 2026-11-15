@@ -34,6 +34,8 @@ class CorpusVectorsTest {
                     "playback-settings",
                     "playback-start",
                     "player-quality",
+                    "quality-auto-floor",
+                    "playback-info-reasons",
                     "settings-presentation",
                     "recovery"
                 ),

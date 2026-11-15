@@ -59,7 +59,7 @@ internal class ServerPlaybackGateway(
     private val client: PlaybackClient,
     private val account: Account,
     private val itemId: String,
-    private val capabilities: () -> DeviceCapabilities,
+    private val capabilities: suspend () -> DeviceCapabilities,
     private val captionLanguage: String? = null,
     private val markPlayed: suspend () -> ClientResult<Unit>
 ) : PlaybackGateway {

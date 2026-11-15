@@ -55,11 +55,20 @@ data class PlaybackTuning(
         if (override != null || !autoAdjustQuality || estimatedBandwidth == null || estimatedBandwidth <= 0) return ceiling
         // Leave room for VBR peaks and protocol overhead. Do not raise quality during an active viewing.
         if (estimatedBandwidth >= ceiling) return ceiling
-        val budget = (estimatedBandwidth / 5 * 4).coerceAtLeast(1)
-        val rung = PlaybackPreferences.BITRATES.filterNotNull().sortedDescending()
-            .firstOrNull { it.toLong() * 1_000_000 <= budget }?.times(1_000_000)
-            ?: minOf(budget, 4_000_000L).toInt()
-        return minOf(ceiling, rung)
+        return automaticCap(ceiling, estimatedBandwidth)
+    }
+
+    companion object {
+        const val AUTO_FLOOR = 4_000_000
+
+        /** Pick an offered rung, retaining the configured ceiling even if it is below the Auto floor. */
+        fun automaticCap(ceiling: Int, estimate: Long): Int {
+            if (estimate <= 0 || estimate >= ceiling) return ceiling
+            val budget = estimate / 5 * 4
+            val rung = PlaybackPreferences.BITRATES.filterNotNull().sortedDescending()
+                .firstOrNull { it.toLong() * 1_000_000 <= budget }?.times(1_000_000) ?: AUTO_FLOOR
+            return minOf(ceiling, rung)
+        }
     }
 
     /** Apply only to a new resume, never to replacement preparation or a fresh From start. */

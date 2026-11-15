@@ -260,7 +260,9 @@ private fun TouchPlaybackInformation(host: PlaybackHostState) {
             host.effectiveSettings.maxStreamingBitrate / 1_000_000,
             tracks,
             host.localPreferences.tuning,
-            host.effectiveSettings.maxStreamingBitrate
+            host.effectiveSettings.maxStreamingBitrate,
+            host.adaptiveQualityNotice,
+            host.output.speed.value.encodedAudio
         ).forEach { section ->
             Text(
                 section.title,

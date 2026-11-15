@@ -87,6 +87,7 @@ internal class PlaybackHostState(
         }
     val qualityOverrideMbps get() = qualitySelection.overrideMbps
     private var qualityGuard = BandwidthQualityGuard()
+    private var reducedStreamBitrate by mutableStateOf<Int?>(null)
     val effectiveSettings get() = localPreferences.deviceSettings(network, estimatedBandwidth, qualityOverrideMbps)
     val qualityLabel get() = app.pictureshow.core.playback.PlaybackQualityPresentation.choiceLabel(qualityOverrideMbps)
     private val configuredQualityBitrate get() = localPreferences.deviceSettings(network).maxStreamingBitrate
@@ -97,8 +98,14 @@ internal class PlaybackHostState(
     val adaptiveQualityNotice get() = app.pictureshow.core.playback.PlaybackQualityPresentation.reductionNotice(
         qualityOverrideMbps,
         effectiveSettings.maxStreamingBitrate,
-        configuredQualityBitrate
+        configuredQualityBitrate,
+        reducedStreamBitrate ?: app.pictureshow.core.playback.PlaybackInformation.streamBitrate(state.decision)
     )
+    fun resetAutomaticQuality() {
+        estimatedBandwidth = null
+        reducedStreamBitrate = null
+        qualityGuard = BandwidthQualityGuard()
+    }
     val creditsCountdown get() = localPreferences.tuning.postCredits == PostCredits.NextEpisode
 
     /** Keep post-credits scenes by waiting for the actual end, even when an outro marker exists. */
@@ -109,12 +116,17 @@ internal class PlaybackHostState(
         val selected = qualitySelection.choose(mbps)
         val changed = selected != qualitySelection
         qualitySelection = selected
+        reducedStreamBitrate = null
         qualityGuard = BandwidthQualityGuard()
         if (changed) controller?.routeChanged()
     }
     fun bandwidthSample(estimate: Long, bytes: Long, nowMs: Long) {
         if (!localPreferences.tuning.autoAdjustQuality || qualityOverrideMbps != null || state.preparing || atEnd) return
         val lower = qualityGuard.reduction(effectiveSettings.maxStreamingBitrate, estimate, bytes, nowMs) ?: return
+        val cap = localPreferences.tuning.bitrate(localPreferences.bitrateMbps, network, lower)
+        val streamBitrate = app.pictureshow.core.playback.PlaybackInformation.streamBitrate(state.decision)
+        if (!app.pictureshow.core.playback.PlaybackQualityPresentation.affectsStream(cap, streamBitrate)) return
+        reducedStreamBitrate = streamBitrate
         estimatedBandwidth = lower
         PlaybackDiagnostics.write("quality-adjust cap=${effectiveSettings.maxStreamingBitrate} network=${network.name}")
         controller?.routeChanged()
@@ -564,7 +576,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         0
                     ),
                     offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, {
-                        activeProbe.snapshot().copy(settings = effectiveSettings)
+                        val settings = effectiveSettings
+                        activeProbe.cachedSnapshot().copy(settings = settings)
                     }, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
                     }.let { server ->
@@ -621,7 +634,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 }
                 output.onBandwidthEstimate =
                     { estimate, bytes -> bandwidthSample(estimate, bytes, android.os.SystemClock.elapsedRealtime()) }
-                activeProbe.start { session.routeChanged() }
+                activeProbe.start(notifyInitial = false) { session.routeChanged() }
                 PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
                 session.start(initialPositionMs, handoff?.tracks)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -689,7 +702,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 withContext(Dispatchers.Main.immediate) {
                     if (currentNetwork != null && network != currentNetwork) {
                         network = currentNetwork
-                        estimatedBandwidth = null
+                        resetAutomaticQuality()
                         controller?.routeChanged()
                     }
                     player?.let {

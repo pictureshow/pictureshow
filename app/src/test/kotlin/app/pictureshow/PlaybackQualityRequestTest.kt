@@ -77,7 +77,7 @@ class PlaybackQualityRequestTest {
                         respond(
                             """{"MediaSources":[{"Id":"src","Container":"mkv","SupportsTranscoding":true,
                             "DefaultAudioStreamIndex":2,"DefaultSubtitleStreamIndex":7,"MediaStreams":[{"Type":"Audio","Index":2,"Codec":"aac"},{"Type":"Subtitle","Index":7,"Codec":"subrip","IsExternal":true,"DeliveryUrl":"/sub.srt"}],
-                            "TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src","TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
+                            "TranscodingUrl":"/videos/item/master.m3u8?MediaSourceId=src&VideoBitrate=8000000&AudioBitrate=128000","TranscodingSubProtocol":"hls","TranscodingContainer":"mp4"}],"PlaySessionId":"view"}""",
                             HttpStatusCode.OK,
                             headersOf(HttpHeaders.ContentType, "application/json")
                         )

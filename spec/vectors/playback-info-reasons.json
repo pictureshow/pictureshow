@@ -1,0 +1,314 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-info-reasons",
+  "cases": [
+    {
+      "id": "playback-info-reasons.unreported-scaling",
+      "input": {
+        "method": "Transcode",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "width": 960,
+          "height": 540,
+          "codec": "hevc"
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "Scaled from 3840\u00d72160 to 960\u00d7540 during playback. The server did not report a resolution reason."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.server-covers-scaling",
+      "input": {
+        "method": "Transcode",
+        "reasons": [
+          "VideoResolutionNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "width": 960,
+          "height": 540
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "This video's resolution exceeds this device's limit. The server reduces the resolution."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.named-video-codec",
+      "input": {
+        "method": "Transcode",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "codec": "h264"
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "This device cannot decode HEVC Main 10. The server converts the video. Try a version with a supported video codec."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.named-audio-codec",
+      "input": {
+        "method": "Transcode",
+        "reasons": [
+          "AudioCodecNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {},
+        "receiverAudio": false
+      },
+      "expected": [
+        "This device cannot decode TRUEHD. The server converts the audio. Choose a compatible audio track if available."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.unreported-codec",
+      "input": {
+        "method": "Transcode",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "codec": "h264"
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "Video changed from HEVC to H264 during playback. The server did not report a codec reason."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.missing-received",
+      "input": {
+        "method": "Transcode",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {},
+        "receiverAudio": false
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-info-reasons.codec-alias",
+      "input": {
+        "method": "Transcode",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "codec": "h265"
+        },
+        "receiverAudio": false
+      },
+      "expected": []
+    },
+    {
+      "id": "playback-info-reasons.direct-device",
+      "input": {
+        "method": "DirectPlay",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {},
+        "receiverAudio": false
+      },
+      "expected": [
+        "Decoded by this device."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.direct-receiver",
+      "input": {
+        "method": "DirectPlay",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {},
+        "receiverAudio": true
+      },
+      "expected": [
+        "Video decoded by this device. Audio sent to your receiver for decoding."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.one-dimension-changed",
+      "input": {
+        "method": "Transcode",
+        "reasons": [],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "width": 1920,
+          "height": 2160
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "Scaled from 3840\u00d72160 to 1920\u00d72160 during playback. The server did not report a resolution reason."
+      ]
+    }
+  ]
+}

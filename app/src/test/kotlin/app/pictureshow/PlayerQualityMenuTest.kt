@@ -337,7 +337,7 @@ class PlayerQualityMenuTest {
                     PlayerQualityMenu(
                         null,
                         "Up to 200 Mbps on your home network",
-                        "Quality limit reduced to 4 Mbps to avoid buffering.",
+                        "Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.",
                         true,
                         {},
                         {}
@@ -364,13 +364,15 @@ class PlayerQualityMenuTest {
                 PlayerQualityMenu(
                     null,
                     "Up to 200 Mbps on your home network",
-                    "Quality limit reduced to 4 Mbps to avoid buffering.",
+                    "Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.",
                     true,
                     {},
                     {}
                 )
             }
         }
-        compose.onNodeWithText("Up to 200 Mbps on your home network\nQuality limit reduced to 4 Mbps to avoid buffering.").assertExists()
+        compose.onNodeWithText(
+            "Up to 200 Mbps on your home network\nLowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again."
+        ).assertExists()
     }
 }

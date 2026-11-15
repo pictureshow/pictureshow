@@ -271,7 +271,7 @@ private suspend fun offlineOriginalWarning(
             BuildConfig.VERSION_NAME
         )
         val gateway =
-            ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::snapshot, null) {
+            ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::cachedSnapshot, null) {
                 ClientResult.Success(Unit)
             }
         val decision = ((gateway.prepare(PlaybackRequest()) as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return null

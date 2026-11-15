@@ -65,19 +65,21 @@
       "input": {
         "overrideMbps": null,
         "activeBitrate": 4000000,
-        "configuredBitrate": 20000000
+        "configuredBitrate": 20000000,
+        "streamBitrate": 8000000
       },
-      "expected": "Quality limit reduced to 4 Mbps to avoid buffering."
+      "expected": "Lowered to 4 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
     },
     {
-      "id": "player-quality.small-reduction",
+      "id": "player-quality.unknown-stream",
       "operation": "notice",
       "input": {
         "overrideMbps": null,
-        "activeBitrate": 800,
-        "configuredBitrate": 4000000
+        "activeBitrate": 4000000,
+        "configuredBitrate": 4000000,
+        "streamBitrate": null
       },
-      "expected": "Quality limit reduced to <1 kbps to avoid buffering."
+      "expected": null
     },
     {
       "id": "player-quality.manual-not-reduced",
@@ -85,7 +87,8 @@
       "input": {
         "overrideMbps": 4,
         "activeBitrate": 4000000,
-        "configuredBitrate": 20000000
+        "configuredBitrate": 20000000,
+        "streamBitrate": 8000000
       },
       "expected": null
     },
@@ -95,7 +98,8 @@
       "input": {
         "overrideMbps": null,
         "activeBitrate": 20000000,
-        "configuredBitrate": 20000000
+        "configuredBitrate": 20000000,
+        "streamBitrate": 8000000
       },
       "expected": null
     },

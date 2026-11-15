@@ -152,8 +152,8 @@
         "participating": true,
         "phase": "Playing",
         "nativePlaying": false,
-        "bandwidthA": 1000000,
-        "bandwidthB": 2000000,
+        "bandwidthA": 6000000,
+        "bandwidthB": 18000000,
         "settleMs": 400
       },
       "expected": {

@@ -598,8 +598,7 @@ internal fun TouchPictureshow(
                             accepted = passthroughEncodingLabels(value.audioOutput.passthrough)
                             supportedPassthrough = value.audioOutput.passthrough
                         }
-                        update(probe.snapshot())
-                        probe.start(::update)
+                        probe.start(onChanged = ::update)
                         onDispose { probe.close() }
                     }
                     // Coming back from the Play Store is how an update gets here.

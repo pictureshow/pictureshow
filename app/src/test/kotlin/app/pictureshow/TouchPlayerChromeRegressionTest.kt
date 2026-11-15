@@ -100,7 +100,19 @@ class TouchPlayerChromeRegressionTest {
             decoder = Decoder()
             host = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
             host.playerSource = mutableStateOf(decoder)
-            host.stateSource = mutableStateOf(PlaybackState(preparing = false))
+            host.stateSource = mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = app.pictureshow.core.playback.PlayDecision(
+                        "film",
+                        app.pictureshow.core.playback.MediaSourceInfo(bitrate = 180_000_000),
+                        app.pictureshow.core.playback.PlayMethod.DirectPlay,
+                        "https://example.test/film",
+                        emptyMap(),
+                        null
+                    )
+                )
+            )
             host.duration = 60_000
             if (reducedQuality) host.estimatedBandwidth = input.getValue("estimatedBandwidth").jsonPrimitive.content.toLong()
         }

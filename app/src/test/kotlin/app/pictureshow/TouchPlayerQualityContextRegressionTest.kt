@@ -98,9 +98,9 @@ class TouchPlayerQualityContextRegressionTest {
     }
     private fun decision(method: PlayMethod) = PlayDecision(
         "film",
-        MediaSourceInfo(id = "source"),
+        MediaSourceInfo(id = "source", bitrate = 180_000_000),
         method,
-        "https://media.example.test/video",
+        "https://media.example.test/video?VideoBitrate=180000000&AudioBitrate=128000",
         emptyMap(),
         "session",
         if (method == PlayMethod.Transcode) listOf("VideoCodecNotSupported") else emptyList()

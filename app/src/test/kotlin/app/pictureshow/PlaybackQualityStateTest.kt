@@ -30,7 +30,20 @@ class PlaybackQualityStateTest {
         {}
     ).also {
         it.network = PlaybackNetwork.Remote
-        it.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false))
+        it.stateSource =
+            androidx.compose.runtime.mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = app.pictureshow.core.playback.PlayDecision(
+                        "item",
+                        app.pictureshow.core.playback.MediaSourceInfo(bitrate = 8_000_000),
+                        app.pictureshow.core.playback.PlayMethod.DirectPlay,
+                        "https://example.test/film",
+                        emptyMap(),
+                        null
+                    )
+                )
+            )
     }
 
     @Test fun autoRestoresNetworkCapAndNeedsTwoFreshSamplesInsteadOfReusingOldGuard() {
@@ -40,7 +53,7 @@ class PlaybackQualityStateTest {
             assertNull(host.estimatedBandwidth)
             host.bandwidthSample(6_000_000, 262_144, 2)
             assertEquals(4_000_000, host.effectiveSettings.maxStreamingBitrate)
-            assertEquals("Quality limit reduced to 4 Mbps to avoid buffering.", host.adaptiveQualityNotice)
+            assertEquals("Lowered to 4 Mbps because the connection slowed. Choose Quality → Auto to try again.", host.adaptiveQualityNotice)
             host.setQualityOverride(null) // Auto while already automatic is a deliberate fresh attempt.
             assertNull(host.estimatedBandwidth)
             assertNull(host.adaptiveQualityNotice)
@@ -49,6 +62,36 @@ class PlaybackQualityStateTest {
             assertEquals(20_000_000, host.effectiveSettings.maxStreamingBitrate)
             host.bandwidthSample(6_000_000, 262_144, 4)
             assertEquals(4_000_000, host.effectiveSettings.maxStreamingBitrate)
+        } finally {
+            host.reportScope.cancel()
+            host.output.release()
+        }
+    }
+
+    @Test fun lowBitrateAndUnknownStreamsDoNotTriggerAnAdaptiveChange() {
+        val host = createHost()
+        try {
+            for (rate in listOf(1_430_000, 4_000_000, null)) {
+                host.stateSource = androidx.compose.runtime.mutableStateOf(
+                    PlaybackState(
+                        preparing = false,
+                        decision = app.pictureshow.core.playback.PlayDecision(
+                            "item",
+                            app.pictureshow.core.playback.MediaSourceInfo(bitrate = rate),
+                            app.pictureshow.core.playback.PlayMethod.DirectPlay,
+                            "https://example.test/film",
+                            emptyMap(),
+                            null
+                        )
+                    )
+                )
+                host.bandwidthSample(427_500, 262_144, 1)
+                host.bandwidthSample(427_500, 262_144, 2)
+                assertNull(host.estimatedBandwidth)
+                assertNull(host.adaptiveQualityNotice)
+                assertEquals(20_000_000, host.effectiveSettings.maxStreamingBitrate)
+                host.setQualityOverride(null)
+            }
         } finally {
             host.reportScope.cancel()
             host.output.release()

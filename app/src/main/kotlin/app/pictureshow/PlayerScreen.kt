@@ -1084,7 +1084,9 @@ internal fun PlayerItemScreen(
                             host.effectiveSettings.maxStreamingBitrate / 1_000_000,
                             player,
                             localPreferences.tuning,
-                            host.effectiveSettings.maxStreamingBitrate
+                            host.effectiveSettings.maxStreamingBitrate,
+                            host.adaptiveQualityNotice,
+                            host.output.speed.value.encodedAudio
                         ) {
                             close(dismiss)
                         }

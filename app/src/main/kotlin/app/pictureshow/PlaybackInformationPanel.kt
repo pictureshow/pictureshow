@@ -63,6 +63,8 @@ internal fun PlaybackInformationContent(
     player: Player?,
     tuning: app.pictureshow.core.playback.PlaybackTuning = app.pictureshow.core.playback.PlaybackTuning(),
     activeBitrate: Int? = null,
+    adaptiveNotice: String? = null,
+    receiverAudio: Boolean = false,
     onClose: () -> Unit
 ) {
     val closeFocus = remember { FocusRequester() }
@@ -78,7 +80,10 @@ internal fun PlaybackInformationContent(
     Text(PlaybackInformation.method(decision), style = MaterialTheme.typography.titleMedium)
     Text("↑ / ↓ scroll · Back closes", style = MaterialTheme.typography.labelMedium)
     val tracks = rememberReceivedTracks(player)
-    playbackInformationSections(decision, audioIndex, subtitleIndex, qualityMbps, tracks, tuning, activeBitrate).forEach { section ->
+    val sections = playbackInformationSections(
+        decision, audioIndex, subtitleIndex, qualityMbps, tracks, tuning, activeBitrate, adaptiveNotice, receiverAudio
+    )
+    sections.forEach { section ->
         InformationSection(section.title) {
             section.lines.forEach { line ->
                 if (section.reasons) Text(line, style = MaterialTheme.typography.bodyMedium) else Text(line)
@@ -111,13 +116,39 @@ internal fun playbackInformationSections(
     qualityMbps: Int?,
     tracks: Tracks,
     tuning: app.pictureshow.core.playback.PlaybackTuning = app.pictureshow.core.playback.PlaybackTuning(),
-    activeBitrate: Int? = null
+    activeBitrate: Int? = null,
+    adaptiveNotice: String? = null,
+    receiverAudio: Boolean = false
 ): List<PlaybackInformationSection> = buildList {
     val source = decision.mediaSource
+    adaptiveNotice?.let { add(PlaybackInformationSection("Quality", listOf(it))) }
     if (decision.method == app.pictureshow.core.playback.PlayMethod.Transcode) {
-        val why = PlaybackInformation.reasons(decision, qualityMbps, tuning, activeBitrate)
+        val why = PlaybackInformation.reasons(decision, qualityMbps, tuning, activeBitrate, audioIndex).filterNot {
+            adaptiveNotice != null && it.startsWith("Quality is capped")
+        }
         add(PlaybackInformationSection("Why the server converts this stream", why, reasons = true))
     }
+    val receivedGroup = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
+    val received = receivedGroup?.let { group ->
+        (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let(group::getTrackFormat)
+    }
+    val receivedCodec = when (received?.sampleMimeType) {
+        "video/avc" -> "h264"
+        "video/hevc" -> "hevc"
+        "video/av01" -> "av1"
+        "video/x-vnd.on2.vp9" -> "vp9"
+        "video/x-vnd.on2.vp8" -> "vp8"
+        "video/mpeg2" -> "mpeg2"
+        "video/mp4v-es" -> "mpeg4"
+        "video/wvc1" -> "vc1"
+        else -> received?.sampleMimeType?.substringAfter('/')
+    }
+    val observations = PlaybackInformation.observations(
+        decision,
+        PlaybackInformation.ReceivedVideo(received?.width, received?.height, receivedCodec),
+        receiverAudio = receiverAudio
+    )
+    if (observations.isNotEmpty()) add(PlaybackInformationSection("Playback on this device", observations))
     val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
     val audio = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Audio && it.index == audioIndex }
     add(
