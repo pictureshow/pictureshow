@@ -95,7 +95,10 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
             }
             Text("Some options depend on your server. Unchanged provider settings are preserved.", style = MaterialTheme.typography.bodySmall)
         } },
-        dismissButton = { TextButton({ if (review) review = false else onDismiss() }, enabled = !busy, modifier = Modifier.controlFocus()) { Text(if (review) "Edit options" else "Cancel") } },
+        dismissButton = { Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onDismiss, enabled = !busy, modifier = Modifier.controlFocus().probe("live:editor:cancel")) { Text("Cancel") }
+            if (review) TextButton({ review = false }, enabled = !busy, modifier = Modifier.controlFocus()) { Text("Edit options") }
+        } },
         confirmButton = {
             Button({
                 runCatching {

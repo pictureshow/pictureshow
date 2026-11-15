@@ -9,13 +9,19 @@ import app.pictureshow.core.livetv.liveGuideCells
 import app.pictureshow.core.livetv.liveGuideInitialFocus
 import app.pictureshow.core.livetv.liveGuideTextWindow
 import app.pictureshow.core.livetv.liveInstant
+import app.pictureshow.core.livetv.liveRecordingMetadata
+import app.pictureshow.core.livetv.liveRecordingProgress
+import app.pictureshow.core.livetv.liveRecordingTitle
 import app.pictureshow.core.livetv.liveScheduleGroup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,6 +35,7 @@ class LivePresentationVectorsTest {
         var groups = 0
         var windows = 0
         var focus = 0
+        var recordings = 0
         cases.map { it.jsonObject }.forEach { case ->
             val input = case.getValue("input").jsonObject
             val id = case.getValue("id").jsonPrimitive.content
@@ -61,6 +68,33 @@ class LivePresentationVectorsTest {
                         id
                     )
                 }
+                "recording-metadata" -> {
+                    recordings++
+                    val item = Json { ignoreUnknownKeys = true }.decodeFromJsonElement<MediaItem>(input.getValue("item"))
+                    val zone = java.time.ZoneId.of(input.getValue("zone").jsonPrimitive.content)
+                    val locale = java.util.Locale.forLanguageTag(input.getValue("locale").jsonPrimitive.content)
+                    val today = java.time.Instant.parse(input.getValue("now").jsonPrimitive.content).atZone(zone).toLocalDate()
+                    val clock = java.time.format.DateTimeFormatter.ofPattern(
+                        if (input.getValue("twentyFour").jsonPrimitive.boolean) "HH:mm" else "h:mm a",
+                        locale
+                    )
+                    fun day(value: Long): String {
+                        val date = java.time.Instant.ofEpochMilli(value).atZone(zone).toLocalDate()
+                        return when (date) {
+                            today -> "Today"
+                            today.plusDays(1) -> "Tomorrow"
+                            else -> java.time.format.DateTimeFormatter.ofPattern("EEE d", locale).format(date)
+                        }
+                    }
+                    val expected = case.getValue("expected").jsonObject
+                    assertEquals(expected.getValue("title").jsonPrimitive.content, liveRecordingTitle(item), id)
+                    assertEquals(
+                        expected.getValue("metadata").jsonPrimitive.content,
+                        liveRecordingMetadata(item, ::day) { clock.format(java.time.Instant.ofEpochMilli(it).atZone(zone)) },
+                        id
+                    )
+                    assertEquals(expected.getValue("progress").jsonPrimitive.floatOrNull, liveRecordingProgress(item), id)
+                }
                 "guide-text-window" -> {
                     windows++
                     fun value(key: String) = input.getValue(key).jsonPrimitive.float
@@ -74,6 +108,7 @@ class LivePresentationVectorsTest {
         assertEquals(13, groups)
         assertEquals(8, windows)
         assertEquals(5, focus)
+        assertEquals(11, recordings)
     }
 
     @Test fun cellsPreserveGapsOverlapsAndBoundaries() {

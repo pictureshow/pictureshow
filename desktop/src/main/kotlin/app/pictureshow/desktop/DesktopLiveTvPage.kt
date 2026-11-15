@@ -69,7 +69,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
         PrimaryTabRow(selectedTabIndex = s.tab.ordinal, modifier = Modifier.fillMaxWidth()) {
             DesktopLiveTab.entries.forEach { tab ->
                 Tab(selected = s.tab == tab, onClick = { owner.tab(tab) }, text = { Text(tab.name) },
-                    modifier = Modifier.controlFocus().probe("live:tab:${tab.name}"))
+                    modifier = Modifier.liveTabFocus().probe("live:tab:${tab.name}"))
             }
         }
         if (s.policy?.access == false) {
@@ -78,8 +78,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(s.search, owner::search, label = { Text(if (s.tab == DesktopLiveTab.Channels || s.tab == DesktopLiveTab.Guide) "Search channels" else "Search ${s.tab.name.lowercase()}") },
                     singleLine = true, modifier = Modifier.weight(1f).widthIn(max = 400.dp).controlFocus().probe("live:search"))
-                if (s.tab in listOf(DesktopLiveTab.Channels, DesktopLiveTab.Guide)) FilterChip(s.favorites, owner::favorites,
-                    label = { Text("Favorites") }, modifier = Modifier.controlFocus().probe("live:favorites"))
+                if (s.tab in listOf(DesktopLiveTab.Channels, DesktopLiveTab.Guide)) LiveToggle(s.favorites, owner::favorites, "Favorites", Modifier.probe("live:favorites"))
                 OutlinedButton({ owner.refresh() }, enabled = !s.loading && !s.writing, modifier = Modifier.controlFocus().probe("live:refresh")) { Text("Refresh") }
             }
             if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp).semantics { contentDescription = "Loading Live TV" })
@@ -91,7 +90,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                 }
             }
             s.notice?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium) }
-            s.fetchedAt?.let { Text("Guide updated ${liveClock(it)}${if (s.offline) " · Saved guide for reference" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            s.fetchedAt?.let { Text("Updated ${liveClock(it)}${if (s.offline) " · Saved guide for reference" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             val none = when {
                 s.loading && s.fetchedAt == null -> "Loading Live TV…"
                 s.offline && s.fetchedAt == null -> "Live TV couldn’t load"
@@ -144,11 +143,16 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                     if (recordings.isEmpty()) LiveEmpty("No recordings", "Finished recordings appear here when your server makes them available.", "Browse guide", { owner.tab(DesktopLiveTab.Guide) })
                     else LiveScroll(scroll) {
                         items(recordings, key = { "recording:${it.id}" }) { item ->
-                            ListItem(headlineContent = { Text(item.name) }, supportingContent = { Text(listOfNotNull(if (item.isInProgress) "Recording now" else item.recordingStatus?.let(::recordingStatus), if (item.userData.playbackPositionTicks > 0) "Resume from ${clock(item.userData.playbackPositionTicks / 10_000_000.0)}" else "Recorded video").joinToString(" · ")) },
+                            ListItem(headlineContent = { Text(liveRecordingTitle(item)) }, supportingContent = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                item.seriesName?.takeIf { it != liveRecordingTitle(item) }?.let { Text(it) }
+                                liveRecordingMetadata(item, ::liveDay) { liveClock(it) }.takeIf(String::isNotBlank)?.let { Text(it) }
+                                Text(listOfNotNull(if (item.isInProgress || item.recordingStatus == "InProgress") "Recording now" else item.recordingStatus?.let(::recordingStatus) ?: "Recorded", if (item.userData.playbackPositionTicks > 0) "Resume from ${clock(item.userData.playbackPositionTicks / 10_000_000.0)}" else null).joinToString(" · "))
+                                liveRecordingProgress(item)?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.widthIn(max = 260.dp)) }
+                            } },
                                 trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton({ detail(item) }, modifier = Modifier.controlFocus().probe("live:recording-details:${item.id}")) { Text("Details") }
                                     Button({ play(item) }, enabled = fresh, modifier = Modifier.controlFocus().probe("live:recording:${item.id}")) { Text(if (item.userData.playbackPositionTicks > 0) "Resume" else "Play") }
-                                    if (item.canDelete == true || s.policy?.deleteContent == true && item.canDelete != false) TextButton({ confirmation = LiveConfirmation(item = item) }, enabled = fresh, modifier = Modifier.controlFocus()) { Text("Delete…") }
+                                    if (item.canDelete == true || s.policy?.deleteContent == true && item.canDelete != false) TextButton({ confirmation = LiveConfirmation(item = item) }, enabled = fresh, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus()) { Text("Delete…") }
                                 } })
                         }
                     }
@@ -169,7 +173,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                                         schedule.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                     } }, trailingContent = { Row {
                                         TextButton({ owner.edit(schedule, series) }, enabled = fresh, modifier = Modifier.controlFocus().probe("live:schedule:$series:${schedule.id}")) { Text("Edit options") }
-                                        TextButton({ confirmation = LiveConfirmation(schedule = schedule, series = series) }, enabled = fresh, modifier = Modifier.controlFocus()) { Text(if (series) "Cancel series…" else "Cancel airing…") }
+                                        TextButton({ confirmation = LiveConfirmation(schedule = schedule, series = series) }, enabled = fresh, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus()) { Text(if (series) "Cancel series…" else "Cancel airing…") }
                                     } })
                                 }
                             }
@@ -252,7 +256,7 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         TextButton({ datePicker = true }, modifier = Modifier.controlFocus()) { Text(liveDay(s.start) + " · " + liveClock(s.start)) }
         OutlinedButton({ owner.moveWindow(s.start + DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Later") }
         Button(owner::jumpNow, enabled = !s.loading, modifier = Modifier.controlFocus().probe("live:now")) { Text("Now") }
-        FilterChip(linear, { linear = !linear }, label = { Text("List view") }, modifier = Modifier.controlFocus().probe("live:guide:list"))
+        LiveToggle(linear, { linear = !linear }, "List view", Modifier.probe("live:guide:list"))
     }
     val programs = guidePrograms(s.programs, channels.map { it.id }.toSet(), iso(s.start), iso(s.start + DesktopLiveTv.WINDOW))
     if (programs.isEmpty() && s.offline) LiveEmpty("Guide unavailable", "The guide couldn’t be loaded. Retry before tuning or scheduling.", "Retry", { owner.refresh() })
@@ -359,4 +363,14 @@ internal fun liveRange(start: String?, end: String?): String {
     val day = Instant.ofEpochMilli(from).atZone(ZoneId.systemDefault()).toLocalDate()
     val endDay = Instant.ofEpochMilli(to).atZone(ZoneId.systemDefault()).toLocalDate()
     return (if (day != today) "${liveDay(from)} · " else "") + liveClock(from) + " – " + (if (endDay != day) "${liveDay(to)} · " else "") + liveClock(to)
+}
+
+@Composable private fun Modifier.liveTabFocus(): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return onFocusChanged { focused = it.isFocused }.border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(6.dp))
+}
+@Composable private fun LiveToggle(selected: Boolean, action: () -> Unit, label: String, modifier: Modifier = Modifier) {
+    val m = modifier.controlFocus().semantics { this.selected = selected; stateDescription = if (selected) "On" else "Off" }
+    if (selected) FilledTonalButton(action, modifier = m) { Text(label) }
+    else OutlinedButton(action, modifier = m) { Text(label) }
 }

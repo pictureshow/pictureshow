@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.playback.*
@@ -36,7 +37,7 @@ internal fun DesktopPlaybackState.canTimeShift(): Boolean = liveWindow?.canTimeS
     val behind = w?.behindLiveMs(position)
     val edge = w?.atLiveEdge(position, p.bufferExpired) == true && !p.paused
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(when {
                 p.bufferExpired -> "Buffer expired · Go live to resume"
                 w == null || !w.canTimeShift -> "Time shift unavailable"
@@ -45,7 +46,7 @@ internal fun DesktopPlaybackState.canTimeShift(): Boolean = liveWindow?.canTimeS
                 else -> "At live edge"
             }, style = MaterialTheme.typography.bodySmall)
             if (edge || w?.goLivePosition() == null) Text("● LIVE", Modifier.semantics { contentDescription = if (edge) "Live, at live edge" else "Live stream" }, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            else TextButton(c::goLive, modifier = Modifier.controlFocus().probe("live:go-live")) { Text("Go live") }
+            else TextButton(c::goLive, modifier = Modifier.controlFocus().probe("live:go-live")) { Text(if (p.paused) "Resume live" else "Go live") }
         }
         if (p.canTimeShift() && w != null) Slider(
             value = position.toFloat().coerceIn(0f, w.defaultPositionMs.toFloat()),

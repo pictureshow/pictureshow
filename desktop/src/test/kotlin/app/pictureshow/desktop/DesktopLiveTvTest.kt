@@ -261,6 +261,14 @@ class DesktopLiveTvTest {
         onNodeWithTag("live:editor:confirm").performClick()
         runOnIdle { assertEquals(1, saves); assertEquals("keep", saved?.string("ProviderOpaque")); assertEquals("30", saved?.string("PrePaddingSeconds")) }
     }
+    @Test fun reviewHasExplicitCancelWithoutWriting() = runComposeUiTest {
+        var dismissed = 0; var saves = 0
+        val original = LiveSchedule(buildJsonObject { put("Name", "Morning show") })
+        setContent { MaterialTheme { DesktopLiveScheduleEditor(original, false, false, false, true, { dismissed++ }, { saves++ }) } }
+        onNodeWithTag("live:editor:review").performClick()
+        onNodeWithTag("live:editor:cancel").performClick()
+        runOnIdle { assertEquals(1, dismissed); assertEquals(0, saves) }
+    }
     @Test fun staleReviewRefreshesWithoutLosingEditedOptions() = runComposeUiTest {
         val fresh = androidx.compose.runtime.mutableStateOf(false)
         var saved: LiveSchedule? = null

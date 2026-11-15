@@ -3,6 +3,10 @@
  */
 package app.pictureshow.core.livetv
 
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.episodeLabel
+import app.pictureshow.core.runtimeLabel
+
 /** Time placement is shared; native clients choose their own pixel sizes and components. */
 data class LiveGuideCell(val program: LiveProgram, val startFraction: Float, val widthFraction: Float, val lane: Int)
 
@@ -50,3 +54,32 @@ fun liveGuideTextWindow(cellX: Float, cellWidth: Float, viewportStart: Float, vi
     val right = minOf(cellX + width, viewportStart + viewportWidth.coerceAtLeast(0f))
     return LiveGuideTextWindow((viewportStart - cellX).coerceIn(0f, width), (right - left).coerceAtLeast(0f))
 }
+
+/** Recording identity and provider-reported growth are shared; clients supply native date/clock formatting. */
+fun liveRecordingTitle(item: MediaItem): String =
+    item.episodeTitle?.takeIf(String::isNotBlank) ?: item.name.takeIf { it.isNotBlank() && it != item.seriesName }
+        ?: recordingEpisode(item) ?: "Recording"
+
+fun liveRecordingMetadata(item: MediaItem, day: (Long) -> String, clock: (Long) -> String): String {
+    val start = liveInstant(item.recordingStartDate)
+    val end = liveInstant(item.recordingEndDate)
+    val growing = item.isInProgress || item.recordingStatus == "InProgress"
+    return listOfNotNull(
+        recordingEpisode(item)?.takeUnless { it == liveRecordingTitle(item) },
+        if (growing && start != null && end != null && end > start) {
+            "Ends ${clock(end)}"
+        } else {
+            start?.let { "${day(it)} · ${clock(it)}" }
+        },
+        runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)
+    ).joinToString(" · ")
+}
+
+/** A reported zero is authoritative; elapsed guide time never invents recording progress. */
+fun liveRecordingProgress(item: MediaItem): Float? {
+    if (!item.isInProgress && item.recordingStatus != "InProgress") return null
+    return item.recordingCompletionPercentage?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { (it / 100).toFloat() }
+}
+
+private fun recordingEpisode(item: MediaItem): String? =
+    if (item.indexNumber != null || item.parentIndexNumber != null) episodeLabel(item) else null

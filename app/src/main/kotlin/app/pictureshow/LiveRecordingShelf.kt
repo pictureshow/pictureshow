@@ -34,10 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.livetv.recordingStatus
-import app.pictureshow.core.runtimeLabel
-import java.time.Instant
 
 internal fun LazyListScope.liveRecordingShelves(
     state: LiveTvState,
@@ -221,36 +218,12 @@ private fun RecordingCaptionText(value: String, tv: Boolean, title: Boolean) {
     }
 }
 
-internal fun liveRecordingTitle(item: MediaItem): String =
-    item.episodeTitle?.takeIf(String::isNotBlank) ?: item.name.takeIf { it.isNotBlank() && it != item.seriesName }
-        ?: recordingEpisode(item) ?: "Recording"
+internal fun liveRecordingTitle(item: MediaItem): String = app.pictureshow.core.livetv.liveRecordingTitle(item)
 
-internal fun liveRecordingMetadata(item: MediaItem, time: LiveTime): String {
-    val start = recordingInstant(item.recordingStartDate)
-    val end = recordingInstant(item.recordingEndDate)
-    val growing = item.isInProgress || item.recordingStatus == "InProgress"
-    val date = start
-    return listOfNotNull(
-        recordingEpisode(item)?.takeUnless { it == liveRecordingTitle(item) },
-        if (growing && start != null && end != null && end > start) {
-            "Ends ${time.clock(end)}"
-        } else {
-            date?.let { "${time.day(it)} · ${time.clock(it)}" }
-        },
-        runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)
-    ).joinToString(" · ")
-}
+internal fun liveRecordingMetadata(item: MediaItem, time: LiveTime): String =
+    app.pictureshow.core.livetv.liveRecordingMetadata(item, time::day, time::clock)
 
-/** A reported zero is authoritative, even when the elapsed guide window would suggest growth. */
-internal fun liveRecordingProgress(item: MediaItem): Float? {
-    if (!item.isInProgress && item.recordingStatus != "InProgress") return null
-    return item.recordingCompletionPercentage?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { (it / 100).toFloat() }
-}
-
-private fun recordingInstant(value: String?): Long? = runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-
-private fun recordingEpisode(item: MediaItem): String? =
-    if (item.indexNumber != null || item.parentIndexNumber != null) episodeLabel(item) else null
+internal fun liveRecordingProgress(item: MediaItem): Float? = app.pictureshow.core.livetv.liveRecordingProgress(item)
 
 /** Reserve extra title/metadata lines after the content, with no TV-only touch control row. */
 internal fun liveRecordingCaptionHeight(fontScale: Float, titleLineHeight: Float, metadataLineHeight: Float): Float =
