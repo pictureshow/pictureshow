@@ -43,9 +43,10 @@ button:hover {
 }
 button:disabled {
     opacity: 0.6;
-    cursor: wait;
+    cursor: not-allowed;
 }
 button:focus-visible,
+button[data-ring]:focus,
 input:focus-visible,
 select:focus-visible,
 a:focus-visible,
@@ -54,7 +55,8 @@ video:focus-visible {
     outline-offset: 5px;
     box-shadow: 0 0 0 8px #625071;
 }
-button:focus-visible {
+button:focus-visible,
+button[data-ring]:focus {
     background: #494151;
 }
 header {
@@ -154,7 +156,8 @@ select {
     font-weight: 700;
 }
 .primary:hover,
-.primary:focus-visible {
+.primary:focus-visible,
+.primary[data-ring]:focus {
     background: #eaddff;
     color: #29194b;
 }

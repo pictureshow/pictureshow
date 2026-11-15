@@ -258,7 +258,9 @@ test("pressing the conversion notice opens Playback info with reasons first, and
     const received = (await details.innerText()).replace(/\s+/g, " ");
     expect(
         /Video format (H\.264|HEVC|AV1|VP9)/.test(received) ||
-            (received.includes("Video format Not reported") &&
+            // Unreported formats are said once, in the sentence, not as rows.
+            (!received.includes("Video format") &&
+                !received.includes("Audio format") &&
                 received.includes("does not report the formats it received")),
     ).toBe(true);
     expect(text.includes("chrome://gpu")).toBe(project === "chromium");

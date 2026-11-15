@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { describe, expect, it } from "vitest";
-import { atNaturalEnd, trimSubFrameTail } from "./hls-end";
+import { atNaturalEnd, playsNativeHls, trimSubFrameTail } from "./hls-end";
 
 // The shape Jellyfin 12 returned for a 60.031 s file transcoded in 3 s segments.
 const playlist = (tail: string, end = "#EXT-X-ENDLIST") =>
@@ -85,5 +85,44 @@ describe("atNaturalEnd", () => {
     it("needs a known duration and buffer", () => {
         expect(atNaturalEnd({ ...base, duration: 0 })).toBe(false);
         expect(atNaturalEnd({ ...base, bufferedEnd: undefined })).toBe(false);
+    });
+});
+
+describe("playsNativeHls", () => {
+    it("keeps WebKit's own HLS", () => {
+        expect(
+            playsNativeHls({
+                nativeHls: true,
+                mediaSource: true,
+                chromium: false,
+            }),
+        ).toBe(true);
+    });
+    it("uses hls.js in Chromium even when it claims native HLS", () => {
+        expect(
+            playsNativeHls({
+                nativeHls: true,
+                mediaSource: true,
+                chromium: true,
+            }),
+        ).toBe(false);
+    });
+    it("falls back to native HLS where Media Source Extensions are missing", () => {
+        expect(
+            playsNativeHls({
+                nativeHls: true,
+                mediaSource: false,
+                chromium: true,
+            }),
+        ).toBe(true);
+    });
+    it("never plays native HLS the browser cannot play", () => {
+        expect(
+            playsNativeHls({
+                nativeHls: false,
+                mediaSource: true,
+                chromium: false,
+            }),
+        ).toBe(false);
     });
 });

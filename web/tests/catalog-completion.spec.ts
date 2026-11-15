@@ -169,6 +169,17 @@ test("a later accepted unwatch choice wins while the completion read remains hel
         .toBe(1);
     const retry = page.getByRole("button", { name: "Retry", exact: true });
     await expect(retry).toBeVisible();
+    // Finishing a film says so politely and rings the control that took focus.
+    await expect(page.locator(".app-announcement")).toHaveText("Finished");
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    document.activeElement?.tagName === "BUTTON" &&
+                    document.activeElement.hasAttribute("data-ring"),
+            ),
+        )
+        .toBe(true);
     // Read failure publishes a polite cue without moving the reader to Retry.
     await expect(page.locator("[data-detail-feedback]")).toContainText(
         "Retry is available",

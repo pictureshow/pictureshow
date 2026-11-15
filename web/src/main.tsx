@@ -120,7 +120,11 @@ function App() {
             server?: Server;
             opener: HTMLElement | null;
         }>(),
-        [confirmError, setConfirmError] = useState("");
+        [confirmError, setConfirmError] = useState(""),
+        // A film that played to its end returns to detail with a polite
+        // "Finished" and a visible ring on the control that takes focus.
+        [announcement, setAnnouncement] = useState("");
+    const ringReturn = useRef(false);
     const device = useRef(
             (() => {
                 try {
@@ -375,6 +379,43 @@ function App() {
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
     }, [stack, account, chooser, confirmation, busy]);
+    useEffect(() => {
+        // Focus moved by code shows no :focus-visible ring after pointer use, so
+        // the control that receives focus on the return from a finished film is
+        // marked until it loses focus. Any input from the viewer ends the window.
+        const mark = (e: FocusEvent) => {
+            const target = e.target;
+            if (
+                !ringReturn.current ||
+                !(target instanceof HTMLButtonElement) ||
+                !document.getElementById("main")?.contains(target)
+            )
+                return;
+            target.dataset.ring = "";
+            target.addEventListener("blur", () => delete target.dataset.ring, {
+                once: true,
+            });
+        };
+        const disarm = () => {
+            ringReturn.current = false;
+        };
+        document.addEventListener("focusin", mark);
+        window.addEventListener("pointerdown", disarm, true);
+        window.addEventListener("keydown", disarm, true);
+        return () => {
+            document.removeEventListener("focusin", mark);
+            window.removeEventListener("pointerdown", disarm, true);
+            window.removeEventListener("keydown", disarm, true);
+        };
+    }, []);
+    useEffect(() => {
+        if (!announcement) return;
+        const timer = setTimeout(() => {
+            setAnnouncement("");
+            ringReturn.current = false;
+        }, 8000);
+        return () => clearTimeout(timer);
+    }, [announcement]);
     useEffect(() => {
         if (player || restoring) return;
         return restorePageFocus(
@@ -655,23 +696,36 @@ function App() {
             >
                 Skip to content
             </a>
-            <header className={player ? "theater-hidden" : `app-header ${route.kind === "home" ? "home-header" : ""}`}>
+            <header
+                className={
+                    player
+                        ? "theater-hidden"
+                        : `app-header ${route.kind === "home" ? "home-header" : ""}`
+                }
+            >
                 <span className="wordmark">
                     pictureshow<span aria-hidden="true">.</span>
                 </span>
                 <span className="connection">
                     {account
                         ? `${account.user.Name} · ${server ? labelOf(server) : ""}`
-                        : (server ? labelOf(server) : "Your library, everywhere.")}
+                        : server
+                          ? labelOf(server)
+                          : "Your library, everywhere."}
                 </span>
                 {account && (
-                    <nav className="header-actions" aria-label="Main navigation">
+                    <nav
+                        className="header-actions"
+                        aria-label="Main navigation"
+                    >
                         {rootKinds.map((kind) => (
                             <button
                                 key={kind}
                                 data-focus={`header:${kind}`}
                                 data-root={kind}
-                                aria-current={navRoot === kind ? "page" : undefined}
+                                aria-current={
+                                    navRoot === kind ? "page" : undefined
+                                }
                                 onClick={() => rootTab(kind)}
                             >
                                 {kind[0].toUpperCase() + kind.slice(1)}
@@ -829,10 +883,15 @@ function App() {
                         onLeaving={(
                             barrier: Promise<void>,
                             retryReport?: () => Promise<void>,
+                            outcome?: "finished",
                         ) => {
                             void barrier.catch(() => {});
                             setReturnBarrier(barrier);
                             setReturnReportRetry(() => retryReport);
+                            if (outcome === "finished") {
+                                ringReturn.current = true;
+                                setAnnouncement("Finished");
+                            }
                             rawBack();
                         }}
                         onBack={(message?: string) => {
@@ -871,24 +930,38 @@ function App() {
                     />
                 )}
             </main>
+            <p className="sr-only app-announcement" aria-live="polite">
+                {announcement}
+            </p>
             {account && !player && !chooser && (
                 <nav className="root-navigation" aria-label="Main navigation">
-                    {rootKinds.map(
-                        (kind) => (
-                            <button
-                                key={kind}
-                                aria-current={
-                                    navRoot === kind ? "page" : undefined
-                                }
-                                onClick={() => rootTab(kind)}
+                    {rootKinds.map((kind) => (
+                        <button
+                            key={kind}
+                            aria-current={navRoot === kind ? "page" : undefined}
+                            onClick={() => rootTab(kind)}
+                        >
+                            <svg
+                                className="navigation-icon"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                                focusable="false"
                             >
-                                <svg className="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                    <path d={kind === "home" ? "M3 10 12 3l9 7v11h-6v-7H9v7H3Z" : kind === "libraries" ? "M4 3h4v18H4Zm6 0h4v18h-4Zm6 1 4-1 4 17-4 1Z" : kind === "search" ? "M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" : "m9 3-.7 3-2.7 1-2.5-1.5L1 9l2.3 2v3L1 16l2.1 3.5L6 18l2.3 1 .7 3h4l.7-3 2.7-1 2.5 1.5L23 16l-2.3-2v-3L23 9l-2.1-3.5L18 7l-2.3-1L15 3ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"} />
-                                </svg>
-                                <span>{kind[0].toUpperCase() + kind.slice(1)}</span>
-                            </button>
-                        ),
-                    )}
+                                <path
+                                    d={
+                                        kind === "home"
+                                            ? "M3 10 12 3l9 7v11h-6v-7H9v7H3Z"
+                                            : kind === "libraries"
+                                              ? "M4 3h4v18H4Zm6 0h4v18h-4Zm6 1 4-1 4 17-4 1Z"
+                                              : kind === "search"
+                                                ? "M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
+                                                : "m9 3-.7 3-2.7 1-2.5-1.5L1 9l2.3 2v3L1 16l2.1 3.5L6 18l2.3 1 .7 3h4l.7-3 2.7-1 2.5 1.5L23 16l-2.3-2v-3L23 9l-2.1-3.5L18 7l-2.3-1L15 3ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                                    }
+                                />
+                            </svg>
+                            <span>{kind[0].toUpperCase() + kind.slice(1)}</span>
+                        </button>
+                    ))}
                 </nav>
             )}
             <footer className={player ? "theater-hidden" : undefined}>

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { atNaturalEnd, trimSubFrameTail } from "./hls-end";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { atNaturalEnd, playsNativeHls, trimSubFrameTail } from "./hls-end";
 import { PLAYER_SHORTCUTS, playerShortcut } from "./player-keys";
 import type Hls from "hls.js";
 import type { HlsConfig } from "hls.js";
@@ -52,7 +52,7 @@ import {
     externalSubtitleRetryDelay,
 } from "@pictureshow/core/rc26";
 export { playerTrackLabels } from "./player-track-labels";
-import { validSubtitleText } from "./player-subtitles";
+import { subtitleDelayLabel, validSubtitleText } from "./player-subtitles";
 import type { TrackMenus } from "./player-track-menus";
 
 /** Dispose this player's MSE ownership without mutating live SourceBuffers. */
@@ -354,6 +354,7 @@ export function Player({
                 : 0,
         ),
         [volume, setVolume] = useState(1),
+        [muted, setMuted] = useState(false),
         [controls, setControls] = useState(true),
         [panel, setPanel] = useState<Panel>(),
         [seekPreview, setSeekPreview] = useState<number>(),
@@ -1071,6 +1072,15 @@ export function Player({
     useEffect(() => {
         video.current?.focus({ preventScroll: true });
     }, []);
+    // The speaker button follows every route to silence: M, the button, audio Off.
+    useEffect(() => {
+        const el = video.current;
+        if (!el) return;
+        const sync = () => setMuted(el.muted);
+        sync();
+        el.addEventListener("volumechange", sync);
+        return () => el.removeEventListener("volumechange", sync);
+    }, []);
     const shortcutKey = useRef<(e: KeyboardEvent) => void>(() => {});
     shortcutKey.current = (e: KeyboardEvent) => {
         if (e.defaultPrevented || panelElement.current?.open) return;
@@ -1520,8 +1530,17 @@ export function Player({
             deadline = undefined;
         };
         // A stall or decoder error on the final buffered frame is the end of the media.
+        // Only hls.js streams: direct play and native HLS end with the element's own
+        // `ended` after the final frames (PLAY-02), and a seek into unbuffered media
+        // near the end is not the end.
         function naturalEnd() {
-            if (!current || replacing.current || pauseIntent.current)
+            if (
+                !hls ||
+                !current ||
+                el.seeking ||
+                replacing.current ||
+                pauseIntent.current
+            )
                 return false;
             const last = el.buffered.length - 1;
             if (
@@ -1530,7 +1549,7 @@ export function Player({
                     duration: fullDuration(),
                     bufferedEnd: last >= 0 ? el.buffered.end(last) : undefined,
                     finalBuffered:
-                        finalFragmentBuffered || !!hls?.bufferedToEnd || !hls,
+                        finalFragmentBuffered || !!hls.bufferedToEnd,
                 })
             )
                 return false;
@@ -1563,7 +1582,7 @@ export function Player({
                 return;
             }
             sample();
-            setPaused(pauseIntent.current);
+            setPaused(pauseIntent.current || playbackFailed.current);
             const advanced = el.currentTime > lastPlaybackClock;
             lastPlaybackClock = el.currentTime;
             if (
@@ -1681,7 +1700,7 @@ export function Player({
             setNotice("");
             if (!pausedAtPhysicalEnd.current) sample();
             if (pauseIntent.current) pauseDecoder(el);
-            setPaused(pauseIntent.current);
+            setPaused(pauseIntent.current || playbackFailed.current);
             if (!viewing.current.started) {
                 viewing.current.started = true;
                 report("start");
@@ -1735,7 +1754,7 @@ export function Player({
             )
                 pendingSeek.current = undefined;
             if (pauseIntent.current) pauseDecoder(el);
-            setPaused(pauseIntent.current);
+            setPaused(pauseIntent.current || playbackFailed.current);
             if (!viewing.current.started) {
                 viewing.current.started = true;
                 report("start");
@@ -1760,7 +1779,7 @@ export function Player({
             periodicProgressAt.current = Date.now();
             update();
             if (!el.ended) {
-                setPaused(pauseIntent.current);
+                setPaused(pauseIntent.current || playbackFailed.current);
                 if (pauseIntent.current) setControls(true);
                 report("progress");
             }
@@ -1948,7 +1967,15 @@ export function Player({
             setDecision(d);
             if (
                 d.method === "DirectPlay" ||
-                (el.canPlayType("application/vnd.apple.mpegurl") &&
+                (playsNativeHls({
+                    nativeHls: !!el.canPlayType(
+                        "application/vnd.apple.mpegurl",
+                    ),
+                    mediaSource:
+                        "MediaSource" in window ||
+                        "ManagedMediaSource" in window,
+                    chromium: "userAgentData" in navigator,
+                }) &&
                     !(
                         location.protocol === "https:" &&
                         localAddressSpace(d.url)
@@ -2782,6 +2809,12 @@ export function Player({
         preferences.subtitleSize,
         subtitleBlob,
     ]);
+    // Playback info shows a divider and a top fade once its rows scroll under the title.
+    const markScrolled = (e: React.UIEvent<HTMLElement>) =>
+        e.currentTarget.toggleAttribute(
+            "data-scrolled",
+            e.currentTarget.scrollTop > 0,
+        );
     function info() {
         // Only the current decision: a pending negotiation shows no previous stream's data.
         const d = decision;
@@ -2789,6 +2822,7 @@ export function Player({
             return (
                 <div
                     className="playback-info"
+                    onScroll={markScrolled}
                     data-scroll
                     data-panel-first
                     tabIndex={0}
@@ -2805,6 +2839,7 @@ export function Player({
             return (
                 <div
                     className="playback-info"
+                    onScroll={markScrolled}
                     data-scroll
                     data-panel-first
                     tabIndex={0}
@@ -2881,6 +2916,7 @@ export function Player({
         return (
             <div
                 className="playback-info"
+                onScroll={markScrolled}
                 data-scroll
                 data-panel-first
                 tabIndex={0}
@@ -2984,11 +3020,25 @@ export function Player({
                                 not report the formats it received.
                             </p>
                         )}
-                        {rows([
-                            ["Video format", codecName(received.video)],
-                            ["Resolution", videoSize || "Not reported"],
-                            ["Audio format", codecName(received.audio)],
-                        ])}
+                        {/* When neither format is reported, the sentence above says so once. */}
+                        {rows(
+                            received.video || received.audio
+                                ? [
+                                      [
+                                          "Video format",
+                                          codecName(received.video),
+                                      ],
+                                      [
+                                          "Resolution",
+                                          videoSize || "Not reported",
+                                      ],
+                                      [
+                                          "Audio format",
+                                          codecName(received.audio),
+                                      ],
+                                  ]
+                                : [["Resolution", videoSize || "Not reported"]],
+                        )}
                     </section>
                 </details>
             </div>
@@ -3232,6 +3282,8 @@ export function Player({
                             }
                             onClick={() => seekStep(-10)}
                             aria-label="Back 10 seconds"
+                            aria-keyshortcuts="J ArrowLeft"
+                            title="Back 10 seconds (J)"
                         >
                             <span className="seek-long" aria-hidden="true">
                                 Back 10 seconds
@@ -3248,6 +3300,8 @@ export function Player({
                                 !!error
                             }
                             onClick={toggle}
+                            aria-keyshortcuts="K Space"
+                            title={`${paused ? "Play" : "Pause"} (K)`}
                         >
                             {paused ? "Play" : "Pause"}
                         </button>
@@ -3258,6 +3312,8 @@ export function Player({
                             }
                             onClick={() => seekStep(10)}
                             aria-label="Forward 10 seconds"
+                            aria-keyshortcuts="L ArrowRight"
+                            title="Forward 10 seconds (L)"
                         >
                             <span className="seek-long" aria-hidden="true">
                                 Forward 10 seconds
@@ -3361,8 +3417,36 @@ export function Player({
                         >
                             Playback info
                         </button>
-                        <label>
-                            Volume
+                        <div className="volume-control">
+                            <button
+                                className="icon-control"
+                                aria-label={muted ? "Unmute" : "Mute"}
+                                aria-keyshortcuts="M"
+                                title={`${muted ? "Unmute" : "Mute"} (M)`}
+                                onClick={toggleMute}
+                            >
+                                <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    width="24"
+                                    height="24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <path
+                                        d="M4 9h4l5-4v14l-5-4H4z"
+                                        fill="currentColor"
+                                    />
+                                    {muted ? (
+                                        <path d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
+                                    ) : (
+                                        <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+                                    )}
+                                </svg>
+                            </button>
                             <input
                                 aria-label="Volume"
                                 type="range"
@@ -3375,7 +3459,7 @@ export function Player({
                                     video.current!.volume = +e.target.value;
                                 }}
                             />
-                        </label>
+                        </div>
                         {fullscreenAvailable && (
                             <button
                                 aria-keyshortcuts="F"
@@ -3387,13 +3471,15 @@ export function Player({
                             </button>
                         )}
                         <button
-                            className="shortcuts-control"
+                            className="shortcuts-control icon-control"
+                            aria-label="Keyboard shortcuts (?)"
                             aria-keyshortcuts="?"
+                            title="Keyboard shortcuts (?)"
                             onClick={(e) =>
                                 openPanel("Shortcuts", e.currentTarget)
                             }
                         >
-                            Keyboard shortcuts
+                            <span aria-hidden="true">?</span>
                         </button>
                         {orientationLockable && (
                             <button
@@ -3543,9 +3629,38 @@ export function Player({
                     {panel === "Info" && info()}
                     {panel === "Shortcuts" && (
                         <dl className="shortcut-list">
-                            {PLAYER_SHORTCUTS.map(([keys, action]) => (
-                                <div key={keys}>
-                                    <dt>{keys}</dt>
+                            {PLAYER_SHORTCUTS.map(({ keys, action }) => (
+                                <div key={action}>
+                                    <dt>
+                                        {keys.map((group, g) => (
+                                            <Fragment key={g}>
+                                                {g > 0 && (
+                                                    <span className="shortcut-or">
+                                                        {" "}
+                                                        or{" "}
+                                                    </span>
+                                                )}
+                                                {group.map((key) => (
+                                                    <kbd key={key.cap}>
+                                                        <span
+                                                            aria-hidden={
+                                                                key.name
+                                                                    ? "true"
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            {key.cap}
+                                                        </span>
+                                                        {key.name && (
+                                                            <span className="sr-only">
+                                                                {key.name}
+                                                            </span>
+                                                        )}
+                                                    </kbd>
+                                                ))}
+                                            </Fragment>
+                                        ))}
+                                    </dt>
                                     <dd>{action}</dd>
                                 </div>
                             ))}
@@ -3616,7 +3731,9 @@ export function Player({
                             )}
                         </div>
                     )}
-                    {panel === "Subtitles" && (
+                    {/* PLAY-11: timing is offered only for a text track the player renders;
+                        burned-in subtitles get one line, and Off gets nothing. */}
+                    {panel === "Subtitles" && (burned || textSubtitle) && (
                         <section aria-label="Subtitle timing">
                             <h3>Subtitle timing</h3>
                             {burned ? (
@@ -3625,49 +3742,45 @@ export function Player({
                                     Timing and appearance cannot be changed.
                                 </p>
                             ) : (
-                                <p>
-                                    Positive delay shows captions later.{" "}
-                                    {subtitleDelay === 0
-                                        ? "No delay"
-                                        : `${subtitleDelay} milliseconds`}
-                                </p>
+                                <>
+                                    <p
+                                        className="subtitle-delay-value"
+                                        aria-live="polite"
+                                    >
+                                        {subtitleDelayLabel(subtitleDelay)}
+                                    </p>
+                                    <p className="subtitle-delay-help">
+                                        Use Later if captions appear too early.
+                                    </p>
+                                    <div className="subtitle-delay">
+                                        <button
+                                            disabled={subtitleDelay <= -10000}
+                                            onClick={() =>
+                                                setSubtitleDelay((v) =>
+                                                    Math.max(-10000, v - 100),
+                                                )
+                                            }
+                                        >
+                                            Earlier
+                                        </button>
+                                        <button
+                                            onClick={() => setSubtitleDelay(0)}
+                                        >
+                                            Reset
+                                        </button>
+                                        <button
+                                            disabled={subtitleDelay >= 10000}
+                                            onClick={() =>
+                                                setSubtitleDelay((v) =>
+                                                    Math.min(10000, v + 100),
+                                                )
+                                            }
+                                        >
+                                            Later
+                                        </button>
+                                    </div>
+                                </>
                             )}
-                            <div className="subtitle-delay">
-                                <button
-                                    disabled={
-                                        burned ||
-                                        !textSubtitle ||
-                                        subtitleDelay <= -10000
-                                    }
-                                    onClick={() =>
-                                        setSubtitleDelay((v) =>
-                                            Math.max(-10000, v - 100),
-                                        )
-                                    }
-                                >
-                                    Earlier
-                                </button>
-                                <button
-                                    disabled={burned || !textSubtitle}
-                                    onClick={() => setSubtitleDelay(0)}
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    disabled={
-                                        burned ||
-                                        !textSubtitle ||
-                                        subtitleDelay >= 10000
-                                    }
-                                    onClick={() =>
-                                        setSubtitleDelay((v) =>
-                                            Math.min(10000, v + 100),
-                                        )
-                                    }
-                                >
-                                    Later
-                                </button>
-                            </div>
                         </section>
                     )}
                     {panel === "Chapters" && (

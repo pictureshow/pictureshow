@@ -19,7 +19,7 @@ const button = { surface: false, control: true, editable: false, range: false };
 const slider = { surface: false, control: false, editable: true, range: true };
 const text = { surface: false, control: false, editable: true, range: false };
 
-describe("playerShortcut (PLAY-28)", () => {
+describe("playerShortcut (PLAY-29)", () => {
     it("maps the documented keys on the picture or page", () => {
         expect(playerShortcut(key(" "), surface)).toBe("toggle");
         expect(playerShortcut(key("k"), surface)).toBe("toggle");

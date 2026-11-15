@@ -138,9 +138,11 @@ for (const zoom of [1, 2])
         await page.locator('[data-focus="libraries:library"]').focus();
         await page.keyboard.press("Enter");
         await expect(heading(page, "Films")).toBeVisible();
-        await expect.poll(focused).toBe("library-sort");
-        // Tab continues from there, not from where the pressed card used to be.
-        await page.keyboard.press("Tab");
+        // Poster first: the library opens on its first title.
+        await expect.poll(focused).toBe("grid:library:movie");
+        // Tab order continues from there, not from where the pressed card used to
+        // be: the sort controls come just before the posters.
+        await page.keyboard.press("Shift+Tab");
         await expect(page.locator(":focus")).toHaveAccessibleName(
             /Sort ascending/,
         );

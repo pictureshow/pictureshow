@@ -54,3 +54,18 @@ export function atNaturalEnd(state: {
         return false;
     return position >= bufferedEnd - 0.3 && duration - position <= 1.5;
 }
+
+/**
+ * Whether a segmented stream plays through the browser's own HLS support or
+ * through hls.js. WebKit's native HLS is the platform player there. Chromium
+ * may also answer "maybe" for HLS (Chrome 157 does, observed 2026-11-15), but
+ * its built-in path cannot drop the sub-frame tail above and fails a few
+ * seconds before the end, so Chromium with Media Source Extensions uses hls.js.
+ */
+export function playsNativeHls(browser: {
+    nativeHls: boolean;
+    mediaSource: boolean;
+    chromium: boolean;
+}): boolean {
+    return browser.nativeHls && !(browser.chromium && browser.mediaSource);
+}

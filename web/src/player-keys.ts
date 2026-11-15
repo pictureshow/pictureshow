@@ -1,16 +1,37 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
-// PLAY-28: the web and desktop player keyboard, shown by the ? sheet.
-export const PLAYER_SHORTCUTS: ReadonlyArray<[string, string]> = [
-    ["Space or K", "Play or pause"],
-    ["Left and Right arrows, or J and L", "Back or forward 10 seconds"],
-    ["F", "Full screen"],
-    ["M", "Mute or unmute"],
-    ["Enter", "Show the controls"],
-    ["Escape", "Close a panel, hide the controls, then leave the player"],
-    ["?", "This list"],
+// PLAY-29: the web and desktop player keyboard, shown by the ? sheet.
+/** One key as drawn on a keycap, with its spoken name when the cap is a symbol. */
+export type ShortcutKey = { cap: string; name?: string };
+/**
+ * The ? sheet: each row lists alternative key groups ("Space" or "K"); the keys
+ * inside a group are pressed for its two directions (← back, → forward).
+ */
+export const PLAYER_SHORTCUTS: ReadonlyArray<{
+    keys: ShortcutKey[][];
+    action: string;
+}> = [
+    { keys: [[{ cap: "Space" }], [{ cap: "K" }]], action: "Play or pause" },
+    {
+        keys: [
+            [
+                { cap: "\u2190", name: "Left arrow" },
+                { cap: "\u2192", name: "Right arrow" },
+            ],
+            [{ cap: "J" }, { cap: "L" }],
+        ],
+        action: "Back or forward 10 seconds",
+    },
+    { keys: [[{ cap: "F" }]], action: "Full screen" },
+    { keys: [[{ cap: "M" }]], action: "Mute or unmute" },
+    { keys: [[{ cap: "Enter" }]], action: "Show the controls" },
+    {
+        keys: [[{ cap: "Esc", name: "Escape" }]],
+        action: "Close a panel, hide the controls, then leave the player",
+    },
+    { keys: [[{ cap: "?", name: "Question mark" }]], action: "This list" },
 ];
 /**
- * PLAY-28: which player shortcut a key press means, given what has focus.
+ * PLAY-29: which player shortcut a key press means, given what has focus.
  * Space keeps its meaning on buttons and form controls; arrows keep moving
  * between focused controls and sliders, and seek only from the picture.
  */

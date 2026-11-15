@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { expect, test } from "vitest";
-import { validSubtitleText } from "./player-subtitles";
+import { subtitleDelayLabel, validSubtitleText } from "./player-subtitles";
 test("optional converted text rejects malformed cue timing but accepts identifiers, notes and settings", () => {
     expect(
         validSubtitleText("WEBVTT\n\nbad timestamp --> wrong timestamp\nbad\n"),
@@ -24,4 +24,9 @@ test("optional converted text rejects malformed cue timing but accepts identifie
         ),
     ).toBe(true);
     expect(validSubtitleText("WEBVTT\n\n")).toBe(true);
+});
+test("the subtitle delay reads as a value: in sync, or signed milliseconds and a direction", () => {
+    expect(subtitleDelayLabel(0)).toBe("Timing: in sync");
+    expect(subtitleDelayLabel(300)).toBe("Timing: +300 ms (later)");
+    expect(subtitleDelayLabel(-1200)).toBe("Timing: −1,200 ms (earlier)");
 });

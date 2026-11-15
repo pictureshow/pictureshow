@@ -730,6 +730,68 @@ test("paused replacement composes pending Right Right Left as exactly ten second
     }
 });
 
+test("Chromium that claims native HLS still plays segmented streams through hls.js", async ({
+    page,
+    browserName,
+}) => {
+    test.skip(browserName !== "chromium", "Chromium's built-in HLS only");
+    // Chrome 157 answers "maybe" here; its built-in HLS fails at Jellyfin's sub-frame tail.
+    await page.addInitScript(() => {
+        const own = HTMLMediaElement.prototype.canPlayType;
+        HTMLMediaElement.prototype.canPlayType = function (type: string) {
+            return /mpegurl/i.test(type) ? "maybe" : own.call(this, type);
+        };
+    });
+    const f = await fixture(page);
+    await openMovie(page);
+    await pause(page);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
+    await expect.poll(() => f.mediaRequests.includes("manifest")).toBe(true);
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) =>
+                    v.currentSrc.slice(0, v.currentSrc.indexOf(":")),
+                ),
+        )
+        .toBe("blob");
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("a playback failure mid-stream leaves the action reading Play", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await openMovie(page);
+    const video = page.locator("video");
+    if (await video.evaluate((v: HTMLVideoElement) => v.paused))
+        await page.getByRole("button", { name: "Play", exact: true }).click();
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => !v.paused))
+        .toBe(true);
+    await video.evaluate((v: HTMLVideoElement) =>
+        v.dispatchEvent(new Event("error")),
+    );
+    await expect(
+        page.getByRole("button", { name: "Retry playback", exact: true }),
+    ).toBeVisible();
+    // The decoder's own pause event after the failure must not relabel it Pause.
+    await page.waitForTimeout(1000);
+    await expect(
+        page.getByRole("button", { name: "Pause", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByRole("button", { name: "Play", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
 test("paused HLS seek to physical playlist end waits for explicit Play", async ({
     page,
 }) => {
@@ -795,7 +857,7 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
     );
 });
 
-test("PLAY-28: the keyboard drives the player as soon as it opens", async ({
+test("PLAY-29: the keyboard drives the player as soon as it opens", async ({
     page,
 }) => {
     await fixture(page);
@@ -850,19 +912,74 @@ test("PLAY-28: the keyboard drives the player as soon as it opens", async ({
     await page.keyboard.press("?");
     const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
     await expect(sheet).toBeVisible();
-    await expect(sheet).toContainText("Space or K");
+    // One keycap per key: Space, K, ←, →, J, L, F, M, Enter, Esc, ?.
+    await expect(sheet.locator("kbd")).toHaveCount(11);
+    await expect(sheet.locator("dt").first()).toHaveText("Space or K");
     await expect(sheet).toContainText("Full screen");
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
+    const help = page.getByRole("button", {
+        name: "Keyboard shortcuts (?)",
+        exact: true,
+    });
+    await expect(help).toBeVisible();
+    await expect(help).toHaveAttribute("title", "Keyboard shortcuts (?)");
+    await expect(page.getByRole("button", { name: "Pause" })).toHaveAttribute(
+        "aria-keyshortcuts",
+        "K Space",
+    );
     await expect(
-        page.getByRole("button", { name: "Keyboard shortcuts", exact: true }),
+        page.getByRole("button", { name: "Back 10 seconds" }),
+    ).toHaveAttribute("aria-keyshortcuts", "J ArrowLeft");
+    // The speaker button and M are one mute toggle.
+    const speaker = page.getByRole("button", { name: "Mute", exact: true });
+    await expect(speaker).toHaveAttribute("aria-keyshortcuts", "M");
+    await speaker.click();
+    await expect(
+        page.getByRole("button", { name: "Unmute", exact: true }),
     ).toBeVisible();
+    expect(
+        await page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
+    ).toBe(true);
+    await page.keyboard.press("m");
+    await expect(speaker).toBeVisible();
+    // F never moves focus.
+    await speaker.focus();
+    await page.keyboard.press("f");
+    await expect(speaker).toBeFocused();
+    if (await page.evaluate(() => !!document.fullscreenElement))
+        await page.keyboard.press("f");
     // The screen-reader choice lives in Settings only (W-12).
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     const subtitles = page.getByRole("dialog", { name: "Subtitles" });
     await expect(subtitles).toBeVisible();
     await expect(subtitles.getByRole("checkbox")).toHaveCount(0);
     await expect(subtitles).not.toContainText("screen-reader");
+    // PLAY-11: no timing controls while subtitles are Off; a text track reads its value.
+    if (
+        (await subtitles
+            .getByRole("radio", { name: "Off", exact: true })
+            .getAttribute("aria-checked")) === "true"
+    ) {
+        await expect(
+            subtitles.getByRole("button", { name: "Earlier" }),
+        ).toHaveCount(0);
+        await subtitles
+            .getByRole("radio", { name: /English captions/ })
+            .click();
+        // Choosing a track closes the sheet; reopen it to read the timing.
+        if (!(await subtitles.isVisible()))
+            await page
+                .getByRole("button", { name: "Subtitles", exact: true })
+                .click();
+    }
+    await expect(subtitles).toContainText("Timing: in sync");
+    await expect(subtitles).toContainText(
+        "Use Later if captions appear too early.",
+    );
+    await subtitles.getByRole("button", { name: "Later", exact: true }).click();
+    await expect(subtitles).toContainText("Timing: +100 ms (later)");
+    await subtitles.getByRole("button", { name: "Reset", exact: true }).click();
     await page.keyboard.press("Escape");
 });
 

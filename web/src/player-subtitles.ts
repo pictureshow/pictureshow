@@ -29,3 +29,12 @@ export function validSubtitleText(text: string): boolean {
     }
     return true;
 }
+
+/** PLAY-11's value line: "in sync", or the signed delay and which way it moves the captions. */
+export function subtitleDelayLabel(ms: number): string {
+    if (ms === 0) return "Timing: in sync";
+    const amount = Math.abs(ms).toLocaleString("en-US");
+    return ms > 0
+        ? `Timing: +${amount} ms (later)`
+        : `Timing: −${amount} ms (earlier)`;
+}
