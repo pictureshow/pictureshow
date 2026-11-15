@@ -56,7 +56,7 @@
         "fontScale": 1.3,
         "settleMs": 128,
         "clearBandwidth": null,
-        "restoreBandwidth": 2000000
+        "restoreBandwidth": 18000000
       },
       "expected": {
         "nullFact": true,
