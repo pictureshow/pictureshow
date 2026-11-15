@@ -133,23 +133,29 @@
     color: #29194b;
     border-color: var(--color-tv-primary);
 }
-.player-overlay button:focus {
+html[data-input="keyboard"] .player-overlay button:focus-visible {
     outline: 4px solid var(--focus-tv-fieldRingColor);
     outline-offset: 4px;
     box-shadow: 0 0 0 8px var(--color-app-window);
     background: var(--color-tv-buttonFocused);
     color: var(--color-tv-buttonFocusedContent);
 }
-.player-overlay input:focus {
+html[data-input="keyboard"] .player-overlay input:focus-visible {
     outline: 3px solid var(--focus-tv-fieldRingColor);
     outline-offset: 4px;
     box-shadow: 0 0 0 7px var(--color-app-window);
 }
-.player-overlay .player-panel [aria-checked="true"]:focus {
+html[data-input="keyboard"]
+    .player-overlay
+    .player-panel
+    [aria-checked="true"]:focus-visible {
     background: var(--color-tv-buttonFocused);
     color: var(--color-tv-buttonFocusedContent);
 }
-.player-overlay .player-panel [aria-checked="true"]:focus::before {
+html[data-input="keyboard"]
+    .player-overlay
+    .player-panel
+    [aria-checked="true"]:focus-visible::before {
     color: var(--color-tv-buttonFocusedContent);
 }
 .player-overlay .seek-short {
@@ -651,14 +657,20 @@
 .player-overlay button {
     transition: transform 0.15s;
 }
-.player-overlay .player-panel [role="radio"]:is(:focus, :focus-visible) {
+html[data-input="keyboard"]
+    .player-overlay
+    .player-panel
+    [role="radio"]:focus-visible {
     background: var(--color-tv-buttonFocused);
     color: var(--color-tv-buttonFocusedContent);
 }
-.player-overlay .player-panel [role="radio"]:is(:focus, :focus-visible)::before,
+html[data-input="keyboard"]
+    .player-overlay
+    .player-panel
+    [role="radio"]:focus-visible::before,
 .player-overlay
     .player-panel
-    [role="radio"]:is(:focus, :focus-visible)
+    [role="radio"]:focus-visible
     :is(span, small, strong, em) {
     color: inherit;
 }
@@ -714,7 +726,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     border-radius: 0.7rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0;
 }
 .player-overlay .player-panel-body > .playback-info {
     max-height: none;
@@ -895,6 +907,8 @@
     }
     .player-overlay .more-control {
         display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
     .player-overlay .track-controls {
         display: flex;
@@ -919,5 +933,45 @@
     .player-overlay .next-episode button {
         font-size: 0.8rem;
         padding: 0.5rem 0.65rem;
+    }
+}
+
+.player-overlay .next-actions button {
+    margin: 0;
+}
+.player-overlay .tool-label {
+    display: none;
+}
+.player-overlay .more-tools .tool-label {
+    display: inline;
+}
+.player-overlay .more-tools .icon-control {
+    justify-content: flex-start;
+    gap: 0.75rem;
+}
+.player-overlay .more-tools .volume-control {
+    gap: 0.75rem;
+}
+.player-overlay .more-tools .volume-control input {
+    flex: 1;
+    max-width: none;
+}
+.player-overlay .player-panel:has(.more-tools) .player-panel-done {
+    align-self: stretch;
+}
+html:not([data-input="keyboard"]) .player-overlay button:focus,
+html:not([data-input="keyboard"]) .player-overlay input:focus {
+    outline: none;
+    box-shadow: none;
+}
+@media (max-width: 650px), (max-height: 480px) {
+    .player-overlay .skip-segment {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.75rem;
+    }
+}
+@media (pointer: coarse) {
+    .player-overlay .more-tools .shortcuts-control {
+        display: none;
     }
 }

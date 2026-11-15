@@ -168,12 +168,14 @@ test("R3-1: pending password retains focus and failure selects the described pas
     await page.goto("/");
     await page.getByLabel("Server address").fill("https://jellyfin.example");
     await page.keyboard.press("Enter");
+    await expect.soft(page.locator(".signin button.primary")).toHaveCount(1);
     await page.getByLabel("Username").fill("Viewer");
     await page.getByLabel("Password", { exact: true }).fill("wrong");
     await page.getByRole("button", { name: "Sign in", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect.poll(() => requests).toBe(1);
     await shot(page, "signin-busy");
+    await shot(page, "signin-busy-phone");
     const retained = await page
         .getByRole("button", { name: "Signing in…" })
         .evaluate((e) => e === document.activeElement);
@@ -181,6 +183,7 @@ test("R3-1: pending password retains focus and failure selects the described pas
     release();
     await expect(page.locator(".error")).toBeVisible();
     await shot(page, "signin-failed");
+    await shot(page, "signin-failed-phone");
     expect.soft(retained).toBe(true);
     expect(requests).toBe(1);
     const password = page.getByLabel("Password", { exact: true });
@@ -398,6 +401,7 @@ for (const [size, width, height] of [
     test(`R3-2/12: ${size} Next title folds credits and paused decoder has a Play label`, async ({
         page,
     }) => {
+        await page.setViewportSize({ width, height });
         await library(page, true);
         await page.route("**/MediaSegments/movie?**", (route) =>
             route.fulfill({
@@ -442,6 +446,23 @@ for (const [size, width, height] of [
             .toBeLessThanOrEqual(transportBox.y);
         for (const button of await page.locator(".next-episode button").all())
             await expect.soft(button).toBeInViewport({ ratio: 1 });
+        if (width === 390) {
+            const primary = (await page
+                .locator(".next-episode")
+                .getByRole("button", { name: "Play now", exact: true })
+                .boundingBox())!;
+            const skip = (await page
+                .locator(".next-episode")
+                .getByRole("button", { name: "Skip credits", exact: true })
+                .boundingBox())!;
+            const cancel = (await page
+                .locator(".next-episode")
+                .getByRole("button", { name: "Cancel next title", exact: true })
+                .boundingBox())!;
+            expect.soft(primary.y).toBeLessThan(skip.y);
+            expect.soft(primary.width).toBeGreaterThan(skip.width * 1.8);
+            expect.soft(Math.abs(skip.y - cancel.y)).toBeLessThanOrEqual(2);
+        }
         await expect.soft(page.locator(".skip-segment")).toHaveCount(0);
         await expect
             .soft(
@@ -482,6 +503,12 @@ test("R3-12: saved account removal takes an explicit management step rather than
     });
     await shot(page, "accounts");
     await expect(remove).toBeHidden();
+    await expect(
+        page.getByRole("button", {
+            name: "Remove server Evening Cinema",
+            exact: true,
+        }),
+    ).toBeHidden();
     await page.getByRole("button", { name: "Continue as Viewer" }).focus();
     await page.keyboard.press("Tab");
     expect(
@@ -671,4 +698,124 @@ test("R3-1: an empty library's focused Refresh survives its pending request", as
     await expect(refresh).toHaveAttribute("aria-disabled", "false");
     await expect(refresh).toBeFocused();
     expect(reads).toBe(before + 1);
+});
+
+for (const [width, height] of [
+    [390, 844],
+    [640, 400],
+]) {
+    test(`R3 follow-up: ${width} action groups fit without orphan buttons or hidden filter fields`, async ({
+        page,
+    }) => {
+        await page.setViewportSize({ width, height });
+        await library(page);
+        if (width === 390) {
+            const sort = (await page
+                .locator('[data-focus="library-sort"]')
+                .boundingBox())!;
+            const filters = (await page
+                .locator('[data-focus="library-filters"]')
+                .boundingBox())!;
+            expect
+                .soft(
+                    Math.abs(
+                        sort.y +
+                            sort.height / 2 -
+                            filters.y -
+                            filters.height / 2,
+                    ),
+                )
+                .toBeLessThanOrEqual(2);
+        }
+        await page
+            .getByRole("button", { name: "Filters", exact: true })
+            .click();
+        const dialog = page.getByRole("dialog", {
+            name: "Filters",
+            exact: true,
+        });
+        const clear = (await dialog
+            .getByRole("button", { name: "Clear all", exact: true })
+            .boundingBox())!;
+        const cancel = (await dialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .boundingBox())!;
+        expect.soft(Math.abs(clear.y - cancel.y)).toBeLessThanOrEqual(2);
+        if (width === 390) {
+            const apply = (await dialog
+                .getByRole("button", { name: "Apply", exact: true })
+                .boundingBox())!;
+            expect.soft(apply.width).toBeGreaterThan(clear.width * 1.8);
+            expect.soft(apply.y).toBeLessThan(clear.y);
+        } else {
+            // At 200% zoom, title, both toggle labels and the first two complete
+            // label/field pairs fit above the pinned footer, not just Genre.
+            await expect
+                .soft(dialog.getByLabel("Genre", { exact: true }))
+                .toBeInViewport({ ratio: 1 });
+            await expect
+                .soft(dialog.getByLabel("Year", { exact: true }))
+                .toBeInViewport({ ratio: 1 });
+            const year = (await dialog
+                .getByLabel("Year", { exact: true })
+                .boundingBox())!;
+            const footer = (await dialog
+                .locator(".library-filter-actions")
+                .boundingBox())!;
+            expect.soft(year.y + year.height).toBeLessThanOrEqual(footer.y);
+        }
+    });
+}
+test("R3 follow-up: pointer More has quiet focus and labelled rows, keyboard keeps a visible focus ring", async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fixture(page);
+    await page.route("**/Items/movie?**", (route) =>
+        route.fulfill({
+            headers,
+            body: JSON.stringify({
+                ...movie,
+                Chapters: [
+                    { Name: "Opening", StartPositionTicks: 0 },
+                    { Name: "Closing", StartPositionTicks: 20e7 },
+                ],
+            }),
+        }),
+    );
+    await play(page);
+    const more = page.getByRole("button", { name: "More", exact: true });
+    await more.click();
+    const dialog = page.getByRole("dialog", { name: "More controls" });
+    const chapters = dialog.getByRole("button", {
+        name: "Chapters",
+        exact: true,
+    });
+    await expect(chapters).toBeFocused();
+    expect(
+        await chapters.evaluate((e) => getComputedStyle(e).outlineStyle),
+    ).toBe("none");
+    const full = dialog.getByRole("button", {
+        name: "Full screen",
+        exact: true,
+    });
+    await expect(full).toContainText("Full screen");
+    expect((await full.boundingBox())!.width).toBeGreaterThan(
+        (await dialog.boundingBox())!.width * 0.7,
+    );
+    await shot(page, "more-phone");
+    await page.keyboard.press("Escape");
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(chapters).toBeFocused();
+    expect(
+        await chapters.evaluate((e) => getComputedStyle(e).outlineStyle),
+    ).toBe("solid");
+    await shot(page, "more-keyboard-phone");
+    await page.keyboard.press("Enter");
+    await expect(
+        page
+            .getByRole("dialog", { name: "Chapters", exact: true })
+            .getByRole("button", { name: /Opening/ }),
+    ).toBeFocused();
 });

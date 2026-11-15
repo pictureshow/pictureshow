@@ -315,7 +315,7 @@ export function FilterDialog({
                         <p role="alert">People couldn't load. {peopleError}</p>
                     )}
                 </fieldset>
-                <div className="library-filter-actions">
+                <div className="library-filter-actions action-row">
                     <button type="submit" className="primary">
                         Apply
                     </button>

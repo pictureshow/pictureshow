@@ -189,7 +189,7 @@ test("Settings reads the server language settings, and a failed read says so wit
         page.getByRole("combobox", { name: "Audio language", exact: true }),
     ).toHaveValue("");
     await expect(page.getByRole("alert")).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    await page.goBack();
     await expect(
         page.getByRole("heading", { name: "Home", level: 1 }),
     ).toBeVisible();
@@ -248,10 +248,18 @@ test("an error that renders above Settings' landing focus keeps that focus fully
     await expect(
         page.getByRole("heading", { name: "Settings", exact: true }),
     ).toBeFocused();
-    const select = page.getByLabel("Max streaming bitrate");
-    await select.focus();
-    await expect(select).toBeFocused();
-    await expect(select).toBeInViewport({ ratio: 1 });
+    const heading = page.getByRole("heading", {
+        name: "Settings",
+        exact: true,
+    });
+    // Make the landing heading just fit. A banner taller than this remaining
+    // gap really would push it out without the landing-focus layout guard.
+    const bounds = (await heading.boundingBox())!;
+    await page.setViewportSize({
+        width: 985,
+        height: Math.ceil(bounds.y + bounds.height + 8),
+    });
+    await expect(heading).toBeInViewport({ ratio: 1 });
     // The failed read now inserts the app's error banner above the page.
     release();
     await expect(page.locator("div.error")).toBeVisible();
@@ -261,8 +269,8 @@ test("an error that renders above Settings' landing focus keeps that focus fully
     // The banner did push the page down, and focus stayed fully in view anyway.
     const pushed = await page.evaluate(() => scrollY);
     expect(pushed).toBeGreaterThan(0);
-    await expect(select).toBeFocused();
-    await expect(select).toBeInViewport({ ratio: 1 });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport({ ratio: 1 });
 });
 test("once the viewer scrolls Settings, a late error does not pull the page back to focus", async ({
     page,
@@ -550,9 +558,7 @@ test("native browser Back restores catalog focus and unwinds player controls bef
     await page.getByRole("button", { name: "Audio", exact: true }).click();
     await page.goBack();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(
-        page.getByRole("button", { name: "Audio", exact: true }),
-    ).toBeFocused();
+    await expect(page.locator("video")).toBeFocused();
     await page.goBack();
     await expect(
         page.getByRole("button", { name: "Stop and go back" }),

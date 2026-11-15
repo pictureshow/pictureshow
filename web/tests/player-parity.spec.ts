@@ -1021,7 +1021,7 @@ test("PLAY-29: controls that hide on their own tell a keyboard viewer how to bri
     await expect(pause).toBeVisible();
 });
 
-test("the Volume slider stays in the control bar at 200% zoom on a desktop (web-jo N1)", async ({
+test("the Volume slider remains keyboard accessible in More at 200% zoom on a desktop (web-jo N1)", async ({
     page,
 }) => {
     await fixture(page);
@@ -1029,6 +1029,7 @@ test("the Volume slider stays in the control bar at 200% zoom on a desktop (web-
     // 1280x800 at 200% zoom leaves a 640x400 CSS viewport with a fine pointer.
     await page.setViewportSize({ width: 640, height: 400 });
     await page.mouse.move(320, 200);
+    await page.getByRole("button", { name: "More", exact: true }).click();
     const volume = page.getByRole("slider", { name: "Volume", exact: true });
     await expect(volume).toBeVisible();
     await volume.focus();
@@ -1066,9 +1067,11 @@ test("phone rotation preserves viewing, pause intent and selected sheet", async 
         page.getByRole("button", { name: "Landscape", exact: true }),
     ).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "More", exact: true }).click();
     await expect(
         page.getByRole("button", { name: "Landscape", exact: true }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await expect(
         page.getByRole("dialog", { name: "Subtitles", exact: true }),
@@ -1081,9 +1084,7 @@ test("phone rotation preserves viewing, pause intent and selected sheet", async 
         .getByRole("button", { name: "Done", exact: true })
         .scrollIntoViewIfNeeded();
     await page.getByRole("button", { name: "Done", exact: true }).click();
-    await expect(
-        page.getByRole("button", { name: "Subtitles", exact: true }),
-    ).toBeFocused();
+    await expect(page.locator("video")).toBeFocused();
     const state = await page
         .locator("video")
         .evaluate((v: HTMLVideoElement) => ({

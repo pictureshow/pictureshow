@@ -3172,6 +3172,7 @@ export function Player({
                         )}
                     </svg>
                 </button>
+                <span className="tool-label">Volume</span>
                 <input
                     aria-label="Volume"
                     type="range"
@@ -3210,6 +3211,9 @@ export function Player({
                             }
                         />
                     </svg>
+                    <span className="tool-label">
+                        {fullscreen ? "Exit full screen" : "Full screen"}
+                    </span>
                 </button>
             )}
             <button
@@ -3220,6 +3224,7 @@ export function Player({
                 onClick={(e) => openPanel("Shortcuts", e.currentTarget)}
             >
                 <span aria-hidden="true">?</span>
+                <span className="tool-label">Keyboard shortcuts</span>
             </button>
             {orientationLockable && (
                 <button
@@ -3407,36 +3412,38 @@ export function Player({
                             ) : null}
                         </h2>
                         <p>{next?.Name}</p>
-                        {segment?.Type === "Outro" &&
-                            !skipUsed.current.has(segmentKey) &&
-                            (preferences.segments?.Outro ?? "Ask") ===
-                                "Ask" && (
-                                <button data-skip="true" onClick={skip}>
-                                    Skip credits
-                                </button>
-                            )}
-                        <button
-                            className="primary"
-                            onClick={() => complete(next)}
-                        >
-                            Play now
-                        </button>
-                        <button
-                            onClick={() => {
-                                setCancelNext(true);
-                                completionNext.current = null;
-                                if (
-                                    completionDeferred.current &&
-                                    viewing.current.stopped
-                                ) {
-                                    void leave();
-                                    return;
-                                }
-                                video.current?.focus();
-                            }}
-                        >
-                            Cancel next {nextNoun}
-                        </button>
+                        <div className="next-actions action-row">
+                            <button
+                                className="primary"
+                                onClick={() => complete(next)}
+                            >
+                                Play now
+                            </button>
+                            {segment?.Type === "Outro" &&
+                                !skipUsed.current.has(segmentKey) &&
+                                (preferences.segments?.Outro ?? "Ask") ===
+                                    "Ask" && (
+                                    <button data-skip="true" onClick={skip}>
+                                        Skip credits
+                                    </button>
+                                )}
+                            <button
+                                onClick={() => {
+                                    setCancelNext(true);
+                                    completionNext.current = null;
+                                    if (
+                                        completionDeferred.current &&
+                                        viewing.current.stopped
+                                    ) {
+                                        void leave();
+                                        return;
+                                    }
+                                    video.current?.focus();
+                                }}
+                            >
+                                Cancel next {nextNoun}
+                            </button>
+                        </div>
                     </aside>
                 )}
                 {segment &&

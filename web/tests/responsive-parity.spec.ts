@@ -32,16 +32,19 @@ test("130 percent layout budget keeps phone, desktop and TV keyboard targets rea
             .getByRole("navigation", { name: "Main navigation" })
             .getByRole("button", { name: "Settings", exact: true })
             .click();
-        // Settings lands focus on its first setting below the jump list, and that
-        // focus has to be on screen without the test moving it.
-        const select = page.getByLabel("Max streaming bitrate");
-        await expect(select).toBeFocused();
-        await expect(select).toBeInViewport({ ratio: 1 });
+        // Settings announces its heading first; that landing target stays in
+        // view at every size without the test moving it.
+        const heading = page.getByRole("heading", {
+            name: "Settings",
+            exact: true,
+        });
+        await expect(heading).toBeFocused();
+        await expect(heading).toBeInViewport({ ratio: 1 });
         const overflow = await page.evaluate(
             () => document.documentElement.scrollWidth > innerWidth + 1,
         );
         expect(overflow).toBe(false);
-        await page.keyboard.press("Escape");
+        await page.goBack();
         await expect(
             page.locator(signedInAs, { hasText: /^Viewer · / }),
         ).toBeVisible();

@@ -494,7 +494,7 @@ button.link {
 .error:has(+ .signin) {
     box-sizing: border-box;
     max-width: 720px;
-    margin-inline: auto;
+    margin-inline: 0;
 }
 @media (min-width: 1500px) {
     .error:has(+ .welcome),
@@ -519,4 +519,25 @@ button.link {
     flex-wrap: wrap;
     align-items: center;
     gap: 1rem;
+}
+
+/* Compact action groups have an intentional row layout rather than an orphan. */
+.action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+@media (max-width: 420px) {
+    .action-row,
+    .library-filter-actions.action-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .action-row > button {
+        min-width: 0;
+        width: 100%;
+    }
+    .action-row:has(> :nth-child(3)) > :first-child {
+        grid-column: 1 / -1;
+    }
 }

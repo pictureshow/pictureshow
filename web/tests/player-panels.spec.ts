@@ -476,7 +476,7 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
         ),
     ).toBe(false);
     await capture(page, "settings-row-off");
-    await page.getByRole("button", { name: "← Back" }).click();
+    await page.goBack();
     await page.locator('[data-focus="resume:movie"]').click();
     await page
         .getByRole("button", { name: "Resume from 0:10", exact: true })
@@ -701,7 +701,7 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
         timeout: 20000,
     });
     await expect(speed).toHaveAccessibleName("Speed, 1×");
-    // R1: a readable card (the notice's style), centred just above the controls.
+    // R3: a readable card in the right-aligned message column above controls.
     expect(
         await status.evaluate((e) => getComputedStyle(e).backgroundColor),
     ).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
@@ -715,7 +715,7 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
         expect(controls.y - (card.y + card.height)).toBeLessThan(40);
         const viewport = page.viewportSize()!;
         expect(
-            Math.abs(card.x + card.width / 2 - viewport.width / 2),
+            Math.abs(card.x + card.width - viewport.width * 0.96),
         ).toBeLessThanOrEqual(2);
     }
     await capture(page, "speed-reset");
@@ -1065,7 +1065,7 @@ test("the conversion notice switch applies the next time the player opens, both 
         const toggle = page.getByRole("switch", { name: "Conversion notice" });
         if ((await toggle.isChecked()) !== checked) await toggle.click();
         await expect(toggle).toBeChecked({ checked });
-        await page.getByRole("button", { name: "← Back" }).click();
+        await page.goBack();
     };
     const open = async () => {
         await page.locator('[data-focus="resume:movie"]').click();

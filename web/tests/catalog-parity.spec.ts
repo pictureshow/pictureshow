@@ -444,7 +444,10 @@ test("search bounds and generation guard preserve ordered partial results, accou
             };
         return {};
     });
-    await page.locator('[data-focus="home-search"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Search", exact: true })
+        .click();
     const field = page.getByRole("searchbox");
     await field.fill("a");
     await page.waitForTimeout(350);
@@ -593,6 +596,8 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     await expect(play).toHaveAccessibleName("Play");
     await expect(play).toHaveAttribute("data-state", "pending");
     await expect(play).toHaveAttribute("aria-disabled", "false");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator('[data-focus="restart"]')).toBeFocused();
     await page.keyboard.press("ArrowRight");
     const watched = page.locator('[data-focus="watched"]');
     await expect(watched).toBeFocused();
@@ -1164,7 +1169,10 @@ test("CAT-14a: two search results that would look the same name their libraries;
         }
         return {};
     });
-    await page.locator('[data-focus="home-search"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Search", exact: true })
+        .click();
     await page.getByRole("searchbox").fill("sintel");
     const shelf = page.locator('.catalog-search [data-shelf="search:MOVIES"]');
     await expect(

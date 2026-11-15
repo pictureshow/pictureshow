@@ -2609,7 +2609,9 @@ function BrowseGrid({
                             aria-pressed={descending}
                             onClick={() => updateSort(sort, !descending)}
                         >
-                            {sortDirectionLabel(descending)}{" "}
+                            <span className="sort-direction-word">
+                                {sortDirectionLabel(descending)}{" "}
+                            </span>
                             <span aria-hidden="true">
                                 {descending ? "↓" : "↑"}
                             </span>

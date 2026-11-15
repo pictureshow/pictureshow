@@ -142,6 +142,15 @@ export function AccountChooser({
                                         </li>
                                     ))}
                             </ul>
+                            <button
+                                className="account-remove"
+                                data-focus={"remove-server:" + s.id}
+                                onClick={(e) =>
+                                    onRemoveServer(s, e.currentTarget)
+                                }
+                            >
+                                Remove server {serverLabel(s, saved.servers)}
+                            </button>
                         </details>
                     )}
                     <div className="actions">
@@ -152,18 +161,11 @@ export function AccountChooser({
                             Sign in another user on{" "}
                             {serverLabel(s, saved.servers)}
                         </button>
-                        <button
-                            data-focus={"remove-server:" + s.id}
-                            onClick={(e) => onRemoveServer(s, e.currentTarget)}
-                        >
-                            Remove server {serverLabel(s, saved.servers)}
-                        </button>
                     </div>
                 </section>
             ))}
             <div className="actions">
                 <button onClick={onAdd}>Add a server</button>
-                {onBack && <button onClick={onBack}>Back to Home</button>}
             </div>
         </section>
     );
@@ -687,7 +689,7 @@ export function SignIn({
                     </form>
                     {enabled ? (
                         <button
-                            className="secondary primary"
+                            className="secondary"
                             aria-disabled={busy}
                             onClick={() => {
                                 if (inflight.current) return;

@@ -99,7 +99,7 @@ test("a page opened from Home stays under Home, and pressing Home returns to Hom
     await page.reload();
     await expect(heading(page, "Settings")).toBeVisible();
     await expect(lit(page)).toHaveText("Settings");
-    await page.getByRole("button", { name: "← Back" }).click();
+    await page.goBack();
     await expect(heading(page, "Home")).toBeVisible();
     await expect(lit(page)).toHaveText("Home");
 });

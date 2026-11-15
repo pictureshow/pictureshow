@@ -572,7 +572,7 @@ html[data-input="keyboard"] #main :is(h1, h2)[tabindex]:focus {
     .catalog-home-heading nav {
         display: none;
     }
-    button:focus {
+    html[data-input="keyboard"] button:focus-visible {
         outline: 4px solid var(--focus-tv-fieldRingColor);
         outline-offset: 4px;
         box-shadow: 0 0 0 8px var(--color-app-window);
@@ -636,10 +636,10 @@ html[data-input="keyboard"] #main :is(h1, h2)[tabindex]:focus {
     .switch-row {
         min-height: 48px;
     }
-    .app-content button:focus,
-    .welcome button:focus,
-    .signin button:focus,
-    .header-actions button:focus {
+    html[data-input="keyboard"] .app-content button:focus-visible,
+    html[data-input="keyboard"] .welcome button:focus-visible,
+    html[data-input="keyboard"] .signin button:focus-visible,
+    html[data-input="keyboard"] .header-actions button:focus-visible {
         outline: 4px solid var(--focus-tv-fieldRingColor);
         outline-offset: 4px;
         box-shadow: 0 0 0 8px var(--color-app-window);

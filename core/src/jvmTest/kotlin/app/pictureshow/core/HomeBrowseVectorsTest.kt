@@ -69,7 +69,12 @@ class HomeBrowseVectorsTest {
                         input["editing"]?.jsonPrimitive?.content == "true"
                     )
                 )
-                "title-count-label" -> Json.encodeToJsonElement(titleCountLabel(input.getValue("count").jsonPrimitive.content.toInt(), input["exact"]?.jsonPrimitive?.content != "false"))
+                "title-count-label" -> Json.encodeToJsonElement(
+                    titleCountLabel(
+                        input.getValue("count").jsonPrimitive.content.toInt(),
+                        input["exact"]?.jsonPrimitive?.content != "false"
+                    )
+                )
                 "resolution-summary" -> Json.encodeToJsonElement(
                     VideoResolution.valueOf(input.getValue("resolution").jsonPrimitive.content).summary()
                 )

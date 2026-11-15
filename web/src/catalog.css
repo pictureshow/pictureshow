@@ -833,3 +833,41 @@
     cursor: pointer;
     padding: 0.75rem 0;
 }
+
+@media (max-width: 420px) {
+    .sort-direction-word {
+        display: none;
+    }
+    .catalog-sort [data-focus="library-direction"] {
+        padding-inline: 0.65rem;
+        min-width: 48px;
+    }
+    .catalog-sort select {
+        min-width: 0;
+    }
+}
+@media (max-height: 480px) {
+    .library-filters {
+        padding: 16px;
+        scroll-padding: 4rem 1rem 6rem;
+    }
+    .library-filters form {
+        gap: 0.75rem;
+    }
+    .library-filters h2 {
+        font-size: 1.25rem;
+        position: sticky;
+        top: -16px;
+        z-index: 2;
+        padding: 0.5rem 0;
+        background: var(--surface);
+    }
+    .library-filter-fields {
+        grid-template-columns: max-content minmax(0, 1fr);
+    }
+    .library-filter-actions {
+        bottom: -16px;
+        margin-bottom: -16px;
+        padding: 0.75rem 0 16px;
+    }
+}
