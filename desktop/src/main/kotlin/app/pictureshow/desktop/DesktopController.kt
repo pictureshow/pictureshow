@@ -403,9 +403,6 @@ class DesktopController(
             publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
         }
         val maxBitrate = mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate
-        var outcome = try { attempt(g, a) { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
-            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) } }
-        catch (e: Throwable) { runCatching { player.close() }; throw e }
         val rejectedDecisions = mutableListOf<PlayDecision>()
         suspend fun discardPreparedPlayer() {
             runCatching { player.close() }
@@ -415,6 +412,21 @@ class DesktopController(
                     .forEach { decision -> runCatching { playbackClient.stopEncoding(a, requireNotNull(decision.playSessionId)) } }
             }
         }
+        // A bounded negotiation may open a server source. Capture its ownership before observing a
+        // cancelled page job, then close it if this selection lost the race. Never discard an owned ID.
+        suspend fun negotiate(call: suspend () -> ClientResult<PlayOutcome>): PlayOutcome? {
+            try {
+                val answer = withContext(NonCancellable) {
+                    attempt(g, a, call).also { outcome ->
+                        (outcome as? PlayOutcome.Play)?.decision?.let(rejectedDecisions::add)
+                    }
+                }
+                currentCoroutineContext().ensureActive()
+                return answer
+            } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+        }
+        var outcome = negotiate { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
+            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) }
         var negotiatedAudio = audio
         var negotiatedSubtitle = subtitle
         if (outcome is PlayOutcome.Play) {
@@ -441,11 +453,11 @@ class DesktopController(
                 val needsBitmapRetry = bitmapFormat != null
                 if (needsExternalRetry || needsBitmapRetry) {
                     val retryProfile = if (needsBitmapRetry) profile.forDesktopSubtitle(selected.codec) else profile.forDesktopSubtitle(null)
-                    outcome = try { attempt(g, a) {
+                    outcome = negotiate {
                         playbackClient.prepareFor(a, item.id, retryProfile, maxBitrate,
                             PlaybackRequest(startPosition = start.seconds, audioStreamIndex = initialAudio,
                                 subtitleStreamIndex = initialSubtitle, mediaSourceId = firstDecision.mediaSourceId))
-                    } } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+                    }
                     val retryDecision = (outcome as? PlayOutcome.Play)?.decision
                     if (retryDecision != null) rejectedDecisions += retryDecision
                     val retriedSubtitle = retryDecision?.mediaSource?.mediaStreams?.firstOrNull {
@@ -502,7 +514,10 @@ class DesktopController(
             currentCoroutineContext().ensureActive()
         }
         catch (e: Throwable) {
-            if (e is CancellationException) throw e
+            if (e is CancellationException) {
+                withContext(NonCancellable) { finishViewing() }
+                throw e
+            }
             if (e is VirtualMachineError || e is ThreadDeath) throw e
             recordDesktopPlayerFailure("open", e)
             runCatching { player.close() }

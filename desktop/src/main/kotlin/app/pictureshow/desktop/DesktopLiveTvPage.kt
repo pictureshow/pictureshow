@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.*
@@ -53,7 +55,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             withFrameNanos { }
             val key = s.focusKey?.takeIf { it in DesktopUiProbe.requestFocus } ?: when (s.tab) {
                 DesktopLiveTab.Channels -> channels.firstOrNull()?.let { "live:channel:${it.id}" }
-                DesktopLiveTab.Guide -> s.programs.firstOrNull { canTune(it, now) }?.let { "live:program:${it.id}" }
+                DesktopLiveTab.Guide -> liveGuideInitialFocus(liveGuideCells(s.programs.filter { it.channelId in channels.map { c -> c.id } }, s.start, s.start + DesktopLiveTv.WINDOW), now)?.let { "live:program:$it" }
                 else -> null
             }
             key?.let { DesktopUiProbe.requestFocus[it]?.let { target -> runCatching { target.requestFocus() } } }
@@ -240,7 +242,8 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
     val vertical = rememberLazyListState()
     var linear by remember { mutableStateOf(false) }
     var datePicker by remember { mutableStateOf(false) }
-    LaunchedEffect(s.start) { horizontal.scrollTo(0) }
+    var lastStart by rememberSaveable { mutableStateOf(s.start) }
+    LaunchedEffect(s.start) { if (lastStart != s.start) { horizontal.scrollTo(0); lastStart = s.start } }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton({ owner.moveWindow(s.start - DesktopLiveTv.WINDOW) }, enabled = !s.loading, modifier = Modifier.controlFocus()) { Text("Earlier") }
         TextButton({ datePicker = true }, modifier = Modifier.controlFocus()) { Text(liveDay(s.start) + " · " + liveClock(s.start)) }
@@ -278,21 +281,26 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
                         LiveChannelMark(channel, account)
                         Column { channel.number?.let { Text(it, style = MaterialTheme.typography.labelSmall) }; Text(channel.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium) }
                     }
-                    Box(Modifier.weight(1f).horizontalScroll(horizontal).requiredWidth(timelineWidth).fillMaxHeight()) {
+                    BoxWithConstraints(Modifier.weight(1f)) {
+                    val viewportWidth = maxWidth
+                    val viewportStart = with(LocalDensity.current) { horizontal.value.toDp() }
+                    Box(Modifier.horizontalScroll(horizontal).requiredWidth(timelineWidth).fillMaxHeight()) {
                         cells.forEach { cell ->
                             val program = cell.program
                             val current = canTune(program, now)
+                            val text = liveGuideTextWindow((timelineWidth * cell.startFraction).value, (timelineWidth * cell.widthFraction - 4.dp).value, viewportStart.value, viewportWidth.value)
                             Surface(onClick = { owner.select(program, "live:program:${program.id}") },
                                 modifier = Modifier.offset(x = timelineWidth * cell.startFraction, y = (cell.lane * 72).dp).width((timelineWidth * cell.widthFraction - 4.dp).coerceAtLeast(1.dp)).height(68.dp).controlFocus(RoundedCornerShape(6.dp)).probe("live:program:${program.id}")
                                     .semantics { contentDescription = "${channel.name}, ${program.name}, ${liveRange(program.startDate, program.endDate)}${if (current) ", on now" else ""}" },
                                 shape = RoundedCornerShape(6.dp), color = if (current) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh) {
-                                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Column(Modifier.offset(x = text.inset.dp).width(text.width.dp).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(program.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                                     Text(liveRange(program.startDate, program.endDate), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
                         if (now >= s.start && now < s.start + DesktopLiveTv.WINDOW) Box(Modifier.offset(x = timelineWidth * ((now - s.start).toFloat() / DesktopLiveTv.WINDOW)).width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary.copy(alpha = .6f)))
+                    }
                     }
                 }
             }
@@ -331,30 +339,9 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
     }
 }
 
-// These are the Android reference's presentation mappings, kept separate from transport and server policy.
-internal data class DesktopGuideCell(val program: LiveProgram, val startFraction: Float, val widthFraction: Float, val lane: Int)
-internal fun desktopGuideCells(programs: List<LiveProgram>, start: Long, end: Long): List<DesktopGuideCell> {
-    require(end > start)
-    val lanes = mutableListOf<Long>()
-    return programs.distinctBy { it.id }.sortedBy { liveInstant(it.startDate) }.mapNotNull { program ->
-        val from = liveInstant(program.startDate)?.coerceAtLeast(start) ?: return@mapNotNull null
-        val to = liveInstant(program.endDate)?.coerceAtMost(end) ?: return@mapNotNull null
-        if (to <= from) return@mapNotNull null
-        var lane = lanes.indexOfFirst { it <= from }
-        if (lane < 0) { lane = lanes.size; lanes.add(to) } else lanes[lane] = to
-        DesktopGuideCell(program, (from - start).toFloat() / (end - start), (to - from).toFloat() / (end - start), lane)
-    }
-}
-internal fun desktopScheduleGroup(schedule: LiveSchedule, now: Long): String {
-    val start = liveInstant(schedule.startDate); val end = liveInstant(schedule.endDate)
-    return when {
-        start == null || end == null || end <= start -> "Other schedules"
-        end <= now -> "Past"
-        start > now -> "Upcoming"
-        schedule.status in listOf("New", "InProgress") -> "Recording now"
-        else -> "Other schedules"
-    }
-}
+// Native layout and schedules use the same core presentation rules as Android.
+internal fun desktopGuideCells(programs: List<LiveProgram>, start: Long, end: Long) = liveGuideCells(programs, start, end)
+internal fun desktopScheduleGroup(schedule: LiveSchedule, now: Long) = liveScheduleGroup(schedule, now)
 internal fun liveClock(value: Long?): String {
     if (value == null) return "Time unavailable"
     val local = Instant.ofEpochMilli(value).atZone(ZoneId.systemDefault())

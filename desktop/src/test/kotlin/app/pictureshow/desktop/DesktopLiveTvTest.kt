@@ -28,6 +28,10 @@ class DesktopLiveTvTest {
         val end = start + 1_800_000
         var access = true; var manage = true; var failGuide = false; var channels = true
         var denyPolicy = false
+        var holdFirstPlayback = false
+        val playbackEntered = java.util.concurrent.CountDownLatch(1)
+        val playbackRelease = java.util.concurrent.CountDownLatch(1)
+        val closedLive = CopyOnWriteArrayList<String>()
         val channel = """{"Id":"channel","Name":"Demo One","ChannelNumber":"2","CurrentProgram":{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}}"""
         val program = """{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}"""
         val account get() = Account(Server("server", "Demo", "http://127.0.0.1:${server.address.port}", "12.4.0"), User("viewer", "Viewer"), "token")
@@ -37,6 +41,8 @@ class DesktopLiveTvTest {
                 val path = e.requestURI.path
                 val body = e.requestBody.bufferedReader().readText()
                 requests.add(Triple(e.requestMethod, path, body))
+                if (path == "/LiveStreams/Close") closedLive += e.requestURI.rawQuery.orEmpty()
+                if (holdFirstPlayback && path.endsWith("/PlaybackInfo")) { playbackEntered.countDown(); playbackRelease.await(10, java.util.concurrent.TimeUnit.SECONDS) }
                 var status = 200
                 val response = when {
                     path == "/Users/Me" -> """{"Id":"viewer","Name":"Viewer"}"""
@@ -136,6 +142,32 @@ class DesktopLiveTvTest {
                 assertTrue(f.requests.any { it.second == "/LiveStreams/Close" })
                 assertTrue(f.requests.any { it.second == "/Sessions/Playing/Stopped" && it.third.contains("owned-live") })
                 assertFalse(f.requests.any { it.second.contains("PlayedItems") })
+            }
+        }
+    }
+    @Test fun rapidRetuneClosesTheDecisionReturnedAfterCancellation(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engines = CopyOnWriteArrayList<Engine>()
+            val store = AccountStore(object : TextPersistence {
+                var text: String? = null
+                override suspend fun read() = text
+                override suspend fun write(value: String) { text = value }
+            })
+            store.remember(f.account)
+            DesktopController(dir(), store = store, playbackFactory = { Engine().also { engines += it } }).use { c ->
+                c.start(); withTimeout(10_000) { c.state.first { it.route == DesktopRoute.Home && !it.busy } }
+                c.openLiveTv(); withTimeout(10_000) { c.liveTv.state.first { !it.loading } }
+                f.holdFirstPlayback = true
+                c.tuneChannel(c.liveTv.state.value.channels.single())
+                assertTrue(withContext(Dispatchers.IO) { f.playbackEntered.await(5, java.util.concurrent.TimeUnit.SECONDS) })
+                // Leaving while the HTTP response owns a server stream must still release its returned identity.
+                c.home()
+                f.playbackRelease.countDown()
+                withTimeout(10_000) { while (f.closedLive.isEmpty()) delay(25) }
+                withTimeout(10_000) { c.state.first { it.route == DesktopRoute.Home && !it.busy } }
+                assertTrue(engines.all { it.closed })
+                assertTrue(engines.none { it.opened })
+                assertTrue(f.closedLive.single().contains("owned-live"))
             }
         }
     }
