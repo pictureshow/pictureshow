@@ -16,7 +16,7 @@
       "input": {
         "reason": "videocodecnotsupported"
       },
-      "expected": "This device cannot decode this video format. The server converts the video. Try a version with a supported video codec."
+      "expected": "This device cannot decode this video format. The server converts the video."
     },
     {
       "id": "playback-information.reason.audiocodecnotsupported",
@@ -24,7 +24,7 @@
       "input": {
         "reason": "audiocodecnotsupported"
       },
-      "expected": "This device cannot decode this audio format. The server converts the audio. Choose a compatible audio track if available."
+      "expected": "This device cannot decode this audio format. The server converts the audio."
     },
     {
       "id": "playback-information.reason.subtitlecodecnotsupported",
@@ -32,7 +32,7 @@
       "input": {
         "reason": "subtitlecodecnotsupported"
       },
-      "expected": "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video. Choose a text subtitle track or turn subtitles off to avoid burn-in."
+      "expected": "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video."
     },
     {
       "id": "playback-information.reason.audioisexternal",
@@ -48,7 +48,7 @@
       "input": {
         "reason": "secondaryaudionotsupported"
       },
-      "expected": "This device cannot play the selected secondary audio directly. Choose the default audio track to try direct playback."
+      "expected": "This device cannot play the selected secondary audio directly. The server converts the audio."
     },
     {
       "id": "playback-information.reason.streamcountexceedslimit",
@@ -72,7 +72,7 @@
       "input": {
         "reason": "videorangetypenotsupported"
       },
-      "expected": "This device does not support this video's HDR or color range. The server converts the video. Try an SDR version if available."
+      "expected": "This device does not support this video's HDR or color range. The server converts the video."
     },
     {
       "id": "playback-information.reason.videocodectagnotsupported",
@@ -152,7 +152,7 @@
       "input": {
         "reason": "audiochannelsnotsupported"
       },
-      "expected": "The selected audio has more channels than the current output supports. The server converts the audio. Choose a track with fewer channels or check your audio output settings."
+      "expected": "The selected audio has more channels than the current output supports. The server converts the audio."
     },
     {
       "id": "playback-information.reason.audioprofilenotsupported",
@@ -160,7 +160,7 @@
       "input": {
         "reason": "audioprofilenotsupported"
       },
-      "expected": "This device does not support the audio's codec profile. The server converts the audio. Choose another audio track if available."
+      "expected": "This device does not support the audio's codec profile. The server converts the audio."
     },
     {
       "id": "playback-information.reason.audiosampleratenotsupported",
@@ -184,7 +184,7 @@
       "input": {
         "reason": "audiobitratenotsupported"
       },
-      "expected": "The audio exceeds a supported bitrate limit. The server lowers its bitrate. Choose another audio track if available."
+      "expected": "The audio exceeds a supported bitrate limit. The server lowers its bitrate."
     },
     {
       "id": "playback-information.reason.unknownvideostreaminfo",
@@ -192,7 +192,7 @@
       "input": {
         "reason": "unknownvideostreaminfo"
       },
-      "expected": "The server could not identify the video's properties. Refresh this item's metadata on the server and try again."
+      "expected": "The server could not identify the video's properties."
     },
     {
       "id": "playback-information.reason.unknownaudiostreaminfo",
@@ -200,7 +200,7 @@
       "input": {
         "reason": "unknownaudiostreaminfo"
       },
-      "expected": "The server could not identify the audio's properties. Refresh this item's metadata on the server and try again."
+      "expected": "The server could not identify the audio's properties."
     },
     {
       "id": "playback-information.reason.directplayerror",
@@ -217,7 +217,7 @@
         "reason": "ContainerBitrateExceedsLimit",
         "qualityMbps": 4
       },
-      "expected": "Quality is capped at 4 Mbps in Settings. Raise the limit to try the original quality; device or server limits may still require conversion."
+      "expected": "Quality is capped at 4 Mbps in Settings. The server lowers the bitrate."
     },
     {
       "id": "playback-information.reason.bitrateAuto",
@@ -225,7 +225,7 @@
       "input": {
         "reason": "VideoBitrateNotSupported"
       },
-      "expected": "This stream exceeds a device or server bitrate limit. The server lowers its bitrate. Check the server's streaming limits."
+      "expected": "This stream exceeds a device or server bitrate limit. The server lowers its bitrate."
     },
     {
       "id": "playback-information.reason.unknown",

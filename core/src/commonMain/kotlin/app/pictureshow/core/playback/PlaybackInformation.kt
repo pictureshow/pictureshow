@@ -57,43 +57,32 @@ object PlaybackInformation {
     fun reason(code: String, qualityMbps: Int? = null, tuning: PlaybackTuning = PlaybackTuning(), activeBitrate: Int? = null): String {
         val normalized = code.lowercase()
         if (normalized == "subtitlecodecnotsupported" && tuning.subtitleBurnIn == SubtitleBurnIn.Always) {
-            return "Your subtitle burn-in setting requires conversion of the video. " +
-                "Set subtitle burn-in to Automatic in Playback settings, or turn subtitles off."
+            return "Your subtitle burn-in setting requires conversion of the video."
         }
         if (normalized == "videorangetypenotsupported" &&
             (tuning.hdr == CapabilityOverride.Disable || tuning.dolbyVision == CapabilityOverride.Disable)
         ) {
-            return "HDR or Dolby Vision is disabled in Playback settings. Restore detected support to try original video; " +
-                "device or server limits may still require conversion."
+            return "HDR or Dolby Vision is disabled in Playback settings. The server converts the video."
         }
         if (normalized in setOf("containerbitrateexceedslimit", "videobitratenotsupported") && activeBitrate != null && activeBitrate > 0) {
-            return "Quality is capped at ${bitrate(activeBitrate)} for this viewing. " +
-                "Change player quality or network quality in Playback settings to try original video; " +
-                "device or server limits may still require conversion."
+            return "Quality is capped at ${bitrate(activeBitrate)} for this viewing. The server lowers the bitrate."
         }
         return when (normalized) {
             "containernotsupported" ->
-                "This device cannot open the file's container. The server repackages the stream into a " +
-                    "compatible container."
+                "This device cannot open the file's container. The server repackages the stream into a compatible container."
             "videocodecnotsupported" ->
-                "This device cannot decode this video format. The server converts the video. Try a " +
-                    "version with a supported video codec."
+                "This device cannot decode this video format. The server converts the video."
             "audiocodecnotsupported" ->
-                "This device cannot decode this audio format. The server converts the audio. Choose a " +
-                    "compatible audio track if available."
+                "This device cannot decode this audio format. The server converts the audio."
             "subtitlecodecnotsupported" ->
-                "This device cannot display this subtitle format. The server converts the subtitles or " +
-                    "burns them into the video. Choose a text subtitle track or turn subtitles off to " +
-                    "avoid burn-in."
+                "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video."
             "audioisexternal" -> "The audio is in a separate file. The server combines it with the video."
             "secondaryaudionotsupported" ->
-                "This device cannot play the selected secondary audio directly. Choose the default " +
-                    "audio track to try direct playback."
+                "This device cannot play the selected secondary audio directly. The server converts the audio."
             "streamcountexceedslimit" -> "The file contains more streams than this device supports. The server selects compatible streams."
             "videoprofilenotsupported" -> "This device does not support the video's codec profile. The server converts the video."
             "videorangetypenotsupported" ->
-                "This device does not support this video's HDR or color range. The server converts the " +
-                    "video. Try an SDR version if available."
+                "This device does not support this video's HDR or color range. The server converts the video."
             "videocodectagnotsupported" -> "This device does not recognize the video's codec tag. The server makes a compatible stream."
             "videolevelnotsupported" -> "This video exceeds the decoder's supported codec level. The server converts the video."
             "videoresolutionnotsupported" -> "This video's resolution exceeds this device's limit. The server reduces the resolution."
@@ -102,32 +91,25 @@ object PlaybackInformation {
             "videorotationnotsupported" -> "This device cannot apply the video's rotation. The server rotates the video."
             "refframesnotsupported" -> "This video needs more reference frames than the decoder supports. The server converts the video."
             "anamorphicvideonotsupported" ->
-                "This device cannot display the video's non-square pixels correctly. The server " +
-                    "converts the video."
+                "This device cannot display the video's non-square pixels correctly. The server converts the video."
             "interlacedvideonotsupported" -> "This device cannot display this interlaced video directly. The server deinterlaces it."
             "audiochannelsnotsupported" ->
-                "The selected audio has more channels than the current output supports. The server " +
-                    "converts the audio. Choose a track with fewer channels or check your audio output " +
-                    "settings."
+                "The selected audio has more channels than the current output supports. The server converts the audio."
             "audioprofilenotsupported" ->
-                "This device does not support the audio's codec profile. The server converts the " +
-                    "audio. Choose another audio track if available."
+                "This device does not support the audio's codec profile. The server converts the audio."
             "audiosampleratenotsupported" -> "This device does not support the audio's sample rate. The server converts the audio."
             "audiobitdepthnotsupported" -> "This device does not support the audio's bit depth. The server converts the audio."
             "containerbitrateexceedslimit", "videobitratenotsupported" -> if (qualityMbps != null && qualityMbps > 0) {
-                "Quality is capped at $qualityMbps Mbps in Settings. Raise the limit to try the original quality; device or server limits may still require conversion."
+                "Quality is capped at $qualityMbps Mbps in Settings. The server lowers the bitrate."
             } else {
-                "This stream exceeds a device or server bitrate limit. The server lowers its bitrate. Check the server's streaming limits."
+                "This stream exceeds a device or server bitrate limit. The server lowers its bitrate."
             }
             "audiobitratenotsupported" ->
-                "The audio exceeds a supported bitrate limit. The server lowers its bitrate. Choose " +
-                    "another audio track if available."
+                "The audio exceeds a supported bitrate limit. The server lowers its bitrate."
             "unknownvideostreaminfo" ->
-                "The server could not identify the video's properties. Refresh this item's metadata on " +
-                    "the server and try again."
+                "The server could not identify the video's properties."
             "unknownaudiostreaminfo" ->
-                "The server could not identify the audio's properties. Refresh this item's metadata on " +
-                    "the server and try again."
+                "The server could not identify the audio's properties."
             // Jellyfin 12 sends this whenever no direct-play profile matched, not only after a failure.
             "directplayerror" -> "This device can't play the file as it is, so the server provides a stream it can play."
             else -> "The server reported an additional conversion requirement that this client does not recognize."
