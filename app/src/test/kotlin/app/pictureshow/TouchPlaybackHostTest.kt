@@ -349,7 +349,12 @@ class TouchPlaybackHostTest {
         compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
         compose.runOnIdle {
             assertEquals(false, output.player.value!!.playWhenReady)
-            assertEquals(1, preparations.get())
+            assertEquals(
+                1,
+                preparations.get(),
+                org.robolectric.shadows.ShadowLog.getLogs()
+                    .filter { it.tag == "PictureshowPlayback" }.joinToString("\n") { it.msg }
+            )
         }
     }
 

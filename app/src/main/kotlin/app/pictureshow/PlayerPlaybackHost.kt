@@ -36,8 +36,10 @@ import app.pictureshow.core.PlaybackExtrasClient
 import app.pictureshow.core.UserConfigurationClient
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
+import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
 import app.pictureshow.core.playback.PlaybackNetwork
+import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PostCredits
 import io.ktor.client.HttpClient
 import java.util.Locale
@@ -50,6 +52,49 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
+
+/** Main-confined: route events must be newer than the capabilities actually consumed by preparation. */
+internal class PlaybackCapabilityChanges(private val onChanged: () -> Unit) {
+    private var prepared = 0L
+    private var observed = 0L
+    private var ready = false
+    private var pending = false
+
+    fun negotiating() {
+        ready = false
+        pending = false
+    }
+    fun prepared(revision: Long) {
+        prepared = revision
+    }
+    fun observed(revision: Long) {
+        observed = maxOf(observed, revision)
+        check()
+    }
+    fun settled(value: Boolean) {
+        ready = value
+        check()
+    }
+    private fun check() {
+        if (ready && !pending && prepared > 0 && observed > prepared) {
+            pending = true
+            onChanged()
+        }
+    }
+}
+
+/** Local playback still records the route used to open its output, without changing the local gateway or its reports. */
+internal fun capabilityTrackedGateway(
+    delegate: PlaybackGateway,
+    captureRevision: suspend () -> Long,
+    changes: PlaybackCapabilityChanges
+): PlaybackGateway = object : PlaybackGateway by delegate {
+    override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
+        changes.negotiating()
+        changes.prepared(captureRevision())
+        return delegate.prepare(request)
+    }
+}
 
 /** A pending or failed optional lookup is not evidence that this is the last episode. */
 internal data class EpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
@@ -567,6 +612,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 }
                 val captionLanguage = captionSubtitleLanguage(captionsEnabled, configuration, Locale.getDefault().toLanguageTag())
                 val report = Any()
+                val capabilityChanges = PlaybackCapabilityChanges { controller?.routeChanged() }
                 val localOwner = LocalVideoOwnerAdapter(
                     app.pictureshow.core.control.ViewingIdentity(
                         account.server.id,
@@ -575,9 +621,14 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         java.util.UUID.randomUUID().toString(),
                         0
                     ),
-                    offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, {
+                    offline?.gateway?.let { local ->
+                        capabilityTrackedGateway(local, { activeProbe.capture().revision }, capabilityChanges)
+                    } ?: ServerPlaybackGateway(client, account, item.id, {
                         val settings = effectiveSettings
-                        activeProbe.cachedSnapshot().copy(settings = settings)
+                        capabilityChanges.negotiating()
+                        val snapshot = activeProbe.capture()
+                        capabilityChanges.prepared(snapshot.revision)
+                        snapshot.capabilities.copy(settings = settings)
                     }, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
                     }.let { server ->
@@ -634,7 +685,12 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 }
                 output.onBandwidthEstimate =
                     { estimate, bytes -> bandwidthSample(estimate, bytes, android.os.SystemClock.elapsedRealtime()) }
-                activeProbe.start(notifyInitial = false) { session.routeChanged() }
+                reportScope.launch {
+                    session.state.collect { value ->
+                        capabilityChanges.settled(!value.preparing && value.decision != null && value.error == null)
+                    }
+                }
+                activeProbe.observe(notifyInitial = false) { capabilityChanges.observed(it.revision) }
                 PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
                 session.start(initialPositionMs, handoff?.tracks)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {

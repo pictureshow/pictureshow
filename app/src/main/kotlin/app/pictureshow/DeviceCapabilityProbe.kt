@@ -45,32 +45,38 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** Serializes cold probes across Play and Settings. No work (including the key) executes on the caller's dispatcher. */
+internal data class CapabilitySnapshot(val revision: Long, val capabilities: DeviceCapabilities)
+
 internal class CapabilitySnapshotCache {
     private val mutex = Mutex()
     private var key: Any? = null
     private var value: DeviceCapabilities? = null
+    private var revision = 0L
 
-    suspend fun snapshot(route: () -> Any, load: () -> DeviceCapabilities): DeviceCapabilities = withContext(Dispatchers.Default) {
+    suspend fun snapshot(route: () -> Any, load: () -> DeviceCapabilities): DeviceCapabilities = capture(route, load).capabilities
+
+    suspend fun capture(route: () -> Any, load: () -> DeviceCapabilities): CapabilitySnapshot = withContext(Dispatchers.Default) {
         mutex.withLock {
             val current = route()
             if (key != current || value == null) {
                 val loaded = load()
                 value = loaded
                 key = current
+                revision++
             }
-            requireNotNull(value)
+            CapabilitySnapshot(revision, requireNotNull(value))
         }
     }
 }
 
 /** Keeps notification intent when a newer route/display snapshot supersedes a suspended one. Main-confined. */
-internal class CapabilityUpdates(
+internal class CapabilityUpdates<T>(
     private val scope: CoroutineScope,
-    private val load: suspend () -> DeviceCapabilities,
-    private val onChanged: (DeviceCapabilities) -> Unit,
+    private val load: suspend () -> T,
+    private val onChanged: (T) -> Unit,
     notifyInitial: Boolean
 ) {
-    private var previous: DeviceCapabilities? = null
+    private var previous: T? = null
     private var notifyPending = notifyInitial
     private var job: kotlinx.coroutines.Job? = null
 
@@ -101,7 +107,9 @@ class DeviceCapabilityProbe(
     private var displayListener: DisplayManager.DisplayListener? = null
 
     /** Process cache excludes viewer settings. The route key also catches changes while no screen observes them. */
-    suspend fun cachedSnapshot(): DeviceCapabilities = processCache.snapshot(
+    suspend fun cachedSnapshot(): DeviceCapabilities = capture().capabilities
+
+    internal suspend fun capture(): CapabilitySnapshot = processCache.capture(
         route = {
             listOf(
                 routeGeneration.get(),
@@ -113,7 +121,7 @@ class DeviceCapabilityProbe(
             )
         },
         load = { snapshot().copy(settings = PlaybackSettings()) }
-    ).copy(settings = settings)
+    ).let { it.copy(capabilities = it.capabilities.copy(settings = settings)) }
 
     fun snapshot(): DeviceCapabilities {
         val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
@@ -190,11 +198,14 @@ class DeviceCapabilityProbe(
     }
 
     /** Media3 observes HDMI broadcasts, Bluetooth/device changes and surround settings; registration returns the initial route. */
-    fun start(notifyInitial: Boolean = true, onChanged: (DeviceCapabilities) -> Unit) {
+    fun start(notifyInitial: Boolean = true, onChanged: (DeviceCapabilities) -> Unit) =
+        observe(notifyInitial) { onChanged(it.capabilities) }
+
+    internal fun observe(notifyInitial: Boolean = true, onChanged: (CapabilitySnapshot) -> Unit) {
         close()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         observerScope = scope
-        val updates = CapabilityUpdates(scope, ::cachedSnapshot, onChanged, notifyInitial)
+        val updates = CapabilityUpdates(scope, ::capture, onChanged, notifyInitial)
         receiver = AudioCapabilitiesReceiver(context, { capabilities ->
             routeCapabilities = capabilities
             AudioOutputFailures(context).clear()
