@@ -646,6 +646,14 @@ html[data-input="keyboard"] #main :is(h1, h2)[tabindex]:focus {
         background: var(--color-tv-buttonFocused);
         color: var(--color-tv-buttonFocusedContent);
     }
+    /* Secondary text shares the light focus fill, unlike artwork and badges
+       that retain their own dark surfaces. Keep it readable in the same frame. */
+    html[data-input="keyboard"]
+        .catalog-card:focus-visible
+        :is(.catalog-muted, .catalog-card-state),
+    html[data-input="keyboard"] button:focus-visible .muted {
+        color: var(--color-tv-borderVariant);
+    }
 }
 .root-navigation .navigation-icon {
     width: 48px;
