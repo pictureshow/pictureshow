@@ -45,3 +45,7 @@ export function decoder(hwdec?: string | null): string {
     if (hwdec === "no") return "Software (mpv)";
     return hwdec && /^[a-zA-Z0-9_-]{1,40}$/.test(hwdec) ? `Hardware (mpv · ${hwdec})` : "Not reported";
 }
+
+export function profile(value?: string | null): string {
+    return value && /^[A-Za-z0-9_. ()-]{1,48}$/.test(value) ? value.toUpperCase() : "Not reported";
+}

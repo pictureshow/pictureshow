@@ -31,6 +31,7 @@ class PlaybackFormatsVectorsTest {
                     str("range")?.let(VideoRangeType::valueOf),
                     input["profile"]?.jsonPrimitive?.intOrNull
                 )
+                "profile" -> PlaybackFormatInformation.profile(str("profile"))
                 "decoder" -> PlaybackFormatInformation.decoder(str("hwdec"))
                 "display" -> PlaybackFormatInformation.display(str("transfer"), HdrOutput.valueOf(requireNotNull(str("output"))))
                 else -> error("Unknown playback format vector")

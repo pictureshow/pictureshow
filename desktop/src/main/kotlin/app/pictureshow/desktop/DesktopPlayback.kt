@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import app.pictureshow.core.Account
 import app.pictureshow.core.playback.*
 import kotlinx.serialization.json.*
@@ -503,6 +505,8 @@ private class LinuxPlayerWindow(
                 val paused = androidx.compose.runtime.mutableStateOf(false)
                 val infoScroll = androidx.compose.foundation.ScrollState(0)
                 var sections by androidx.compose.runtime.mutableStateOf(emptyList<PlaybackInfoSection>())
+                var focusedControl: Int? = null
+                var infoReturnFocus: Int? = null
                 var dirty = true
                 var lastUpdate = System.nanoTime()
                 val fakeComponent = java.awt.Canvas()
@@ -516,12 +520,18 @@ private class LinuxPlayerWindow(
                     if (width != w || height != h) {
                         scene?.close(); width = w; height = h
                         scene = androidx.compose.ui.ImageComposeScene(width = w, height = h) {
+                            val focus = androidx.compose.runtime.remember { List(7) { androidx.compose.ui.focus.FocusRequester() } }
+                            androidx.compose.runtime.LaunchedEffect(showingInfo.value) {
+                                androidx.compose.runtime.withFrameNanos { }
+                                val index = if (showingInfo.value) 6 else infoReturnFocus
+                                index?.let { runCatching { focus[it].requestFocus() } }
+                            }
                             androidx.compose.material.MaterialTheme(colors = androidx.compose.material.darkColors()) {
                                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                                     if (showingInfo.value) {
                                         androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF141820)).padding(24.dp)) {
                                             androidx.compose.material.Text("Playback info", style = androidx.compose.material.MaterialTheme.typography.h6)
-                                            androidx.compose.material.OutlinedButton(onClick = { showingInfo.value = false }) { androidx.compose.material.Text("Close") }
+                                            androidx.compose.material.OutlinedButton(onClick = { showingInfo.value = false }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[6])) { androidx.compose.material.Text("Close") }
                                             androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f).verticalScroll(infoScroll), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
                                                 sections.forEach { section ->
                                                     androidx.compose.material.Text(section.title, style = androidx.compose.material.MaterialTheme.typography.subtitle1)
@@ -533,12 +543,12 @@ private class LinuxPlayerWindow(
                                     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth().background(androidx.compose.ui.graphics.Color(0xEE141820)).padding(12.dp)) {
                                         androidx.compose.material.Text("Playback controls · Space pause · ←/→ seek · F fullscreen · Esc return", color = androidx.compose.ui.graphics.Color.White)
                                         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-                                            androidx.compose.material.OutlinedButton(onClick = { sections = info(); showingInfo.value = true }) { androidx.compose.material.Text("Playback info (I)") }
-                                            androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }) { androidx.compose.material.Text("Back to title") }
-                                            androidx.compose.material.Button(onClick = pause) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
-                                            androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }) { androidx.compose.material.Text("Back 10s") }
-                                            androidx.compose.material.OutlinedButton(onClick = { skip(10.0) }) { androidx.compose.material.Text("Forward 10s") }
-                                            androidx.compose.material.OutlinedButton(onClick = { fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0) }) { androidx.compose.material.Text("Fullscreen") }
+                                            androidx.compose.material.OutlinedButton(onClick = { infoReturnFocus = 0; sections = info(); showingInfo.value = true }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[0]).onFocusChanged { if (it.isFocused) focusedControl = 0 }) { androidx.compose.material.Text("Playback info (I)") }
+                                            androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[1]).onFocusChanged { if (it.isFocused) focusedControl = 1 }) { androidx.compose.material.Text("Back to title") }
+                                            androidx.compose.material.Button(onClick = pause, modifier = androidx.compose.ui.Modifier.focusRequester(focus[2]).onFocusChanged { if (it.isFocused) focusedControl = 2 }) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
+                                            androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[3]).onFocusChanged { if (it.isFocused) focusedControl = 3 }) { androidx.compose.material.Text("Back 10s") }
+                                            androidx.compose.material.OutlinedButton(onClick = { skip(10.0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[4]).onFocusChanged { if (it.isFocused) focusedControl = 4 }) { androidx.compose.material.Text("Forward 10s") }
+                                            androidx.compose.material.OutlinedButton(onClick = { fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[5]).onFocusChanged { if (it.isFocused) focusedControl = 5 }) { androidx.compose.material.Text("Fullscreen") }
                                         }
                                         androidx.compose.material.Text("Choose audio, subtitles or the next episode in the main Pictureshow window.")
                                     }
@@ -560,7 +570,7 @@ private class LinuxPlayerWindow(
                                 val consumed = if (scrollTarget != null) { kotlinx.coroutines.runBlocking { infoScroll.scrollTo(scrollTarget) }; true } else scene!!.sendKeyEvent(keyEvent)
                                 if (pressed && !consumed && (!showingInfo.value || code == java.awt.event.KeyEvent.VK_ESCAPE)) when (code) {
                                     java.awt.event.KeyEvent.VK_ESCAPE -> if (showingInfo.value) showingInfo.value = false else exitRequested = true
-                                    java.awt.event.KeyEvent.VK_I -> { sections = info(); showingInfo.value = true }
+                                    java.awt.event.KeyEvent.VK_I -> { infoReturnFocus = focusedControl; sections = info(); showingInfo.value = true }
                                     java.awt.event.KeyEvent.VK_SPACE -> pause()
                                     java.awt.event.KeyEvent.VK_F -> fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0)
                                     java.awt.event.KeyEvent.VK_LEFT -> skip(-10.0)

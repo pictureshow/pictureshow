@@ -252,6 +252,7 @@ for (const file of files) {
                 if (suite.suite === "playback-formats") {
                     switch (c.operation) {
                         case "range": value = playbackFormats.sourceRange(i.range, i.profile); break;
+                        case "profile": value = playbackFormats.profile(i.profile); break;
                         case "decoder": value = playbackFormats.decoder(i.hwdec); break;
                         case "display": value = playbackFormats.display(i.transfer, i.output); break;
                         default: throw new Error("Unknown playback format operation");

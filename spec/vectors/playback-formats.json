@@ -210,6 +210,28 @@
         "output": "HdrEdR"
       },
       "expected": "Not reported"
+    },
+    {
+      "id": "format-profile-main10",
+      "operation": "profile",
+      "input": {
+        "profile": "Main 10"
+      },
+      "expected": "MAIN 10"
+    },
+    {
+      "id": "format-profile-missing",
+      "operation": "profile",
+      "input": {},
+      "expected": "Not reported"
+    },
+    {
+      "id": "format-profile-private",
+      "operation": "profile",
+      "input": {
+        "profile": "https://private.invalid/token"
+      },
+      "expected": "Not reported"
     }
   ]
 }

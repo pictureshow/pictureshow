@@ -61,7 +61,7 @@ internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): L
             "Container: ${PlaybackInformation.codec(source.container)} · Total bitrate: ${PlaybackInformation.bitrate(source.bitrate)}",
             "Video: ${PlaybackInformation.codec(video?.codec)} · ${PlaybackInformation.resolution(video?.width, video?.height)}",
             "Source range: ${PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile)}",
-            "Video bitrate: ${PlaybackInformation.bitrate(video?.bitRate)} · Profile: ${PlaybackInformation.codec(video?.profile)}",
+            "Video bitrate: ${PlaybackInformation.bitrate(video?.bitRate)} · Profile: ${PlaybackFormatInformation.profile(video?.profile)}",
             if (p.audioIndex < 0) "Audio: Off" else "Audio: ${PlaybackInformation.codec(audio?.codec)} · ${number(audio?.channels, "channels")} · ${PlaybackInformation.bitrate(audio?.bitRate)}",
             "Subtitles: ${PlaybackInformation.subtitle(source, p.subtitleIndex)}",
             "Server metadata may describe the converted stream. Received formats below come from mpv."

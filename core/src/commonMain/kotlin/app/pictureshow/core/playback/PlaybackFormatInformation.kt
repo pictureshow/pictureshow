@@ -24,6 +24,8 @@ object PlaybackFormatInformation {
         }
     }
 
+    fun profile(value: String?): String = value?.takeIf { it.matches(Regex("[A-Za-z0-9_. ()-]{1,48}")) }?.uppercase() ?: "Not reported"
+
     fun transfer(value: String?): String = when (value?.lowercase()) {
         "pq", "smpte2084" -> "HDR (PQ)"
         "hlg", "arib-std-b67" -> "HDR (HLG)"
