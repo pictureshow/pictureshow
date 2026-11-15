@@ -67,13 +67,26 @@ export type Item = {
 export type Page = { Items: Item[] };
 export type Row = { key: string; title: string; items: Item[] };
 export class ClientError extends Error {
+    /** `detail` holds the technical causes, shown under "More details". */
     constructor(
         public kind: string,
         message: string,
+        public detail?: string,
     ) {
         super(message);
     }
 }
+/** Plain copy for errors people read; the technical causes go in `detail`. */
+export const errorCopy = {
+    network: "Couldn't reach your server. Check your connection and try again.",
+    unreachableAddress:
+        "Pictureshow couldn't reach a server at that address. Check the spelling, and include the port if your server uses one (Jellyfin's usual port is 8096), for example http://myserver:8096.",
+    networkDetail:
+        "Other possible causes: the server is off or on a different network; the address uses https but this browser doesn't trust the server's certificate; this page is on https and the server address is http, which browsers block; the server doesn't allow this website in its network settings (CORS); or the browser asked for local network access and it was refused.",
+    wrongPassword:
+        "That username and password didn't work. Check them and try again.",
+    expired: "Your sign-in has ended. Sign in again.",
+} as const;
 export const encode = (s: string) =>
     encodeURIComponent(s).replace(
         /[!'()*]/g,
@@ -488,6 +501,44 @@ export function browserProfile(probe: Probe, bitrate = 200_000_000) {
         ],
     };
 }
+const codecNames: Record<string, string> = {
+    h264: "H.264",
+    hevc: "HEVC (H.265)",
+    av1: "AV1",
+    vp9: "VP9",
+    vp8: "VP8",
+    mpeg4: "MPEG-4",
+    aac: "AAC",
+    mp3: "MP3",
+    opus: "Opus",
+    vorbis: "Vorbis",
+    flac: "FLAC",
+    ac3: "Dolby Digital",
+    eac3: "Dolby Digital Plus",
+};
+/**
+ * INFO-01 on web: a plain verdict for Troubleshooting, ahead of the technical
+ * report. `streaming` is whether the browser can play the server's converted
+ * stream at all (Media Source Extensions or native HLS).
+ */
+export function browserPlaybackSummary(probe: Probe, streaming: boolean) {
+    const video = Object.entries(videoCodecs)
+        .filter(([, v]) => probe(`video/mp4; codecs="${v}"`))
+        .map(([k]) => codecNames[k]);
+    const audio = Object.entries(audioCodecs)
+        .filter(([, v]) => probe(`audio/mp4; codecs="${v}"`))
+        .map(([k]) => codecNames[k]);
+    const h264 = video.includes("H.264");
+    const verdict =
+        h264 && streaming
+            ? "This browser can play most videos. When a file is in a format it can't play, your server converts it, so it still plays."
+            : h264
+              ? "This browser can play common video files directly, but it can't play the server's converted streams, so some files won't play. Try a recent version of Chrome, Edge, Firefox or Safari."
+              : streaming
+                ? "This browser can't play H.264, the most common video format, so your server has to convert most videos. Try a recent version of Chrome, Edge, Firefox or Safari."
+                : "This browser can't play videos from your server. Try a recent version of Chrome, Edge, Firefox or Safari.";
+    return { verdict, video, audio };
+}
 export class Jellyfin {
     constructor(
         public server: Server,
@@ -542,7 +593,8 @@ export class Jellyfin {
                           : "Network";
                 throw new ClientError(
                     "NETWORK",
-                    "Could not reach the server. Check the address, certificate, CORS settings and local network permission.",
+                    errorCopy.network,
+                    errorCopy.networkDetail,
                 );
             }
             status = r.status;
@@ -555,7 +607,7 @@ export class Jellyfin {
                           ? "NOT_FOUND"
                           : "SERVER",
                     r.status === 401
-                        ? "Sign-in was refused or expired. Sign in again."
+                        ? errorCopy.expired
                         : `The server could not complete the request (${r.status}).`,
                 );
             if (r.status === 204) return undefined as T;
@@ -625,19 +677,32 @@ export class Jellyfin {
                 error = e;
             }
         }
+        // While connecting, "no answer" almost always means a mistyped address.
+        if (error instanceof ClientError && error.kind === "NETWORK")
+            throw new ClientError(
+                "NETWORK",
+                errorCopy.unreachableAddress,
+                errorCopy.networkDetail,
+            );
         throw error;
     }
     async authenticate(username: string, password: string) {
-        return this.accept(
-            await this.request<{
-                User: Account["user"];
-                AccessToken: string;
-                ServerId: string;
-            }>("Users/AuthenticateByName", {
+        let v: { User: Account["user"]; AccessToken: string; ServerId: string };
+        try {
+            v = await this.request("Users/AuthenticateByName", {
                 Username: username,
                 Pw: password,
-            }),
-        );
+            });
+        } catch (e) {
+            // A 401 here is a wrong username or password, not an ended sign-in.
+            if (e instanceof ClientError && e.kind === "EXPIRED")
+                throw new ClientError(
+                    "INVALID_CREDENTIALS",
+                    errorCopy.wrongPassword,
+                );
+            throw e;
+        }
+        return this.accept(v);
     }
     accept(v: {
         User: Account["user"];

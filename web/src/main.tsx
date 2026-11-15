@@ -104,6 +104,8 @@ function App() {
             return [{ route: { kind: "home" } }];
         }),
         [error, setError] = useState(""),
+        // The technical causes behind `error`, shown under "More details".
+        [errorDetail, setErrorDetail] = useState<{ message: string; detail: string }>(),
         [busy, setBusy] = useState(false),
         [restoring, setRestoring] = useState(!!initial.saved?.current),
         [verifyAttempt, setVerifyAttempt] = useState(0),
@@ -192,6 +194,11 @@ function App() {
     function fail(e: unknown) {
         setError(
             e instanceof Error ? e.message : "The request failed. Try again.",
+        );
+        setErrorDetail(
+            e instanceof ClientError && e.detail
+                ? { message: e.message, detail: e.detail }
+                : undefined,
         );
         if (
             e instanceof ClientError &&
@@ -678,6 +685,7 @@ function App() {
                 });
             }}
             onBack={account ? rawBack : undefined}
+            onSignOut={account ? logout : undefined}
         />
     );
     return (
@@ -760,6 +768,12 @@ function App() {
                 {error && (
                     <div role="alert" className="error">
                         {error}
+                        {errorDetail?.message === error && (
+                            <details className="error-detail">
+                                <summary>More details</summary>
+                                <p>{errorDetail.detail}</p>
+                            </details>
+                        )}
                         <button onClick={() => setError("")}>Dismiss</button>
                     </div>
                 )}

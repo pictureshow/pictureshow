@@ -63,6 +63,7 @@ export function AccountChooser({
     onRemove,
     onRemoveServer,
     onBack,
+    onSignOut,
 }: {
     saved: Saved;
     onSelect: (a: Account) => void;
@@ -71,10 +72,26 @@ export function AccountChooser({
     onRemove: (a: Account, opener?: HTMLElement) => void;
     onRemoveServer: (s: Server, opener?: HTMLElement) => void;
     onBack?: () => void;
+    /** Present while someone is signed in: W-17 puts Sign out here too. */
+    onSignOut?: () => void;
 }) {
+    const current = onSignOut
+        ? saved.accounts.find((a) => accountKey(a) === saved.current)
+        : undefined;
     return (
         <section className="account-page">
-            <h1>Remembered accounts</h1>
+            <h1>{current ? "Accounts" : "Remembered accounts"}</h1>
+            {current && (
+                <section className="current-account">
+                    <p>
+                        Signed in as <strong>{current.user.Name}</strong> on{" "}
+                        {serverLabel(current.server, saved.servers)}.
+                    </p>
+                    <button data-focus="accounts:sign-out" onClick={onSignOut}>
+                        Sign out
+                    </button>
+                </section>
+            )}
             <p>
                 Choose a viewer or sign in another user. Removing a sign-in only
                 forgets it in this browser.
@@ -197,7 +214,8 @@ export function ServerForm({
     onAccounts?: () => void;
     onSubmit: (s: string) => void;
 }) {
-    const [address, setAddress] = useState("");
+    const [address, setAddress] = useState(""),
+        [missing, setMissing] = useState(false);
     return (
         <section className="welcome">
             <h1>Connect to Jellyfin</h1>
@@ -213,8 +231,14 @@ export function ServerForm({
                 </section>
             )}
             <form
+                noValidate
                 onSubmit={(e) => {
                     e.preventDefault();
+                    if (!address.trim()) {
+                        setMissing(true);
+                        document.getElementById("server")?.focus();
+                        return;
+                    }
                     if (!busy) onSubmit(address);
                 }}
             >
@@ -227,17 +251,29 @@ export function ServerForm({
                     autoCapitalize="none"
                     spellCheck={false}
                     placeholder="https://jellyfin.example.com"
-                    required
+                    aria-required="true"
+                    aria-invalid={missing || undefined}
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    aria-describedby="server-help"
+                    onChange={(e) => {
+                        setAddress(e.target.value);
+                        if (e.target.value.trim()) setMissing(false);
+                    }}
+                    aria-describedby={
+                        missing ? "server-missing server-help" : "server-help"
+                    }
                 />
+                {missing && (
+                    <p id="server-missing" className="field-error" role="alert">
+                        Enter your server's address.
+                    </p>
+                )}
                 <p id="server-help" className="muted">
-                    Include your server's base path if it has one. Web browsers
-                    cannot broadcast Jellyfin LAN discovery; enter an address
+                    Use the address you open Jellyfin with, including the port
+                    and any path after it, for example http://myserver:8096.
+                    Browsers can't search your network for servers
                     {remembered.length
-                        ? " or choose a remembered server."
-                        : "."}
+                        ? ", so type it or choose a remembered server above."
+                        : ", so type it here."}
                 </p>
                 <button className="primary" disabled={busy}>
                     {busy ? "Connecting…" : "Connect to server →"}
@@ -286,7 +322,10 @@ export function SignIn({
         [enabled, setEnabled] = useState<boolean>(),
         [quickError, setQuickError] = useState(""),
         [retry, setRetry] = useState(0),
-        [renewed, setRenewed] = useState(false);
+        [renewed, setRenewed] = useState(false),
+        [picked, setPicked] = useState<string>(),
+        [allUsers, setAllUsers] = useState(false),
+        [missing, setMissing] = useState(false);
     const alive = useRef(true),
         inflight = useRef(false),
         seen = useRef(
@@ -420,8 +459,8 @@ export function SignIn({
                 <>
                     <h2>Quick Connect</h2>
                     <p>
-                        On an already signed-in Jellyfin app, open Settings →
-                        Quick Connect and enter:
+                        Approve this code on a device that's already signed in
+                        to this server:
                     </p>
                     <output
                         aria-live="off"
@@ -432,6 +471,19 @@ export function SignIn({
                     >
                         {code || "Getting a code…"}
                     </output>
+                    <ul className="quick-steps">
+                        <li>
+                            In another Jellyfin app, open your profile or
+                            Settings, then Quick Connect, and enter the code.
+                        </li>
+                        <li>
+                            Or open {client.server.url} in a browser, sign in,
+                            then choose your user icon → Quick Connect.
+                        </li>
+                    </ul>
+                    <p className="muted">
+                        Pictureshow can't approve codes itself yet.
+                    </p>
                     <p className="sr-only" role="status">
                         {spoken
                             ? `${renewed ? "New code. The old code expired. " : ""}${spoken}`
@@ -467,30 +519,16 @@ export function SignIn({
                 </>
             ) : (
                 <>
-                    {users.length > 0 && (
-                        <section>
-                            <h2>Choose a user</h2>
-                            <div className="actions">
-                                {users.map((u) => (
-                                    <button
-                                        key={u.Id}
-                                        onClick={() => {
-                                            setUsername(u.Name);
-                                            document
-                                                .getElementById("password")
-                                                ?.focus();
-                                        }}
-                                    >
-                                        {u.Name}
-                                    </button>
-                                ))}
-                            </div>
-                        </section>
-                    )}
                     <form
+                        noValidate
                         onSubmit={async (e) => {
                             e.preventDefault();
                             if (inflight.current) return;
+                            if (!username.trim()) {
+                                setMissing(true);
+                                document.getElementById("username")?.focus();
+                                return;
+                            }
                             inflight.current = true;
                             setBusy(true);
                             try {
@@ -521,9 +559,16 @@ export function SignIn({
                             autoComplete="username"
                             autoCapitalize="none"
                             enterKeyHint="next"
-                            required
+                            aria-required="true"
+                            aria-invalid={missing || undefined}
+                            aria-describedby={
+                                missing ? "username-missing" : undefined
+                            }
                             value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            onChange={(e) => {
+                                setUsername(e.target.value);
+                                if (e.target.value.trim()) setMissing(false);
+                            }}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") {
                                     e.preventDefault();
@@ -533,6 +578,34 @@ export function SignIn({
                                 }
                             }}
                         />
+                        {missing && (
+                            <p
+                                id="username-missing"
+                                className="field-error"
+                                role="alert"
+                            >
+                                Enter your username.
+                            </p>
+                        )}
+                        {picked !== undefined && picked === username && (
+                            <p className="signing-in-as" id="signing-in-as">
+                                Signing in as <strong>{picked}</strong>
+                                {" · "}
+                                <button
+                                    type="button"
+                                    className="link"
+                                    onClick={() => {
+                                        setPicked(undefined);
+                                        setUsername("");
+                                        document
+                                            .getElementById("username")
+                                            ?.focus();
+                                    }}
+                                >
+                                    Not you?
+                                </button>
+                            </p>
+                        )}
                         <label htmlFor="password">Password</label>
                         <div className="password-field">
                             <input
@@ -540,6 +613,11 @@ export function SignIn({
                                 type={shown ? "text" : "password"}
                                 autoComplete="current-password"
                                 enterKeyHint="go"
+                                aria-describedby={
+                                    picked !== undefined && picked === username
+                                        ? "signing-in-as"
+                                        : undefined
+                                }
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                             />
@@ -575,6 +653,44 @@ export function SignIn({
                                 ? "Checking Quick Connect…"
                                 : "Quick Connect is unavailable. Sign in with your username and password."}
                         </p>
+                    )}
+                    {users.length > 0 && (
+                        <section className="user-picker">
+                            <h2>Or choose your name</h2>
+                            <div className="actions">
+                                {(allUsers || users.length <= 8
+                                    ? users
+                                    : users.slice(0, 8)
+                                ).map((u) => (
+                                    <button
+                                        key={u.Id}
+                                        type="button"
+                                        aria-pressed={
+                                            picked === u.Name &&
+                                            username === u.Name
+                                        }
+                                        onClick={() => {
+                                            setUsername(u.Name);
+                                            setPicked(u.Name);
+                                            setMissing(false);
+                                            document
+                                                .getElementById("password")
+                                                ?.focus();
+                                        }}
+                                    >
+                                        {u.Name}
+                                    </button>
+                                ))}
+                                {users.length > 8 && !allUsers && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setAllUsers(true)}
+                                    >
+                                        Show all {users.length} users
+                                    </button>
+                                )}
+                            </div>
+                        </section>
                     )}
                 </>
             )}

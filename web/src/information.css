@@ -37,3 +37,20 @@
         background: var(--surface);
     }
 }
+/* Headings, text chunks and the disclosure take focus too: same lavender ring as controls. */
+.information [tabindex]:focus-visible,
+.information summary:focus-visible {
+    outline: 3px solid #eaddff;
+    outline-offset: 5px;
+    box-shadow: 0 0 0 8px #625071;
+}
+.information .verdict {
+    font-size: 1.15em;
+}
+.information details.technical {
+    margin-top: 1.5rem;
+}
+.information details.technical summary {
+    cursor: pointer;
+    padding: 14px 0;
+}

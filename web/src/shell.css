@@ -132,6 +132,32 @@ fieldset {
     display: grid;
     gap: 20px;
 }
+/* W-17: a short jump list opens Settings, so Accounts is a few presses away. */
+.settings-jump ul {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+.settings-jump button {
+    min-height: 44px;
+}
+.settings-page .settings-heading {
+    margin: 16px 0 0;
+    scroll-margin-top: 24px;
+}
+.settings-page .settings-heading:focus-visible {
+    outline: 3px solid #eaddff;
+    outline-offset: 5px;
+    box-shadow: 0 0 0 8px #625071;
+}
+/* SET-02 where the platform has no passthrough: a read-only line, not a switch. */
+.setting-list .setting-readonly {
+    display: grid;
+    gap: 4px;
+}
 .settings-links {
     display: flex;
     flex-wrap: wrap;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import React, { useEffect, useState } from "react";
 import "./information.css";
-import { browserProfile } from "@pictureshow/core";
+import { browserPlaybackSummary, browserProfile } from "@pictureshow/core";
 export type InformationRoute =
     | { kind: "about" | "device" | "support" | "licenses" }
     | { kind: "license"; index: number };
@@ -38,6 +38,8 @@ export function Information({
         [error, setError] = useState(""),
         [attempt, setAttempt] = useState(0),
         [profile, setProfile] = useState<object>(),
+        [summary, setSummary] =
+            useState<ReturnType<typeof browserPlaybackSummary>>(),
         [show, setShow] = useState(false);
     useEffect(() => {
         let live = true;
@@ -63,6 +65,14 @@ export function Information({
     function refresh() {
         try {
             const video = document.createElement("video");
+            const probe = (t: string) => !!video.canPlayType(t);
+            setSummary(
+                browserPlaybackSummary(
+                    probe,
+                    typeof MediaSource !== "undefined" ||
+                        probe("application/vnd.apple.mpegurl"),
+                ),
+            );
             setProfile({
                 profile: browserProfile((t) => !!video.canPlayType(t)),
                 display: {
@@ -96,7 +106,7 @@ export function Information({
             setError("");
         } catch {
             setError(
-                "Browser capabilities could not be read. Use Refresh to try again.",
+                "Pictureshow couldn't check this browser. Press Check again to retry.",
             );
         }
     }
@@ -107,50 +117,64 @@ export function Information({
         return (
             <section className="information">
                 <h1>This browser</h1>
-                <p>
-                    Current browser capabilities. MIME support is a capability
-                    probe, not proof every file can decode. The actual source is
-                    negotiated with your server.
-                </p>
+                <p>What this browser can play, and why.</p>
                 <button data-autofocus onClick={refresh}>
-                    Refresh browser capabilities
+                    Check again
                 </button>
                 {error && <p role="alert">{error}</p>}
-                {profile && (
+                {profile && summary && (
                     <>
-                        <h2>Playback support</h2>
+                        <h2>Playback</h2>
+                        <p className="verdict">{summary.verdict}</p>
                         <p>
-                            Native HLS:{" "}
-                            {(profile as any).playback.nativeHls
-                                ? "Available"
-                                : "Not reported"}{" "}
-                            · MSE:{" "}
-                            {(profile as any).playback.mse
-                                ? "Available"
-                                : "Not reported"}
+                            Video formats it plays:{" "}
+                            {summary.video.join(", ") || "none reported"}
                         </p>
                         <p>
-                            Encoded passthrough, speaker channels, decoder
-                            hardware/profile/level and display refresh rate are
-                            not reported by browser APIs. No Android
-                            capabilities are assumed.
+                            Audio formats it plays:{" "}
+                            {summary.audio.join(", ") || "none reported"}
                         </p>
-                        <button
-                            aria-expanded={show}
-                            onClick={() => setShow(!show)}
-                        >
-                            {show
-                                ? "Hide device profile JSON"
-                                : "View device profile JSON"}
-                        </button>
-                        {show &&
-                            chunks(JSON.stringify(profile, null, 2)).map(
-                                (s, i) => (
-                                    <pre key={i} tabIndex={0}>
-                                        {s}
-                                    </pre>
-                                ),
-                            )}
+                        <p>
+                            Browsers decode the sound themselves, so audio can't
+                            pass through to a receiver.
+                        </p>
+                        <details className="technical">
+                            <summary>Technical details</summary>
+                            <p>
+                                Media Source Extensions:{" "}
+                                {(profile as any).playback.mse
+                                    ? "Available"
+                                    : "Not reported"}{" "}
+                                · Native HLS:{" "}
+                                {(profile as any).playback.nativeHls
+                                    ? "Available"
+                                    : "Not reported"}
+                            </p>
+                            <p>
+                                Formats come from the browser's MIME type check,
+                                which doesn't prove that every file decodes.
+                                Your server decides the actual stream for each
+                                video. Browsers don't report encoded
+                                passthrough, speaker channels, decoder hardware,
+                                profile or level, or the display's refresh rate.
+                            </p>
+                            <button
+                                aria-expanded={show}
+                                onClick={() => setShow(!show)}
+                            >
+                                {show
+                                    ? "Hide device profile JSON"
+                                    : "View device profile JSON"}
+                            </button>
+                            {show &&
+                                chunks(JSON.stringify(profile, null, 2)).map(
+                                    (s, i) => (
+                                        <pre key={i} tabIndex={0}>
+                                            {s}
+                                        </pre>
+                                    ),
+                                )}
+                        </details>
                     </>
                 )}
             </section>
@@ -196,22 +220,20 @@ export function Information({
             <section className="information">
                 <h1>Support Pictureshow</h1>
                 <p>
-                    Pictureshow is free and open source. Voluntary monthly
-                    support helps development and gives feature requests
-                    priority for consideration.
+                    Pictureshow is free and open source. Monthly supporters help
+                    pay for its development, and their feature requests are
+                    considered first.
                 </p>
                 <p>
-                    Support does not guarantee delivery of a feature or a
-                    delivery date. Playback stays free.
+                    Supporting doesn't promise a feature or a date. Watching
+                    stays free.
                 </p>
-                <h2 tabIndex={0} data-autofocus>
-                    Purchases are unavailable in this browser
+                <h2 tabIndex={-1} data-autofocus>
+                    You can't become a supporter in the web app yet
                 </h2>
                 <p>
-                    Only Google Play billing is configured in the current
-                    Android app. No web subscription provider, price, purchase
-                    or management flow is configured. There is no subscription
-                    to purchase here.
+                    Support is available in the Pictureshow app for Android.
+                    Everything here stays free.
                 </p>
             </section>
         );

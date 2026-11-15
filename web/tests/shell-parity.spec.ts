@@ -156,7 +156,7 @@ test("settings preserve unknown server fields and rejected desired writes can re
     await page.reload();
     // Reload restores the safe Settings route; its desktop navigation is the rail.
     await expect(
-        page.getByRole("heading", { name: "Playback settings", exact: true }),
+        page.getByRole("heading", { name: "Settings", exact: true }),
     ).toBeVisible();
     await expect(
         page.getByRole("combobox", {
@@ -202,6 +202,7 @@ test("About, all bundled license text, device JSON and unavailable support are r
     await page
         .getByRole("button", { name: "Troubleshooting · This browser" })
         .click();
+    await page.getByText("Technical details").click();
     await page
         .getByRole("button", { name: "View device profile JSON" })
         .click();
@@ -212,7 +213,7 @@ test("About, all bundled license text, device JSON and unavailable support are r
         .click();
     await expect(
         page.getByRole("heading", {
-            name: "Purchases are unavailable in this browser",
+            name: "You can't become a supporter in the web app yet",
         }),
     ).toBeFocused();
     await expect(

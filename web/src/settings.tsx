@@ -176,7 +176,21 @@ export function Settings({
     }
     return (
         <section className="settings-page">
-            <h1>Playback settings</h1>
+            <h1>Settings</h1>
+            <nav className="settings-jump" aria-label="Settings sections">
+                <ul>
+                    {sections.map(([id, label]) => (
+                        <li key={id}>
+                            <button
+                                data-focus={"settings-jump:" + id}
+                                onClick={() => jump(id)}
+                            >
+                                {label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
             {error && (
                 <div role="alert">
                     <p>{error}</p>
@@ -195,6 +209,7 @@ export function Settings({
                 </div>
             )}
             <div className="setting-list">
+                <Heading id="playback">Playback</Heading>
                 <label>
                     Max streaming bitrate
                     <select
@@ -218,13 +233,15 @@ export function Settings({
                         ))}
                     </select>
                 </label>
-                <SwitchRow
-                    label="Allow audio passthrough"
-                    captionId="passthrough-caption"
-                    caption="This browser does not expose encoded audio passthrough or the connected speaker layout. Playback uses supported decoded audio or server conversion; this preference cannot grant a capability."
-                    checked={value.passthrough}
-                    onChange={(v) => patch("passthrough", v)}
-                />
+                {/* SET-02: a browser always decodes the sound itself, so there is
+                    no passthrough to switch on or off; say so instead. */}
+                <div className="setting-readonly" id="passthrough-row">
+                    <span className="switch-text">Audio passthrough</span>
+                    <span className="muted">
+                        Not available in browsers. The browser decodes the sound
+                        itself.
+                    </span>
+                </div>
                 <SwitchRow
                     label="Conversion notice"
                     focus="setting:conversion-notice"
@@ -233,6 +250,7 @@ export function Settings({
                     checked={value.conversionNotice}
                     onChange={(v) => patch("conversionNotice", v)}
                 />
+                <Heading id="subtitles">Subtitles</Heading>
                 <label>
                     Subtitle size
                     <select
@@ -244,14 +262,18 @@ export function Settings({
                             )
                         }
                     >
-                        {[
-                            "System",
-                            "Small",
-                            "Normal",
-                            "Large",
-                            "ExtraLarge",
-                        ].map((v) => (
-                            <option key={v}>{v}</option>
+                        {(
+                            [
+                                ["System", "System"],
+                                ["Small", "Small"],
+                                ["Normal", "Normal"],
+                                ["Large", "Large"],
+                                ["ExtraLarge", "Extra large"],
+                            ] as const
+                        ).map(([v, label]) => (
+                            <option key={v} value={v}>
+                                {label}
+                            </option>
                         ))}
                     </select>
                 </label>
@@ -273,13 +295,21 @@ export function Settings({
                     </select>
                 </label>
                 <p className="muted">
-                    System uses browser caption styling where available.
-                    Burned-in captions retain their authored appearance.
+                    System follows your browser's caption settings. Subtitles
+                    the server draws into the video keep their original look.
                 </p>
-                <h2>Skip segments</h2>
+                <Heading id="segments">Skip segments</Heading>
+                <p className="muted">
+                    What happens when a video reaches an intro, recap, preview,
+                    ad break or credits.
+                </p>
                 {Object.entries(value.segments).map(([kind, mode]) => (
                     <label key={kind}>
-                        {kind === "Outro" ? "Credits" : kind}
+                        {kind === "Outro"
+                            ? "Credits"
+                            : kind === "Commercial"
+                              ? "Ad breaks"
+                              : kind}
                         <select
                             value={mode}
                             onChange={(e) =>
@@ -296,16 +326,22 @@ export function Settings({
                         </select>
                     </label>
                 ))}
+                <Heading id="accessibility">Accessibility</Heading>
                 <SwitchRow
-                    label="Require Play now for the next episode"
+                    label="Ask before playing the next episode"
+                    focus="setting:next-episode-ask"
                     captionId="screen-reader-caption"
-                    caption="Recommended for screen readers. Browsers do not report whether a screen reader is enabled; manual continuation is the default."
+                    caption="Useful with a screen reader: the next episode waits until you press Play now."
                     checked={value.screenReader}
                     onChange={(v) => patch("screenReader", v)}
                 />
-                <h2>Server preferences</h2>
+                <Heading id="languages">Languages</Heading>
+                <p className="muted">
+                    Saved on your server, so they apply in every Jellyfin app
+                    you use.
+                </p>
                 {!config ? (
-                    <p role="status">Loading server preferences…</p>
+                    <p role="status">Loading your language settings…</p>
                 ) : (
                     <fieldset disabled={busy}>
                         <legend>Language and subtitles</legend>
@@ -352,15 +388,15 @@ export function Settings({
                         </label>
                     </fieldset>
                 )}
-                {busy && <p role="status">Saving server preferences…</p>}
+                {busy && <p role="status">Saving…</p>}
             </div>
-            <h2>Pictureshow</h2>
+            <Heading id="account">Account and help</Heading>
             <div className="settings-links">
                 <button
                     data-focus="settings:accounts"
                     onClick={() => navigate({ kind: "accounts" })}
                 >
-                    Accounts
+                    Accounts and sign out
                 </button>
                 <button
                     data-focus="settings:support"
@@ -382,6 +418,28 @@ export function Settings({
                 </button>
             </div>
         </section>
+    );
+}
+
+/** W-17: the sections the jump list at the top of Settings opens. */
+const sections = [
+    ["playback", "Playback"],
+    ["subtitles", "Subtitles"],
+    ["segments", "Skip segments"],
+    ["accessibility", "Accessibility"],
+    ["languages", "Languages"],
+    ["account", "Account and help"],
+] as const;
+function jump(id: string) {
+    const h = document.getElementById("settings-" + id);
+    h?.scrollIntoView({ block: "start" });
+    h?.focus({ preventScroll: true });
+}
+function Heading({ id, children }: { id: string; children: string }) {
+    return (
+        <h2 id={"settings-" + id} tabIndex={-1} className="settings-heading">
+            {children}
+        </h2>
     );
 }
 

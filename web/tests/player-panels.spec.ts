@@ -344,7 +344,8 @@ test("a click anywhere on a setting row's title or help text flips its switch", 
     await signIn(page);
     await page.locator('[data-focus="home-settings"]').click();
     const rows = page.locator(".setting-list .switch-row");
-    expect(await rows.count()).toBeGreaterThanOrEqual(3);
+    // Web has two switches: SET-02 passthrough is read-only text in a browser.
+    expect(await rows.count()).toBeGreaterThanOrEqual(2);
     for (const row of await rows.all()) {
         const toggle = row.getByRole("switch");
         // One switch per row, named by the title only, described by the help text.
@@ -386,7 +387,7 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
     // One drawn switch component for every boolean setting, with no On/Off text:
     // the thumb and role="switch" carry the state.
     const switches = page.locator(".setting-list").getByRole("switch");
-    expect(await switches.count()).toBeGreaterThanOrEqual(3);
+    expect(await switches.count()).toBeGreaterThanOrEqual(2);
     for (const s of await switches.all()) {
         expect(await s.evaluate((e) => e.className)).toBe("switch");
         const box = (await s.boundingBox())!;
@@ -440,14 +441,16 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
     );
     // Its own row, directly after audio passthrough and before Subtitle size.
     const order = await page
-        .locator(".setting-list > label, .setting-list > .switch-row")
+        .locator(
+            ".setting-list > label, .setting-list > .switch-row, .setting-list > .setting-readonly",
+        )
         .evaluateAll((rows) =>
             rows.map((r) =>
                 ((r.querySelector("label") ?? r).textContent ?? "").trim(),
             ),
         );
     const at = order.findIndex((t) => t.startsWith("Conversion notice"));
-    expect(order[at - 1]).toContain("Allow audio passthrough");
+    expect(order[at - 1]).toContain("Audio passthrough");
     expect(order[at + 1]).toContain("Subtitle size");
     await capture(page, "settings-row-on");
     await toggle.click();
@@ -1079,7 +1082,8 @@ test.describe("touch", () => {
         await signIn(page);
         await page.locator('[data-focus="home-settings"]').tap();
         const rows = page.locator(".setting-list .switch-row");
-        expect(await rows.count()).toBeGreaterThanOrEqual(3);
+        // Web has two switches: SET-02 passthrough is read-only text in a browser.
+        expect(await rows.count()).toBeGreaterThanOrEqual(2);
         for (const row of await rows.all()) {
             const [r, sw, text, caption] = await Promise.all([
                 row.boundingBox(),
@@ -1110,7 +1114,8 @@ test.describe("touch", () => {
         await signIn(page);
         await page.locator('[data-focus="home-settings"]').tap();
         const rows = page.locator(".setting-list .switch-row");
-        expect(await rows.count()).toBeGreaterThanOrEqual(3);
+        // Web has two switches: SET-02 passthrough is read-only text in a browser.
+        expect(await rows.count()).toBeGreaterThanOrEqual(2);
         for (const row of await rows.all()) {
             const toggle = row.getByRole("switch");
             const start = await toggle.isChecked();
