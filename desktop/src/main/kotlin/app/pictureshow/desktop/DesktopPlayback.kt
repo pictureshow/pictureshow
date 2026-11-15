@@ -38,6 +38,8 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun togglePause()
     fun seek(seconds: Double)
     fun volume(value: Int)
+    /** PLAY-29's M key. Engines without a mute control ignore it. */
+    fun mute(muted: Boolean) {}
     fun fullscreen(enabled: Boolean)
     fun viewport(topRatio: Double, bottomRatio: Double) {}
     fun viewportReceipt(): String? = null
@@ -325,6 +327,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun togglePause() { mpv?.command("cycle", "pause") }
     override fun seek(seconds: Double) { mpv?.command("seek", (seconds - offset).coerceAtLeast(0.0).toString(), "absolute+exact") }
     override fun volume(value: Int) { mpv?.set("volume", value.coerceIn(0, 100).toString()) }
+    override fun mute(muted: Boolean) { if (!stopped.get()) mpv?.set("mute", if (muted) "yes" else "no") }
     override fun viewport(topRatio: Double, bottomRatio: Double) {
         if (!topRatio.isFinite() || !bottomRatio.isFinite() || topRatio < 0 || bottomRatio < 0 || topRatio + bottomRatio >= 1) return
         viewportMargins.set(topRatio to bottomRatio)

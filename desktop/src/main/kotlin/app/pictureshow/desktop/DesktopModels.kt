@@ -30,8 +30,17 @@ data class DesktopPlaybackState(
     val positionSeconds: Double = 0.0,
     val durationSeconds: Double = 0.0,
     val ready: Boolean = false,
-    val nextEpisode: MediaItem? = null
+    val nextEpisode: MediaItem? = null,
+    val muted: Boolean = false,
+    /** Set once the viewing reached its physical end (PLAY-17): the end card replaces the transport. */
+    val end: DesktopEndCard? = null
 )
+
+/**
+ * The card shown after a genuine end. [next] null means "Finished" (a film or the last episode).
+ * [secondsLeft] counts down to the next episode; null means no countdown (autoplay off or cancelled).
+ */
+data class DesktopEndCard(val next: MediaItem?, val secondsLeft: Int? = null)
 
 data class DesktopState(
     val route: DesktopRoute = DesktopRoute.Loading,
@@ -58,5 +67,7 @@ data class DesktopState(
     val episodes: List<MediaItem> = emptyList(),
     val selectedSeason: MediaItem? = null,
     val settings: DesktopSettings = DesktopSettings(),
-    val playback: DesktopPlaybackState? = null
+    val playback: DesktopPlaybackState? = null,
+    /** A control tag the next page focuses once, e.g. "play" on the title after a film finishes (PLAY-17). */
+    val returnFocus: String? = null
 )

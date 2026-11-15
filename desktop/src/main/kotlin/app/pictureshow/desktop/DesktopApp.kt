@@ -201,11 +201,10 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
                         (help || remove != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
+                        // PLAY-29: the player page owns its keys (DesktopPlayerPage.kt, playerKeyAction), including a menu's Escape.
+                        state.route == DesktopRoute.Player && !help && remove == null && PlayerKeyboard.handle(e) { modalReturnFocus = null; help = true } -> true
                         e.key == Key.Escape && fullscreen -> { onFullscreen(); true }
                         e.key == Key.Escape -> { controller.back(); true }
-                        state.route == DesktopRoute.Player && !help && remove == null && e.key == Key.Spacebar -> { controller.playerToggle(); true }
-                        state.route == DesktopRoute.Player && e.key == Key.DirectionLeft && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) - 10); true }
-                        state.route == DesktopRoute.Player && e.key == Key.DirectionRight && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) + 10); true }
                         state.route in listOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> {
                             focus.moveFocus(when(e.key) { Key.DirectionLeft -> FocusDirection.Left; Key.DirectionRight -> FocusDirection.Right; Key.DirectionUp -> FocusDirection.Up; else -> FocusDirection.Down }); true
                         }

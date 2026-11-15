@@ -57,6 +57,8 @@ class Mpv(val out: File, val probe: Boolean = true) : AutoCloseable {
         option("config", "no")
         option("terminal", "yes")
         option("msg-level", "all=warn,vd=info,vo=info")
+        // One mpv.log per viewing; keep the previous four so an autoplayed episode does not erase the one before it.
+        rotateDesktopLog(File(out, "mpv.log"), keep = 4)
         option("log-file", File(out, "mpv.log").absolutePath)
         option("hwdec", "auto-safe")
         if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") option("gpu-sw", "yes")
