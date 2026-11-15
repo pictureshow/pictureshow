@@ -211,6 +211,9 @@ class DesktopSearchTest {
                 onNodeWithTag("search:MOVIES:a").assertIsFocused()
                 onNodeWithTag("search:MOVIES:a").performKeyInput { pressKey(Key.Enter) }
                 waitUntil(timeoutMillis = 5000) { c.state.value.route == DesktopRoute.Detail && !c.state.value.busy }
+                // A test Box has no Window fallback when no descendant has focus. Wait for
+                // the real detail entry focus before delivering Escape through the test root.
+                waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["play"] == true }
                 onRoot().performKeyInput { pressKey(Key.Escape) }
                 waitUntil(timeoutMillis = 5000) { c.state.value.route == DesktopRoute.Search }
                 waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
