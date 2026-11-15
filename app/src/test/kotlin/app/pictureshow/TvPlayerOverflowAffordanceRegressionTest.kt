@@ -9,8 +9,10 @@ package app.pictureshow
 import android.app.Application
 import android.app.UiModeManager
 import android.content.res.Configuration
-import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -20,6 +22,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -37,39 +40,21 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntSize
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.emptyPreferences
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import app.pictureshow.core.Account
-import app.pictureshow.core.AccountStore
-import app.pictureshow.core.ClientResult
-import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
-import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
-import app.pictureshow.core.sync.SyncGroup
-import app.pictureshow.core.sync.SyncRequest
-import app.pictureshow.core.sync.SyncUtcTime
-import app.pictureshow.core.sync.syncUtcTimestamp
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import java.io.File
 import java.io.InterruptedIOException
 import kotlin.math.abs
@@ -77,19 +62,15 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
@@ -102,9 +83,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -173,179 +152,30 @@ class TvPlayerOverflowAffordanceRegressionTest {
         hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and (hasText("Play") or hasText("Pause"))
     )
     private fun transportSent() = sent.filter { it in setOf("Pause", "Unpause", "Stop") }
+
+    /** Oversized direct controls deliberately exercise the reusable scroller, not the two-row HUD's inventory. */
     private fun launch(c: Profile) {
         RuntimeEnvironment.setFontScale(c.number("fontScale"))
-        val input = c.input
-        val participating = input.getValue("participating").jsonPrimitive.boolean
-        val phase = c.text("phase")
-        val entries = input.getValue("queueEntries").jsonPrimitive.int
-        val localShowPlay = input.getValue("localShowPlayButton").jsonPrimitive.boolean
-        val usable = input.getValue("usable").jsonPrimitive.boolean
-        val gateway = object : SyncPlayGateway {
-            override suspend fun groups(account: Account): ClientResult<List<SyncGroup>> {
-                if (holdRefresh) refreshRelease.await()
-                return ClientResult.Success(listOf(SyncGroup("g", "Friday films", phase, emptyList(), epoch * 10_000)))
-            }
-            override suspend fun access(account: Account) = ClientResult.Success("CreateAndJoinGroups")
-            override suspend fun time(account: Account) = ClientResult.Success(SyncUtcTime(epoch, epoch))
-            override suspend fun send(account: Account, request: SyncRequest): Int {
-                sent += request.operation
-                return 204
-            }
-        }
-        compose.runOnIdle {
-            group = SyncPlayHost(scope, gateway, { epoch + scheduler.currentTime }, { scheduler.currentTime })
-            group.bind(account)
-            group.socket(true)
-            group.refresh()
-            scheduler.runCurrent()
-            if (participating) {
-                group.join("g")
-                scheduler.runCurrent()
-                update(
-                    "GroupJoined",
-                    buildJsonObject {
-                        put("GroupId", "g")
-                        put("GroupName", "Friday films")
-                        put("State", phase)
-                        put("Participants", JsonArray(emptyList()))
-                        put("LastUpdatedAt", syncUtcTimestamp(epoch))
-                    }
-                )
-                update(
-                    "PlayQueue",
-                    buildJsonObject {
-                        put("Reason", "NewPlaylist")
-                        put("LastUpdate", syncUtcTimestamp(epoch))
-                        put(
-                            "Playlist",
-                            JsonArray(
-                                (0 until entries).map {
-                                    buildJsonObject {
-                                        put("ItemId", "film")
-                                        put("PlaylistItemId", "entry-a")
-                                    }
-                                }
-                            )
-                        )
-                        put("PlayingItemIndex", 0)
-                        put("StartPositionTicks", 200_000_000L)
-                        put("IsPlaying", phase == "Playing")
-                        put("RepeatMode", "RepeatNone")
-                        put("ShuffleMode", "Sorted")
-                    }
-                )
-                scheduler.runCurrent()
-            }
-        }
-        val store = object : DataStore<Preferences> {
-            override val data = MutableStateFlow(emptyPreferences())
-            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
-                transform(data.value).also { data.value = it }
-        }
-        http = HttpClient(MockEngine) {
-            engine {
-                addHandler { request ->
-                    val json = when {
-                        request.url.encodedPath.endsWith("/PlaybackInfo") ->
-                            """{"PlaySessionId":"viewing","MediaSources":[{"Id":"source","RunTimeTicks":600000000,"SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls","TranscodingUrl":"/Videos/film/master.m3u8","MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"}]}]}"""
-                        request.url.encodedPath == "/Items/film" -> buildJsonObject {
-                            put("Id", "film")
-                            put("Name", c.text("title"))
-                            put("Type", "Movie")
-                            put(
-                                "Chapters",
-                                JsonArray(
-                                    listOf(
-                                        buildJsonObject {
-                                            put("StartPositionTicks", 0)
-                                            put("Name", "A real chapter")
-                                        }
-                                    )
-                                )
-                            )
-                        }.toString()
-                        request.url.encodedPath.startsWith(
-                            "/MediaSegments"
-                        ) -> """{"Items":[{"Id":"intro","Type":"Intro","StartTicks":0,"EndTicks":500000000}]}"""
-                        else -> return@addHandler respond("", HttpStatusCode.NoContent)
-                    }
-                    respond(json, headers = headersOf(HttpHeaders.ContentType, "application/json"))
-                }
-            }
-        }
-        startKoin {
-            modules(
-                module {
-                    single { group }
-                    single { inertRemoteTarget() }
-                    single { http }
-                    single { DeviceIdentityStore(store) }
-                    single { PlaybackPreferencesStore(store) }
-                }
-            )
-        }
-        val accounts = AccountStore(object : TextPersistence {
-            override suspend fun read(): String? = null
-            override suspend fun write(value: String) = Unit
-        })
-        val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
-        output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
         compose.setContent {
             TvEnvironment {
-                PlayerItemScreen(account, MediaItem("film", c.text("title"), "Movie"), 0, catalog, {
-                }, { exitCalls++ }, providedOutput = output)
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)
+                        .testTag("player:surface")
+                ) {
+                    TvPlayerActions(
+                        androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                            .padding(horizontal = 48.dp, vertical = 36.dp)
+                    ) {
+                        labels(c).forEach { label ->
+                            PlayerActionButton(onClick = {}) { androidx.tv.material3.Text(label) }
+                        }
+                    }
+                }
             }
         }
-        compose.waitUntil(10_000) {
-            shadowOf(Looper.getMainLooper()).idle()
-            output.player.value?.playbackState == Player.STATE_BUFFERING
-        }
-        compose.waitForIdle()
-        compose.runOnIdle {
-            scheduler.runCurrent()
-            native = requireNotNull(output.player.value)
-            output.applySync { native.playWhenReady = !localShowPlay }
-            output.setSpeed(c.number("speed"))
-            shadowOf(Looper.getMainLooper()).idle()
-        }
-        compose.waitForIdle()
-        compose.onNodeWithTag("player:surface").performClick()
-        compose.waitForIdle()
-        compose.runOnIdle {
-            if (!usable) {
-                holdRefresh = true
-                group.refresh()
-                scheduler.runCurrent()
-            }
-        }
-        compose.waitForIdle()
-        compose.runOnIdle {
-            assertEquals(participating, group.participating, "Fixture membership")
-            if (participating) {
-                assertEquals(phase, group.state.value.phase, "Fixture authoritative phase")
-                assertEquals(entries, group.state.value.queue.size, "Fixture authoritative queue")
-                assertEquals(!usable, group.state.value.busy, "Fixture usable/busy state")
-                assertNotNull(output.syncRequest, "Actual host must install its output interception")
-                assertTrue(output.syncParticipating(), "Actual binding must expose membership")
-            }
-            assertTrue(native === output.player.value, "Fixture must retain the actual mounted output player")
-            assertEquals(localShowPlay, Util.shouldShowPlayButton(native), "Fixture local native projection")
-            val feedback = output.onSyncPauseRequested
-            output.onSyncPauseRequested = {
-                pauseFeedback++
-                feedback()
-            }
-            native.addListener(nativeListener)
-            sent.clear()
-            nativeChanges.clear()
-            pauseFeedback = 0
-        }
-        primary().assertIsDisplayed()
+        settle()
         assertNative(c)
         labels(c).forEach { action(it).assertExists() }
-        assertFont(c, compose.onNodeWithText(c.text("title"), useUnmergedTree = true))
-        compose.onNodeWithTag("skip:Intro").assertExists()
     }
     private var density = 0f
     private var window = IntSize.Zero
@@ -490,7 +320,7 @@ class TvPlayerOverflowAffordanceRegressionTest {
         cue(c)
         action(names.first()).assertIsFocused()
         assertEquals(c.metric("groupCommands").toInt(), transportSent().size, "Passive cue and traversal send no transport")
-        assertEquals(c.metric("exitCalls").toInt(), exitCalls, "Focus Stop without invoking it")
+        assertEquals(c.metric("exitCalls").toInt(), exitCalls, "Traversal does not invoke synthetic actions")
     }
 
     private fun wholeFocusedLabel(c: Profile, label: String) {

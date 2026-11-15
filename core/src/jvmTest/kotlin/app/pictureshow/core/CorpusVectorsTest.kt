@@ -116,7 +116,8 @@ class CorpusVectorsTest {
                     // TouchPlayerDirectorRegressionTest and TouchTransportClearanceVectorsTest.
                     "touch-player-director-clearance-paint-edges",
                     // TouchPlayerSeekOrientationRegressionTest and TvPlayerOverflowAffordanceRegressionTest.
-                    "player-control-affordances"
+                    "player-control-affordances",
+                    "player-hud-clocks"
                 )
         )
         fun directory(name: String) = File(requireNotNull(javaClass.classLoader.getResource(name)) { "Missing packaged $name" }.toURI())

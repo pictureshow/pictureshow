@@ -23,23 +23,28 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntSize
 import androidx.datastore.core.DataStore
@@ -347,6 +352,7 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
     }
     private var density = 0f
     private var window = IntSize.Zero
+    private var windowFocused = false
     private var exitCalls = 0
     private data class Profile(val input: JsonObject, val expected: JsonObject) {
         fun text(key: String) = input.getValue(key).jsonPrimitive.content
@@ -376,9 +382,11 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
             PictureshowTheme {
                 val scale = LocalDensity.current.density
                 val actualWindow = LocalWindowInfo.current.containerSize
+                val actualWindowFocused = LocalWindowInfo.current.isWindowFocused
                 SideEffect {
                     density = scale
                     window = actualWindow
+                    windowFocused = actualWindowFocused
                 }
                 content()
             }
@@ -399,7 +407,7 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
         )
     }
     private fun action(label: String) = compose.onNode(
-        hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and hasText(label)
+        hasAnyAncestor(hasTestTag("player:surface")) and hasClickAction() and (hasText(label) or hasContentDescription(label))
     )
     private fun nativeBounds(node: SemanticsNodeInteraction): Rect {
         val b = node.getUnclippedBoundsInRoot()
@@ -482,22 +490,38 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
         }
     }
 
-    @Test fun nativeTvActionsNeverWrapAndDpadRevealsLastThenReturnsAtFontOne() = row("tv-actions-one-row-font-one")
+    @Test fun nativeTvTransportAndToolsHaveStableRowsAndDpadOrderAtFontOne() = row("tv-actions-one-row-font-one")
 
-    @Test fun nativeTvActionsNeverWrapAndDpadRevealsLastThenReturnsAtLargeFont() = row("tv-actions-one-row-large-font")
+    @Test fun nativeTvTransportAndToolsHaveStableRowsAndDpadOrderAtLargeFont() = row("tv-actions-one-row-large-font")
     private fun row(id: String) {
         val c = profile(id)
         launch(c)
-        val names = labels(c)
+        val names = labels(c).drop(1)
+        val transport = nativeBounds(compose.onNodeWithTag("player:transport"))
         val boxes = names.map { nativeBounds(action(it)) }
         val top = boxes.first().top
         for ((label, b) in names.zip(boxes)) {
-            assertTrue(
-                abs(b.top - top) <= c.metric("sameRowTolerancePx"),
-                "All actual actions share one native row: $label=$b firstTop=$top"
-            )
+            assertTrue(abs(b.top - top) <= c.metric("sameRowTolerancePx"), "All tools occupy row2: $label=$b first=$top")
+            assertTrue(b.top > transport.bottom, "A secondary action cannot leak into transport: $label")
         }
-        requestFocus(action(names.first()))
+        val back = compose.onNodeWithTag("player:back10")
+        val forward = compose.onNodeWithTag("player:forward10")
+        assertTrue(nativeBounds(back).right < nativeBounds(primary()).left)
+        assertTrue(nativeBounds(primary()).right < nativeBounds(forward).left)
+        // Reveal through the actual remote surface: transport, not Audio/Skip/title, gets default focus.
+        compose.onNodeWithTag("player:surface").performKeyInput { pressKey(Key.DirectionUp) }
+        settle()
+        primary().assertIsFocused()
+        primary().performKeyInput { pressKey(Key.DirectionRight) }
+        forward.assertIsFocused()
+        forward.performKeyInput { pressKey(Key.DirectionLeft) }
+        primary().assertIsFocused()
+        primary().performKeyInput { pressKey(Key.DirectionLeft) }
+        back.assertIsFocused()
+        back.performKeyInput { pressKey(Key.DirectionRight) }
+        primary().assertIsFocused()
+        primary().performKeyInput { pressKey(Key.DirectionDown) }
+        action(names.first()).assertIsFocused()
         names.forEachIndexed { index, label ->
             if (index > 0) action(names[index - 1]).performKeyInput { pressKey(Key.DirectionRight) }
             settle()
@@ -508,8 +532,98 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
             settle()
             wholeFocusedTarget(c, action(names[index - 1]))
         }
-        assertEquals(0, exitCalls, "Stop must be reachable without invoking it")
+        action(names.first()).performKeyInput { pressKey(Key.DirectionUp) }
+        primary().assertIsFocused()
+        compose.onNodeWithText("Stop").assertDoesNotExist()
+        assertEquals(0, exitCalls, "Navigation cannot exit viewing")
         assertTrue(transportSent().isEmpty(), "Directional traversal must send no group transport")
+        // Playback info remains one deliberately chosen overflow away, and returns to its real opener.
+        val moreBefore = nativeBounds(action("More playback options"))
+        val secondaryBefore = names.map { nativeBounds(action(it)) }
+        fun captionInk(): List<Pair<Int, Int>> {
+            val surface = compose.onNodeWithTag("player:surface")
+            val origin = surface.fetchSemanticsNode().boundsInRoot
+            val bitmap = surface.captureToImage().asAndroidBitmap()
+            val left = ((moreBefore.left + moreBefore.right) / 2f - 52f * density).roundToInt()
+            val right = (left + 104f * density).roundToInt()
+            val top = (moreBefore.bottom + 6f * density).roundToInt()
+            val bottom = minOf((moreBefore.bottom + 44f * density).roundToInt(), window.height)
+            return buildList {
+                for (y in top until bottom) {
+                    for (x in left until right) {
+                        val localX = x - origin.left.roundToInt()
+                        val localY = y - origin.top.roundToInt()
+                        if (localX in 0 until bitmap.width && localY in 0 until bitmap.height) {
+                            val pixel = bitmap.getPixel(localX, localY)
+                            if (listOf((pixel shr 16) and 255, (pixel shr 8) and 255, pixel and 255).all { it >= 200 }) add(x to y)
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(captionInk().isEmpty(), "More's caption remains visually hidden away from focus")
+        requestFocus(action("More playback options"))
+        assertEquals(
+            listOf("More playback options"),
+            action("More playback options").fetchSemanticsNode().config[SemanticsProperties.ContentDescription]
+        )
+        val moreInk = captionInk()
+        assertTrue(moreInk.size > 8, "Focusing More actually paints its caption")
+        assertTrue(
+            (moreInk.maxOf { it.first } - moreInk.minOf { it.first }) / density <= 56f,
+            "The compact More caption fits one short word; the full accessible name must not replace it"
+        )
+        val secondaryAfter = names.map { nativeBounds(action(it)) }
+        secondaryBefore.zip(secondaryAfter).forEach { (before, after) ->
+            assertEquals(before.center.x, after.center.x, 1f, "Focus captions do not move neighboring target centers")
+            assertEquals(before.center.y, after.center.y, 1f, "Focus captions do not move neighboring target centers")
+        }
+        action("More playback options").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
+        settle()
+        compose.onNodeWithTag("player:overflow-info").assertIsDisplayed().assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        settle()
+        compose.onNodeWithTag("player:overflow-info").assertDoesNotExist()
+        compose.onNodeWithText("Playback info").assertIsDisplayed()
+        compose.onNodeWithText("Close").assertIsDisplayed().assertIsFocused()
+        // Robolectric can omit the native window-focus event after changing font scale.
+        // Exercise the real guard explicitly, then deliver the same event Android delivers on return.
+        fun nativeWindowFocus(focused: Boolean) {
+            compose.runOnIdle {
+                // Match PanelMediaBridgeTest: ViewRootImpl updates AttachInfo and notifies both
+                // native descendants and tree observers; dispatching only the decor view does not.
+                val decor = compose.activity.window.decorView
+                val root = org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(decor, "getViewRootImpl")
+                org.robolectric.shadow.api.Shadow.extract<org.robolectric.shadows.ShadowViewRootImpl>(root)
+                    .callWindowFocusChanged(focused)
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            compose.waitUntil(5_000) { windowFocused == focused }
+            assertEquals(focused, compose.activity.window.decorView.hasWindowFocus(), "Native window focus agrees with Compose")
+        }
+        nativeWindowFocus(false)
+        assertFalse(windowFocused, "Fixture must actually publish the unfocused native window")
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        settle()
+        action("More playback options").assertIsDisplayed().assertIsNotFocused()
+        assertFalse(windowFocused, "Panel return must wait for the activity window")
+        nativeWindowFocus(true)
+        assertTrue(windowFocused, "Regained native window focus must reach Compose WindowInfo")
+        try {
+            compose.waitUntil(5_000) {
+                shadowOf(Looper.getMainLooper()).idle()
+                runCatching { action("More playback options").fetchSemanticsNode().config[SemanticsProperties.Focused] }.getOrDefault(false)
+            }
+        } catch (failure: Throwable) {
+            val focusLog = org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").joinToString("\n") { it.msg }
+            throw AssertionError(
+                "More must regain focus after Playback info Back. WindowInfo focused=$windowFocused " +
+                    "native=${compose.activity.window.decorView.hasWindowFocus()}\n$focusLog\n" +
+                    compose.onRoot(useUnmergedTree = true).printToString(),
+                failure
+            )
+        }
+        action("More playback options").assertIsFocused()
     }
 
     @Test fun nativeTvChipContentTimelineAndSkipUseOneSafeHorizontalEdgeAtFontOne() = edges("tv-safe-edges-font-one")
@@ -533,7 +647,8 @@ class SyncPlayTvPlayerCoherenceRegressionTest {
             "Actual title glyph ink, independently of layout box: $ink expectedLeft=$expectedLeft"
         )
         assertEquals(expectedLeft, nativeBounds(compose.onNodeWithTag("player:position")).left, 1f)
-        assertEquals(expectedLeft, nativeBounds(primary()).left, 1f)
+        assertEquals(expectedLeft, nativeBounds(compose.onNodeWithTag("player:transport")).left, 1f)
+        assertTrue(nativeBounds(primary()).left > expectedLeft, "VOD backward seek precedes default Play/Pause")
         val skip = compose.onNodeWithTag("skip:Intro").assertIsDisplayed()
         assertEquals(window.width - expectedLeft, nativeBounds(skip).right, 1f, "Actual Skip shares48dp right safe edge")
         val hit = skip.fetchSemanticsNode().touchBoundsInRoot

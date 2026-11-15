@@ -1031,7 +1031,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Live",
+        "status": "",
         "clock": ""
       }
     },
@@ -1050,7 +1050,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Live",
+        "status": "",
         "clock": ""
       }
     },
@@ -1069,7 +1069,7 @@
         "canTimeShift": true
       },
       "expected": {
-        "status": "Paused · At live edge",
+        "status": "Paused",
         "clock": ""
       }
     },
@@ -2409,7 +2409,7 @@
         "clock": "−0:12",
         "behind": 12000
       },
-      "expected": "Paused · 12 sec behind live"
+      "expected": "Paused"
     },
     {
       "id": "live-buffer-status-playing",
@@ -2419,7 +2419,7 @@
         "clock": "−2:13",
         "behind": 133000
       },
-      "expected": "2 min 13 sec behind live"
+      "expected": ""
     },
     {
       "id": "live-buffer-status-edge",
@@ -2825,8 +2825,8 @@
         "expired": false
       },
       "expected": [
-        "Available buffer · start",
-        "Live edge"
+        "Time unavailable",
+        "LIVE"
       ]
     },
     {
@@ -2872,8 +2872,8 @@
         "expired": false
       },
       "expected": [
-        "Measured buffer",
-        "Live edge unavailable"
+        "Time unavailable",
+        ""
       ]
     },
     {
@@ -2889,8 +2889,8 @@
         "expired": false
       },
       "expected": [
-        "Measured buffer",
-        "Live edge unavailable"
+        "Time unavailable",
+        ""
       ]
     },
     {
@@ -2923,8 +2923,8 @@
         "expired": false
       },
       "expected": [
-        "Measured buffer",
-        "Live edge unavailable"
+        "Time unavailable",
+        ""
       ]
     },
     {
@@ -4873,6 +4873,44 @@
         "imageState": "success"
       },
       "expected": false
+    },
+    {
+      "id": "buffer-start-clock-12",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true,
+          "startEpochMs": 1762766400000
+        },
+        "position": 22000,
+        "expired": false,
+        "twentyFourHour": false
+      },
+      "expected": [
+        "9:20 AM",
+        "LIVE"
+      ]
+    },
+    {
+      "id": "buffer-start-clock-24",
+      "operation": "live-buffer-endpoints",
+      "input": {
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true,
+          "startEpochMs": 1762766400000
+        },
+        "position": 22000,
+        "expired": false,
+        "twentyFourHour": true
+      },
+      "expected": [
+        "09:20",
+        "LIVE"
+      ]
     }
   ]
 }

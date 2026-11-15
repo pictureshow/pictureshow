@@ -172,7 +172,7 @@ class SeekReturnFocusTest {
     private fun openerReturn(tag: String) {
         launch(true)
         val titleId = compose.onNodeWithText("An episode").fetchSemanticsNode().id
-        val stopId = compose.onNodeWithText("Stop").fetchSemanticsNode().id
+        val otherActionId = compose.onNodeWithTag("player:back10").fetchSemanticsNode().id
         val positionId = compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode().id
         val opener = compose.onNodeWithTag(tag)
         opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
@@ -187,7 +187,7 @@ class SeekReturnFocusTest {
         compose.onNodeWithTag(tag).assertIsFocused()
         compose.runOnIdle {
             val provider = host.accessibilityNodeProvider!!
-            listOf(titleId, stopId, positionId).forEach { id ->
+            listOf(titleId, otherActionId, positionId).forEach { id ->
                 val node = provider.createAccessibilityNodeInfo(id)
                 assertTrue(node == null || !node.isVisibleToUser, "Only the opener is offered while the reader returns to it")
             }
@@ -203,7 +203,7 @@ class SeekReturnFocusTest {
         compose.onNodeWithTag(tag).assertIsFocused()
         compose.runOnIdle {
             val provider = host.accessibilityNodeProvider!!
-            listOf(titleId, stopId, positionId).forEach { id ->
+            listOf(titleId, otherActionId, positionId).forEach { id ->
                 assertTrue(checkNotNull(provider.createAccessibilityNodeInfo(id)).isVisibleToUser)
             }
             assertTrue(hostFocusReachesReader())
@@ -463,9 +463,9 @@ class SeekReturnFocusTest {
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:info").fetchSemanticsNodes().isNotEmpty() }
             title
         }
-        assertEquals("Playback info", titles[0])
+        assertEquals("More playback options", titles[0])
         assertTrue(titles[0] != titles[1] && titles[1] != titles[2], titles.toString())
-        assertEquals(setOf("Playback info"), titles.map { it.replace("\u200B", "") }.toSet())
+        assertEquals(setOf("More playback options"), titles.map { it.replace("\u200B", "") }.toSet())
     }
 
     /** rc30: "Button. Skip credits" was spoken at +215 ms, ahead of the opener. It's offered once the opener has been reached. */
@@ -706,7 +706,7 @@ class SeekReturnFocusTest {
     private fun assertControlsOffered() {
         val ids = listOf(
             compose.onNodeWithText("An episode").fetchSemanticsNode().id,
-            compose.onNodeWithText("Stop").fetchSemanticsNode().id,
+            compose.onNodeWithTag("player:back10").fetchSemanticsNode().id,
             compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode().id
         )
         compose.runOnIdle {

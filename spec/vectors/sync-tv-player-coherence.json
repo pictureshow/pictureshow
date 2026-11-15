@@ -66,7 +66,7 @@
     },
     {
       "id": "tv-actions-one-row-font-one",
-      "profile": "native-tv-actions-one-row",
+      "profile": "native-tv-transport-and-tool-rows",
       "input": {
         "windowWidthPx": 960,
         "windowHeightPx": 540,
@@ -83,22 +83,36 @@
           "Pause",
           "Audio",
           "Subtitles",
+          "Quality",
+          "Speed",
           "Chapters",
-          "Speed · 1.25×",
-          "Playback info",
           "Watch together",
-          "Quality · Auto",
-          "Stop"
+          "More playback options"
         ]
       },
       "expected": {
         "minimumTargetDp": 48,
-        "sameRowTolerancePx": 1
+        "sameRowTolerancePx": 1,
+        "defaultFocus": "Play/Pause",
+        "row1": [
+          "Back 10 seconds",
+          "Play/Pause",
+          "Forward 10 seconds"
+        ],
+        "row2": [
+          "Audio",
+          "Subtitles",
+          "Quality",
+          "Speed",
+          "Chapters",
+          "Watch together",
+          "More playback options"
+        ]
       }
     },
     {
       "id": "tv-actions-one-row-large-font",
-      "profile": "native-tv-actions-one-row",
+      "profile": "native-tv-transport-and-tool-rows",
       "input": {
         "windowWidthPx": 960,
         "windowHeightPx": 540,
@@ -115,17 +129,31 @@
           "Pause",
           "Audio",
           "Subtitles",
+          "Quality",
+          "Speed",
           "Chapters",
-          "Speed · 1.25×",
-          "Playback info",
           "Watch together",
-          "Quality · Auto",
-          "Stop"
+          "More playback options"
         ]
       },
       "expected": {
         "minimumTargetDp": 48,
-        "sameRowTolerancePx": 1
+        "sameRowTolerancePx": 1,
+        "defaultFocus": "Play/Pause",
+        "row1": [
+          "Back 10 seconds",
+          "Play/Pause",
+          "Forward 10 seconds"
+        ],
+        "row2": [
+          "Audio",
+          "Subtitles",
+          "Quality",
+          "Speed",
+          "Chapters",
+          "Watch together",
+          "More playback options"
+        ]
       }
     },
     {
@@ -147,12 +175,11 @@
           "Pause",
           "Audio",
           "Subtitles",
+          "Quality",
+          "Speed",
           "Chapters",
-          "Speed · 1.25×",
-          "Playback info",
           "Watch together",
-          "Quality · Auto",
-          "Stop"
+          "More playback options"
         ]
       },
       "expected": {
@@ -182,12 +209,11 @@
           "Pause",
           "Audio",
           "Subtitles",
+          "Quality",
+          "Speed",
           "Chapters",
-          "Speed · 1.25×",
-          "Playback info",
           "Watch together",
-          "Quality · Auto",
-          "Stop"
+          "More playback options"
         ]
       },
       "expected": {

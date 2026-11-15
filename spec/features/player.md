@@ -86,4 +86,48 @@ Large-text acceptance must set the platform font configuration and verify that t
 
 A VOD ten-second seek action has a recognizable replay/forward arrow and a visible small “10”, with a whole native 48 dp target. Over a bright picture, meaningful arrow ink has at least 3:1 contrast against its immediate backing; the small numeral has at least 4.5:1. Supply local contrast backing around the mark while retaining the whole controls-layer picture dim and existing live/disabled behavior. Portrait (exit landscape) uses inward corners; Landscape (enter full-screen landscape) uses outward corners. Labels and callbacks continue to name the actual next orientation.
 
-A horizontally scrolling TV action row exposes a visible passive overflow cue whenever actions continue outside the viewport. Its paint reflects the actual scroll position and direction; it neither takes D-pad focus nor sends a playback request. Native focus reveals the whole target and label of each direct action. A label crossing the clip edge is conservatively faded or concealed, so cut letters do not masquerade as complete actions; full revealed labels remain legible. Keep the shared 48 dp TV safe edges and all nine direct actions required by SYN player integration. These rules require actual native paint/geometry/focus adapters, not a portable inventory pass. The four player-control-affordances profiles specify bright-picture seek contrast/numeral, orientation corner direction, and real TV overflow/traversal/partial-label paint. Their neutral-picture and recording-gateway fixtures do not qualify a decoder or peer output.
+When a TV tool row needs horizontal scrolling, it exposes a visible passive overflow cue whenever actions continue outside the viewport. Its paint reflects the actual scroll position and direction; it neither takes D-pad focus nor sends a playback request. Native focus reveals the whole target and label of each direct action. A label crossing the clip edge is conservatively faded or concealed, so cut letters do not masquerade as complete actions; full revealed labels remain legible. Keep the shared 48 dp TV safe edges and every tool defined by PLAY-28 reachable. The oversized nine-label fixture exercises the generic overflow component; it is not the current HUD inventory. These rules require actual native paint/geometry/focus adapters, not a portable inventory pass. The four player-control-affordances profiles specify bright-picture seek contrast/numeral, orientation corner direction, and real TV overflow/traversal/partial-label paint. Their neutral-picture and recording-gateway fixtures do not qualify a decoder or peer output.
+
+
+## Player HUD hierarchy (PLAY-28)
+
+TV live and on-demand controls share two fixed, nonwrapping rows. Row 1 contains transport only: on-demand
+Back 10 seconds, Play/Pause, Forward 10 seconds; live Play/Pause followed by Go live. Play/Pause receives default
+remote focus when the HUD is revealed. Row 2 contains Audio, Subtitles, Quality, Speed, optional Chapters,
+Watch together and More playback options, in that order. Audio/Subtitles/Quality/Speed are 48 dp minimum icon
+targets with captions revealed on focus. Captions reserve their layout space; every icon always exposes its
+full action name and current value to accessibility. Focus retains the existing light fill and 1.1 remote scale.
+Down from transport enters Audio; Up from a secondary tool returns to Play/Pause. Left/right traverse their
+row in visual order without sending transport requests. More opens Playback info; its panel returns to More.
+The persistent SyncPlay chip and Watch together action remain reachable. TV Stop is removed; existing Back,
+modal opener restoration and paused lifecycle return (first OK resumes) behavior remains PLAY-05/24.
+
+The live track starts with the decoder's measured buffer-start clock in the device's 12/24-hour format and
+ends with LIVE. A decoder without a wall-clock origin shows Time unavailable; a programme's scheduled start
+is never substituted. Unknown, expired and nonseekable ranges retain their honest unavailable states.
+The only visible behind-live distance is one negative clock beside the track (−0:05, −1:05, −1:00:05).
+At the measured edge the distance is absent, and Go live becomes a noninteractive LIVE badge while playing.
+Paused status says Paused, without repeating distance or LIVE; expired buffers explain recovery. Speech may
+spell out the distance in units when the position is queried, without per-tick announcements.
+On-demand clocks show elapsed at the start and negative remaining at the end; unknown duration omits the
+remaining clock. Position accessibility retains elapsed of total, so the negative clock is not mistaken for
+a negative seek target.
+
+Phone retains its center transport and icon row. Landscape moves metadata/Quality/Watch together to the
+upper header and keeps the bottom gradient track/icon band around 30% of a 360 dp window (at most 128 dp at
+font 1.0/1.3), with 8 dp gaps. All actions remain reachable and retain 48 dp native targets. Portrait retains
+its existing hierarchy, including the backed white ten-second seek marks. Apple TV, web TV and desktop
+translate these action groups, clocks and focus outcomes using native controls; touch ports translate the
+compact landscape treatment. Android tests and vectors establish the reference, not qualification of those ports.
+
+Executable contracts: `sync-tv-player-coherence.json` (transport/tool rows and default/navigation focus),
+`live-presentation.json` (readout, distance and measured-clock endpoint), `player-hud-clocks.json` (elapsed/remaining), and `sync-phone-player-chrome.json`
+(compact landscape, remaining clock and native targets). The intentionally oversized component fixture in
+`player-control-affordances.json` continues to verify generic horizontal action overflow independently of
+this HUD's current inventory.
+
+Landscape reserves its upper metadata band even while controls are hidden. The group chip, conversion notice,
+Skip and next-episode card clear the complete title/Quality/Watch together header targets; center transport
+and temporary quality messages also exclude that band. Skip and Cancel retain their vertical anchors while controls hide
+and reappear, preventing a tap intended for one action from landing on another after the HUD changes.
+Native compact and group-overlay cases exercise these placements with real mounted chrome.

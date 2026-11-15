@@ -5,21 +5,101 @@
     {
       "id": "joined-landscape-free-band-clearance",
       "profile": "actual-player-geometry",
-      "input": {"widthDp":640,"heightDp":360,"fontScale":1.0,"participating":true,"phase":"Playing","groupName":"Sync91Design4k","queueItems":1,"nativePlaying":false},
-      "expected": {"minimumChipClearanceDp":16,"minimumPanelClearanceDp":16,"maximumFreeBandGapImbalanceDp":16,"minimumSeekTargetDp":48,"primaryTargetDp":64,"transportWidthDp":208,"transportGapDp":24},
-      "placementCase": {"width":640,"height":360,"panelHeight":160,"video":[0,0,640,360],"safeArea":[0,0,640,360],"blockers":[[16,16,310,70]],"transportWidth":208,"transportHeight":64,"clearance":16,"expected":{"minimumBlockerClearance":16,"minimumPanelClearance":16,"maximumFreeBandGapImbalance":16,"insideSafeViewport":true}}
+      "input": {
+        "widthDp": 640,
+        "heightDp": 360,
+        "fontScale": 1.0,
+        "participating": true,
+        "phase": "Playing",
+        "groupName": "Sync91Design4k",
+        "queueItems": 1,
+        "nativePlaying": false
+      },
+      "expected": {
+        "minimumChipClearanceDp": 16,
+        "minimumPanelClearanceDp": 16,
+        "maximumFreeBandGapImbalanceDp": 16,
+        "minimumSeekTargetDp": 48,
+        "primaryTargetDp": 64,
+        "transportWidthDp": 208,
+        "transportGapDp": 24
+      },
+      "placementCase": {
+        "width": 640,
+        "height": 360,
+        "panelHeight": 160,
+        "video": [
+          0,
+          0,
+          640,
+          360
+        ],
+        "safeArea": [
+          0,
+          0,
+          640,
+          360
+        ],
+        "blockers": [
+          [
+            16,
+            16,
+            310,
+            70
+          ]
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "clearance": 16,
+        "expected": {
+          "minimumBlockerClearance": 16,
+          "minimumPanelClearance": 16,
+          "maximumFreeBandGapImbalance": 16,
+          "insideSafeViewport": true
+        }
+      }
     },
     {
       "id": "bright-video-whole-seek-target-backing-and-hidden-release",
       "profile": "actual-player-native-paint",
-      "input": {"widthDp":640,"heightDp":360,"fontScale":1.0,"videoArgb":"FFFFFFFF","targetTags":["touch:back10","touch:forward10"],"controlsInitiallyVisible":true},
-      "expected": {"seekTargetSizeDp":48,"borderInsetDp":2,"minimumVideoChannelWhenShown":90,"maximumVideoChannelWhenShown":190,"maximumSeekLocalBackingChannel":110,"maximumHiddenWhiteChannelDelta":2,"bottomGradientStillDeepens":true}
+      "input": {
+        "widthDp": 640,
+        "heightDp": 360,
+        "fontScale": 1.0,
+        "videoArgb": "FFFFFFFF",
+        "targetTags": [
+          "touch:back10",
+          "touch:forward10"
+        ],
+        "controlsInitiallyVisible": true
+      },
+      "expected": {
+        "seekTargetSizeDp": 48,
+        "borderInsetDp": 2,
+        "minimumVideoChannelWhenShown": 90,
+        "maximumVideoChannelWhenShown": 190,
+        "maximumSeekLocalBackingChannel": 110,
+        "maximumHiddenWhiteChannelDelta": 2,
+        "bottomGradientStillDeepens": true
+      }
     },
     {
       "id": "quality-and-total-clock-painted-right-edge",
       "profile": "actual-player-native-ink",
-      "input": {"widthDp":640,"heightDp":360,"fontScale":1.0,"videoArgb":"FF000000","positionMs":20000,"durationMs":60000,"qualityLabel":"Auto"},
-      "expected": {"maximumInkRightEdgeDifferenceDp":2,"minimumQualityTargetDp":48,"qualityTargetInsidePlayer":true}
+      "input": {
+        "widthDp": 640,
+        "heightDp": 360,
+        "fontScale": 1.0,
+        "videoArgb": "FF000000",
+        "positionMs": 20000,
+        "durationMs": 60000,
+        "qualityLabel": "Auto"
+      },
+      "expected": {
+        "maximumInkRightEdgeDifferenceDp": 2,
+        "minimumQualityTargetDp": 48,
+        "qualityTargetInsidePlayer": true
+      }
     },
     {
       "id": "group-chip-skip-intro-portrait-normal",
@@ -198,7 +278,9 @@
         "skipLabel": "Skip intro",
         "cardTitle": null,
         "countdownVisible": false,
-        "membershipRetained": true
+        "membershipRetained": true,
+        "headerClearsChipAndAction": true,
+        "controlsToggleKeepsActionY": true
       }
     },
     {
@@ -234,7 +316,9 @@
         "skipLabel": null,
         "cardTitle": "Another episode",
         "countdownVisible": false,
-        "membershipRetained": true
+        "membershipRetained": true,
+        "headerClearsChipAndAction": true,
+        "controlsToggleKeepsActionY": true
       }
     },
     {
@@ -272,7 +356,9 @@
         "cardTitle": null,
         "countdownVisible": false,
         "membershipRetained": true,
-        "actionPlacement": "beside"
+        "actionPlacement": "beside",
+        "headerClearsChipAndAction": true,
+        "controlsToggleKeepsActionY": true
       }
     },
     {
@@ -310,7 +396,9 @@
         "cardTitle": "Another episode",
         "countdownVisible": false,
         "membershipRetained": true,
-        "actionPlacement": "beside"
+        "actionPlacement": "beside",
+        "headerClearsChipAndAction": true,
+        "controlsToggleKeepsActionY": true
       }
     },
     {

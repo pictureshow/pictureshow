@@ -21,11 +21,11 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
@@ -135,10 +135,10 @@ class OfflineReconnectTvTest {
 
     private fun openAudio() {
         press(Key.DirectionUp)
-        idle { compose.onAllNodesWithText("Audio").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Audio").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        compose.onNodeWithText("Audio").assertIsFocused()
-        compose.onNodeWithText("Audio").performKeyInput { pressKey(Key.DirectionCenter) }
+        idle { compose.onAllNodesWithContentDescription("Audio").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Audio").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
+        compose.onNodeWithContentDescription("Audio").performKeyInput { pressKey(Key.DirectionCenter) }
         // The panel lands on the selected row.
         idle { runCatching { compose.onNodeWithTag("track:1").assertIsFocused() }.isSuccess }
     }
@@ -189,7 +189,7 @@ class OfflineReconnectTvTest {
             assertTrue(fixture.settles.isEmpty())
             assertEquals(0, exits)
         }
-        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
     }
 
     @Test fun `Back from the offer is a no`() {

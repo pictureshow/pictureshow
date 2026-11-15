@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -230,6 +230,7 @@ internal fun PlayerItemScreen(
     val speedFocus = remember { FocusRequester() }
     val infoFocus = remember { FocusRequester() }
     val qualityFocus = remember { FocusRequester() }
+    val moreInfoFocus = remember { FocusRequester() }
     fun extraPanelFocus(title: String?) = when (title) {
         "Playback speed" -> speedFocus
         "Quality" -> qualityFocus
@@ -773,31 +774,44 @@ internal fun PlayerItemScreen(
                             seekOpen = true
                         }
                     )
-                    // Keep every direct opener composed; native focus scrolls and the passive cue exposes overflow.
-                    TvPlayerActions(
-                        modifier = Modifier.then(
-                            if (restoringSeekFocus) {
-                                Modifier.focusProperties { canFocus = false }.clearAndSetSemantics { hideFromAccessibility() }
-                            } else {
-                                Modifier
-                            }
-                        ),
-                        verticalAlignment = if (host.isLive) Alignment.CenterVertically else Alignment.Top
+                    Row(
+                        Modifier.fillMaxWidth().testTag("player:transport")
+                            .then(
+                                if (restoringSeekFocus) {
+                                    Modifier.focusProperties {
+                                        canFocus = false
+                                    }.clearAndSetSemantics { hideFromAccessibility() }
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (!host.isLive) {
+                            PlayerActionButton(
+                                onClick = { seek(-10_000) },
+                                liveStyle = true,
+                                modifier = Modifier.testTag("player:back10").focusProperties {
+                                    down = audioFocus
+                                }.then(readerOpenerOnly("player:back10"))
+                            ) {
+                                androidx.tv.material3.Icon(playerActionIcon("back10"), null, Modifier.size(24.dp))
+                                Text("Back 10 seconds")
+                            }
+                        }
                         PlaybackToggle(
                             paused,
                             primaryAction != "pause",
-                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))
+                            Modifier.focusRequester(playFocus).focusProperties {
+                                down = audioFocus
+                            }.testTag("player:play").then(readerOpenerOnly("player:play"))
                                 .then(
-                                    if (host.isLive) {
-                                        Modifier.width(liveControlWidth()).heightIn(min = 48.dp).align(Alignment.CenterVertically)
-                                    } else {
-                                        Modifier
-                                    }
+                                    if (host.isLive) Modifier.width(liveControlWidth()) else Modifier.width(112.dp)
                                 ),
                             ended,
                             enabled = primaryEnabled,
-                            liveStyle = host.isLive,
+                            liveStyle = true,
                             primaryState = primaryState,
                             actionLabel = primaryLabel
                         ) {
@@ -806,14 +820,47 @@ internal fun PlayerItemScreen(
                             interaction++
                         }
                         if (host.isLive) {
-                            Box(Modifier.align(Alignment.CenterVertically).wholePlayerActionPaint()) {
+                            Box(
+                                Modifier.align(Alignment.CenterVertically).wholePlayerActionPaint()
+                                    .focusProperties { down = audioFocus }.then(readerOpenerOnly("player:go-live"))
+                            ) {
                                 PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused) {
                                     host.goLive()
                                     if (!accessibleControls) playFocus.requestFocus()
                                 }
                             }
                         }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
+                        if (!host.isLive) {
+                            PlayerActionButton(
+                                onClick = { seek(10_000) },
+                                liveStyle = true,
+                                modifier = Modifier.testTag("player:forward10").focusProperties {
+                                    down = audioFocus
+                                }.then(readerOpenerOnly("player:forward10"))
+                            ) {
+                                androidx.tv.material3.Icon(playerActionIcon("forward10"), null, Modifier.size(24.dp))
+                                Text("Forward 10 seconds")
+                            }
+                        }
+                    }
+                    TvPlayerActions(
+                        modifier = Modifier.testTag("player:secondary")
+                            .then(
+                                if (restoringSeekFocus) {
+                                    Modifier.focusProperties {
+                                        canFocus = false
+                                    }.clearAndSetSemantics { hideFromAccessibility() }
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        TvPlayerControlButton(
+                            "audio",
+                            "Audio",
+                            Modifier.focusRequester(audioFocus).focusProperties { up = playFocus }.then(readerOpenerOnly("player:audio"))
+                        ) {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Audio,
                                 trackMenus,
@@ -821,8 +868,14 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.audioIndex
                             )
-                        }, modifier = Modifier.focusRequester(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
+                        }
+                        TvPlayerControlButton(
+                            "cc",
+                            "Subtitles",
+                            Modifier.focusRequester(subtitleFocus).focusProperties {
+                                up = playFocus
+                            }.then(readerOpenerOnly("player:subtitles"))
+                        ) {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Subtitle,
                                 trackMenus,
@@ -830,73 +883,60 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.subtitleIndex
                             )
-                        }, modifier = Modifier.focusRequester(subtitleFocus).then(readerOpenerOnly("player:subtitles"))) {
-                            Text("Subtitles")
+                        }
+                        TvPlayerControlButton(
+                            "quality",
+                            "Quality",
+                            Modifier.focusRequester(qualityFocus).focusProperties {
+                                up = playFocus
+                            }.testTag("player:quality").then(readerOpenerOnly("player:quality")),
+                            enabled = offline == null && !state.preparing && state.decision != null,
+                            state = if (offline != null) "Quality is fixed for this download." else host.qualityLabel
+                        ) {
+                            openExtraPanel("Quality", qualityFocus)
+                            interaction++
+                        }
+                        TvPlayerControlButton(
+                            "speed",
+                            "Speed",
+                            Modifier.focusRequester(speedFocus).focusProperties {
+                                up = playFocus
+                            }.testTag("player:speed").then(readerOpenerOnly("player:speed")),
+                            state = app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)
+                        ) {
+                            openExtraPanel("Playback speed", speedFocus)
                         }
                         if (metadata.chapters.isNotEmpty()) {
-                            PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
+                            TvPlayerControlButton(
+                                "chapters",
+                                "Chapters",
+                                Modifier.focusRequester(chaptersFocus).focusProperties {
+                                    up = playFocus
+                                }.then(readerOpenerOnly("player:chapters"))
+                            ) {
                                 chaptersOpen = true
                                 seekPreview = null
-                            }, modifier = Modifier.focusRequester(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
-                                Text("Chapters")
                             }
                         }
-                        PlayerActionButton(
-                            liveStyle = host.isLive,
-                            scale = playerButtonScale(),
-                            onClick = {
-                                openExtraPanel("Playback speed", speedFocus)
-                            },
-                            modifier = Modifier.focusRequester(speedFocus).testTag("player:speed").then(readerOpenerOnly("player:speed"))
-                                .playerTouchClick {
-                                    openExtraPanel("Playback speed", speedFocus)
-                                }
+                        TvPlayerControlButton(
+                            "group",
+                            stringResource(R.string.sync_title),
+                            Modifier.testTag("player:syncplay").focusProperties {
+                                up =
+                                    playFocus
+                            }.then(readerOpenerOnly("player:syncplay"))
                         ) {
-                            Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
-                        }
-                        PlayerActionButton(
-                            liveStyle = host.isLive,
-                            scale = playerButtonScale(),
-                            onClick = {
-                                openExtraPanel("Playback info", infoFocus)
-                            },
-                            modifier = Modifier.focusRequester(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
-                                .playerTouchClick { openExtraPanel("Playback info", infoFocus) }
-                        ) {
-                            Text("Playback info")
-                        }
-                        PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             host.sync?.show()
-                        }, modifier = Modifier.testTag("player:syncplay")) {
-                            Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
                         }
-                        PlayerActionButton(
-                            liveStyle = host.isLive,
-                            scale = playerButtonScale(),
-                            onClick = {
-                                openExtraPanel("Quality", qualityFocus)
-                                interaction++
-                            },
-                            modifier = Modifier.focusRequester(
-                                qualityFocus
-                            ).testTag("player:quality").then(readerOpenerOnly("player:quality"))
-                                .playerTouchClick {
-                                    if (offline == null &&
-                                        !state.preparing &&
-                                        state.decision != null
-                                    ) {
-                                        openExtraPanel("Quality", qualityFocus)
-                                    }
-                                },
-                            enabled = offline == null && !state.preparing && state.decision != null
-                        ) { Text("Quality · ${if (offline != null) "Download" else host.qualityLabel}") }
-                        PlayerActionButton(
-                            liveStyle = host.isLive,
-                            scale = playerButtonScale(),
-                            onClick = { finish(reason = "stop-button") },
-                            modifier = readerOpenerOnly("player:stop")
+                        TvPlayerControlButton(
+                            "more",
+                            "More playback options",
+                            Modifier.focusRequester(infoFocus).focusProperties {
+                                up = playFocus
+                            }.testTag("player:info").then(readerOpenerOnly("player:info")),
+                            caption = "More"
                         ) {
-                            Text("Stop")
+                            openExtraPanel("More playback options", infoFocus)
                         }
                     }
                     val qualityNotice = if (offline !=
@@ -1069,7 +1109,13 @@ internal fun PlayerItemScreen(
                 }, dismiss)
             } else {
                 PlayerPanel(title, dismiss, scrollable = title != "Playback speed", inActivityWindow = true) {
-                    if (title == "Playback speed") {
+                    if (title == "More playback options") {
+                        Button(
+                            onClick = { extraPanel = "Playback info" },
+                            modifier = Modifier.focusRequester(moreInfoFocus).testTag("player:overflow-info")
+                        ) { Text("Playback info") }
+                        LaunchedEffect(Unit) { moreInfoFocus.requestFocus() }
+                    } else if (title == "Playback speed") {
                         SpeedChoices(speedState, state.decision?.method == app.pictureshow.core.playback.PlayMethod.Transcode) { value ->
                             select({
                                 output.setSpeed(value)

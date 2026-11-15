@@ -32,7 +32,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(366, cases.size)
+        assertEquals(368, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -45,7 +45,8 @@ class LivePresentationVectorsTest {
                     100_000,
                     w.getValue("duration").jsonPrimitive.long,
                     w.getValue("default").jsonPrimitive.long,
-                    w.getValue("seekable").jsonPrimitive.boolean
+                    w.getValue("seekable").jsonPrimitive.boolean,
+                    w["startEpochMs"]?.takeUnless { it == kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.long
                 )
             }
             when (envelope.getValue("operation").jsonPrimitive.content) {
@@ -631,7 +632,11 @@ class LivePresentationVectorsTest {
                         liveBufferEndpointLabels(
                             liveWindow(c["window"]),
                             c.getValue("position").jsonPrimitive.long,
-                            c.getValue("expired").jsonPrimitive.boolean
+                            c.getValue("expired").jsonPrimitive.boolean,
+                            clock = { epoch ->
+                                LiveTime(c["twentyFourHour"]?.jsonPrimitive?.boolean ?: false, Locale.US, ZoneId.of("UTC")).clock(epoch)
+                                    .replace('\u202f', ' ').replace('\u00a0', ' ')
+                            }
                         )
                     assertEquals(
                         envelope.getValue("expected").jsonArray.map {

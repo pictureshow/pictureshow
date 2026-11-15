@@ -17,6 +17,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -102,10 +103,10 @@ class PausedReturnFocusTest {
         launch(false)
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
         compose.onNodeWithText("Pause").assertIsFocused()
-        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
-        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
         backgroundAndReturn()
-        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
     }
 
     @Test fun nativeLivePauseMovesSurfaceFocusToPlayAndOneRightReachesGoLive() {
@@ -135,15 +136,19 @@ class PausedReturnFocusTest {
         compose.onNodeWithText("Play").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("player:go-live").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Play").assertIsFocused()
     }
 
     @Test fun nativeLivePausePreservesAnAlreadyFocusedAudioAction() {
         launch(false, live = true)
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
-        compose.onNodeWithText("Audio").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.onNodeWithContentDescription("Audio").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
         compose.runOnIdle { requireNotNull(output.player.value).pause() }
-        compose.onNodeWithText("Audio").assertIsFocused()
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
     }
 
     private fun launch(accessible: Boolean, live: Boolean = false) {

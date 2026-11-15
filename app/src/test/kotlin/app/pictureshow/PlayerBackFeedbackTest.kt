@@ -18,8 +18,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -122,7 +122,9 @@ class PlayerBackFeedbackTest {
             output.player.value != null && output.player.value !== firstPlayer
         }
         readyPaused()
-        compose.onNodeWithText("Quality · 40 Mbps").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag(
+            "player:quality"
+        ).assertIsDisplayed().assertIsFocused().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "40 Mbps"))
         compose.onNodeWithTag("player:quality").performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
         compose.onNodeWithText("40 Mbps").assertIsFocused().assertIsSelected()
         val manualPlayer = output.player.value
@@ -132,7 +134,9 @@ class PlayerBackFeedbackTest {
             output.player.value != null && output.player.value !== manualPlayer
         }
         readyPaused()
-        compose.onNodeWithText("Quality · Auto").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag(
+            "player:quality"
+        ).assertIsDisplayed().assertIsFocused().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Auto"))
         compose.runOnIdle {
             assertTrue(!output.player.value!!.playWhenReady)
             assertEquals(0, exits)
@@ -167,12 +171,12 @@ class PlayerBackFeedbackTest {
         val decision = CompletableDeferred<Unit>()
         try {
             launch(true, decision, sourceWithId)
-            compose.onNodeWithText("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-            compose.onNodeWithText("Subtitles").assertIsFocused()
+            compose.onNodeWithContentDescription("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            compose.onNodeWithContentDescription("Subtitles").assertIsFocused()
             compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitUntil(5_000) {
                 shadowOf(android.os.Looper.getMainLooper()).idle()
-                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isEmpty()
+                compose.onAllNodesWithContentDescription("Subtitles").fetchSemanticsNodes().isEmpty()
             }
             compose.onNodeWithTag("player:panel").assertDoesNotExist()
             decision.complete(Unit)
@@ -198,14 +202,14 @@ class PlayerBackFeedbackTest {
         val decision = CompletableDeferred<Unit>()
         try {
             launch(true, decision)
-            compose.onNodeWithText("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-            compose.onNodeWithText("Subtitles").assertIsFocused()
+            compose.onNodeWithContentDescription("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            compose.onNodeWithContentDescription("Subtitles").assertIsFocused()
             compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitUntil(5_000) {
                 shadowOf(android.os.Looper.getMainLooper()).idle()
-                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isEmpty()
+                compose.onAllNodesWithContentDescription("Subtitles").fetchSemanticsNodes().isEmpty()
             }
-            compose.onNodeWithText("Subtitles").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Subtitles").assertDoesNotExist()
             compose.onNodeWithTag("player:panel").assertDoesNotExist()
             if (stopActivity) {
                 compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
@@ -215,9 +219,9 @@ class PlayerBackFeedbackTest {
             }
             compose.waitUntil(5_000) {
                 shadowOf(android.os.Looper.getMainLooper()).idle()
-                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodesWithContentDescription("Subtitles").fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Subtitles").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Subtitles").assertIsDisplayed()
             decision.complete(Unit)
             compose.waitUntil(10_000) {
                 shadowOf(android.os.Looper.getMainLooper()).idle()
@@ -225,7 +229,7 @@ class PlayerBackFeedbackTest {
             }
             compose.waitForIdle()
             compose.onNodeWithTag("player:panel").assertDoesNotExist()
-            compose.onNodeWithText("Subtitles").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Subtitles").assertIsDisplayed()
             assertEquals(0, exits)
         } finally {
             decision.complete(Unit)

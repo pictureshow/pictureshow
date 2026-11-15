@@ -109,7 +109,6 @@ import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
-import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
@@ -288,6 +287,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
     }
     val activity = LocalContext.current.playerActivity()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    // Reserve the header band even while hidden: Skip/Cancel never move when controls toggle.
+    val headerInset = if (landscape) 56.dp else 0.dp
     val locksOrientation = touchPlayerLocksOrientation(LocalConfiguration.current.smallestScreenWidthDp)
     val resources = LocalResources.current
     val density = LocalDensity.current
@@ -424,7 +425,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             val text = Constraints(maxWidth = with(density) { (cardWidth - 24.dp).roundToPx() }.coerceAtLeast(0))
             val title = noticeMeasurer.measure(notice.title, titleStyle, constraints = text).size.height
             val line = noticeMeasurer.measure(touchConversionNoticeLine(notice), lineStyle, constraints = text).size.height
-            val top = WindowInsets.safeDrawing.getTop(density) + with(density) { TOUCH_PLAYER_EDGE.roundToPx() }
+            val top = WindowInsets.safeDrawing.getTop(density) + with(density) { (TOUCH_PLAYER_EDGE + headerInset).roundToPx() }
             top + title + line + with(density) { 28.dp.roundToPx() }
         }
         // TalkBack keeps the controls up for good, and its user needs the announcement most, so it never waits there.
@@ -440,7 +441,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                 !host.state.preparing &&
                 actionsVisible &&
                 noticeClearsControls,
-            modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
+            modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(top = headerInset).padding(TOUCH_PLAYER_EDGE),
             card = { notice, placement, announce, details ->
                 DisposableEffect(Unit) {
                     conversionCardReleased = false
@@ -492,7 +494,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             val safeLeft = WindowInsets.safeDrawing.getLeft(density, layoutDirection)
             val safeRight = WindowInsets.safeDrawing.getRight(density, layoutDirection)
             val cueTop = maxOf(
-                safeTop + with(density) { TOUCH_PLAYER_EDGE.roundToPx() },
+                safeTop + with(density) { (TOUCH_PLAYER_EDGE + headerInset).roundToPx() },
                 chipBounds?.bottom?.toInt()?.minus(playerTop) ?: 0,
                 topActionsBottom - playerTop
             )
@@ -576,7 +578,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
         SyncPlayerChip(
             host.sync,
             Modifier.align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp).widthIn(max = 440.dp)
+                .windowInsetsPadding(WindowInsets.safeDrawing).padding(top = headerInset).padding(16.dp).widthIn(max = 440.dp)
                 .onGloballyPositioned { chipBounds = it.boundsInRoot() }
         )
 
@@ -594,6 +596,17 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                 Rect(frame.left.toFloat(), frame.top.toFloat(), frame.right.toFloat(), frame.bottom.toFloat()),
                 listOfNotNull(noticeBounds, actionsBounds?.takeIf { actionsHeight > 0 }, chipBounds?.takeIf { chipExpected }).map {
                     it.translate(-playerLeft.toFloat(), -playerTop.toFloat())
+                } + if (landscape) {
+                    listOf(
+                        Rect(
+                            0f,
+                            0f,
+                            constraints.maxWidth.toFloat(),
+                            WindowInsets.safeDrawing.getTop(density) + with(density) { headerInset.toPx() }
+                        )
+                    )
+                } else {
+                    emptyList()
                 },
                 with(density) { 208.dp.roundToPx() },
                 with(density) { 64.dp.roundToPx() },
@@ -650,6 +663,60 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                 }
             }
         }
+        if (controlsVisible && landscape) {
+            Row(
+                Modifier.align(Alignment.TopEnd).fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                    .background(Color.Black.copy(alpha = .7f)).padding(horizontal = TOUCH_PLAYER_EDGE),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).testTag("touch:title")
+                )
+                val syncUnavailable = if (host.isLive) stringResource(R.string.sync_live_unavailable) else null
+                IconButton(
+                    onClick = {
+                        if (!host.isLive) host.sync?.show()
+                        ui.interact()
+                    },
+                    enabled = !host.isLive,
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                    modifier = Modifier.size(48.dp).testTag("touch:syncplay").semantics {
+                        syncUnavailable?.let { stateDescription = it }
+                    }
+                ) {
+                    Icon(syncIcon("group"), stringResource(R.string.sync_title))
+                }
+                TouchBarButton(
+                    {
+                        qualityOpen = true
+                        ui.interact()
+                    },
+                    Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
+                        contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
+                        stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
+                    },
+                    enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
+                    contentPadding = PaddingValues(
+                        start = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET,
+                        end = 0.dp,
+                        top = 8.dp,
+                        bottom = 8.dp
+                    )
+                ) {
+                    Text(
+                        "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
         if (controlsVisible) {
             Column(
                 // The scrim reaches the screen's edges behind a cutout; only its content keeps to the safe area (TOUCH-10).
@@ -662,51 +729,53 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                     .heightIn(max = if (landscape) 260.dp else 430.dp)
                     .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(if (landscape) 8.dp else 4.dp)
             ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f).testTag("touch:title")
-                    )
-                    val syncUnavailable = if (host.isLive) stringResource(R.string.sync_live_unavailable) else null
-                    IconButton(
-                        onClick = {
-                            if (!host.isLive) host.sync?.show()
-                            ui.interact()
-                        },
-                        enabled = !host.isLive,
-                        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
-                        modifier = Modifier.size(48.dp).testTag("touch:syncplay").semantics {
-                            syncUnavailable?.let { stateDescription = it }
-                        }
-                    ) {
-                        Icon(syncIcon("group"), stringResource(R.string.sync_title))
-                    }
-                    TouchBarButton(
-                        {
-                            qualityOpen = true
-                            ui.interact()
-                        },
-                        Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
-                            contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
-                            stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
-                        },
-                        enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
-                        contentPadding = PaddingValues(
-                            start = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET,
-                            end = 0.dp,
-                            top = 8.dp,
-                            bottom = 8.dp
-                        )
-                    ) {
+                if (!landscape) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f).testTag("touch:title")
                         )
+                        val syncUnavailable = if (host.isLive) stringResource(R.string.sync_live_unavailable) else null
+                        IconButton(
+                            onClick = {
+                                if (!host.isLive) host.sync?.show()
+                                ui.interact()
+                            },
+                            enabled = !host.isLive,
+                            colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                            modifier = Modifier.size(48.dp).testTag("touch:syncplay").semantics {
+                                syncUnavailable?.let { stateDescription = it }
+                            }
+                        ) {
+                            Icon(syncIcon("group"), stringResource(R.string.sync_title))
+                        }
+                        TouchBarButton(
+                            {
+                                qualityOpen = true
+                                ui.interact()
+                            },
+                            Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
+                                contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
+                                stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
+                            },
+                            enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
+                            contentPadding = PaddingValues(
+                                start = if (host.isLive) 0.dp else TOUCH_BAR_TEXT_INSET,
+                                end = 0.dp,
+                                top = 8.dp,
+                                bottom = 8.dp
+                            )
+                        ) {
+                            Text(
+                                "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 val qualityNotice = if (offlineQuality) {
@@ -722,7 +791,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                         modifier = Modifier.testTag("touch:quality-notice")
                     )
                 }
-                if (host.isLive) {
+                if (host.isLive && !landscape) {
                     val time = liveTime()
                     Text(
                         listOfNotNull(
@@ -861,7 +930,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
                 Modifier.align(Alignment.TopEnd).testTag("touch:actions").windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(top = maxOf(belowNotice, chipGap))
+                    .padding(top = maxOf(headerInset + belowNotice, chipGap))
                     .padding(TOUCH_PLAYER_EDGE)
                     .widthIn(max = TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - TOUCH_PLAYER_EDGE * 2))
                     .onGloballyPositioned {
@@ -1127,8 +1196,8 @@ internal fun TouchPlayerScrubber(
     val shown = preview ?: if (ended) completedPlaybackPosition(position, duration) else playbackEndPosition(position, duration)
     // The clock moves every second; the reader hears it on arrival, pause and seek, as PLAY-06 asks, never per tick.
     val spoken = spokenPlaybackPosition(if (ended) completedPlaybackPosition(position, duration) else preview ?: spokenMs, duration)
-    val elapsed = playerTime(shown)
-    val total = displayRuntimeMillis(duration)?.let(::playerTime)
+    val elapsed = playerElapsedClock(shown, duration)
+    val total = playerRemainingClock(shown, duration)
     val clockStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
     val clockWidth = with(LocalDensity.current) {

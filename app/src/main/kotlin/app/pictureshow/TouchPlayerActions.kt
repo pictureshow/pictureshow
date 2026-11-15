@@ -7,9 +7,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -176,73 +176,86 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
         )
     }
     val accent = MaterialTheme.colorScheme.primary
-    Column(Modifier.semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(
-            Modifier.fillMaxWidth().testTag("touch:live-position"),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (window != null && touchLiveSliderAvailable(window, host.liveBufferExpired)) {
-                Slider(
-                    value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
-                    valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
-                    enabled = window.canTimeShift && !host.liveBufferExpired,
-                    onValueChange = {
-                        ui.scrubMs = it.toLong()
-                        ui.interact()
-                    },
-                    onValueChangeFinished = {
-                        ui.scrubMs?.let(host::seekTo)
-                        ui.scrubMs = null
-                    },
-                    track = { LivePlayerTrack(window, position, accent, expired = host.liveBufferExpired) },
-                    modifier = Modifier.weight(1f).testTag("touch:scrubber").semantics {
-                        contentDescription = "Live playback position"
-                        stateDescription = spoken
-                    }
-                )
-            } else {
-                LivePlayerTrack(window, position, accent, Modifier.weight(1f), expired = host.liveBufferExpired)
+    Row(
+        Modifier.fillMaxWidth().semantics { testTagsAsResourceId = true },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(Modifier.weight(1f).height(48.dp)) {
+            val endpoints = liveBufferEndpointLabels(window, position, host.liveBufferExpired, liveTime()::clock)
+            Row(Modifier.fillMaxWidth().align(Alignment.TopCenter), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(endpoints.first, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                Text(endpoints.second, color = Color.White, style = MaterialTheme.typography.labelSmall)
             }
-            Box(Modifier.width(liveControlWidth()).heightIn(min = 48.dp).testTag("touch:live-slot"), contentAlignment = Alignment.Center) {
-                if (atEdge && !paused) {
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
-                            .semantics(mergeDescendants = true) { contentDescription = "Live" },
-                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Canvas(Modifier.size(6.dp).clearAndSetSemantics {}) { drawCircle(Color(0xFFFF6B6B)) }
-                        Text("Live", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            host.goLive()
+            Row(
+                Modifier.fillMaxWidth().align(Alignment.Center).testTag("touch:live-position"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (readout.status.isNotEmpty()) {
+                    Text(
+                        readout.status,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics {
+                            contentDescription = "Live playback status"
+                            stateDescription = spoken
+                        }
+                    )
+                }
+                if (window != null && touchLiveSliderAvailable(window, host.liveBufferExpired)) {
+                    Slider(
+                        value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
+                        valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
+                        enabled = window.canTimeShift && !host.liveBufferExpired,
+                        onValueChange = {
+                            ui.scrubMs = it.toLong()
                             ui.interact()
                         },
-                        enabled = window?.goLivePosition() != null,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
-                    ) { Text("Go live") }
+                        onValueChangeFinished = {
+                            ui.scrubMs?.let(host::seekTo)
+                            ui.scrubMs = null
+                        },
+                        track = { LivePlayerTrack(window, position, accent, expired = host.liveBufferExpired) },
+                        modifier = Modifier.weight(1f).heightIn(max = 24.dp).testTag("touch:scrubber").semantics {
+                            contentDescription = "Live playback position"
+                            stateDescription = spoken
+                        }
+                    )
+                } else {
+                    LivePlayerTrack(window, position, accent, Modifier.weight(1f), expired = host.liveBufferExpired)
+                }
+                if (readout.clock.isNotEmpty()) {
+                    Text(
+                        readout.clock,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.testTag("touch:behind-live").clearAndSetSemantics {}
+                    )
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                readout.status,
-                color = Color.White.copy(alpha = .8f),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics {
-                    contentDescription = "Live playback status"
-                    stateDescription = spoken
+        Box(Modifier.width(liveControlWidth()).heightIn(min = 48.dp).testTag("touch:live-slot"), contentAlignment = Alignment.Center) {
+            if (atEdge && !paused) {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
+                        .semantics(mergeDescendants = true) { contentDescription = "Live" },
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Canvas(Modifier.size(6.dp).clearAndSetSemantics {}) { drawCircle(Color(0xFFFF6B6B)) }
+                    Text("LIVE", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
                 }
-            )
-            Text(
-                readout.clock,
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.testTag("touch:behind-live").clearAndSetSemantics {}
-            )
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        host.goLive()
+                        ui.interact()
+                    },
+                    enabled = window?.goLivePosition() != null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:go-live")
+                ) { Text("Go live") }
+            }
         }
     }
 }

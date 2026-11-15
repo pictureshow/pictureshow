@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -67,7 +66,7 @@ internal fun PlayerTimeline(
         }
         Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                val endpoints = liveBufferEndpointLabels(liveWindow, positionMs, liveExpired)
+                val endpoints = liveBufferEndpointLabels(liveWindow, positionMs, liveExpired, liveTime()::clock)
                 Text(endpoints.first, style = androidx.tv.material3.MaterialTheme.typography.labelMedium)
                 if (endpoints.second.isNotEmpty()) {
                     Text(
@@ -108,7 +107,7 @@ internal fun PlayerTimeline(
         Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray).clearAndSetSemantics {}) {
             Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
         }
-        Row {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             // The clock's compact bounds align with the controls below; a full-width 5 dp target is
             // skipped by TV TalkBack's directional distance scoring.
             Box(
@@ -132,9 +131,9 @@ internal fun PlayerTimeline(
                                 playerTime(spokenTimelinePosition)
                             }
                     }
-            ) { Text(playerClock(timelinePosition, durationMs, paused), modifier = Modifier.clearAndSetSemantics {}) }
+            ) { Text(playerElapsedClock(timelinePosition, durationMs), modifier = Modifier.clearAndSetSemantics {}) }
             // Keep the clock and row geometry stable while arrows navigate a focused control.
-            Text("  ·  ← / → seek 10 seconds", modifier = Modifier.alpha(if (arrowsSeek) 1f else 0f).clearAndSetSemantics {})
+            playerRemainingClock(timelinePosition, durationMs)?.let { Text(it, modifier = Modifier.clearAndSetSemantics {}) }
         }
     }
 }
@@ -179,18 +178,19 @@ internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: 
     else -> "Live"
 }
 
-/** Keep the compact negative clock, with explicit units nearby to distinguish seconds from programme minutes. */
-internal fun liveTimelineVisualStatus(readout: LiveTimelineReadout, behindMs: Long?): String =
-    if (readout.clock.isNotEmpty() && behindMs != null) {
-        listOf(readout.status, liveBehindDescription(behindMs)).filter(String::isNotBlank).joinToString(" · ")
-    } else {
-        readout.status
-    }
+/** Distance is already beside the track; status never repeats it. */
+internal fun liveTimelineVisualStatus(readout: LiveTimelineReadout, behindMs: Long?): String = readout.status
 
-/** Endpoint words never claim an available live target when the decoder cannot establish it. */
-internal fun liveBufferEndpointLabels(window: ObservedLiveWindow?, positionMs: Long, expired: Boolean): Pair<String, String> = when {
+/** Only a decoder-provided epoch is a buffer clock. Never infer one from programme metadata. */
+internal fun liveBufferEndpointLabels(
+    window: ObservedLiveWindow?,
+    positionMs: Long,
+    expired: Boolean,
+    clock: (Long) -> String = { "Time unavailable" }
+): Pair<String, String> = when {
     expired -> "Buffer expired" to ""
     window?.canTimeShift != true -> "Time shift unavailable" to ""
-    liveTrackPositionFraction(window, positionMs, expired) != null -> "Available buffer · start" to "Live edge"
-    else -> "Measured buffer" to "Live edge unavailable"
+    liveTrackPositionFraction(window, positionMs, expired) != null ->
+        (window.startEpochMs?.let(clock) ?: "Time unavailable") to "LIVE"
+    else -> "Time unavailable" to ""
 }

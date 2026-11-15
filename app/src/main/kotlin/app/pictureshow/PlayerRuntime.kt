@@ -11,3 +11,9 @@ internal fun playerClock(positionMs: Long, durationMs: Long, paused: Boolean): S
     val time = playerTime(positionMs) + (total?.let { " / ${playerTime(it)}" } ?: "")
     return (if (paused) "Paused  ·  " else "") + time
 }
+
+/** Both native HUDs use elapsed/remaining clocks; an untrusted duration never invents a remainder. */
+internal fun playerElapsedClock(positionMs: Long, durationMs: Long): String = playerTime(playbackEndPosition(positionMs, durationMs))
+
+internal fun playerRemainingClock(positionMs: Long, durationMs: Long): String? =
+    displayRuntimeMillis(durationMs)?.let { "−${playerTime((it - playbackEndPosition(positionMs, durationMs)).coerceAtLeast(0))}" }

@@ -80,7 +80,7 @@ internal fun liveTimelineReadout(
     expired -> LiveTimelineReadout("Paused · Buffer expired", "")
     !canTimeShift -> LiveTimelineReadout("Time shift unavailable", "")
     window?.behindLiveMs(positionMs) == null -> LiveTimelineReadout("Live position unavailable", "")
-    window.atLiveEdge(positionMs, expired) -> LiveTimelineReadout(if (paused) "Paused · At live edge" else "Live", "")
+    window.atLiveEdge(positionMs, expired) -> LiveTimelineReadout(if (paused) "Paused" else "", "")
     else -> LiveTimelineReadout(if (paused) "Paused" else "", behindLiveClock(window.behindLiveMs(positionMs)))
 }
 
@@ -98,9 +98,9 @@ internal fun LiveEdgeBadge(tv: Boolean, modifier: Modifier = Modifier) {
     ) {
         Canvas(Modifier.size(6.dp).clearAndSetSemantics {}) { drawCircle(Color(0xFFFF6B6B)) }
         if (tv) {
-            androidx.tv.material3.Text("Live", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
+            androidx.tv.material3.Text("LIVE", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
         } else {
-            androidx.compose.material3.Text("Live", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
+            androidx.compose.material3.Text("LIVE", color = Color.White, modifier = Modifier.clearAndSetSemantics {})
         }
     }
 }

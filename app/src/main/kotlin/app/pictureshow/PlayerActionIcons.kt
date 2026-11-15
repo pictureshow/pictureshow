@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 
 /** Original player marks; play/pause/Cast reuse the app's existing action vectors. */
 internal fun playerActionIcon(action: String): ImageVector {
+    if (action == "group") return syncIcon("group")
     if (action in setOf("play", "pause", "cast", "casting")) return touchActionIcon(action)
     return ImageVector.Builder(action, 24.dp, 24.dp, 24f, 24f).apply {
         path(fill = SolidColor(Color.White)) {
@@ -130,6 +131,32 @@ internal fun playerActionIcon(action: String): ImageVector {
                     lineTo(16f, 21f)
                     lineTo(14f, 21f)
                     close()
+                }
+                "quality" -> {
+                    moveTo(2f, 4f)
+                    lineTo(22f, 4f)
+                    lineTo(22f, 18f)
+                    lineTo(2f, 18f)
+                    close()
+                    moveTo(4f, 6f)
+                    lineTo(4f, 16f)
+                    lineTo(20f, 16f)
+                    lineTo(20f, 6f)
+                    close()
+                }
+                "chapters" -> {
+                    for (y in listOf(5f, 11f, 17f)) {
+                        moveTo(3f, y)
+                        lineTo(6f, y)
+                        lineTo(6f, y + 2f)
+                        lineTo(3f, y + 2f)
+                        close()
+                        moveTo(9f, y)
+                        lineTo(21f, y)
+                        lineTo(21f, y + 2f)
+                        lineTo(9f, y + 2f)
+                        close()
+                    }
                 }
                 "more" -> {
                     for (y in listOf(4f, 11f, 18f)) {

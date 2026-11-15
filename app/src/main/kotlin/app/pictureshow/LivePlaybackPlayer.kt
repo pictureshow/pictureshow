@@ -20,7 +20,16 @@ internal fun Player.observedLiveWindow(): ObservedLiveWindow? {
     val duration = window.durationMs.takeIf { it != C.TIME_UNSET && it > 0 } ?: return null
     val offset = window.windowStartTimeMs.takeIf { it != C.TIME_UNSET }
         ?: window.positionInFirstPeriodMs
-    return ObservedLiveWindow(offset, duration, window.defaultPositionMs, window.isSeekable)
+    return ObservedLiveWindow(
+        offset,
+        duration,
+        window.defaultPositionMs,
+        window.isSeekable,
+        window.windowStartTimeMs.takeIf {
+            it !=
+                C.TIME_UNSET
+        }
+    )
 }
 
 /** Every controller, media key and screen uses the same measured-range guards. */

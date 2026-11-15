@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "suite": "player-hud-clocks",
+  "cases": [
+    {
+      "id": "player-hud-clock.normal",
+      "input": {
+        "positionMs": 20000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "elapsed": "0:20",
+        "remaining": "−0:40"
+      }
+    },
+    {
+      "id": "player-hud-clock.start",
+      "input": {
+        "positionMs": 0,
+        "durationMs": 60000
+      },
+      "expected": {
+        "elapsed": "0:00",
+        "remaining": "−1:00"
+      }
+    },
+    {
+      "id": "player-hud-clock.completed",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "elapsed": "1:00",
+        "remaining": "−0:00"
+      }
+    },
+    {
+      "id": "player-hud-clock.past-end",
+      "input": {
+        "positionMs": 62000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "elapsed": "1:00",
+        "remaining": "−0:00"
+      }
+    },
+    {
+      "id": "player-hud-clock.unknown",
+      "input": {
+        "positionMs": 20000,
+        "durationMs": 0
+      },
+      "expected": {
+        "elapsed": "0:20",
+        "remaining": null
+      }
+    },
+    {
+      "id": "player-hud-clock.implausible",
+      "input": {
+        "positionMs": 20000,
+        "durationMs": 4294982295
+      },
+      "expected": {
+        "elapsed": "0:20",
+        "remaining": null
+      }
+    },
+    {
+      "id": "player-hud-clock.hours",
+      "input": {
+        "positionMs": 5000,
+        "durationMs": 3605000
+      },
+      "expected": {
+        "elapsed": "0:05",
+        "remaining": "−1:00:00"
+      }
+    }
+  ]
+}

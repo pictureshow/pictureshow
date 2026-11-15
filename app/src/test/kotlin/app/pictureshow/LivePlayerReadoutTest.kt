@@ -13,9 +13,9 @@ class LivePlayerReadoutTest {
     private val window = ObservedLiveWindow(100_000, 30_000, 27_000, true)
 
     @Test fun visibleReadoutUsesOneMeasuredEdgeDecisionForBothStrings() {
-        assertEquals(LiveTimelineReadout("Live", ""), liveTimelineReadout(window, 26_000, false, false, true))
-        assertEquals(LiveTimelineReadout("Live", ""), liveTimelineReadout(window, 25_000, false, false, true))
-        assertEquals(LiveTimelineReadout("Paused · At live edge", ""), liveTimelineReadout(window, 25_000, true, false, true))
+        assertEquals(LiveTimelineReadout("", ""), liveTimelineReadout(window, 26_000, false, false, true))
+        assertEquals(LiveTimelineReadout("", ""), liveTimelineReadout(window, 25_000, false, false, true))
+        assertEquals(LiveTimelineReadout("Paused", ""), liveTimelineReadout(window, 25_000, true, false, true))
         assertEquals(LiveTimelineReadout("", "−0:03"), liveTimelineReadout(window, 24_000, false, false, true))
         assertEquals(LiveTimelineReadout("Paused", "−0:03"), liveTimelineReadout(window, 24_000, true, false, true))
         assertEquals("Paused · 3 sec behind live", liveTimelineLabel(true, true, false, 3_000))
@@ -31,6 +31,28 @@ class LivePlayerReadoutTest {
         )
         assertEquals(LiveTimelineReadout("Live position unavailable", ""), liveTimelineReadout(window, 31_000, false, false, true))
         assertEquals(LiveTimelineReadout("Paused · Buffer expired", ""), liveTimelineReadout(window, 27_000, true, true, true))
+    }
+
+    @Test fun endpointClockUsesOnlyDecoderEpochAndStatusDoesNotRepeatDistance() {
+        val actualEpoch = 1_800_000_000_000L
+        val seen = mutableListOf<Long>()
+        val timed = window.copy(startEpochMs = actualEpoch)
+        assertEquals(
+            "9:20 AM" to "LIVE",
+            liveBufferEndpointLabels(timed, 24_000, false) {
+                seen += it
+                "9:20 AM"
+            }
+        )
+        assertEquals(listOf(actualEpoch), seen)
+        assertEquals("Time unavailable" to "LIVE", liveBufferEndpointLabels(window, 24_000, false) { error("No invented epoch") })
+        assertEquals("Buffer expired" to "", liveBufferEndpointLabels(timed, 24_000, true) { error("Expired buffer") })
+        assertEquals("Time shift unavailable" to "", liveBufferEndpointLabels(null, 0, false))
+        assertEquals("Time unavailable" to "", liveBufferEndpointLabels(timed, 31_000, false))
+        assertEquals("Paused", liveTimelineVisualStatus(LiveTimelineReadout("Paused", "−0:05"), 5_000))
+        assertEquals("", liveTimelineVisualStatus(LiveTimelineReadout("", "−1:05"), 65_000))
+        assertEquals("−1:05", behindLiveClock(65_000))
+        assertEquals("−1:00:05", behindLiveClock(3_605_000))
     }
 
     @Test fun forwardGuardUsesTheActualEdgeWithoutChangingOrdinaryPlayback() {

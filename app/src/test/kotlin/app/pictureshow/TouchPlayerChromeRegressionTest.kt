@@ -91,17 +91,20 @@ class TouchPlayerChromeRegressionTest {
             if (::output.isInitialized) output.release()
         }
     }
-    private fun show(case: JsonObject, reducedQuality: Boolean = false) {
+    private fun show(case: JsonObject, reducedQuality: Boolean = false, live: Boolean = false) {
         val input = case.getValue("input").jsonObject
         val font = input.getValue("fontScale").jsonPrimitive.float
         RuntimeEnvironment.setFontScale(font)
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder()
-            host = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
+            host = PlaybackHostState(MediaItem("film", "A film", if (live) "TvChannel" else "Movie"), 20_000, output, {}, {})
             host.playerSource = mutableStateOf(decoder)
             host.stateSource = mutableStateOf(PlaybackState(preparing = false))
             host.duration = 60_000
+            if (live) {
+                host.liveWindow = app.pictureshow.core.playback.ObservedLiveWindow(100_000, 30_000, 27_000, true, 1_762_766_400_000)
+            }
             if (reducedQuality) host.estimatedBandwidth = input.getValue("estimatedBandwidth").jsonPrimitive.content.toLong()
         }
         compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) } }
@@ -207,7 +210,7 @@ class TouchPlayerChromeRegressionTest {
             "Seek row compaction must retain the native48dp slider input height"
         )
         val targetTags = input.getValue("targetTags").jsonArray.map { it.jsonPrimitive.content }
-        val stationaryTransport = setOf("touch:toggle", "touch:back10", "touch:forward10")
+        val stationaryTransport = setOf("touch:toggle", "touch:back10", "touch:forward10", "touch:syncplay", "touch:quality")
         val overflowTargets = setOf("touch:stop", "touch:open:Info")
         // Incoming native transport is a sibling of the bottom scroll panel. Overflow is reached by More.
         // Check ordinary targets first, then open the real popup once without invoking destructive Stop.
@@ -237,6 +240,85 @@ class TouchPlayerChromeRegressionTest {
             )
         }
     }
+
+    @Test fun landscapeVodKeepsHeaderOutOfCompactBottomAndShowsRemainingAtFont10() = compact("compact-vod-font-1-0", false)
+
+    @Test fun landscapeVodKeepsHeaderOutOfCompactBottomAndShowsRemainingAtFont13() = compact("compact-vod-font-1-3", false)
+
+    @Test fun landscapeLiveKeepsOneBehindReadoutAndCompactBottomAtFont10() = compact("compact-live-font-1-0", true)
+
+    @Test fun landscapeLiveKeepsOneBehindReadoutAndCompactBottomAtFont13() = compact("compact-live-font-1-3", true)
+
+    private fun compact(id: String, live: Boolean) {
+        val case = vector(id)
+        show(case, live = live)
+        val expected = case.getValue("expected").jsonObject
+        val panel = compose.onNodeWithTag("touch:panel").getUnclippedBoundsInRoot()
+        val title = compose.onNodeWithTag("touch:title", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val secondary = compose.onNodeWithTag("touch:secondary").getUnclippedBoundsInRoot()
+        assertTrue(title.bottom < panel.top, "Landscape title stays in the upper header, leaving the picture and compact bottom readable")
+        assertTrue(
+            (panel.bottom - panel.top).value <= expected.getValue("maximumBottomHeightDp").jsonPrimitive.float,
+            "The actual bottom HUD must fit the roughly30% screen budget: $panel"
+        )
+        assertTrue(secondary.top >= panel.top && secondary.bottom <= panel.bottom)
+        val headerBottom = listOf("touch:title", "touch:quality", "touch:syncplay")
+            .maxOf { compose.onNodeWithTag(it, useUnmergedTree = true).getUnclippedBoundsInRoot().bottom.value }
+        val transport = compose.onNodeWithTag("touch:transport").getUnclippedBoundsInRoot()
+        assertTrue(transport.top.value >= headerBottom, "Center transport must not cover the upper metadata/header actions")
+        if (!live) {
+            compose.runOnIdle {
+                host.segments = listOf(app.pictureshow.core.MediaSegment("intro", app.pictureshow.core.SegmentType.Intro, 0, 600_000_000))
+            }
+            compose.waitForIdle()
+            fun stableAction(tag: String) {
+                val shown = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertTrue(shown.top.value >= headerBottom, "Action clears complete title/Quality/Watch together header: $tag $shown")
+                val gestures = compose.onNodeWithTag("touch:gestures")
+                assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+                // Invoke the layer's semantic action: a center pointer can hit the next-episode card above it.
+                gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+                compose.waitForIdle()
+                assertEquals("Show controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+                val hidden = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertEquals(shown.top.value, hidden.top.value, .5f, "Hiding controls must retain the action's vertical anchor")
+                gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+                compose.waitForIdle()
+                assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+                val restored = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertEquals(shown.top.value, restored.top.value, .5f, "Revealing controls must retain the action's vertical anchor")
+            }
+            stableAction("touch:skip")
+            compose.runOnIdle { host.deferredNext = MediaItem("next", "Another episode") }
+            compose.waitForIdle()
+            stableAction("next:cancel")
+            compose.runOnIdle {
+                host.deferredNext = null
+                host.segments = emptyList()
+            }
+            compose.waitForIdle()
+        }
+        if (live) {
+            compose.onNodeWithTag("touch:behind-live", useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag("touch:live-status").assertExists()
+            assertEquals(
+                listOf("Live playback status"),
+                compose.onNodeWithTag(
+                    "touch:live-status"
+                ).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription]
+            )
+        } else {
+            compose.onNodeWithTag("touch:seek-time", useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag("touch:total-time", useUnmergedTree = true).assertExists()
+            assertEquals(
+                "0:20 of 1:00",
+                compose.onNodeWithTag(
+                    "touch:scrubber"
+                ).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription]
+            )
+        }
+    }
+
     private fun distance(a: Int, b: Int) =
         (0..2).maxOf { channel -> abs(((a ushr (channel * 8)) and 255) - ((b ushr (channel * 8)) and 255)) }
     private class Decoder : SimpleBasePlayer(Looper.getMainLooper()) {

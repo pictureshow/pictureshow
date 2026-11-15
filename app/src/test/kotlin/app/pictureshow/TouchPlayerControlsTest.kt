@@ -403,7 +403,20 @@ class TouchPlayerControlsTest {
         val notice = bounds("touch:conversion-notice")
         val actions = bounds("touch:actions")
         assertTrue(notice.right + 12.dp <= actions.left + 16.dp + 1.dp, "notice $notice beside column $actions")
-        assertTrue(bounds("touch:skip").top < 24.dp, "Skip at the top: ${bounds("touch:skip")}")
+        val headerBottom = listOf("touch:title", "touch:quality", "touch:syncplay").maxOf { bounds(it).bottom.value }
+        assertTrue(bounds("touch:skip").top.value >= headerBottom, "Skip clears the full landscape header")
+        assertTrue(notice.top.value >= headerBottom, "Conversion notice clears the full landscape header")
+        val skipTop = bounds("touch:skip").top
+        val gestures = compose.onNodeWithTag("touch:gestures")
+        assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        settled()
+        assertEquals("Show controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertEquals(skipTop, bounds("touch:skip").top, "Hiding controls keeps Skip's header reservation")
+        gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        settled()
+        assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertEquals(skipTop, bounds("touch:skip").top, "Showing controls keeps Skip's header reservation")
         assertEquals(914f - 16f, bounds("touch:skip").right.value, 1f)
     }
 

@@ -12,8 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -387,7 +387,7 @@ class NextEpisodeResolutionTest {
 
     private fun reopenAndEnd(enableAccessibilityAtEnd: Boolean = false, holdTimeline: Boolean = false) {
         val previous = output.player.value
-        compose.onNodeWithText("Subtitles").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        compose.onNodeWithContentDescription("Subtitles").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
         // Robolectric does not grant Dialog window focus; model the native focused window.
         compose.runOnIdle {
             org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView.dispatchWindowFocusChanged(true)

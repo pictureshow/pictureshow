@@ -303,6 +303,8 @@ class TouchPlayerDirectorRegressionTest {
         show(grouped = true)
         compose.onNodeWithTag("sync:player-chip").assertIsDisplayed()
         val chip = dpBounds("sync:player-chip")
+        val headerBottom = listOf("touch:title", "touch:quality", "touch:syncplay").maxOf { dpBounds(it).bottom.value }
+        assertTrue(chip.top.value >= headerBottom, "Persistent group chip starts below all landscape header targets")
         val transport = dpBounds("touch:transport")
         val panel = dpBounds("touch:panel")
         val frame = dpBounds("touch:player")
@@ -556,6 +558,35 @@ class TouchPlayerDirectorRegressionTest {
         val actionBounds = action.fetchSemanticsNode().boundsInRoot
         val chip = chipButton().assertIsDisplayed().assertIsEnabled()
         val chipBounds = chip.fetchSemanticsNode().touchBoundsInRoot
+        if (input.getValue("orientation").jsonPrimitive.content == "landscape") {
+            val headerBottom = listOf("touch:title", "touch:quality", "touch:syncplay")
+                .maxOf { overlayTarget(it).fetchSemanticsNode().touchBoundsInRoot.bottom }
+            assertTrue(chipBounds.top >= headerBottom, "Actual group chip clears the complete landscape header")
+            assertTrue(actionBounds.top >= headerBottom, "Actual Skip/next card clears the complete landscape header")
+            val actionTag = if (card) "next:cancel" else "touch:skip"
+            val shownY = overlayTarget(actionTag).fetchSemanticsNode().touchBoundsInRoot.top
+            val gestures = compose.onNodeWithTag("touch:gestures")
+            assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+            gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            compose.waitForIdle()
+            assertEquals("Show controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+            assertEquals(
+                shownY,
+                overlayTarget(actionTag).assertIsDisplayed().fetchSemanticsNode().touchBoundsInRoot.top,
+                1f,
+                "Group action stays anchored while controls are hidden"
+            )
+            gestures.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            compose.waitForIdle()
+            assertEquals("Hide controls", gestures.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+            assertEquals(
+                shownY,
+                overlayTarget(actionTag).assertIsDisplayed().fetchSemanticsNode().touchBoundsInRoot.top,
+                1f,
+                "Group action stays anchored when header returns"
+            )
+            assertEquals(chipBounds.top, chipButton().fetchSemanticsNode().touchBoundsInRoot.top, 1f)
+        }
         val frame = root.boundsInRoot
         for ((role, rect) in listOf("chip" to chipBounds, "action" to actionBounds)) {
             assertTrue(

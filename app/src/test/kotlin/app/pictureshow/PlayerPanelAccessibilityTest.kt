@@ -42,6 +42,7 @@ import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -185,7 +186,7 @@ class PlayerPanelAccessibilityTest {
         compose.onNodeWithTag("track:30").assertIsDisplayed().assertIsFocused().assertIsSelected()
         compose.runOnIdle { focused = true }
         compose.onNodeWithTag("track:30").assertIsFocused().assertIsSelected()
-        compose.onNodeWithText("Audio").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Audio").assertDoesNotExist()
         compose.onNodeWithTag("player:panel").assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Audio"))
         compose.onNodeWithTag("player:panel").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
     }
