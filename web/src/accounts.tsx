@@ -117,42 +117,38 @@ export function AccountChooser({
                                 </li>
                             ))}
                     </ul>
-                    {saved.accounts.some((a) => a.server.id === s.id) && (
-                        <details className="account-management">
-                            <summary>
-                                Manage saved sign-ins on{" "}
-                                {serverLabel(s, saved.servers)}
-                            </summary>
-                            <ul className="account-list">
-                                {saved.accounts
-                                    .filter((a) => a.server.id === s.id)
-                                    .map((a) => (
-                                        <li key={accountKey(a)}>
-                                            <button
-                                                className="account-remove"
-                                                data-focus={
-                                                    "remove:" + accountKey(a)
-                                                }
-                                                onClick={(e) =>
-                                                    onRemove(a, e.currentTarget)
-                                                }
-                                            >
-                                                Remove {a.user.Name}
-                                            </button>
-                                        </li>
-                                    ))}
-                            </ul>
-                            <button
-                                className="account-remove"
-                                data-focus={"remove-server:" + s.id}
-                                onClick={(e) =>
-                                    onRemoveServer(s, e.currentTarget)
-                                }
-                            >
-                                Remove server {serverLabel(s, saved.servers)}
-                            </button>
-                        </details>
-                    )}
+                    <details className="account-management">
+                        <summary>
+                            Manage saved sign-ins on{" "}
+                            {serverLabel(s, saved.servers)}
+                        </summary>
+                        <ul className="account-list">
+                            {saved.accounts
+                                .filter((a) => a.server.id === s.id)
+                                .map((a) => (
+                                    <li key={accountKey(a)}>
+                                        <button
+                                            className="account-remove"
+                                            data-focus={
+                                                "remove:" + accountKey(a)
+                                            }
+                                            onClick={(e) =>
+                                                onRemove(a, e.currentTarget)
+                                            }
+                                        >
+                                            Remove {a.user.Name}
+                                        </button>
+                                    </li>
+                                ))}
+                        </ul>
+                        <button
+                            className="account-remove"
+                            data-focus={"remove-server:" + s.id}
+                            onClick={(e) => onRemoveServer(s, e.currentTarget)}
+                        >
+                            Remove server {serverLabel(s, saved.servers)}
+                        </button>
+                    </details>
                     <div className="actions">
                         <button
                             data-focus={"login:" + s.id}

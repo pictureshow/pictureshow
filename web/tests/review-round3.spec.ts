@@ -819,3 +819,47 @@ test("R3 follow-up: pointer More has quiet focus and labelled rows, keyboard kee
             .getByRole("button", { name: /Opening/ }),
     ).toBeFocused();
 });
+
+test("R3-12: a remembered server can still be forgotten after its last saved sign-in is removed", async ({
+    page,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    await page
+        .getByRole("button", { name: "Switch user", exact: true })
+        .click();
+    const manage = page.locator(".account-management");
+    await manage.locator("summary").click();
+    await page
+        .getByRole("button", { name: "Remove Viewer", exact: true })
+        .click();
+    await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Remove", exact: true })
+        .click();
+    await expect(
+        page.getByRole("button", { name: "Continue as Viewer" }),
+    ).toHaveCount(0);
+    await expect(manage).toBeVisible();
+    if (!(await manage.evaluate((e: HTMLDetailsElement) => e.open)))
+        await manage.locator("summary").click();
+    await page
+        .getByRole("button", {
+            name: "Remove server Evening Cinema",
+            exact: true,
+        })
+        .click();
+    await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Remove", exact: true })
+        .click();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () =>
+                    JSON.parse(localStorage.getItem("pictureshow.accounts.v1")!)
+                        .servers.length,
+            ),
+        )
+        .toBe(0);
+});
