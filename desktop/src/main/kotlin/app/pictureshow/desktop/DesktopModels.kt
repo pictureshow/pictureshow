@@ -69,7 +69,7 @@ data class DesktopState(
     val settings: DesktopSettings = DesktopSettings(),
     val playback: DesktopPlaybackState? = null,
     /** TOUCH-02: the sidebar root this page was opened under, stored when it opens; Detail keeps its opener's root. */
-    val root: String? = null
+    val root: String? = null,
     /** A control tag the next page focuses once, e.g. "play" on the title after a film finishes (PLAY-17). */
     val returnFocus: String? = null
 )
