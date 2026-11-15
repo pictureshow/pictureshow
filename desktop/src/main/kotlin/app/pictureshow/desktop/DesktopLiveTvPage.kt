@@ -138,7 +138,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                     if (recordings.isEmpty()) LiveEmpty("No recordings", "Finished recordings appear here when your server makes them available.", "Browse guide", { owner.tab(DesktopLiveTab.Guide) })
                     else LiveScroll(scroll) {
                         items(recordings, key = { "recording:${it.id}" }) { item ->
-                            ListItem(headlineContent = { Text(item.name) }, supportingContent = { Text(if (item.userData.playbackPositionTicks > 0) "Resume from ${clock(item.userData.playbackPositionTicks / 10_000_000.0)}" else "Recorded video") },
+                            ListItem(headlineContent = { Text(item.name) }, supportingContent = { Text(listOfNotNull(if (item.isInProgress) "Recording now" else item.recordingStatus?.let(::recordingStatus), if (item.userData.playbackPositionTicks > 0) "Resume from ${clock(item.userData.playbackPositionTicks / 10_000_000.0)}" else "Recorded video").joinToString(" · ")) },
                                 trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) {
                                     Button({ play(item) }, enabled = fresh, modifier = Modifier.controlFocus().probe("live:recording:${item.id}")) { Text(if (item.userData.playbackPositionTicks > 0) "Resume" else "Play") }
                                     if (item.canDelete == true || s.policy?.deleteContent == true && item.canDelete != false) TextButton({ confirmation = LiveConfirmation(item = item) }, enabled = fresh, modifier = Modifier.controlFocus()) { Text("Delete…") }

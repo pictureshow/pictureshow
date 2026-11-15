@@ -154,6 +154,9 @@ jobs:
           name: desktop-app-${{ runner.os }}
           retention-days: 7
           path: |
+            desktop/build/libs/*.jar
+            ui-shared/build/libs/*.jar
+            core/build/libs/*.jar
             desktop-evidence/**
             desktop/build/test-results/**
             desktop/build/reports/tests/**

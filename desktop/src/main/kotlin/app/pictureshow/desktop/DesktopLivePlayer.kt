@@ -16,7 +16,11 @@ import kotlinx.serialization.json.*
 internal fun desktopLiveWindow(cache: String?, seekable: Boolean): ObservedLiveWindow? = runCatching {
     val state = Json.parseToJsonElement(cache ?: return null).jsonObject
     val ranges = state["seekable-ranges"]?.jsonArray ?: return null
-    val range = ranges.lastOrNull()?.jsonObject ?: return null
+    val range = ranges.mapNotNull { it as? JsonObject }.filter {
+        val start = it["start"]?.jsonPrimitive?.doubleOrNull
+        val end = it["end"]?.jsonPrimitive?.doubleOrNull
+        start != null && end != null && start.isFinite() && end.isFinite() && end > start && start >= 0
+    }.maxByOrNull { it["end"]!!.jsonPrimitive.double } ?: return null
     val start = range["start"]?.jsonPrimitive?.doubleOrNull ?: return null
     val end = range["end"]?.jsonPrimitive?.doubleOrNull ?: return null
     if (!start.isFinite() || !end.isFinite() || end <= start || start < 0) return null

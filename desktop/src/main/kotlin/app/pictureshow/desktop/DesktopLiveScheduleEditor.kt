@@ -23,6 +23,7 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
     val values = original.fields + edits
     val changed = edits.any { (key, value) ->
         if (key == "Days") (original.fields[key] as? JsonArray)?.toSet() != (value as? JsonArray)?.toSet()
+        else if (key in setOf("PrePaddingSeconds", "PostPaddingSeconds", "Priority", "KeepUpTo")) (original.fields[key] as? JsonPrimitive)?.content?.toIntOrNull() != (value as? JsonPrimitive)?.content?.toIntOrNull()
         else original.fields[key] != value
     }
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() },

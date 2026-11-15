@@ -169,7 +169,7 @@ class DesktopLiveTv internal constructor(
     private fun write(operation: suspend (Account) -> LiveWrite) = mutate { a ->
         require(mutable.value.actionsAvailable(now())) { "Refresh Live TV before making changes." }
         val answer = operation(a)
-        update(a) { it.copy(notice = answer.message ?: when (answer.outcome) {
+        update(a) { it.copy(notice = answer.message?.replace(Regex("\\s*\\(\\d{3}\\)"), "") ?: when (answer.outcome) {
             "ok" -> "Recording change saved."
             "unknown" -> "The result is uncertain. Refresh to reconcile before trying again."
             else -> "The recording change was not saved. Refresh and review it."

@@ -148,7 +148,8 @@ class DesktopLiveTvTest {
     }
     @Test fun measuredMpvRangesNeverUseScheduledDuration() {
         val w = desktopLiveWindow("""{"seekable-ranges":[{"start":100,"end":120}]}""", true)!!
-        assertEquals(100_000, w.offsetMs); assertEquals(20_000, w.durationMs); assertEquals(20_000, w.goLivePosition())
+        assertEquals(100_000L, w.offsetMs); assertEquals(20_000L, w.durationMs); assertEquals(20_000L, w.goLivePosition())
+        assertEquals(100_000L, desktopLiveWindow("""{"seekable-ranges":[{"start":100,"end":120},{"start":0,"end":10}]}""", true)!!.offsetMs)
         assertNull(desktopLiveWindow("{}", true))
         assertNull(desktopLiveWindow("""{"seekable-ranges":[{"start":120,"end":100}]}""", true))
         assertFalse(desktopLiveWindow("""{"seekable-ranges":[{"start":100,"end":120}]}""", false)!!.canTimeShift)
