@@ -19,6 +19,7 @@ dependencies {
     implementation(libs.coroutines.core)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
+    testImplementation(compose.desktop.uiTestJUnit4)
     implementation(compose.desktop.currentOs)
     implementation("net.java.dev.jna:jna:5.18.1")
     implementation("org.jogamp.jogl:jogl-all-main:2.6.0")

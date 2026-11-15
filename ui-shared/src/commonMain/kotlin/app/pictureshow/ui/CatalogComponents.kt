@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +43,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.imageUrl
+import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import coil3.compose.AsyncImage
@@ -79,10 +84,7 @@ fun CatalogCard(
         )
         // Always 4 dp tall, so progress on one card doesn't step it out of its row.
         Box(Modifier.fillMaxWidth().height(4.dp)) {
-            val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
-            if (showProgress && fraction > 0 && (artworkProgress != null || !item.isWatched)) {
-                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
-            }
+            if (showProgress) CatalogResumeBar(item, artworkProgress)
         }
         if (caption != null) {
             caption()
@@ -146,14 +148,52 @@ fun CatalogArtwork(
             )
         }
         if (url == null || failed) {
-            Text(
-                item.name.take(1).uppercase(),
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clearAndSetSemantics {
-                }
-            )
+            val type = catalogPlaceholderType(item)
+            if (type != null) {
+                // A library or folder without art shows what it holds, not an initial (CAT-20).
+                Icon(
+                    catalogTypeGlyph(type),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(40.dp).testTag("catalog:type-icon:$type").clearAndSetSemantics {}
+                )
+            } else {
+                Text(
+                    item.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clearAndSetSemantics {
+                    }
+                )
+            }
         }
+    }
+}
+
+/**
+ * The resume bar a card shows under its art: the viewer's progress, hidden once watched unless the caller
+ * supplies its own fraction. Decorative; the card's announcement carries the state (CAT-02).
+ */
+@Composable
+fun CatalogResumeBar(item: MediaItem, artworkProgress: Float? = null, modifier: Modifier = Modifier) {
+    val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
+    if (fraction > 0 && (artworkProgress != null || !item.isWatched) && !item.isEmptyContainer) {
+        LinearProgressIndicator(progress = { fraction }, modifier = modifier.fillMaxWidth().testTag("catalog:resume").clearAndSetSemantics {})
+    }
+}
+
+/** A watched mark for art, shown only for a really watched item (an empty container's vacuous flag never counts). */
+@Composable
+fun CatalogWatchedBadge(item: MediaItem, modifier: Modifier = Modifier) {
+    if (!item.isWatched || item.isEmptyContainer) return
+    Row(
+        modifier.background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp).testTag("catalog:watched").clearAndSetSemantics {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(CatalogGlyphs.Check, contentDescription = null, tint = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.size(14.dp))
+        Text("Watched", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.inverseOnSurface)
     }
 }
 

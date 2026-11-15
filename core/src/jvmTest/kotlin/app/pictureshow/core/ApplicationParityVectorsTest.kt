@@ -62,6 +62,9 @@ class ApplicationParityVectorsTest {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
                     "catalog-announcement" -> JsonPrimitive(catalogAnnouncement(Json.decodeFromJsonElement(input.getValue("item"))))
+                    "runtime-label" -> JsonPrimitive(runtimeLabel(input.getValue("ticks").jsonPrimitive.long))
+                    "catalog-placeholder-kind" -> catalogPlaceholderKind(Json.decodeFromJsonElement(input.getValue("item")))
+                        ?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull
                     "detail-play-item" -> detailPlayItem(
                         Json.decodeFromJsonElement(input.getValue("item")),
                         Json.decodeFromJsonElement(input.getValue("nextUp")),

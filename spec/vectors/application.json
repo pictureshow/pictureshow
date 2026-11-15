@@ -7024,6 +7024,146 @@
           }
         },
         "expected": "A Movie, 2026, Resume from 1:00, Favorite"
+      },
+      {
+        "id": "runtime-label-under-minute",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 310000000
+        },
+        "expected": "31 s"
+      },
+      {
+        "id": "runtime-label-tiny",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 2000000
+        },
+        "expected": "1 s"
+      },
+      {
+        "id": "runtime-label-just-under-minute",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 599999999
+        },
+        "expected": "59 s"
+      },
+      {
+        "id": "runtime-label-one-minute",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 600000000
+        },
+        "expected": "1m"
+      },
+      {
+        "id": "runtime-label-hours",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 37230000000
+        },
+        "expected": "1h 2m"
+      },
+      {
+        "id": "runtime-label-implausible",
+        "operation": "runtime-label",
+        "source": "spec/features/catalog.md CAT-05",
+        "input": {
+          "ticks": 864000000001
+        },
+        "expected": ""
+      },
+      {
+        "id": "placeholder-kind-movies",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "l1",
+            "Name": "Films",
+            "Type": "CollectionFolder",
+            "CollectionType": "movies",
+            "IsFolder": true
+          }
+        },
+        "expected": "movies"
+      },
+      {
+        "id": "placeholder-kind-shows",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "l2",
+            "Name": "Shows",
+            "Type": "CollectionFolder",
+            "CollectionType": "tvshows",
+            "IsFolder": true
+          }
+        },
+        "expected": "shows"
+      },
+      {
+        "id": "placeholder-kind-livetv",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "l3",
+            "Name": "Live TV",
+            "Type": "UserView",
+            "CollectionType": "livetv",
+            "IsFolder": true
+          }
+        },
+        "expected": "livetv"
+      },
+      {
+        "id": "placeholder-kind-unknown-library",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "l4",
+            "Name": "Mixed",
+            "Type": "CollectionFolder",
+            "IsFolder": true
+          }
+        },
+        "expected": "folder"
+      },
+      {
+        "id": "placeholder-kind-boxset",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "b1",
+            "Name": "Saga",
+            "Type": "BoxSet",
+            "IsFolder": true
+          }
+        },
+        "expected": "collections"
+      },
+      {
+        "id": "placeholder-kind-title",
+        "operation": "catalog-placeholder-kind",
+        "source": "spec/features/catalog.md CAT-20",
+        "input": {
+          "item": {
+            "Id": "m1",
+            "Name": "A Film",
+            "Type": "Movie"
+          }
+        },
+        "expected": null
       }
   ]
 }
