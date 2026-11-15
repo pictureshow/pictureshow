@@ -178,7 +178,7 @@ internal fun PlaybackToggle(
 }
 
 /** Media events reveal controls outside Compose's key path; do not steal an existing control's focus. */
-internal fun livePauseRequestsControlFocus(live: Boolean, surfaceFocused: Boolean): Boolean = live && surfaceFocused
+internal fun pauseRequestsControlFocus(surfaceFocused: Boolean): Boolean = surfaceFocused
 
 /** One native family and height for live actions; ordinary playback retains its original native defaults. */
 @Composable

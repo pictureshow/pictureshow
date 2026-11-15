@@ -505,17 +505,24 @@ internal fun TrackChoices(
 
 @Composable
 internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, onDismiss: () -> Unit) =
-    SeekPanel(positionMs, durationMs, onSeekBy, forwardEnabled = true, onDismiss)
+    SeekPanel(positionMs, durationMs, onSeekBy, forwardEnabled = true, onDismiss = onDismiss)
 
 @Composable
-internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, forwardEnabled: Boolean, onDismiss: () -> Unit) {
+internal fun SeekPanel(
+    positionMs: Long,
+    durationMs: Long,
+    onSeekBy: (Long) -> Unit,
+    forwardEnabled: Boolean,
+    positionDescription: (Long, Long) -> String = ::spokenPlaybackPosition,
+    onDismiss: () -> Unit
+) {
     val first = remember { FocusRequester() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
-    val latestPosition = rememberUpdatedState(spokenPlaybackPosition(positionMs, durationMs))
+    val latestPosition = rememberUpdatedState(positionDescription(positionMs, durationMs))
     CurrentPositionAccessibility(setOf("seek:position", "seek:back", "seek:forward")) { latestPosition.value }
     var step by remember { mutableStateOf(0) }
-    val position = remember(step) { spokenPlaybackPosition(positionMs, durationMs) }
+    val position = remember(step) { positionDescription(positionMs, durationMs) }
     var previousPosition by remember { mutableStateOf<String?>(null) }
     fun seek(delta: Long) {
         previousPosition = position
@@ -532,7 +539,7 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
     }
     Text("Seek", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
     Text(
-        spokenPlaybackPosition(positionMs, durationMs),
+        positionDescription(positionMs, durationMs),
         modifier = Modifier.testTag("seek:position").clearAndSetSemantics {
             contentDescription = "Playback position"
             stateDescription = position

@@ -2130,8 +2130,8 @@
       "operation": "program-recording-label"
     },
     {
-      "id": "live-media-pause-focus-True-True",
-      "operation": "live-pause-focus",
+      "id": "media-pause-focus-True-True",
+      "operation": "media-pause-focus",
       "input": {
         "live": true,
         "surfaceFocused": true
@@ -2139,8 +2139,8 @@
       "expected": true
     },
     {
-      "id": "live-media-pause-focus-True-False",
-      "operation": "live-pause-focus",
+      "id": "media-pause-focus-True-False",
+      "operation": "media-pause-focus",
       "input": {
         "live": true,
         "surfaceFocused": false
@@ -2148,17 +2148,17 @@
       "expected": false
     },
     {
-      "id": "live-media-pause-focus-False-True",
-      "operation": "live-pause-focus",
+      "id": "media-pause-focus-False-True",
+      "operation": "media-pause-focus",
       "input": {
         "live": false,
         "surfaceFocused": true
       },
-      "expected": false
+      "expected": true
     },
     {
-      "id": "live-media-pause-focus-False-False",
-      "operation": "live-pause-focus",
+      "id": "media-pause-focus-False-False",
+      "operation": "media-pause-focus",
       "input": {
         "live": false,
         "surfaceFocused": false
@@ -4911,6 +4911,48 @@
         "09:20",
         "LIVE"
       ]
+    },
+    {
+      "id": "live-seek-position-playing-behind",
+      "operation": "live-seek-description",
+      "input": {
+        "paused": false,
+        "position": 10000,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": "17 sec behind live"
+    },
+    {
+      "id": "live-seek-position-paused-behind",
+      "operation": "live-seek-description",
+      "input": {
+        "paused": true,
+        "position": 10000,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": "Paused · 17 sec behind live"
+    },
+    {
+      "id": "live-seek-position-at-edge",
+      "operation": "live-seek-description",
+      "input": {
+        "paused": false,
+        "position": 27000,
+        "window": {
+          "duration": 30000,
+          "default": 27000,
+          "seekable": true
+        }
+      },
+      "expected": "Live"
     }
   ]
 }

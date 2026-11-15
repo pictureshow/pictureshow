@@ -7,15 +7,24 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -24,6 +33,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import app.pictureshow.core.playback.ObservedLiveWindow
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -106,17 +116,81 @@ class LivePlayerPresentationTest {
                 )
             }
         }
-        compose.onNodeWithText("Live edge").assertIsDisplayed()
+        compose.onNodeWithText("LIVE").assertIsDisplayed()
+        compose.onNodeWithText("Time unavailable").assertIsDisplayed()
         compose.runOnIdle { window.value = ObservedLiveWindow(0, 30_000, -1, true) }
-        compose.onNodeWithText("Live edge").assertDoesNotExist()
-        compose.onNodeWithText("Live edge unavailable").assertIsDisplayed()
+        compose.onNodeWithText("LIVE").assertDoesNotExist()
+        compose.onNodeWithText("Time unavailable").assertIsDisplayed()
         compose.runOnIdle { window.value = null }
-        compose.onNodeWithText("Live edge").assertDoesNotExist()
-        compose.onNodeWithText("Available buffer · start").assertDoesNotExist()
+        compose.onNodeWithText("LIVE").assertDoesNotExist()
+        compose.onNodeWithText("Time unavailable").assertDoesNotExist()
         compose.onNodeWithText("Time shift unavailable").assertIsDisplayed()
         compose.runOnIdle { expired.value = true }
         compose.onNodeWithText("Buffer expired").assertIsDisplayed()
-        compose.onNodeWithText("Live edge").assertDoesNotExist()
+        compose.onNodeWithText("LIVE").assertDoesNotExist()
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun focusedLivePositionPaintsAVisiblePerimeterBehindLiveAndAtTheEdge() {
+        val position = mutableLongStateOf(10_000)
+        // This component render test supplies the TV keyboard input environment explicitly.
+        // It verifies native focus/paint, not Android's hardware input-mode switch integration.
+        val keyboard = object : InputModeManager {
+            override val inputMode = InputMode.Keyboard
+            override fun requestInputMode(inputMode: InputMode): Boolean = inputMode == InputMode.Keyboard
+        }
+        assertTrue(keyboard.requestInputMode(InputMode.Keyboard))
+        assertEquals(InputMode.Keyboard, keyboard.inputMode)
+        compose.setContent {
+            CompositionLocalProvider(LocalInputModeManager provides keyboard) {
+                PictureshowTheme {
+                    Column(Modifier.width(360.dp).background(Color.Black)) {
+                        PlayerTimeline(
+                            position.longValue,
+                            position.longValue,
+                            30_000,
+                            paused = true,
+                            live = true,
+                            liveCanTimeShift = true,
+                            liveWindow = ObservedLiveWindow(100_000, 30_000, 27_000, true)
+                        )
+                        androidx.tv.material3.Button(onClick = {}, modifier = Modifier.testTag("other")) {
+                            androidx.tv.material3.Text("Another control")
+                        }
+                    }
+                }
+            }
+        }
+        val target = compose.onNodeWithTag("player:position")
+        fun brightPerimeter(): Pair<Int, Int> {
+            val pixels = target.captureToImage().toPixelMap()
+            var bright = 0
+            var sampled = 0
+            for (x in 4 until pixels.width - 4) {
+                for (y in listOf(0, pixels.height - 1)) {
+                    val pixel = pixels[x, y]
+                    sampled++
+                    if (pixel.red > .85f && pixel.green > .85f && pixel.blue > .85f) bright++
+                }
+            }
+            return bright to sampled
+        }
+        for (at in listOf(10_000L, 27_000L)) {
+            compose.runOnIdle { position.longValue = at }
+            compose.onNodeWithTag("other").performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }
+            compose.waitForIdle()
+            target.assertIsNotFocused()
+            val (unfocused, samples) = brightPerimeter()
+            assertTrue(samples > 20, "Measure actual target perimeter pixels")
+            assertTrue(unfocused < samples / 10, "No focus perimeter away from focus: $unfocused/$samples")
+            assertEquals(InputMode.Keyboard, keyboard.inputMode)
+            target.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }
+            compose.waitForIdle()
+            target.assertIsFocused()
+            val (focused, focusedSamples) = brightPerimeter()
+            assertTrue(focused > focusedSamples * .8f, "Focused live position is visibly outlined at $at: $focused/$focusedSamples")
+        }
     }
 
     @Test fun liveChipIsABadgeAtTheEdgeAndAnExplicitResumeWhenPaused() {

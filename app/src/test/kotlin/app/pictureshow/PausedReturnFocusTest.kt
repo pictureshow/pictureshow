@@ -11,6 +11,8 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
@@ -47,6 +49,8 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import java.io.InterruptedIOException
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Rule
@@ -107,6 +111,64 @@ class PausedReturnFocusTest {
         compose.onNodeWithContentDescription("Audio").assertIsFocused()
         backgroundAndReturn()
         compose.onNodeWithContentDescription("Audio").assertIsFocused()
+    }
+
+    @Test fun nativeVodDecoderPauseMovesSurfaceFocusToPlayAndFirstOkResumes() {
+        launch(false)
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.runOnIdle { requireNotNull(output.player.value).pause() }
+        compose.onNodeWithText("Play").assertIsDisplayed().assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertTrue(compose.runOnIdle { requireNotNull(output.player.value).playWhenReady }, "First OK after native pause resumes")
+    }
+
+    @Test fun nativeVodDecoderPausePreservesAnAlreadyFocusedAudioAction() {
+        launch(false)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.onNodeWithText("Pause").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
+        compose.runOnIdle { requireNotNull(output.player.value).pause() }
+        compose.onNodeWithContentDescription("Audio").assertIsFocused()
+    }
+
+    @Test fun nativeLiveSeekPanelUsesTheSameSingleBehindLiveDescriptionAsItsTimeline() {
+        launch(false, live = true)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onAllNodes(hasText("Pause") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
+        val target = compose.runOnIdle {
+            val edge = requireNotNull(requireNotNull(output.liveWindow).goLivePosition())
+            assertTrue(edge >= 10_000, "Measured fixture must supply at least ten seconds of live buffer")
+            (edge - 10_000).also { requireNotNull(output.player.value).seekTo(it) }
+        }
+        // Publish the actual native seek before pause captures the deliberate spoken position.
+        compose.waitUntil(10_000) {
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            output.player.value?.currentPosition == target
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { requireNotNull(output.player.value).pause() }
+        val timeline = compose.onNodeWithTag("player:position")
+        val livePosition = timeline.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        val expected = compose.runOnIdle {
+            val window = requireNotNull(output.liveWindow)
+            liveTimelineLabel(true, window.canTimeShift, false, window.behindLiveMs(target))
+        }
+        assertEquals(expected, livePosition, "Timeline words must reflect the measured native position")
+        assertTrue(livePosition.contains("behind live"), "Measured fixture must be behind its live edge: $livePosition")
+        timeline.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        compose.waitForIdle()
+        listOf("seek:position", "seek:back", "seek:forward").forEach { tag ->
+            val description = compose.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+            assertEquals(livePosition, description, "Mounted live Seek must use the live timeline's words: $tag")
+            assertFalse(description.contains(" of "), "A live buffer is not an elapsed-of-total film: $description")
+            assertEquals(1, Regex("behind live").findAll(description).count(), "One human distance per position: $tag")
+        }
     }
 
     @Test fun nativeLivePauseMovesSurfaceFocusToPlayAndOneRightReachesGoLive() {
@@ -207,7 +269,7 @@ class PausedReturnFocusTest {
             override suspend fun write(value: String) = Unit
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
-        output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
+        output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource(live) })
         shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             PictureshowTheme { PlayerItemScreen(account, item, 0, catalog, {}, {}, providedOutput = output) }
@@ -222,7 +284,7 @@ class PausedReturnFocusTest {
     }
 
     /** The decoder is deliberately held; renderer timing is supplied at the real output callback boundary. */
-    private class WaitingSource : DataSource {
+    private class WaitingSource(private val live: Boolean) : DataSource {
         override fun addTransferListener(transferListener: TransferListener) = Unit
         private var uri: android.net.Uri? = null
         private var manifest: java.io.ByteArrayInputStream? = null
@@ -230,10 +292,19 @@ class PausedReturnFocusTest {
         override fun open(dataSpec: DataSpec): Long {
             uri = dataSpec.uri
             manifest = if (dataSpec.uri.path?.endsWith(".m3u8") == true) {
-                (
-                    "#EXTM3U\n#EXT-X-TARGETDURATION:61\n#EXT-X-MEDIA-SEQUENCE:0\n" +
-                        "#EXTINF:60.008,\nsegment.ts\n#EXT-X-ENDLIST\n"
-                    ).byteInputStream()
+                if (live) {
+                    // An infinite server flag alone does not make an ENDLIST window live.
+                    // Let Media3 derive a real dynamic default position from a six-segment buffer.
+                    buildString {
+                        append("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:100\n")
+                        for (segment in 100..105) append("#EXTINF:10.000,\nsegment$segment.ts\n")
+                    }.byteInputStream()
+                } else {
+                    (
+                        "#EXTM3U\n#EXT-X-TARGETDURATION:61\n#EXT-X-MEDIA-SEQUENCE:0\n" +
+                            "#EXTINF:60.008,\nsegment.ts\n#EXT-X-ENDLIST\n"
+                        ).byteInputStream()
+                }
             } else {
                 null
             }

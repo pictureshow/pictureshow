@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +59,7 @@ internal fun PlayerTimeline(
     onOpenSeek: () -> Unit = {}
 ) {
     if (live) {
+        var positionFocused by remember { mutableStateOf(false) }
         val readout = liveTimelineReadout(liveWindow, positionMs, paused, liveExpired, liveCanTimeShift)
         val spoken = remember(paused, announcedPositionMs, liveExpired, liveCanTimeShift, liveWindow?.goLivePosition() != null) {
             liveTimelineLabel(paused, liveCanTimeShift, liveExpired, liveWindow?.behindLiveMs(announcedPositionMs))
@@ -83,13 +86,26 @@ internal fun PlayerTimeline(
                 )
                 Box(
                     modifier = Modifier.widthIn(min = 48.dp).testTag("player:position")
+                        .onFocusChanged { positionFocused = it.isFocused }
+                        .border(2.dp, if (positionFocused) Color(0xFFE8E8E8) else Color.Transparent)
                         .clickable(enabled = liveCanTimeShift && !liveExpired, onClickLabel = "Seek in live buffer", onClick = onOpenSeek)
                         .semantics {
                             contentDescription = "Live playback position"
                             stateDescription = spoken
                         },
                     contentAlignment = Alignment.CenterEnd
-                ) { Text(readout.clock, modifier = Modifier.clearAndSetSemantics {}) }
+                ) {
+                    Text(
+                        if (positionFocused &&
+                            readout.clock.isEmpty()
+                        ) {
+                            "Seek"
+                        } else {
+                            readout.clock
+                        },
+                        modifier = Modifier.clearAndSetSemantics {}
+                    )
+                }
             }
         }
         return

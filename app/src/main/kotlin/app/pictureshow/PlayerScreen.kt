@@ -216,7 +216,7 @@ internal fun PlayerItemScreen(
     var focusControls by remember { mutableStateOf(false) }
     val playback = rememberPlayerPlayback(player, onPause = {
         controls = true
-        if (livePauseRequestsControlFocus(host.isLive, rootFocused)) focusControls = true
+        if (pauseRequestsControlFocus(rootFocused)) focusControls = true
         interaction++
     }, onResume = { interaction++ }, revealPause = host.sync?.participating != true)
     val paused = playback.paused || pauseIntent
@@ -1144,7 +1144,19 @@ internal fun PlayerItemScreen(
                 restoringSeekFocus = true
                 returnFocus = timelineFocus
             }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
-                SeekPanel(position, if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration, ::seek, forwardSeekAllowed()) {
+                SeekPanel(
+                    position,
+                    if (host.isLive) host.liveWindow?.durationMs ?: 0 else duration,
+                    ::seek,
+                    forwardSeekAllowed(),
+                    positionDescription = { current, total ->
+                        if (host.isLive) {
+                            liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired, host.liveWindow?.behindLiveMs(current))
+                        } else {
+                            spokenPlaybackPosition(current, total)
+                        }
+                    }
+                ) {
                     close {
                         seekOpen = false
                         restoringSeekFocus = true

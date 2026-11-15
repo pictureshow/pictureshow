@@ -537,9 +537,9 @@ Round3 director closure adds5live-presentation cases (362presentation +51core Li
 
 
 Player HUD revision (PLAY-28): `sync-tv-player-coherence.json` now specifies separate transport and secondary
-rows, default Play/Pause focus and preserved SyncPlay reachability. `live-presentation.json` has368cases,
+rows, default Play/Pause focus and preserved SyncPlay reachability. `live-presentation.json` has371cases,
 including measured buffer-start epoch12/24-hour labels and one negative behind-live clock; edge visual
-status no longer duplicates LIVE. `sync-phone-player-chrome.json` adds four real landscape cases at font1.0/1.3
+status no longer duplicates LIVE. Media pause reveals Play from the surface for both live and VOD while preserving an existing control; live Seek descriptions retain one human live distance rather than elapsed-of-total wording. `sync-phone-player-chrome.json` adds four real landscape cases at font1.0/1.3
 for the upper metadata header, compact bottom band and elapsed/remaining clocks. Android executes these
 against native Compose surfaces; Apple, web and desktop owe their equivalent structure and evidence.
 The oversized `player-control-affordances` scroller fixture retains its original overflow/cue/whole-label

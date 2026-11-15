@@ -101,6 +101,8 @@ Down from transport enters Audio; Up from a secondary tool returns to Play/Pause
 row in visual order without sending transport requests. More opens Playback info; its panel returns to More.
 The persistent SyncPlay chip and Watch together action remain reachable. TV Stop is removed; existing Back,
 modal opener restoration and paused lifecycle return (first OK resumes) behavior remains PLAY-05/24.
+A decoder/media pause received while the playback surface owns focus reveals the HUD with Play focused
+for both on-demand and live viewing, so the first OK resumes. An already-focused control retains focus.
 
 The live track starts with the decoder's measured buffer-start clock in the device's 12/24-hour format and
 ends with LIVE. A decoder without a wall-clock origin shows Time unavailable; a programme's scheduled start
@@ -108,7 +110,10 @@ is never substituted. Unknown, expired and nonseekable ranges retain their hones
 The only visible behind-live distance is one negative clock beside the track (−0:05, −1:05, −1:00:05).
 At the measured edge the distance is absent, and Go live becomes a noninteractive LIVE badge while playing.
 Paused status says Paused, without repeating distance or LIVE; expired buffers explain recovery. Speech may
-spell out the distance in units when the position is queried, without per-tick announcements.
+spell out the distance in units when the position is queried, without per-tick announcements. Live Seek
+uses the same live-position words on its position and seek actions, with one human behind-live distance
+and no elapsed-of-total wording. After Seek closes, the restored live position has visible focus paint,
+including at the edge where no distance clock is shown.
 On-demand clocks show elapsed at the start and negative remaining at the end; unknown duration omits the
 remaining clock. Position accessibility retains elapsed of total, so the negative clock is not mistaken for
 a negative seek target.

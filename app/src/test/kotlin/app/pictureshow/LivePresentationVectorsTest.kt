@@ -9,6 +9,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
@@ -32,7 +34,7 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(368, cases.size)
+        assertEquals(371, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
@@ -590,14 +592,23 @@ class LivePresentationVectorsTest {
                     id
                 )
 
-                "live-pause-focus" -> assertEquals(
+                "media-pause-focus" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.boolean,
-                    livePauseRequestsControlFocus(
-                        c.getValue("live").jsonPrimitive.boolean,
-                        c.getValue("surfaceFocused").jsonPrimitive.boolean
-                    ),
+                    pauseRequestsControlFocus(c.getValue("surfaceFocused").jsonPrimitive.boolean),
                     id
                 )
+                "live-seek-description" -> {
+                    val window = liveWindow(c.getValue("window"))!!
+                    val description = liveTimelineLabel(
+                        c.getValue("paused").jsonPrimitive.boolean,
+                        window.canTimeShift,
+                        false,
+                        window.behindLiveMs(c.getValue("position").jsonPrimitive.long)
+                    )
+                    assertEquals(envelope.getValue("expected").jsonPrimitive.content, description, id)
+                    assertFalse(description.contains(" of "), id)
+                    assertTrue(Regex("behind live").findAll(description).count() <= 1, id)
+                }
                 "live-buffer-fill" -> {
                     val actual =
                         liveTrackPositionFraction(
