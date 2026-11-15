@@ -148,4 +148,34 @@ class DesktopReturnInteractionTest {
         onNodeWithTag("sign-out").assertIsNotFocused()
     }
 
+
+    @Test fun modalOpenerWaitsForNativeHostWindowFocus() = runComposeUiTest {
+        var modal by mutableStateOf<String?>("help-close")
+        var hostFocused by mutableStateOf(false)
+        var restored = 0
+        mainClock.autoAdvance = false
+        setContent {
+            MaterialTheme {
+                Column {
+                    Button({}, Modifier.probe("shortcuts")) { Text("Keyboard shortcuts") }
+                    Button({}, Modifier.probe("help-close")) { Text("Close help") }
+                    DesktopModalFocusEffect(modal, "shortcuts", hostFocused) { restored++ }
+                }
+            }
+        }
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        onNodeWithTag("help-close").assertIsFocused()
+        runOnIdle { modal = null }
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        onNodeWithTag("help-close").assertIsFocused()
+        assertEquals(0, restored, "the dialog's native window has not returned focus yet")
+        runOnIdle { hostFocused = true }
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        onNodeWithTag("shortcuts").assertIsFocused()
+        assertEquals(1, restored)
+    }
+
 }
