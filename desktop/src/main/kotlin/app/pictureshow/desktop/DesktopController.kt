@@ -495,6 +495,21 @@ class DesktopController(
             return
         }
         val decision = outcome.decision
+        // A subtitle retry may allocate a different owned live source. Release superseded
+        // ownership before adoption, while preserving identities shared with the final decision.
+        try {
+            withContext(NonCancellable) {
+                rejectedDecisions.mapNotNull { it.ownedLiveStreamId }.distinct()
+                    .filter { it != decision.ownedLiveStreamId }
+                    .forEach { id -> runCatching { playbackClient.closeLiveStream(a, id) } }
+                rejectedDecisions.distinctBy { it.playSessionId }
+                    .filter { it.method == PlayMethod.Transcode && it.playSessionId != null && it.playSessionId != decision.playSessionId }
+                    .forEach { old -> runCatching { playbackClient.stopEncoding(a, requireNotNull(old.playSessionId)) } }
+                rejectedDecisions.clear()
+                rejectedDecisions += decision
+            }
+            currentCoroutineContext().ensureActive()
+        } catch (e: Throwable) { discardPreparedPlayer(); throw e }
         val streams = decision.mediaSource.mediaStreams
         val ai = negotiatedAudio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
         val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)

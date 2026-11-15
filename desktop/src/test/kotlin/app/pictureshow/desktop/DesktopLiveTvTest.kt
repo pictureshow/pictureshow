@@ -29,6 +29,8 @@ class DesktopLiveTvTest {
         var access = true; var manage = true; var failGuide = false; var channels = true
         var denyPolicy = false
         var holdFirstPlayback = false
+        var subtitleRetry = false
+        val negotiations = java.util.concurrent.atomic.AtomicInteger()
         val playbackEntered = java.util.concurrent.CountDownLatch(1)
         val playbackRelease = java.util.concurrent.CountDownLatch(1)
         val closedLive = CopyOnWriteArrayList<String>()
@@ -54,7 +56,12 @@ class DesktopLiveTvTest {
                     path == "/LiveTv/Programs/program" -> program
                     path == "/LiveTv/Timers/Defaults" -> """{"PrePaddingSeconds":0,"PostPaddingSeconds":60,"Priority":0,"RecordNewOnly":true,"ProviderOpaque":"keep"}"""
                     path.startsWith("/LiveTv/Timers") || path == "/LiveTv/SeriesTimers" -> """{"Items":[],"TotalRecordCount":0}"""
-                    path.endsWith("/PlaybackInfo") -> """{"PlaySessionId":"session","MediaSources":[{"Id":"source","IsInfiniteStream":true,"LiveStreamId":"owned-live","RequiresClosing":true,"SupportsDirectPlay":true,"Container":"ts","MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"}]}]}"""
+                    path.endsWith("/PlaybackInfo") -> {
+                        val count = negotiations.incrementAndGet()
+                        val liveId = if (subtitleRetry) "owned-$count" else "owned-live"
+                        val captions = if (!subtitleRetry) "" else "," + """{"Index":1,"Type":"Subtitle","Codec":"srt","IsExternal":true,"IsForced":true${if (count > 1) ",\"DeliveryUrl\":\"/subtitles/ready.srt\"" else ""}}"""
+                        """{"PlaySessionId":"session-$count","MediaSources":[{"Id":"source","IsInfiniteStream":true,"LiveStreamId":"$liveId","RequiresClosing":true,"SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":1,"Container":"ts","MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"}$captions]}]}"""
+                    }
                     path == "/LiveStreams/Close" -> ""
                     path.startsWith("/Sessions/") || path.startsWith("/Videos/ActiveEncodings") -> ""
                     else -> """{"Items":[],"TotalRecordCount":0}"""
@@ -168,6 +175,25 @@ class DesktopLiveTvTest {
                 assertTrue(engines.all { it.closed })
                 assertTrue(engines.none { it.opened })
                 assertTrue(f.closedLive.single().contains("owned-live"))
+            }
+        }
+    }
+    @Test fun successfulSubtitleRetryClosesSupersededLiveSourceOnly(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.subtitleRetry = true
+            val engine = Engine()
+            controller(f, engine).use { c ->
+                c.tuneChannel(c.liveTv.state.value.channels.single())
+                withTimeout(10_000) { c.state.first { it.playback?.ready == true || it.error != null } }
+                assertNull(c.state.value.error)
+                assertTrue(engine.opened)
+                assertEquals(2, f.negotiations.get())
+                assertTrue(f.closedLive.single().contains("owned-1"))
+                assertFalse(f.closedLive.any { it.contains("owned-2") })
+                c.stopPlayback()
+                withTimeout(10_000) { c.state.first { it.route == DesktopRoute.LiveTv && !it.busy } }
+                assertEquals(2, f.closedLive.size)
+                assertTrue(f.closedLive.last().contains("owned-2"))
             }
         }
     }
