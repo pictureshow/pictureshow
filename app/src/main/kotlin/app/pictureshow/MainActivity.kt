@@ -526,6 +526,7 @@ internal fun Pictureshow(
     val musicState by music.state.collectAsStateWithLifecycle()
     val tvRoute = backStackEntry?.destination?.route
     val musicBarShown = tvShowsMusicBar(musicState.visible, tvRoute)
+    val syncStayShown = tvShowsSyncStay(tvRoute)
     var musicBarHeight by remember { mutableIntStateOf(0) }
     NavHost(
         navController = nav,
@@ -545,7 +546,7 @@ internal fun Pictureshow(
         },
         // The bar sits below the screens rather than over them, so it never covers a focused row.
         modifier = Modifier.fillMaxSize().padding(
-            bottom = if (musicBarShown) {
+            bottom = if (musicBarShown || syncStayShown) {
                 with(LocalDensity.current) {
                     musicBarHeight.toDp()
                 }
@@ -1163,10 +1164,11 @@ internal fun Pictureshow(
             }
         }
     }
-    if (musicBarShown) {
+    if (musicBarShown || syncStayShown) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Box(Modifier.onSizeChanged { musicBarHeight = it.height }) {
-                TvMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
+            Column(Modifier.onSizeChanged { musicBarHeight = it.height }) {
+                TvSyncStayReminder(tvRoute)
+                if (musicBarShown) TvMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
             }
         }
     }

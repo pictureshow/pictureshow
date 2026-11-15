@@ -1,0 +1,413 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-stay",
+  "rule": "SYN-08: closing the player keeps membership; only explicit Leave, an external route, sign-out or the server removes it.",
+  "cases": [
+    {
+      "id": "sync-stay.close.back-stays-and-stops-holding-the-wait",
+      "op": "close",
+      "input": {
+        "reason": "BACK",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": true,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.close-button-stays-and-stops-holding-the-wait",
+      "op": "close",
+      "input": {
+        "reason": "CLOSE",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": true,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.stop-button-stays-and-stops-holding-the-wait",
+      "op": "close",
+      "input": {
+        "reason": "STOP_BUTTON",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": true,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.error-back-stays-and-stops-holding-the-wait",
+      "op": "close",
+      "input": {
+        "reason": "ERROR_BACK",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": true,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.natural-end-stays-and-stops-holding-the-wait",
+      "op": "close",
+      "input": {
+        "reason": "NATURAL_END",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": true,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.back-after-earlier-stay-sends-nothing-new",
+      "op": "close",
+      "input": {
+        "reason": "BACK",
+        "participating": true,
+        "following": false
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": false,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.not-participating-is-untouched",
+      "op": "close",
+      "input": {
+        "reason": "BACK",
+        "participating": false,
+        "following": true
+      },
+      "expected": {
+        "outcome": "NONE",
+        "ignoreWait": false,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.background-on-home-keeps-membership",
+      "op": "close",
+      "input": {
+        "reason": "BACKGROUND_IDLE",
+        "participating": true,
+        "following": false
+      },
+      "expected": {
+        "outcome": "STAY",
+        "ignoreWait": false,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.close.background-while-rendering-keeps-leave-once",
+      "op": "close",
+      "input": {
+        "reason": "BACKGROUND_RENDERING",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "LEAVE",
+        "ignoreWait": false,
+        "departure": "MEMBERSHIP_LOST"
+      }
+    },
+    {
+      "id": "sync-stay.close.cast-handoff-leaves",
+      "op": "close",
+      "input": {
+        "reason": "EXTERNAL_ROUTE",
+        "participating": true,
+        "following": true
+      },
+      "expected": {
+        "outcome": "LEAVE",
+        "ignoreWait": false,
+        "departure": "EXTERNAL_ROUTE"
+      }
+    },
+    {
+      "id": "sync-stay.close.explicit-leave-leaves",
+      "op": "close",
+      "input": {
+        "reason": "MANUAL_LEAVE",
+        "participating": true,
+        "following": false
+      },
+      "expected": {
+        "outcome": "LEAVE",
+        "ignoreWait": false,
+        "departure": "MANUAL_LEAVE"
+      }
+    },
+    {
+      "id": "sync-stay.close.sign-out-leaves-without-a-retained-fact",
+      "op": "close",
+      "input": {
+        "reason": "SIGN_OUT",
+        "participating": true,
+        "following": false
+      },
+      "expected": {
+        "outcome": "LEAVE",
+        "ignoreWait": false,
+        "departure": null
+      }
+    },
+    {
+      "id": "sync-stay.reminder.stayed-with-queue-offers-watch-and-leave",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": true,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.playing-group-offers-watch",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Playing",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": true,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.open-player-has-the-chip-instead",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": true,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": null
+    },
+    {
+      "id": "sync-stay.reminder.no-membership-shows-nothing",
+      "op": "reminder",
+      "input": {
+        "groupId": null,
+        "groupName": null,
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": null
+    },
+    {
+      "id": "sync-stay.reminder.group-ended-by-server-clears",
+      "op": "reminder",
+      "input": {
+        "groupId": null,
+        "groupName": null,
+        "phase": "Idle",
+        "queueEntries": 0,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": null
+    },
+    {
+      "id": "sync-stay.reminder.blank-name-falls-back",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "  ",
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": null,
+        "rejoin": true,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.empty-queue-offers-leave-only",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Idle",
+        "queueEntries": 0,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": false,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.disconnected-offers-leave-only",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": false,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": false,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.reconnecting-offers-leave-only",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Reconnecting",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": false,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.error-offers-leave-only",
+      "op": "reminder",
+      "input": {
+        "groupId": "g1",
+        "groupName": "Friday movie night",
+        "phase": "Error",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": false
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": false,
+        "leaveUnconfirmed": false
+      }
+    },
+    {
+      "id": "sync-stay.reminder.unconfirmed-leave-stays-visible",
+      "op": "reminder",
+      "input": {
+        "groupId": null,
+        "groupName": "Friday movie night",
+        "phase": "Paused",
+        "queueEntries": 2,
+        "playerOpen": false,
+        "connected": true,
+        "leavePending": true
+      },
+      "expected": {
+        "groupName": "Friday movie night",
+        "rejoin": false,
+        "leaveUnconfirmed": true
+      }
+    },
+    {
+      "id": "sync-stay.denial.not-in-group-ends-stayed-membership",
+      "op": "denial",
+      "input": {
+        "reason": "NotInGroup",
+        "playerOpen": false
+      },
+      "expected": true
+    },
+    {
+      "id": "sync-stay.denial.missing-group-ends-stayed-membership",
+      "op": "denial",
+      "input": {
+        "reason": "GroupDoesNotExist",
+        "playerOpen": false
+      },
+      "expected": true
+    },
+    {
+      "id": "sync-stay.denial.open-player-keeps-its-recovery",
+      "op": "denial",
+      "input": {
+        "reason": "NotInGroup",
+        "playerOpen": true
+      },
+      "expected": false
+    },
+    {
+      "id": "sync-stay.denial.library-denial-is-not-an-ended-group",
+      "op": "denial",
+      "input": {
+        "reason": "LibraryAccessDenied",
+        "playerOpen": false
+      },
+      "expected": false
+    },
+    {
+      "id": "sync-stay.open.following-opens-new-entries",
+      "op": "open",
+      "input": {
+        "following": true
+      },
+      "expected": true
+    },
+    {
+      "id": "sync-stay.open.stayed-device-waits-for-watch",
+      "op": "open",
+      "input": {
+        "following": false
+      },
+      "expected": false
+    }
+  ]
+}

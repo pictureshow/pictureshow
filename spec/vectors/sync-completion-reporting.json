@@ -6,9 +6,9 @@
       "id": "sync-completion-reporting.current-decision",
       "operation": "video-completion",
       "currentDecision": true,
-      "expectedMembership": false,
+      "expectedMembership": true,
       "expectedWire": [
-        "Leave"
+        "SetIgnoreWait"
       ],
       "expectedReports": [
         "/Sessions/Playing/Stopped",

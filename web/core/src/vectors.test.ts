@@ -49,6 +49,7 @@ import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
 import { controlProjection, controlSuites, runControlCase } from "./control";
 import { playerTrackLabels } from "../../src/player-track-labels";
+import { runSyncStayVector } from "./sync-stay";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
@@ -162,6 +163,7 @@ for (const file of files) {
             "playback-information",
             ...controlSuites,
             ...pendingPortSuites,
+            "sync-stay",
         ].includes(suite.suite) ||
         !Array.isArray(suite.cases)
     )
@@ -169,6 +171,16 @@ for (const file of files) {
     for (const c of suite.cases) {
         if (ids.has(c.id)) throw new Error("Duplicate vector ID: " + c.id);
         ids.add(c.id);
+    }
+    if (suite.suite === "sync-stay") {
+        // SYN-08 stay-in-group policy: executed here, not owed.
+        describe("sync-stay " + file, () => {
+            for (const c of suite.cases)
+                it(c.id, () =>
+                    expect(runSyncStayVector(c)).toEqual(c.expected),
+                );
+        });
+        continue;
     }
     if (pendingPortSuites.has(suite.suite)) {
         describe("owed " + file, () => {

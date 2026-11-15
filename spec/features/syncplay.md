@@ -11,7 +11,7 @@
 | SYN-05 | Server clock and drift correction use deterministic measurable tolerances. | Calibrate via GetUtcTime; send measured RTT to SyncPlay/Ping. At 1x absolute drift <=80 ms needs no correction; >80..250 ms uses 0.97x ahead / 1.03x behind only if the engine advertises that exact rate and source permits rate changes, for at most 5 s, then restores 1x/rechecks. Otherwise or >250 ms seek with 2 s cooldown. Paused commands seek and stay paused. Vectorize equality and future/late scheduling; never echo applied group commands. |
 | SYN-06 | Sync quality is visible and bounded by real renderer capability. | On controlled LAN VOD, each supported platform pair converges to ≤250 ms drift within 5 s after start/seek/rebuffer, stays there for ≥95% of a 10-minute measured run and has no unexplained >1 s excursion. Record measurement uncertainty; if uncertainty exceeds 50 ms or route lacks timely position/seek, report Not qualified. Buffer waits and correction seeks are separately counted; do not hide poor runs with an average. |
 | SYN-07 | Group events are scoped, ordered and stale-safe. | Deduplicate MessageId when present, reject another group/old membership/queue entry, compare EmittedAt and queue LastUpdate and preserve server order for equal timestamps. Missing/gapped/out-of-order state triggers paused resnapshot/rejoin rather than applying stale commands. Unknown future event type is recoverable, never silent success or app crash. |
-| SYN-08 | Reconnect, background and leave have explicit ownership. | Network loss pauses participant; reacquire membership, queue and clock before output. Deliberate Leave retains local paused resume and never Stops group. Video background pauses and sends Leave once; foreground requires deliberate rejoin. Music may continue while active OS audio and calibrated clock meet SYN-06; loss of either pauses and leaves once. Late membership events cannot undo Leave. |
+| SYN-08 | Reconnect, background, close and leave have explicit ownership. | Network loss pauses participant; reacquire membership, queue and clock before output. Closing the player (Back, Close, Stop button, error Back, natural end of the last entry) keeps membership: the device pauses, sends `SetIgnoreWait` true once so the group does not wait for it, and Home, Libraries and title pages show “Still in {group} · Leave” (with Watch when there is a current entry) until an explicit Leave, a sign-out or account change, or the server ending membership (`GroupLeft`, `NotInGroup`, `GroupDoesNotExist`). A stayed device never opens a group entry by itself; Watch reopens the current entry and restores the viewer’s Wait for me choice (operator, 2026-11-15). Deliberate Leave retains local paused resume and never Stops group. Video background while rendering pauses and sends Leave once; foreground requires deliberate rejoin; background with no player open keeps membership. Music may continue while active OS audio and calibrated clock meet SYN-06; loss of either pauses and leaves once. Late membership events cannot undo Leave. |
 | SYN-09 | Track/quality preferences are local; shared timeline remains common. | Participants may use different supported audio/subtitle/bitrate paths for the same item, with full-media ticks. Local subtitle delay and styling do not seek the group. Skip/next actions that change timeline become group seeks/queue requests; disable independent auto segment-skip/credits/episode-next while in group. Group repeat/queue owns continuation. |
 | SYN-10 | Native Jellyfin TV and remote control support groups; external casting requires leaving at launch. | Phone controlling a group TV sends to that TV, which makes group requests. Selecting Cast Connect, Web Receiver or AirPlay requires explicit Leave group before casting; cancel keeps current membership/output. SyncPlay over these external routes is later improvement work under SYN-PD03, not a launch gate. A TV joining directly as a native Jellyfin participant remains supported. |
 | SYN-11 | Live/infinite streams and offline copies do not pretend to be common VOD. | Group VOD and music are launch paths. Live TV lacks a shared guaranteed seek origin; display unavailable Watch together for live/infinite sources unless an independently qualified common recording timeline exists. Offline cannot join a server group; reconnect and validate the same media source/timeline first. |
@@ -372,8 +372,11 @@ native UI and app-case parity remain pending even when Kotlin vectors pass.
 ### Retained departure acknowledgement
 
 A local departure retains a typed cause and the actual known former group name,
-separately from transient informational notices. Stop ends this local viewing and
-intentionally leaves; ended playback and closed viewing have their own causes.
+separately from transient informational notices. Since SYN-08's stay rule
+(2026-11-15), Stop, ended playback and closed viewing end only this local viewing
+and record no departure; the `PLAYBACK_STOPPED`, `PLAYBACK_ENDED` and
+`PLAYBACK_CLOSED` causes remain in the reducer for direct callers but no player
+exit uses them.
 Actual manual Leave retains “You left the group. This device is paused.” and can
 show the former name as separate context. Confirmed Cast has its own cause; opening
 or cancelling Cast consent has no departure effect. Unexpected accepted server
@@ -398,6 +401,58 @@ The separate sync-departure vector traces exercise the actual core reducer. Nati
 binding/Host tests additionally exercise refresh, hidden time, selected severity,
 actual placement, Close/Back and disposal. Kotlin coverage does not implement the
 Web, Apple or desktop reducer/acknowledgement: those app cases remain owed.
+
+### Stay in group (SYN-08, operator 2026-11-15)
+
+Closing the player is not leaving the group. The shared decision is
+`syncCloseDecision(reason, participating, following)` in core (`SyncStay.kt`),
+executed by the 29 `sync-stay` vectors:
+
+- Back, Close, the Stop button, Back from a playback error and the natural end
+  of the last entry STAY. When the device was following the group it sends
+  `SetIgnoreWait` true once: Jellyfin counts every buffering participant in its
+  wait barrier whether or not it has a player, so a device with no player must
+  not hold the others at Waiting. No departure is recorded and no Leave or group
+  Stop is sent.
+- Backgrounding with no player open STAYS with no request. Backgrounding while a
+  renderer is bound keeps the earlier rule: pause and Leave once
+  (`MEMBERSHIP_LOST`).
+- An external route (Cast) LEAVES with `EXTERNAL_ROUTE`; explicit Leave LEAVES with
+  `MANUAL_LEAVE`; sign-out or account change LEAVES with no retained departure.
+- Not participating is NONE.
+
+`syncStayReminder(facts)` decides the reminder. It is hidden while a player is
+open and outside a group. An unconfirmed Leave shows “Leaving {group} wasn’t
+confirmed” with Leave (retry) only. Otherwise it shows “Still in {group}” with
+Leave, and with Watch only when connected, the queue has an entry and the phase
+is neither Error nor Reconnecting. A blank group name falls back to unnamed copy.
+Platforms show it on Home, Libraries and title pages, below content and with the
+other bottom bars, reachable by D-pad, touch, keyboard and screen reader; each
+action has a description naming the group, and the line is a polite live region.
+
+While stayed, `syncOpensGroupEntry(following = false)` is false: new queues and
+commands never open the player by themselves. Watch opens the group's current
+entry and, when the viewer's earlier Wait for me choice differs from the stayed
+`IgnoreWait`, restores it with one `SetIgnoreWait`. Binding a renderer while in the
+group also resumes following.
+
+`syncStayEndsOnDenial(reason, playerOpen)`: a `NotInGroup` or `GroupDoesNotExist`
+update while no player is open ends the stayed membership locally with
+`MEMBERSHIP_LOST` and no Leave request (the server already has none), clearing
+the reminder. `GroupLeft` also clears it. With a player open, those updates keep
+their existing error notice and Leave recovery.
+
+App kill keeps nothing on the device: membership is not persisted, and on the
+next launch no reminder shows. Jellyfin removes a session's membership when the
+session ends after its websocket is lost (DeepWiki on jellyfin/jellyfin:
+`SessionEnded` calls LeaveGroup; ASSUMED timing, not measured here). A reconnect
+of a stayed device re-joins and, having no player, sends `SetIgnoreWait` true.
+
+Ports: Android TV and phone implement the rule (`SyncPlayHost.closeViewing`,
+`SyncStayReminder.kt`). Web runs the `sync-stay` vectors through
+`web/core/src/sync-stay.ts` but has no SyncPlay UI yet, so its reminder is owed
+with web SyncPlay; desktop SyncPlay (gap C39) and the Apple Swift port owe both
+the decision and the reminder.
 
 ### Native viewport, chooser and chip layout
 
@@ -595,7 +650,7 @@ Use the shared48dp horizontal TV player safe edge for conversion notice, persist
 
 The shared player-control-affordances rules in player.md also apply during group playback: preserve readable ten-second seek intent and orientation marks, expose TV overflow without a playback request, and reveal complete direct-action labels through native focus.
 
-Natural completion is distinct from an explicit Next request. With a current authoritative queue and matching unpaused renderer, an earlier Repeat Off entry requests NextItem; Repeat All also requests NextItem, including its last entry. Repeat One requests SetPlaylistItem for the current playlist entry to restart through the server. Never seek, rewind, or advance the local queue optimistically. At the final Repeat Off entry, finish local video/audio reporting and Leave once with the retained playback-ended departure; send neither NextItem nor group Stop. Video must validate the captured playback decision before every natural-completion action, including Next and Repeat; rejected, closing or already-completed decisions cannot send a group request, report completion or navigate. A valid terminal decision queues its normal Stopped-before-Played completion before leaving or navigating away. A valid completion reports Played once even when navigation immediately closes the screen. Missing/recovering queue authority, a mismatched renderer/entry, or a paused seek-to-end cannot authorize continuation or terminal departure. Capture renderer token, native source, membership generation and playlist entry with the completion callback; a retired callback cannot finish a replacement viewing, even for identical media. Explicit Next retains its separate server-authoritative request and may be a no-op at the final entry. The 25 `sync-completion` vectors execute the shared natural-completion policy; Android host tests separately verify wire identity, departure, native intent and obsolete-callback fences. The six `sync-completion-reporting` adapter cases exercise current and obsolete playback decisions for terminal Repeat Off, earlier Repeat Off and Repeat One through the actual video binding/session, including ordered completion reports and local navigation; other platforms must run them through their native adapters.
+Natural completion is distinct from an explicit Next request. With a current authoritative queue and matching unpaused renderer, an earlier Repeat Off entry requests NextItem; Repeat All also requests NextItem, including its last entry. Repeat One requests SetPlaylistItem for the current playlist entry to restart through the server. Never seek, rewind, or advance the local queue optimistically. At the final Repeat Off entry, finish local video/audio reporting and close with SYN-08's stay: keep membership, send `SetIgnoreWait` true once while this device was following, record no departure, and send neither Leave, NextItem nor group Stop. Video must validate the captured playback decision before every natural-completion action, including Next and Repeat; rejected, closing or already-completed decisions cannot send a group request, report completion or navigate. A valid terminal decision queues its normal Stopped-before-Played completion before closing or navigating away. A valid completion reports Played once even when navigation immediately closes the screen. Missing/recovering queue authority, a mismatched renderer/entry, or a paused seek-to-end cannot authorize continuation or terminal departure. Capture renderer token, native source, membership generation and playlist entry with the completion callback; a retired callback cannot finish a replacement viewing, even for identical media. Explicit Next retains its separate server-authoritative request and may be a no-op at the final entry. The 25 `sync-completion` vectors execute the shared natural-completion policy; Android host tests separately verify wire identity, departure, native intent and obsolete-callback fences. The six `sync-completion-reporting` adapter cases exercise current and obsolete playback decisions for terminal Repeat Off, earlier Repeat Off and Repeat One through the actual video binding/session, including ordered completion reports and local navigation; other platforms must run them through their native adapters.
 
 
 Clock calibration recovery: a still-connected active membership with its current authoritative snapshot retries an all-invalid calibration after30seconds measured monotonically from completion of the failed attempt. Permit only one calibration at a time. Keep the clock unavailable and output paused until fresh bounded samples establish an anchor; no cached clock, automatic group Join/Play, or fabricated timeline may substitute. Successful recovery reuses only the retained current command under the existing entry/source/generation/readiness fences. Leave, account replacement and disconnect discard the retry scope. A backwards or unrepresentable monotonic interval requests fresh calibration rather than reusing timing. Existing valid anchors retain their30second refresh cadence. The9 clock-refresh-due cases and native Host recovery regressions distinguish no-anchor initialization, before/exact/after deadline, rollback and both signed64 overflow directions, single-flight, completion-based delay and scope cancellation. This recovery rule does not qualify renderer convergence.

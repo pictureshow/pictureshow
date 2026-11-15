@@ -39,17 +39,19 @@ import org.robolectric.annotation.Config
 class PlaybackHostDepartureTest {
     @get:Rule val timeLimit = PerTestTimeLimit(180)
 
-    @Test fun actualPlaybackHostFinishClassifiesExitAndDoesNotDuplicateLeave() = runTest {
-        // These are actual current callers' reason strings; fallback must not expose its diagnostic string.
-        val reasons = listOf(
-            "stop-button" to SyncDepartureCause.PLAYBACK_STOPPED,
-            "remote-stop" to SyncDepartureCause.PLAYBACK_STOPPED,
-            "system-stop" to SyncDepartureCause.PLAYBACK_STOPPED,
-            "natural-end" to SyncDepartureCause.PLAYBACK_ENDED,
-            "back" to SyncDepartureCause.PLAYBACK_CLOSED,
-            "error-back" to SyncDepartureCause.PLAYBACK_CLOSED,
-            "back-during-next" to SyncDepartureCause.PLAYBACK_CLOSED,
-            "opaque-internal-exit-code" to SyncDepartureCause.PLAYBACK_CLOSED
+    @Test fun actualPlaybackHostFinishKeepsMembershipAndOnlyCastLeaves() = runTest {
+        // SYN-08: actual current callers' reason strings. Closing stays in the group (no departure, no Leave)
+        // and asks the server once not to wait for this device; only the Cast handoff still leaves.
+        val reasons = listOf<Pair<String, SyncDepartureCause?>>(
+            "stop-button" to null,
+            "remote-stop" to null,
+            "system-stop" to null,
+            "natural-end" to null,
+            "back" to null,
+            "error-back" to null,
+            "back-during-next" to null,
+            "opaque-internal-exit-code" to null,
+            "cast" to SyncDepartureCause.EXTERNAL_ROUTE
         )
         for ((reason, expected) in reasons) {
             val account = Account(Server("s", "Fixture", "https://media.example.test", "12"), User("a", "Ana"), "test-token")
@@ -103,16 +105,24 @@ class PlaybackHostDepartureTest {
                 sent.clear()
                 playback.finish(reason = reason)
                 runCurrent()
-                val fact = assertNotNull(sync.state.value.departure, reason)
-                assertEquals(expected, fact.cause, reason)
-                assertEquals("Evening", fact.groupName, reason)
+                val wire = if (expected == null) listOf("SetIgnoreWait") else listOf("Leave")
+                if (expected == null) {
+                    assertEquals(null, sync.state.value.departure, reason)
+                    assertTrue(sync.participating, reason)
+                    assertEquals(false, sync.following, reason)
+                } else {
+                    val fact = assertNotNull(sync.state.value.departure, reason)
+                    assertEquals(expected, fact.cause, reason)
+                    assertEquals("Evening", fact.groupName, reason)
+                }
                 assertEquals(1, exits, reason)
-                assertEquals(listOf("Leave"), sent, reason)
+                assertEquals(wire, sent, reason)
+                val departure = sync.state.value.departure
                 playback.finish(reason = reason)
                 runCurrent()
-                assertEquals(fact, sync.state.value.departure, reason)
+                assertEquals(departure, sync.state.value.departure, reason)
                 assertEquals(1, exits, reason)
-                assertEquals(listOf("Leave"), sent, reason)
+                assertEquals(wire, sent, reason)
             } finally {
                 playback.reportScope.cancel()
                 output.release()

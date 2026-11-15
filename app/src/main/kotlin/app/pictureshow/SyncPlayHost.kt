@@ -154,6 +154,32 @@ internal class SyncPlayHost(
     // Local Joining intent alone cannot have changed server membership. Preserve this through recovery/rejoin.
     private var serverMembershipPossible = false
     val participating: Boolean get() = membership.active || membership.groupId != null || leavePending
+
+    /** SYN-08: true while this device renders, or is opening, the group's entry; a closed player stays a member. */
+    internal var following = false
+        private set
+
+    /** The viewer's own Wait-for-me choice, restored when Watch rejoins after a stay asked the group not to wait. */
+    private var waitPreference = false
+    private var stayedToken: Any? = null
+
+    /** "Still in <group> · Leave" for Home and title pages; null while the player is open or outside a group. */
+    var stayReminder by mutableStateOf<app.pictureshow.core.sync.SyncStayReminder?>(null)
+        private set
+
+    private fun refreshReminder() {
+        stayReminder = app.pictureshow.core.sync.syncStayReminder(
+            app.pictureshow.core.sync.SyncStayFacts(
+                groupId = membership.groupId,
+                groupName = membership.group?.name,
+                phase = membership.phase,
+                queueEntries = membership.queue?.entries?.size ?: 0,
+                playerOpen = renderer != null,
+                connected = connected,
+                leavePending = leavePending
+            )
+        )
+    }
     private data class PendingExternalRoute(val consent: SyncExternalRouteConsent, val route: () -> Unit)
     private var pendingRoute by mutableStateOf<PendingExternalRoute?>(null)
     private var externalRouteId = 0L
@@ -250,6 +276,8 @@ internal class SyncPlayHost(
         pendingRoute = null
         val before = account
         if (participating && before != null) leave()
+        following = false
+        waitPreference = false
         account = usable
         departure(SyncDepartureEvent.ScopeChanged(departureState.scope + 1))
         sequence++
@@ -260,6 +288,7 @@ internal class SyncPlayHost(
         resetClock("account")
         trace("membership", stateFields())
         mutable.value = SyncPlayPresentation(server = usable?.server?.name.orEmpty(), viewer = usable?.user?.name.orEmpty())
+        refreshReminder()
     }
 
     internal var departureState = SyncDepartureState()
@@ -368,8 +397,9 @@ internal class SyncPlayHost(
         } else if (value && participating) {
             // Rejoin obtains membership and fresh queue events; stale local state is never replayed.
             val group = membership.groupId
-            if (group != null) join(group) else leave()
+            if (group != null) begin(syncJoin(group), group, false) else leave()
         }
+        refreshReminder()
     }
 
     fun receive(text: String, generation: Long = membership.generation) {
@@ -389,7 +419,29 @@ internal class SyncPlayHost(
                 ((event as? SyncEvent.Command)?.command?.let(::commandFields) ?: "")
         )
         if (after === before || after == before) return
+        if (event is SyncEvent.Denied &&
+            app.pictureshow.core.sync.syncStayEndsOnDenial(event.reason, playerOpen = renderer != null)
+        ) {
+            // The server says this session is in no group: end the stayed membership locally, no Leave request.
+            departure(SyncDepartureEvent.Recorded(departureState.scope, before.group?.name, SyncDepartureCause.MEMBERSHIP_LOST))
+            serverMembershipPossible = false
+            following = false
+            membership = leaveSync(before)
+            membershipSocket?.invoke(membership.generation, false)
+            resetClock("group-ended")
+            trace("membership", stateFields())
+            publish()
+            return
+        }
         membership = after
+        if (event is SyncEvent.Left) following = false
+        if (event is SyncEvent.Joined && !following && renderer == null) {
+            // A stayed device that rejoined after reconnecting must not hold the group's wait barrier.
+            send(syncIgnoreWait(true)) {
+                ignoreWait = true
+                publish()
+            }
+        }
         if (event is SyncEvent.Joined) departure(SyncDepartureEvent.MembershipStarted(departureState.scope))
         if (event is SyncEvent.Left) {
             departure(
@@ -478,7 +530,9 @@ internal class SyncPlayHost(
             trace("apply-after", "source=prepared-queue " + stateFields())
         }
         val needsOpen = entry != null && !reusePrepared && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
-        if (entry != null && needsOpen && requestedOpen != entry.playlistItemId) {
+        if (entry != null && needsOpen && requestedOpen != entry.playlistItemId &&
+            app.pictureshow.core.sync.syncOpensGroupEntry(following)
+        ) {
             pause("queue-opening")
             requestedOpen = entry.playlistItemId
             openingEntry = entry.playlistItemId
@@ -502,8 +556,14 @@ internal class SyncPlayHost(
         return ok
     }
 
-    fun join(group: String) = begin(syncJoin(group), group, false)
-    fun create(name: String) = begin(syncCreate(name), null, true)
+    fun join(group: String) {
+        following = true
+        begin(syncJoin(group), group, false)
+    }
+    fun create(name: String) {
+        following = true
+        begin(syncCreate(name), null, true)
+    }
     private fun begin(request: SyncRequest, group: String?, creating: Boolean) {
         val target = account ?: return
         if (!connected && membershipSocket == null) {
@@ -646,6 +706,8 @@ internal class SyncPlayHost(
         trace("membership", stateFields())
         createQueue = false
         ignoreWait = false
+        following = false
+        waitPreference = false
         publish()
         note(
             if (departureState.pending?.cause == SyncDepartureCause.MANUAL_LEAVE) {
@@ -664,6 +726,7 @@ internal class SyncPlayHost(
                 if (status !in 200..299 && !participating) {
                     leavePending = true
                     mutable.value = mutable.value.copy(phase = "Reconnecting")
+                    refreshReminder()
                     note(
                         "This device is paused. The server has not confirmed Leave; reconnect and leave again.",
                         SyncNoticeKind.LEAVE_UNCONFIRMED,
@@ -680,7 +743,75 @@ internal class SyncPlayHost(
 
     fun background() {
         trace("lifecycle", "source=background participating=$participating")
-        if (participating) leave(SyncDepartureCause.MEMBERSHIP_LOST)
+        closeViewing(
+            if (renderer != null) {
+                app.pictureshow.core.sync.SyncCloseReason.BACKGROUND_RENDERING
+            } else {
+                app.pictureshow.core.sync.SyncCloseReason.BACKGROUND_IDLE
+            }
+        )
+    }
+
+    /** SYN-08: closing the player keeps membership; the core decision says when a close still leaves. */
+    fun closeViewing(reason: app.pictureshow.core.sync.SyncCloseReason) {
+        val decision = app.pictureshow.core.sync.syncCloseDecision(reason, participating, following)
+        trace("close", "reason=$reason outcome=${decision.outcome} ignoreWait=${decision.ignoreWait}")
+        when (decision.outcome) {
+            app.pictureshow.core.sync.SyncCloseOutcome.NONE -> Unit
+            app.pictureshow.core.sync.SyncCloseOutcome.LEAVE -> leave(decision.departure ?: SyncDepartureCause.MANUAL_LEAVE)
+            app.pictureshow.core.sync.SyncCloseOutcome.STAY -> stay(decision.ignoreWait)
+        }
+    }
+
+    private fun stay(ignore: Boolean) {
+        following = false
+        // The closing player may re-bind before it is disposed; only a different player follows again.
+        stayedToken = rendererToken
+        scheduled?.cancel()
+        requestedOpen = null
+        openingEntry = null
+        awaitingSource = null
+        pendingSource = null
+        pause("stay")
+        if (ignore) {
+            // Remember the viewer's own choice once, before asking the server not to wait for this device.
+            waitPreference = ignoreWait
+            if (!ignoreWait && groupRequestsUsable()) {
+                send(syncIgnoreWait(true)) {
+                    ignoreWait = true
+                    publish()
+                }
+            }
+        }
+        publish()
+    }
+
+    private fun resumeFollowing() {
+        if (following) return
+        following = true
+        val restore = waitPreference
+        if (ignoreWait != restore && groupRequestsUsable()) {
+            send(syncIgnoreWait(restore)) {
+                ignoreWait = restore
+                publish()
+            }
+        }
+    }
+
+    private fun groupRequestsUsable() = connected && membership.group != null && membership.phase !in setOf("Error", "Reconnecting")
+
+    /** Watch on the reminder: follow the group again from its current entry and restore Wait for me. */
+    fun rejoinPlayback() {
+        if (!participating || leavePending || membership.groupId == null) return
+        resumeFollowing()
+        val queue = membership.queue
+        val entry = queue?.current
+        if (entry != null) {
+            requestedOpen = entry.playlistItemId
+            openingEntry = entry.playlistItemId
+            opening.tryEmit(SyncOpen(membership.generation, entry.playlistItemId, entry.itemId, queue.startPositionTicks))
+        }
+        publish()
     }
     fun bindRenderer(token: Any, next: SyncRenderer, localSelection: SyncLocalSelection? = null, opening: SyncOpen? = null): Boolean {
         val current = membership.queue?.current
@@ -716,6 +847,9 @@ internal class SyncPlayHost(
         }
         rendererToken = token
         renderer = next
+        // A new player opened while in a group (Watch, or a title the viewer picked) follows the group again.
+        if (participating && !leavePending && token !== stayedToken) resumeFollowing()
+        refreshReminder()
         if (opening != null && opening.entryId == openingEntry) openingEntry = null
         awaitingSource = null
         pendingSource = localSelection?.takeIf {
@@ -737,6 +871,7 @@ internal class SyncPlayHost(
         pendingSource = null
         awaitingSource = null
         readiness = SyncReadinessState()
+        refreshReminder()
     }
 
     /** Actual native seek callbacks also cover deferred seeks and sub-tick buffer cycles. */
@@ -785,6 +920,8 @@ internal class SyncPlayHost(
     }
 
     private fun completeNaturalEnd(complete: () -> Boolean): Boolean {
+        // A device that already stayed (SYN-08) sends nothing; its caller only finishes the local viewing.
+        if (!following) return false
         val queue = membership.queue
         val entry = queue?.current
         val value = renderer?.snapshot()
@@ -799,7 +936,7 @@ internal class SyncPlayHost(
             SyncCompletionAction.FINISH -> {
                 // Validate and queue this viewing's normal completion before membership/navigation teardown.
                 if (!complete()) return true
-                leave(SyncDepartureCause.PLAYBACK_ENDED)
+                closeViewing(app.pictureshow.core.sync.SyncCloseReason.NATURAL_END)
                 return false
             }
         }
@@ -1068,6 +1205,11 @@ internal class SyncPlayHost(
         }
         val current = membership.queue?.current ?: run {
             tickTrace("no-entry", r)
+            return
+        }
+        // SYN-08: a closing player that stayed reports no readiness; the group already stopped waiting for it.
+        if (!following) {
+            tickTrace("stayed", r)
             return
         }
         // A first queue can arrive without StateUpdate while our cached phase is still Idle.
@@ -1556,6 +1698,7 @@ internal class SyncPlayHost(
 
     private fun publish() {
         trace("published", stateFields())
+        refreshReminder()
         val q = membership.queue
         val entries = q?.entries.orEmpty()
         val target = account
