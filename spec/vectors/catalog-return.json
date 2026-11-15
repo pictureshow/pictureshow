@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "suite": "catalog-return",
+  "cases": [
+    {
+      "id": "return-home",
+      "operation": "refresh",
+      "input": {
+        "page": "Home"
+      },
+      "expected": "HomeRows"
+    },
+    {
+      "id": "return-detail",
+      "operation": "refresh",
+      "input": {
+        "page": "Detail"
+      },
+      "expected": "TitleAndChildren"
+    },
+    {
+      "id": "return-library",
+      "operation": "refresh",
+      "input": {
+        "page": "Library"
+      },
+      "expected": "LoadedCards"
+    },
+    {
+      "id": "return-person",
+      "operation": "refresh",
+      "input": {
+        "page": "Person"
+      },
+      "expected": "LoadedCards"
+    },
+    {
+      "id": "return-search",
+      "operation": "refresh",
+      "input": {
+        "page": "Search"
+      },
+      "expected": "SearchResults"
+    },
+    {
+      "id": "return-settings",
+      "operation": "refresh",
+      "input": {
+        "page": "Settings"
+      },
+      "expected": "None"
+    },
+    {
+      "id": "local-eof",
+      "operation": "progress",
+      "input": {
+        "previous": {
+          "PlaybackPositionTicks": 100,
+          "Played": false,
+          "IsFavorite": true
+        },
+        "positionTicks": 600,
+        "ended": true
+      },
+      "expected": {
+        "PlaybackPositionTicks": 0,
+        "Played": true,
+        "IsFavorite": true
+      }
+    },
+    {
+      "id": "local-stop",
+      "operation": "progress",
+      "input": {
+        "previous": {
+          "PlaybackPositionTicks": 100,
+          "Played": false
+        },
+        "positionTicks": 430,
+        "ended": false
+      },
+      "expected": {
+        "PlaybackPositionTicks": 430,
+        "Played": false
+      }
+    },
+    {
+      "id": "local-rewatch",
+      "operation": "progress",
+      "input": {
+        "previous": {
+          "Played": true
+        },
+        "positionTicks": 10,
+        "ended": false
+      },
+      "expected": {
+        "PlaybackPositionTicks": 10,
+        "Played": true
+      }
+    },
+    {
+      "id": "local-negative",
+      "operation": "progress",
+      "input": {
+        "previous": {},
+        "positionTicks": -1,
+        "ended": false
+      },
+      "expected": {
+        "PlaybackPositionTicks": 0,
+        "Played": false
+      }
+    }
+  ]
+}

@@ -145,6 +145,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     val state by controller.state.collectAsState()
     // Semantics and tooltip callbacks may outlive this composition during sign-out.
 
+    val menus = remember { DesktopMenuOwner() }
     val sidebarAccount = state.account
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
@@ -153,27 +154,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
         else -> ""
     }
     val savedPages = rememberSaveableStateHolder()
-    LaunchedEffect(pageKey, state.busy) {
-        if(!state.busy && state.route != DesktopRoute.Search) {
-            delay(150)
-            if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
-                // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
-                // when the player page provides one) or on nothing, so Space and arrows reach playback.
-                val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }
-                else DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
-                    DesktopRoute.Servers -> "server-address"
-                    DesktopRoute.SignIn -> "username"
-                    DesktopRoute.Detail -> "play"
-                    DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
-                    DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" }
-                    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
-                    DesktopRoute.Search -> "search-field"
-                    else -> null
-                }
-                target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
-            }
-        }
-    }
+    DesktopPageEntryFocus(state, pageKey)
     // Restore Search once on entry, not on every debounce completion: a viewer may have
     // deliberately moved to the sidebar while a query is pending.
     LaunchedEffect(pageKey) {
@@ -224,6 +205,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     if (e.type != KeyEventType.KeyDown) false
                     else when {
                         e.key == Key.F11 || (e.key == Key.Enter && e.isAltPressed) || (macChrome && e.key == Key.F && e.isCtrlPressed && e.isMetaPressed) -> { onFullscreen(); true }
+                        e.key == Key.Escape && menus.escape() -> true
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
                         (help || remove != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
@@ -259,7 +241,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 true
             } }
-            CompositionLocalProvider(LocalModalOpen provides (help || remove != null)) {
+            CompositionLocalProvider(LocalDesktopMenus provides menus, LocalModalOpen provides (help || remove != null)) {
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
                 chrome {
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -403,6 +385,9 @@ internal fun DesktopSidebar(
                     SidebarItem(library.name, root == desktopLibraryRoot(library.id), "nav:library:${library.id}") { onLibrary(library) }
                 }
             }
+            if (scroll.canScrollForward) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surfaceContainer)))
+                .testTag("sidebar-more-below"))
             VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 2.dp))
         }
         HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
@@ -437,10 +422,11 @@ private fun SidebarItem(label: String, selected: Boolean, tag: String, onClick: 
 @Composable
 private fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccounts: () -> Unit, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
+    val opener = remember { FocusRequester() }
     Box(modifier) {
         DesktopTooltip("${account.user.name} on ${account.server.name}") {
             Surface(onClick = { open = true }, shape = RoundedCornerShape(12.dp), color = Color.Transparent,
-                modifier = Modifier.fillMaxWidth().controlFocus(RoundedCornerShape(12.dp)).probe("nav:account")
+                modifier = Modifier.fillMaxWidth().focusRequester(opener).controlFocus(RoundedCornerShape(12.dp)).probe("nav:account")
                     .semantics { contentDescription = "${account.user.name} on ${account.server.name}. Account menu"; role = Role.DropdownList }) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -451,7 +437,7 @@ private fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccou
                 }
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
+        DesktopDropdownMenu(expanded = open, onDismissRequest = { open = false }, opener = opener, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
             DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.probe("account-menu:switch"))
             DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.probe("account-menu:settings"))
             HorizontalDivider()
@@ -474,3 +460,31 @@ internal fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, e
 
 internal fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream): String =
     trackLanguage(stream.language) ?: trackLabel(stream).substringBefore(" · ").ifBlank { "Track ${stream.index + 1}" }
+
+/** Entry focus applies after loading and after pointer navigation, without stealing focus during an edit. */
+@Composable
+internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String) {
+    LaunchedEffect(pageKey, state.busy) {
+        if(!state.busy && state.route != DesktopRoute.Search) {
+            delay(150)
+            if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
+                // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
+                // when the player page provides one) or on nothing, so Space and arrows reach playback.
+                val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }
+                else DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
+                    DesktopRoute.Servers -> "server-address"
+                    DesktopRoute.SignIn -> "username"
+                    DesktopRoute.Settings -> "sign-out"
+                    DesktopRoute.LiveTv -> "live:tab:Channels"
+                    DesktopRoute.Detail -> "play"
+                    DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
+                    DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" } ?: "sort"
+                    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
+                    DesktopRoute.Search -> "search-field"
+                    else -> null
+                }
+                target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
+            }
+        }
+    }
+}

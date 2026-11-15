@@ -13,6 +13,9 @@ import androidx.compose.ui.unit.dp
 /** Small local Material-style glyphs for desktop actions; keeps desktop free of an icons dependency. */
 object DesktopGlyph {
     val TransportBack by lazy { outlineGlyph("TransportBack") { moveTo(5f,12f); curveTo(5f,16.4f,8.6f,20f,13f,20f); curveTo(17.4f,20f,21f,16.4f,21f,12f); curveTo(21f,7.6f,17.4f,4f,13f,4f); curveTo(10f,4f,7.3f,5.6f,5.9f,8f); moveTo(6f,4f); lineTo(6f,8f); lineTo(10f,8f) } }
+    val Info by lazy { outlineGlyph("Info") { moveTo(12f,2f); arcTo(10f,10f,0f,true,true,11.9f,22f); arcTo(10f,10f,0f,false,true,12f,2f); close(); moveTo(12f,10f); lineTo(12f,17f); moveTo(12f,6f); lineTo(12f,7f) } }
+    val Star by lazy { glyph("Star") { starPath() } }
+    val StarOutline by lazy { outlineGlyph("StarOutline") { starPath() } }
     val Play by lazy { glyph("Play") { moveTo(7f,4f); lineTo(20f,12f); lineTo(7f,20f); close() } }
     val Pause by lazy { glyph("Pause") { moveTo(6f,4f); lineTo(10f,4f); lineTo(10f,20f); lineTo(6f,20f); close(); moveTo(14f,4f); lineTo(18f,4f); lineTo(18f,20f); lineTo(14f,20f); close() } }
     val TransportForward by lazy { outlineGlyph("TransportForward") { moveTo(19f,12f); curveTo(19f,16.4f,15.4f,20f,11f,20f); curveTo(6.6f,20f,3f,16.4f,3f,12f); curveTo(3f,7.6f,6.6f,4f,11f,4f); curveTo(14f,4f,16.7f,5.6f,18.1f,8f); moveTo(18f,4f); lineTo(18f,8f); lineTo(14f,8f) } }
@@ -55,3 +58,7 @@ private fun outlineGlyph(name: String, body: androidx.compose.ui.graphics.vector
         strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round) { body() }
 
 }.build()
+
+private fun androidx.compose.ui.graphics.vector.PathBuilder.starPath() {
+    moveTo(12f,2f); lineTo(15f,8.5f); lineTo(22f,9.3f); lineTo(17f,14.2f); lineTo(18.3f,21f); lineTo(12f,17.6f); lineTo(5.7f,21f); lineTo(7f,14.2f); lineTo(2f,9.3f); lineTo(9f,8.5f); close()
+}

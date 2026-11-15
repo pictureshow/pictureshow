@@ -67,6 +67,7 @@ data class DesktopState(
     val sortBy: String = "SortName",
     val descending: Boolean = false,
     val detail: MediaItem? = null,
+    val detailLibrary: String? = null,
     val seasons: List<MediaItem> = emptyList(),
     val episodes: List<MediaItem> = emptyList(),
     val selectedSeason: MediaItem? = null,

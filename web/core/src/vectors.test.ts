@@ -49,6 +49,7 @@ import * as rc26 from "./rc26";
 import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
 import * as playbackFormats from "./playback-formats";
+import * as catalogReturn from "./catalog-return";
 import { controlProjection, controlSuites, runControlCase } from "./control";
 import { playerTrackLabels } from "../../src/player-track-labels";
 import * as browse from "../../src/library-browse";
@@ -204,6 +205,7 @@ for (const file of files) {
             "playback-information",
             "home-browse",
             "playback-formats",
+            "catalog-return",
             ...controlSuites,
             ...pendingPortSuites,
         ].includes(suite.suite) ||
@@ -290,6 +292,12 @@ for (const file of files) {
                 const i = c.input,
                     ctx = suite.context;
                 let value: unknown;
+                if (suite.suite === "catalog-return") {
+                    if (c.operation === "refresh") expect(catalogReturn.catalogReturnRefresh(i.page)).toEqual(c.expected);
+                    else if (c.operation === "progress") expect(catalogReturn.playbackReturnData(i.previous, i.positionTicks, i.ended)).toEqual(c.expected);
+                    else throw new Error("Unknown catalog return operation");
+                    return;
+                }
                 if (suite.suite === "playback-formats") {
                     switch (c.operation) {
                         case "range": value = playbackFormats.sourceRange(i.range, i.profile); break;

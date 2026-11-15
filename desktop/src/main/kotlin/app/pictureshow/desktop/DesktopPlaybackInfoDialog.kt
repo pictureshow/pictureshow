@@ -34,7 +34,6 @@ internal fun DesktopPlaybackInfoDialog(sections: List<PlaybackInfoSection>, clos
                     if (i > 0) HorizontalDivider()
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(section.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         section.lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         section.fields.forEach { (label, value) ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -42,6 +41,7 @@ internal fun DesktopPlaybackInfoDialog(sections: List<PlaybackInfoSection>, clos
                                 Text(value, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"))
                             }
                         }
+                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }

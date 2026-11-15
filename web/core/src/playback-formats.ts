@@ -36,7 +36,8 @@ export function display(value: string | null | undefined, output: string): strin
     switch (output) {
         case "HdrEdR": return "HDR active (EDR)";
         case "HdrScRgb": return "HDR active (scRGB)";
-        case "Sdr": return "HDR video on an SDR display · mapped to SDR";
+        case "Sdr": return "SDR display · mapped to SDR";
+        case "HdrInactive": return "HDR display, HDR not active right now · mapped to SDR";
         case "WaylandPq": return "HDR sent to compositor (PQ / BT.2020) · display HDR not reported";
         default: return "Not reported";
     }

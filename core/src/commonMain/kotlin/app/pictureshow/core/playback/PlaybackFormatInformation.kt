@@ -42,7 +42,8 @@ object PlaybackFormatInformation {
         return when (output) {
             HdrOutput.HdrEdR -> "HDR active (EDR)"
             HdrOutput.HdrScRgb -> "HDR active (scRGB)"
-            HdrOutput.Sdr -> "HDR video on an SDR display · mapped to SDR"
+            HdrOutput.Sdr -> "SDR display · mapped to SDR"
+            HdrOutput.HdrInactive -> "HDR display, HDR not active right now · mapped to SDR"
             HdrOutput.WaylandPq -> "HDR sent to compositor (PQ / BT.2020) · display HDR not reported"
             HdrOutput.Unknown -> "Not reported"
         }
@@ -55,4 +56,4 @@ object PlaybackFormatInformation {
     }
 }
 
-enum class HdrOutput { Unknown, Sdr, HdrEdR, HdrScRgb, WaylandPq }
+enum class HdrOutput { Unknown, Sdr, HdrInactive, HdrEdR, HdrScRgb, WaylandPq }

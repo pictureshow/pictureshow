@@ -1,0 +1,90 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+package app.pictureshow.desktop
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.*
+import app.pictureshow.core.*
+import kotlin.test.*
+
+class DesktopReturnInteractionTest {
+    @Test fun escapeClosesEachMenuWithoutBackAndRestoresItsOpener() = runComposeUiTest {
+        val owner = DesktopMenuOwner()
+        var back = 0
+        var label by mutableStateOf("Account")
+        var open by mutableStateOf(false)
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalDesktopMenus provides owner) {
+                    val opener = remember { FocusRequester() }
+                    Box(Modifier.onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.Escape && owner.escape() }
+                        .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { back++; true } else false }) {
+                        Button({ open = true }, Modifier.focusRequester(opener).testTag("opener")) { Text(label) }
+                        DesktopDropdownMenu(open, { open = false }, opener) { DropdownMenuItem(text = { Text("Option") }, onClick = {}) }
+                    }
+                }
+            }
+        }
+        for (name in listOf("Account", "Video quality", "Sort", "Guide day", "Guide time", "Retention", "Audio", "Subtitles")) {
+            runOnIdle { label = name }
+            onNodeWithTag("opener").performClick()
+            onNodeWithText("Option").assertExists().performKeyInput { pressKey(Key.Escape) }
+            waitUntil { !open }
+            waitForIdle()
+            assertEquals(0, back, name)
+            onNodeWithTag("opener").assertIsFocused()
+        }
+    }
+
+    @Test fun topmostMenuWinsBeforeTheDialogOrBack() {
+        val owner = DesktopMenuOwner(); val closed = mutableListOf<String>()
+        val parent = Any(); val child = Any()
+        owner.register(parent) { closed += "parent" }; owner.register(child) { closed += "child" }
+        assertTrue(owner.escape()); assertEquals(listOf("child"), closed)
+        owner.remove(child)
+        assertTrue(owner.escape()); assertEquals(listOf("child", "parent"), closed)
+        assertFalse(owner.escape())
+    }
+
+    @Test fun mouseEntryStartsInsideEverySidebarDestination() = runComposeUiTest {
+        val account = Account(Server("s", "Demo", "https://example.invalid", "12"), User("u", "Viewer"), "token")
+        var state by mutableStateOf(DesktopState())
+        val destinations = listOf(DesktopRoute.Settings to "sign-out", DesktopRoute.Library to "grid:film", DesktopRoute.LiveTv to "live:tab:Channels",
+            DesktopRoute.Detail to "play", DesktopRoute.Search to "search-field", DesktopRoute.Home to "card:latest:film")
+        setContent {
+            MaterialTheme {
+                val page = state.route.name
+                Column {
+                    Button({ state = DesktopState() }, Modifier.testTag("header")) { Text("Back") }
+                    Row {
+                        Column { destinations.forEach { (route, _) -> Button({ state = DesktopState(route = route, account = account,
+                            items = listOf(MediaItem("film")), homeRows = listOf(HomeRow("latest", "Latest", listOf(MediaItem("film")))) ) }, Modifier.testTag("nav:$route")) { Text(route.name) } } }
+                        key(page) {
+                            CompositionLocalProvider(LocalDesktopPage provides page) {
+                                val target = destinations.firstOrNull { it.first == state.route }?.second
+                                if (target != null) Button({}, Modifier.probe(target)) { Text("Page control") }
+                                DesktopPageEntryFocus(state, page)
+                                // Search owns its field focus on entry in the real Search page.
+                                if (state.route == DesktopRoute.Search) LaunchedEffect(page) { withFrameNanos { }; DesktopUiProbe.requestFocus["search-field"]?.requestFocus() }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for ((route, target) in destinations) {
+            onNodeWithTag("nav:$route").performClick()
+            waitUntil(timeoutMillis = 3000) { DesktopUiProbe.focus[target] == true }
+            onNodeWithTag(target).assertIsFocused()
+            onNodeWithTag("header").assertIsNotFocused()
+        }
+    }
+}

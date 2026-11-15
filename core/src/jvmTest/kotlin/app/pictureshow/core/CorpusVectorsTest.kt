@@ -22,6 +22,7 @@ class CorpusVectorsTest {
                 setOf(
                     "application",
                     "catalog",
+                    "catalog-return",
                     "compatibility",
                     "native-regressions",
                     "negotiation",

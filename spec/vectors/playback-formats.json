@@ -173,7 +173,7 @@
         "transfer": "pq",
         "output": "Sdr"
       },
-      "expected": "HDR video on an SDR display \u00b7 mapped to SDR"
+      "expected": "SDR display \u00b7 mapped to SDR"
     },
     {
       "id": "display-linux",
@@ -232,6 +232,33 @@
         "profile": "https://private.invalid/token"
       },
       "expected": "Not reported"
+    },
+    {
+      "id": "display-hdr-inactive",
+      "operation": "display",
+      "input": {
+        "transfer": "pq",
+        "output": "HdrInactive"
+      },
+      "expected": "HDR display, HDR not active right now \u00b7 mapped to SDR"
+    },
+    {
+      "id": "display-hlg-inactive",
+      "operation": "display",
+      "input": {
+        "transfer": "hlg",
+        "output": "HdrInactive"
+      },
+      "expected": "HDR display, HDR not active right now \u00b7 mapped to SDR"
+    },
+    {
+      "id": "display-sdr-on-inactive",
+      "operation": "display",
+      "input": {
+        "transfer": "bt.709",
+        "output": "HdrInactive"
+      },
+      "expected": "SDR video"
     }
   ]
 }

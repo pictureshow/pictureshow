@@ -142,8 +142,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         PlayerKeyboard.handler = handler@{ e, openHelp ->
             val open = currentMenu
             if (e.key == Key.Escape) {
-                if (open == null) return@handler false
-                if (open == "info") closeInfo() else { menu = null; DesktopUiProbe.requestFocus[open]?.let { runCatching { it.requestFocus() } } }
+                if (open != "info") return@handler false
+                closeInfo()
                 return@handler true
             }
             if (open != null) return@handler false
@@ -174,6 +174,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         onDispose { PlayerKeyboard.handler = null }
     }
     if (menu == "info") DesktopPlaybackInfoDialog(playbackInfoSections(p, state.settings.bitrateMbps), ::closeInfo)
+    CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || menu == "info")) {
     Column(Modifier.fillMaxSize().onGloballyPositioned { playerBottom = (it.positionInWindow().y + it.size.height).toDouble() }) {
         Box(Modifier.weight(1f).fillMaxWidth()
             .onGloballyPositioned { videoTop = it.positionInWindow().y.toDouble(); videoBottom = videoTop + it.size.height }
@@ -240,6 +241,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                 if(!p.ready) Text("Opening video…",modifier=Modifier.semantics{liveRegion=LiveRegionMode.Polite})
             }
         }
+    }
     }
 }
 
@@ -323,9 +325,11 @@ private fun SeekBar(p: DesktopPlaybackState, c: DesktopController, modifier: Mod
 private fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector, items: List<Pair<Int, String>>, selected: Int,
                       chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, onChoose: (Int) -> Unit) {
     val density = LocalDensity.current
+    val opener = remember { FocusRequester() }
+    val menuKeys = DesktopMenuRegistration(open, opener, onDismiss)
     Box {
         OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, contentPadding = PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.controlFocus().width(156.dp).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
+            modifier = Modifier.focusRequester(opener).controlFocus().width(156.dp).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(chipValue, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = MaterialTheme.typography.labelLarge.fontWeight)
@@ -339,7 +343,7 @@ private fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.grap
             Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
                 val maxHeight = with(density) { (ceiling - 2 * gap).coerceAtLeast(160).toDp() }
                 Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 3.dp, shadowElevation = 8.dp,
-                    modifier = Modifier.widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
+                    modifier = Modifier.onPreviewKeyEvent(menuKeys).widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
                     Column(Modifier.width(IntrinsicSize.Max).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                         Text(label, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         items.forEach { (key, text) ->

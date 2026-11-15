@@ -62,6 +62,16 @@ class DesktopShellTest {
         assertInsideWindow("nav:home")
     }
 
+    @Test fun mouseWheelOverSidebarMovesLibrariesAndShowsMoreBelow() = runDesktopComposeUiTest(800, 600) {
+        shell(views = 12, livingRoom = false)
+        onNodeWithTag("sidebar-more-below").assertExists()
+        val before = unclipped("nav:library:lib4").top
+        onNodeWithTag("sidebar-list").performMouseInput { moveTo(center); scroll(4f) }
+        waitForIdle()
+        assertTrue(unclipped("nav:library:lib4").top < before, "wheel over the list must move its contents")
+        assertInsideWindow("nav:settings")
+    }
+
     @Test fun pinnedDestinationsAtTheDefaultWindow() = runDesktopComposeUiTest(1280, 800) {
         shell(views = 12, livingRoom = false)
         assertInsideWindow("nav:account")

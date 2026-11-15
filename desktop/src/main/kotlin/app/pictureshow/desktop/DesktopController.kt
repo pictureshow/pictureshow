@@ -388,15 +388,18 @@ class DesktopController(
         }
     }
     fun detail(item: MediaItem) = page(DesktopRoute.Detail, remember = true) { g -> loadDetail(g, item) }
-    private suspend fun loadDetail(g: Long, item: MediaItem) {
+    private suspend fun loadDetail(g: Long, item: MediaItem, selected: MediaItem? = null) {
         val a = mutable.value.account ?: return
-        publish(g) { it.copy(detail = item, seasons = emptyList(), episodes = emptyList(), selectedSeason = null) }
+        publish(g) { it.copy(detail = item, detailLibrary = null, seasons = emptyList(), episodes = emptyList(), selectedSeason = null) }
         val fresh = attempt(g, a) { client.item(a, item.id) } ?: return
         publish(g) { it.copy(detail = fresh) }
+        val parents = (client.searchAncestors(a, fresh.id) as? ClientResult.Success)?.value.orEmpty()
+        val libraryName = searchLibraryName(parents, mutable.value.homeRows.filter { it.library }.flatMap { it.items })
+        publish(g) { it.copy(detailLibrary = libraryName) }
         if (fresh.type == "Series") {
             val seasons = attempt(g, a) { client.seasons(a, fresh.id) }?.items.orEmpty()
             publish(g) { it.copy(seasons = seasons) }
-            seasons.firstOrNull()?.let { loadSeason(g, a, fresh.id, it) }
+            (seasons.firstOrNull { it.id == selected?.id } ?: seasons.firstOrNull())?.let { loadSeason(g, a, fresh.id, it) }
         } else if (fresh.type == "Season") {
             fresh.seriesId?.let { loadSeason(g, a, it, fresh) }
         }
@@ -432,13 +435,45 @@ class DesktopController(
         if (previous != null) {
             mutable.value = previous.copy(busy = false, error = null, errorKind = null, settings = s.settings,
                 search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError))
-            if (previous.route == DesktopRoute.Search && previous.search.loading) searchQuery(previous.search.query, immediate = true)
+            refreshReturnedPage(previous)
         } else when (s.route) {
             DesktopRoute.SignIn -> addServer()
             DesktopRoute.Accounts, DesktopRoute.Servers -> if (s.account != null) home() else addServer()
             else -> if (s.account != null) home() else addServer()
         }
     }
+    /** Layout/history may be cached; user data never becomes authoritative just because Back restored it. */
+    private fun refreshReturnedPage(previous: DesktopState) {
+        when (catalogReturnRefresh(previous.route.name)) {
+            CatalogReturnRefresh.HomeRows -> page(DesktopRoute.Home) { g -> loadHome(g) }
+            CatalogReturnRefresh.TitleAndChildren -> previous.detail?.let { item -> page(DesktopRoute.Detail) { g -> loadDetail(g, item, previous.selectedSeason) } }
+            CatalogReturnRefresh.LoadedCards -> page(previous.route) { g ->
+                val a = mutable.value.account ?: return@page
+                val count = maxOf(60, previous.items.size)
+                val result = if (previous.route == DesktopRoute.Library) previous.library?.let {
+                    attempt(g, a) { client.items(a, BrowseQuery(it.id, sortBy = previous.sortBy, descending = previous.descending, limit = count)) }
+                } else previous.person?.let { attempt(g, a) { client.personItems(a, it.id) } }
+                if (result != null) {
+                    nextPageIndex = result.startIndex + result.items.size
+                    publish(g) { it.copy(items = result.items.distinctBy(MediaItem::id), total = result.totalRecordCount) }
+                }
+            }
+            CatalogReturnRefresh.SearchResults -> searchQuery(previous.search.query, immediate = true)
+            CatalogReturnRefresh.None -> Unit
+        }
+    }
+
+    /** Patch every cached occurrence before a slow/offline return can paint a pre-play badge or resume label. */
+    private fun patchPlaybackData(item: MediaItem, position: Double, ended: Boolean) {
+        fun patch(card: MediaItem) = if (card.id == item.id) card.copy(userData = playbackReturnData(card.userData, (position.coerceAtLeast(0.0) * 10_000_000).toLong(), ended)) else card
+        fun patch(s: DesktopState) = s.copy(detail = s.detail?.let(::patch), items = s.items.map(::patch),
+            seasons = s.seasons.map(::patch), episodes = s.episodes.map(::patch),
+            homeRows = s.homeRows.map { it.copy(items = it.items.map(::patch)) },
+            search = s.search.copy(rows = s.search.rows.map { it.copy(items = it.items.map(::patch)) }))
+        mutable.update(::patch)
+        synchronized(history) { history.indices.forEach { history[it] = patch(history[it]) } }
+    }
+
     fun retry() {
         val s = mutable.value
         when (s.route) {
@@ -844,16 +879,18 @@ class DesktopController(
             }
             return
         }
-        // page() clears the playback before this block runs, so read the end state first.
-        val finished = mutable.value.playback?.end != null
-        page(DesktopRoute.Detail) { g -> stopPlaybackPage(g, finished) }
-    }
-    private suspend fun stopPlaybackPage(g: Long, finished: Boolean) {
-        val old = mutable.value.playback?.item ?: mutable.value.detail
-        finishViewing()
-        publish(g) { it.copy(playback = null, returnFocus = if (finished) "play" else null) }
-        takeCarriedReportError()?.let { e -> publish(g) { it.copy(error = e) } }
-        if (old != null) loadDetail(g, old)
+        val playback = mutable.value.playback
+        val old = playback?.item ?: mutable.value.detail
+        if (old != null && playback != null) patchPlaybackData(old, playback.positionSeconds, playback.end != null)
+        // Stop replaces the playback opener, including after an autoplay chain; Back must reach its parent.
+        synchronized(history) { if (history.lastOrNull()?.route == DesktopRoute.Detail) history.removeAt(history.lastIndex) }
+        page(DesktopRoute.Detail) { g ->
+            // page() finishes/report-stops first. Use its patched final engine position, not the poll's older item.
+            val patched = mutable.value.detail?.takeIf { it.id == old?.id } ?: old
+            publish(g) { it.copy(playback = null, returnFocus = "play") }
+            takeCarriedReportError()?.let { e -> publish(g) { it.copy(error = e) } }
+            if (patched != null) loadDetail(g, patched)
+        }
     }
     /**
      * PLAY-17/18 at the physical end: show the end card at once, close the viewing (one Stop, then one watched
@@ -863,6 +900,7 @@ class DesktopController(
         if (v.ended || viewing !== v) return
         v.endPosition = maxOf(snap.positionSeconds, snap.durationSeconds)
         v.ended = true
+        patchPlaybackData(v.item, v.endPosition, true)
         val next = mutable.value.playback?.nextEpisode
         val countdown = if (next != null && mutable.value.settings.autoplayNext) endCountdownSeconds.coerceAtLeast(0) else null
         countdownCancelled = false
@@ -940,6 +978,7 @@ class DesktopController(
                     if (v.startAttempted) {
                         val seen = observed?.positionSeconds?.takeIf { it > 0 } ?: mutable.value.playback?.positionSeconds ?: 0.0
                         val position = if (v.ended) maxOf(seen, v.endPosition) else seen
+                        patchPlaybackData(v.item, position, v.ended)
                         val failed = v.playbackFailed && !v.ended
                         runCatching {
                             playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds, failed = failed))

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.*
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.livetv.*
@@ -77,9 +78,10 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
                     if (review) ReviewOption("Retention", labels[current] ?: "Provider setting", edits["KeepUntil"] != null && original.fields["KeepUntil"] != values["KeepUntil"])
                     else {
                         var open by remember { mutableStateOf(false) }
+                        val opener = remember { FocusRequester() }
                         Box {
-                            OutlinedButton({ open = true }, enabled = !busy, modifier = Modifier.controlFocus()) { Text(labels[current] ?: "Provider retention setting") }
-                            DropdownMenu(open, { open = false }) {
+                            OutlinedButton({ open = true }, enabled = !busy, modifier = Modifier.focusRequester(opener).controlFocus().probe("live:retention")) { Text(labels[current] ?: "Provider retention setting") }
+                            DesktopDropdownMenu(open, { open = false }, opener) {
                                 listOf("UntilDeleted", "UntilSpaceNeeded").forEach { choice -> DropdownMenuItem(text = { Text(labels.getValue(choice)) }, leadingIcon = { RadioButton(current == choice, null) }, onClick = { edits = edits + ("KeepUntil" to JsonPrimitive(choice)); open = false }) }
                             }
                         }

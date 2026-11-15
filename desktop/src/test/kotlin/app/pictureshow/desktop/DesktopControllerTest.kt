@@ -97,7 +97,7 @@ class DesktopControllerTest {
                     path == "/Items/e1" -> episode("e1", "Pilot", 1)
                     path == "/Items/e2" -> episode("e2", "Second", 2)
                     path == "/Shows/show/Episodes" -> """{"Items":[${episode("e1", "Pilot", 1)},${episode("e2", "Second", 2)}],"TotalRecordCount":2}"""
-                    path.startsWith("/UserPlayedItems/") -> """{"Played":true,"PlayCount":1}"""
+                    path.startsWith("/UserPlayedItems/") -> { serverPlayed += path.substringAfterLast("/"); """{"Played":true,"PlayCount":1}""" }
                     path == "/Sessions/Playing/Stopped" && failStop -> { status = 500; "" }
                     path.endsWith("/PlaybackInfo") && transcode -> playbackInfo(request, transcoding = true)
                     path.endsWith("/PlaybackInfo") -> playbackInfo(request)
@@ -585,6 +585,41 @@ class DesktopControllerTest {
             assertFailsWith<IllegalArgumentException> { proxy.rewriteManifest("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"https://elsewhere.invalid/key\"", decision.url) }
             val rewritten = proxy.rewriteManifest("#EXTM3U\nsegment.ts\n#EXT-X-MAP:URI=\"init.mp4\"", decision.url)
             assertTrue(rewritten.contains("http://127.0.0.1:")); assertFalse(rewritten.contains("private")); assertFalse(rewritten.contains("secret"))
+        }
+    }
+
+    @Test fun autoplayStopBackNeverRestoresThePrePlayTitleAndHomeRefreshes(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engines = CopyOnWriteArrayList<Engine>()
+            DesktopController(directory(), playbackFactory = { Engine().also { engines += it } }, endCountdownSeconds = 0).use { c ->
+                c.login(f)
+                c.detail(e1); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                c.play(c.state.value.detail!!)
+                c.endWhenReady { engines.first() }
+                c.await { it.playback?.item?.id == "e2" && it.playback?.ready == true }
+                engines.last().position = 73.0
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertEquals("e2", c.state.value.detail?.id)
+                val before = f.count("/UserItems/Resume")
+                c.back(); c.await { it.route != DesktopRoute.Detail && !it.busy }
+                assertEquals(DesktopRoute.Home, c.state.value.route, "Back consumes the replaced E1 title instead of restoring it")
+                assertTrue(f.count("/UserItems/Resume") > before, "Back refreshes Home progress rows")
+                c.detail(e1); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertTrue(c.state.value.detail!!.isWatched)
+            }
+        }
+    }
+
+    @Test fun backToLibraryRefreshesLoadedBadges(): Unit = runBlocking {
+        Fixture().use { f ->
+            DesktopController(directory()).use { c ->
+                c.login(f)
+                c.browse(MediaItem("library", "Movies", "CollectionFolder")); c.await { it.route == DesktopRoute.Library && !it.busy }
+                c.detail(c.state.value.items.first()); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                val before = f.count("/Items")
+                c.back(); c.await { it.route == DesktopRoute.Library && !it.busy }
+                assertTrue(f.count("/Items") > before, "Back must fetch current card data")
+            }
         }
     }
 

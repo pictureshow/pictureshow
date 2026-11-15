@@ -78,7 +78,8 @@ data class MediaItem(
     @SerialName("EpisodeTitle") val episodeTitle: String? = null,
     @SerialName("StartDate") val recordingStartDate: String? = null,
     @SerialName("EndDate") val recordingEndDate: String? = null,
-    @SerialName("CompletionPercentage") val recordingCompletionPercentage: Double? = null
+    @SerialName("CompletionPercentage") val recordingCompletionPercentage: Double? = null,
+    @SerialName("MediaStreams") val mediaStreams: List<app.pictureshow.core.playback.MediaStream> = emptyList()
 )
 
 /** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */

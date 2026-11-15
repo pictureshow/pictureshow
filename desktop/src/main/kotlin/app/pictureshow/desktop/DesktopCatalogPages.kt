@@ -233,7 +233,7 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
                 CatalogArtwork(item,account,isEpisode,Modifier.width(posterWidth).aspectRatio(if (isEpisode) 16f / 9f else 2f / 3f))
                 Column(Modifier.widthIn(min=280.dp).weight(1f),verticalArrangement=Arrangement.spacedBy(if (expansive) 18.dp else 14.dp)) {
                     Text(item.name, style = if (expansive) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                    Text(listOfNotNull(item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(listOfNotNull(state.detailLibrary, titleHdrTag(item), item.productionYear?.toString(),item.officialRating,runtimeLabel(item.runTimeTicks).takeIf{it.isNotBlank()},episodeLabel(item).takeIf{item.type=="Episode" && it.isNotBlank()}).joinToString(" · "),color=MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         LaunchedEffect(state.returnFocus, state.busy, item.id) { if (state.returnFocus == "play" && !state.busy) { withFrameNanos { }; DesktopUiProbe.requestFocus["play"]?.requestFocus(); c.returnFocusDone() } }
                         Button(onClick={c.play(item)},enabled=!state.busy,modifier = Modifier.controlFocus().heightIn(min=48.dp).probe("play")) { Text(if(item.userData.playbackPositionTicks>0) resumeLabel(item.userData.playbackPositionTicks) else "Play") }
@@ -287,3 +287,8 @@ internal fun DetailPage(state: DesktopState, c: DesktopController) {
 /** The episode row's one announcement: the shared card announcement (identity, Watched or Resume), then runtime. */
 internal fun episodeRowAnnouncement(episode: MediaItem): String =
     listOf(catalogAnnouncement(episode), runtimeLabel(episode.runTimeTicks)).filter(String::isNotBlank).joinToString(", ")
+
+/** Source range belongs beside title metadata, independently of the current display's output. */
+internal fun titleHdrTag(item: MediaItem): String? = item.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
+    ?.let { PlaybackFormatInformation.range(it.videoRangeType, it.dvProfile) }
+    ?.takeUnless { it == "SDR" || it == "Not reported" }

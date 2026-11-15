@@ -6,6 +6,7 @@ package app.pictureshow.desktop
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -67,7 +68,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
     CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || confirmation != null || s.selected != null || s.draft != null)) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Live TV", Modifier.padding(top = 12.dp).semantics { heading() }, style = MaterialTheme.typography.headlineMedium)
-        PrimaryTabRow(selectedTabIndex = s.tab.ordinal, modifier = Modifier.fillMaxWidth()) {
+        PrimaryScrollableTabRow(selectedTabIndex = s.tab.ordinal, edgePadding = 0.dp, modifier = Modifier.fillMaxWidth()) {
             DesktopLiveTab.entries.forEach { tab ->
                 Tab(selected = s.tab == tab, onClick = { owner.tab(tab) }, text = { Text(tab.name) },
                     modifier = Modifier.liveTabFocus().probe("live:tab:${tab.name}"))
@@ -114,7 +115,11 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                         val current = programs.firstOrNull { canTune(it, now) }
                         val next = programs.firstOrNull { (liveInstant(it.startDate) ?: Long.MIN_VALUE) > now }
                         val focus = "live:channel:${channel.id}"
-                        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                        val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val hovered by interaction.collectIsHoveredAsState()
+                        var rowFocused by remember { mutableStateOf(false) }
+                        Surface(modifier = Modifier.hoverable(interaction).onFocusChanged { rowFocused = it.hasFocus }.focusGroup(),
+                            shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 LiveChannelMark(channel, account)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -126,13 +131,16 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                                         LinearProgressIndicator(progress = { ((now - start).toFloat() / (end - start)).coerceIn(0f, 1f) }, modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth().height(3.dp))
                                     }
                                 }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Button({ tune(channel) }, enabled = fresh, modifier = Modifier.controlFocus().probe(focus)) { Icon(DesktopGlyph.Play, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Watch") }
-                                    current?.let { p -> TextButton({ owner.select(p, focus) }, modifier = Modifier.controlFocus().probe("live:details:${p.id}")) { Text("Program details") } }
-                                }
+                                Button({ tune(channel) }, enabled = fresh, colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (hovered || rowFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    contentColor = if (hovered || rowFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
+                                    modifier = Modifier.controlFocus().probe(focus)) { Icon(DesktopGlyph.Play, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Watch") }
+                                Box(Modifier.size(40.dp)) { current?.let { p ->
+                                    IconButton({ owner.select(p, focus) }, modifier = Modifier.controlFocus().probe("live:details:${p.id}")) { Icon(DesktopGlyph.Info, "Program details") }
+                                } }
                                 IconToggleButton(channel.userData.isFavorite, { owner.favorite(channel) }, enabled = fresh && s.policy?.userData == true,
                                     modifier = Modifier.controlFocus().probe("live:favorite:${channel.id}")) {
-                                    Text(if (channel.userData.isFavorite) "★" else "☆", Modifier.semantics { contentDescription = "${if (channel.userData.isFavorite) "Remove" else "Add"} ${channel.name} ${if (channel.userData.isFavorite) "from" else "to"} favorites" }, style = MaterialTheme.typography.headlineSmall)
+                                    Icon(if (channel.userData.isFavorite) DesktopGlyph.Star else DesktopGlyph.StarOutline, "${if (channel.userData.isFavorite) "Remove" else "Add"} ${channel.name} ${if (channel.userData.isFavorite) "from" else "to"} favorites")
                                 }
                             }
                         }
@@ -323,14 +331,16 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         var selected by remember { mutableStateOf(s.start) }
         var daysOpen by remember { mutableStateOf(false) }
         var timesOpen by remember { mutableStateOf(false) }
+        val dayOpener = remember { FocusRequester() }
+        val timeOpener = remember { FocusRequester() }
         val first = day.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         // Enumerating instants offers both fall-back offsets and never offers a nonexistent spring hour.
         val times = remember(day) { generateSequence(first) { it + 1_800_000 }.takeWhile { it < end }.toList() }
         AlertDialog(onDismissRequest = { datePicker = false }, title = { Text("Guide date and time") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box {
-                OutlinedButton({ daysOpen = true }) { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(day)) }
-                DropdownMenu(daysOpen, { daysOpen = false }) {
+                OutlinedButton({ daysOpen = true }, modifier = Modifier.focusRequester(dayOpener).probe("live:guide-day")) { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(day)) }
+                DesktopDropdownMenu(daysOpen, { daysOpen = false }, dayOpener) {
                     val today = Instant.now().atZone(zone).toLocalDate()
                     (listOf(initial) + (0L..6L).map { today.plusDays(it) }).distinct().forEach { date ->
                         DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
@@ -338,8 +348,8 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
                 }
             }
             Box {
-                OutlinedButton({ timesOpen = true }) { Text(liveClock(selected)) }
-                DropdownMenu(timesOpen, { timesOpen = false }, modifier = Modifier.heightIn(max = 280.dp)) {
+                OutlinedButton({ timesOpen = true }, modifier = Modifier.focusRequester(timeOpener).probe("live:guide-time")) { Text(liveClock(selected)) }
+                DesktopDropdownMenu(timesOpen, { timesOpen = false }, timeOpener, modifier = Modifier.heightIn(max = 280.dp)) {
                     times.forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, onClick = { selected = instant; timesOpen = false }) }
                 }
             }

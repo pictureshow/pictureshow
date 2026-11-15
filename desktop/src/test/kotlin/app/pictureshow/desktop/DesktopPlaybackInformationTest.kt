@@ -37,8 +37,17 @@ class DesktopPlaybackInformationTest {
         assertEquals(DesktopReceivedFormats(), receivedFormats({ null }, HdrOutput.Unknown))
     }
 
+    @Test fun titleMetadataShowsSourceHdrWithoutClaimingDisplayOutput() {
+        assertEquals("HDR10", titleHdrTag(MediaItem("hdr", mediaStreams = listOf(MediaStream(type = MediaStreamType.Video, videoRangeType = VideoRangeType.HDR10)))))
+        assertEquals("HLG", titleHdrTag(MediaItem("hlg", mediaStreams = listOf(MediaStream(type = MediaStreamType.Video, videoRangeType = VideoRangeType.HLG)))))
+        assertNull(titleHdrTag(MediaItem("unknown")))
+        assertNull(titleHdrTag(MediaItem("sdr", mediaStreams = listOf(MediaStream(type = MediaStreamType.Video, videoRangeType = VideoRangeType.SDR)))))
+    }
+
     @Test fun displayUsesCurrentNativeEvidenceNotPotentialOrTargetOptions() {
-        assertEquals(HdrOutput.Sdr, nativeHdrOutput("mac", """{"wantsEDR":true,"screenMaxEDR":1,"screenPotentialEDR":4}"""))
+        assertEquals(HdrOutput.HdrInactive, nativeHdrOutput("mac", """{"wantsEDR":true,"screenMaxEDR":1,"screenPotentialEDR":4}"""))
+        assertEquals(HdrOutput.Sdr, nativeHdrOutput("mac", """{"wantsEDR":true,"screenMaxEDR":1,"screenPotentialEDR":1}"""))
+        assertEquals(HdrOutput.Unknown, nativeHdrOutput("mac", """{"wantsEDR":true,"screenMaxEDR":1}"""))
         assertEquals(HdrOutput.HdrEdR, nativeHdrOutput("mac", """{"wantsEDR":true,"screenMaxEDR":2.3}"""))
         assertEquals(HdrOutput.Unknown, nativeHdrOutput("mac", """{"screenPotentialEDR":4}"""))
         assertEquals(HdrOutput.HdrScRgb, nativeHdrOutput("windows", """{"SetColorSpace1HRESULT":0,"CheckColorSpaceSupport":1,"outputColorSpace":12}"""))

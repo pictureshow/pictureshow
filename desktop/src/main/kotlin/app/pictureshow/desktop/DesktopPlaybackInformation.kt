@@ -36,7 +36,9 @@ internal fun nativeHdrOutput(platform: String, receipt: String?): HdrOutput = ru
         "mac" -> when {
             b("wantsEDR") != true || n("screenMaxEDR") == null -> HdrOutput.Unknown
             n("screenMaxEDR")!! > 1.0 -> HdrOutput.HdrEdR
-            else -> HdrOutput.Sdr
+            n("screenPotentialEDR")?.let { it > 1.0 } == true -> HdrOutput.HdrInactive
+            n("screenPotentialEDR") == 1.0 -> HdrOutput.Sdr
+            else -> HdrOutput.Unknown
         }
         "windows" -> when {
             n("SetColorSpace1HRESULT") != 0.0 || ((n("CheckColorSpaceSupport")?.toInt() ?: 0) and 1) == 0 -> HdrOutput.Unknown
