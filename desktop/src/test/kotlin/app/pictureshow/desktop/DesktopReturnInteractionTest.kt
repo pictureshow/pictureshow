@@ -44,6 +44,25 @@ class DesktopReturnInteractionTest {
         }
     }
 
+    @Test fun escapeInDialogDropdownPreservesTheUnsavedDialog() = runComposeUiTest {
+        var dialog by mutableStateOf(true)
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalDesktopMenus provides remember { DesktopMenuOwner() }) {
+                    if (dialog) AlertDialog(onDismissRequest = { dialog = false }, title = { Text("Unsaved recording") },
+                        text = { Choice("Retention", listOf(1 to "Keep", 2 to "Delete later"), 1, "retention") {} },
+                        confirmButton = { TextButton({ dialog = false }) { Text("Cancel") } })
+                }
+            }
+        }
+        onNodeWithTag("retention").performClick()
+        onNodeWithTag("retention:1").performKeyInput { pressKey(Key.Escape) }
+        waitForIdle()
+        assertTrue(dialog, "Escape must close only the dropdown, preserving the edit")
+        onNodeWithText("Unsaved recording").assertExists()
+        onNodeWithTag("retention").assertIsFocused()
+    }
+
     @Test fun topmostMenuWinsBeforeTheDialogOrBack() {
         val owner = DesktopMenuOwner(); val closed = mutableListOf<String>()
         val parent = Any(); val child = Any()
