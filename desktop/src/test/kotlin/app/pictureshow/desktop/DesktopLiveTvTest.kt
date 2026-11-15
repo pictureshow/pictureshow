@@ -37,6 +37,19 @@ class DesktopLiveTvTest {
         val closedLive = CopyOnWriteArrayList<String>()
         val channel = """{"Id":"channel","Name":"Demo One","ChannelNumber":"2","CurrentProgram":{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}}"""
         val program = """{"Id":"program","Name":"Morning show","ChannelId":"channel","StartDate":"${iso(start)}","EndDate":"${iso(end)}","IsSeries":true}"""
+        private fun mediaSource(count: Int, opened: Boolean) = buildJsonObject {
+            put("Id", "source"); put("IsInfiniteStream", true); put("SupportsDirectPlay", true); put("Container", "ts")
+            put("DefaultSubtitleStreamIndex", if (subtitleRetry) 1 else -1)
+            if (opened) { put("LiveStreamId", if (subtitleRetry) "owned-$count" else "owned-live"); put("RequiresClosing", true) }
+            else { put("RequiresOpening", true); put("OpenToken", "open-$count") }
+            putJsonArray("MediaStreams") {
+                addJsonObject { put("Index", 0); put("Type", "Video"); put("Codec", "h264") }
+                if (subtitleRetry) addJsonObject {
+                    put("Index", 1); put("Type", "Subtitle"); put("Codec", "srt"); put("IsExternal", true); put("IsForced", true)
+                    if (count > 1) put("DeliveryUrl", "/subtitles/ready.srt")
+                }
+            }
+        }
         val account get() = Account(Server("server", "Demo", "http://127.0.0.1:${server.address.port}", "12.4.0"), User("viewer", "Viewer"), "token")
         init {
             server.executor = executor
@@ -59,9 +72,11 @@ class DesktopLiveTvTest {
                     path.startsWith("/LiveTv/Timers") || path == "/LiveTv/SeriesTimers" -> """{"Items":[],"TotalRecordCount":0}"""
                     path.endsWith("/PlaybackInfo") -> {
                         val count = negotiations.incrementAndGet()
-                        val liveId = if (subtitleRetry) "owned-$count" else "owned-live"
-                        val captions = if (!subtitleRetry) "" else "," + """{"Index":1,"Type":"Subtitle","Codec":"srt","IsExternal":true,"IsForced":true${if (count > 1) ",\"DeliveryUrl\":\"/subtitles/ready.srt\"" else ""}}"""
-                        """{"PlaySessionId":"session-$count","MediaSources":[{"Id":"source","IsInfiniteStream":true,"LiveStreamId":"$liveId","RequiresClosing":true,"SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":1,"Container":"ts","MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"}$captions]}]}"""
+                        """{"PlaySessionId":"session-$count","MediaSources":[${mediaSource(count, false)}]}"""
+                    }
+                    path == "/LiveStreams/Open" -> {
+                        val count = Json.parseToJsonElement(body).jsonObject.getValue("OpenToken").jsonPrimitive.content.removePrefix("open-").toInt()
+                        """{"MediaSource":${mediaSource(count, true)}}"""
                     }
                     path == "/LiveStreams/Close" -> { if (failClose) status = 500; "" }
                     path.startsWith("/Sessions/") || path.startsWith("/Videos/ActiveEncodings") -> ""
