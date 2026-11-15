@@ -6,7 +6,7 @@ package app.pictureshow.desktop
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 
-enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings }
+enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings, LiveTv }
 
 data class DesktopSettings(
     val bitrateMbps: Int? = null,
@@ -33,7 +33,10 @@ data class DesktopPlaybackState(
     val nextEpisode: MediaItem? = null,
     val muted: Boolean = false,
     /** Set once the viewing reached its physical end (PLAY-17): the end card replaces the transport. */
-    val end: DesktopEndCard? = null
+    val end: DesktopEndCard? = null,
+    val liveChannel: app.pictureshow.core.livetv.LiveChannel? = null,
+    val liveWindow: ObservedLiveWindow? = null,
+    val bufferExpired: Boolean = false
 )
 
 /**

@@ -5,6 +5,7 @@ package app.pictureshow.desktop
 
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
+import app.pictureshow.core.livetv.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import java.awt.Window
@@ -35,6 +36,7 @@ class DesktopController(
     private val identity = ClientIdentity("Pictureshow Desktop", installationId())
     private val client = JellyfinClient(http, identity)
     private val playbackClient = PlaybackClient(http, identity)
+    val liveTv = DesktopLiveTv(LiveTvClient(http, identity, DesktopLivePendingWrites(File(directory, "live-pending"))), scope, { mutable.value.account })
     private val extras = PlaybackExtrasClient(http, identity)
     private val generation = AtomicLong()
     private var pageJob: Job? = null
@@ -169,6 +171,7 @@ class DesktopController(
     }
     private suspend fun acceptAccount(g: Long, account: Account) {
         currentCoroutineContext().ensureActive()
+        liveTv.clear()
         store.remember(account)
         snapshotAccounts()
         synchronized(history) { history.clear() }
@@ -213,6 +216,7 @@ class DesktopController(
             }
             return@page
         }
+        liveTv.clear()
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
         publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
     }
@@ -223,6 +227,7 @@ class DesktopController(
             store.signOut(account.key); snapshotAccounts(); synchronized(history) { history.clear() }
             publish(g) { DesktopState(route = if (store.snapshots.value.accounts.isEmpty()) DesktopRoute.SignIn else DesktopRoute.Accounts,
                 server = account.server, accounts = store.snapshots.value.accounts, rememberedServers = store.snapshots.value.rememberedServers, settings = it.settings) }
+            liveTv.clear()
             runCatching { client.logout(account) }
         }
     }
@@ -340,12 +345,19 @@ class DesktopController(
     /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
     fun browseRoot(library: MediaItem) { browse(library); mutable.update { it.copy(root = desktopLibraryRoot(library.id)) } }
     /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
-    internal fun isLiveTvView(item: MediaItem) = item.collectionType == "livetv"
+    internal fun isLiveTvView(item: MediaItem) = item.collectionType.equals("livetv", ignoreCase = true)
+    fun openLiveTv(item: MediaItem? = null) = page(DesktopRoute.LiveTv, remember = mutable.value.route != DesktopRoute.LiveTv) { g ->
+        val a = mutable.value.account ?: return@page
+        publish(g) { it.copy(library = item, root = item?.let { view -> desktopLibraryRoot(view.id) } ?: "live-tv") }
+        liveTv.open(a)
+    }
     fun open(item: MediaItem) {
         if (item.type == "Person") { person(item); return }
+        if (isLiveTvView(item)) { openLiveTv(item); return }
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
     fun browse(item: MediaItem, sortBy: String = "SortName", descending: Boolean = false) {
+        if (isLiveTvView(item)) { openLiveTv(item); return }
         require(sortBy in listOf("SortName", "DateCreated", "PremiereDate"))
         page(DesktopRoute.Library, remember = mutable.value.library?.id != item.id) { g ->
             val a = mutable.value.account ?: return@page
@@ -436,6 +448,7 @@ class DesktopController(
                 val p = attempt(g, a) { client.personItems(a, item.id) } ?: return@page
                 publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
             } }
+            DesktopRoute.LiveTv -> liveTv.refresh()
             DesktopRoute.Library -> s.library?.let { browse(it, s.sortBy, s.descending) }
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()
@@ -463,13 +476,24 @@ class DesktopController(
                 }
                 detailPlayItem(fresh, next, episodes)
             } else detailPlayItem(fresh, emptyList(), emptyList())
-            if (playable == null || playable.isFolder || playable.type !in setOf("Movie", "Episode", "Video", "MusicVideo")) {
+            if (playable == null || playable.isFolder || playable.type !in setOf("Movie", "Episode", "Video", "MusicVideo", "Recording")) {
                 publish(g) { it.copy(error = "There is no playable video in this item.") }; return@page
             }
             prepareViewing(g, a, playable, if (fromStart) 0.0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000_000.0)
         }
     }
-    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null) {
+    fun tuneChannel(channel: LiveChannel) {
+        val a = mutable.value.account ?: return
+        if (!liveTv.state.value.actionsAvailable(System.currentTimeMillis()) || channel.id !in liveTv.state.value.channels.map { it.id }) return
+        page(DesktopRoute.Player, remember = true) { g ->
+            finishViewing()
+            val policy = attempt(g, a) { LiveTvClient(http, identity).policy(a) } ?: return@page
+            if (!policy.access) { publish(g) { it.copy(error = "Live TV access is disabled for this viewer.") }; return@page }
+            val fresh = attempt(g, a) { LiveTvClient(http, identity).channel(a, channel.id) } ?: return@page
+            prepareViewing(g, a, MediaItem(fresh.id, fresh.name, "TvChannel"), 0.0, liveChannel = fresh)
+        }
+    }
+    private suspend fun prepareViewing(g: Long, a: Account, item: MediaItem, start: Double, audio: Int? = null, subtitle: Int? = null, sourceId: String? = null, audioChosen: Boolean = audio != null, subtitleChosen: Boolean = subtitle != null, subtitleCodec: String? = null, liveChannel: LiveChannel? = null) {
         publish(g) { it.copy(detail = item, playback = null) }
         val player = try { playbackFactory(File(directory, "playback")) }
         catch (e: LinkageError) { recordDesktopPlayerFailure("factory", e); publish(g) { it.copy(error = "The desktop player is not installed correctly. Check libmpv and its native adapter.") }; return }
@@ -481,17 +505,30 @@ class DesktopController(
             publish(g) { it.copy(error = "The desktop player could not load its decoder capabilities. Check the installed libmpv build.") }; return
         }
         val maxBitrate = mutable.value.settings.preferences().deviceSettings().maxStreamingBitrate
-        var outcome = try { attempt(g, a) { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
-            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) } }
-        catch (e: Throwable) { runCatching { player.close() }; throw e }
         val rejectedDecisions = mutableListOf<PlayDecision>()
         suspend fun discardPreparedPlayer() {
             runCatching { player.close() }
             withContext(NonCancellable) {
+                rejectedDecisions.mapNotNull { it.ownedLiveStreamId }.distinct().forEach { id -> runCatching { playbackClient.closeLiveStream(a, id) } }
                 rejectedDecisions.distinctBy { it.playSessionId }.filter { it.method == PlayMethod.Transcode && it.playSessionId != null }
                     .forEach { decision -> runCatching { playbackClient.stopEncoding(a, requireNotNull(decision.playSessionId)) } }
             }
         }
+        // A bounded negotiation may open a server source. Capture its ownership before observing a
+        // cancelled page job, then close it if this selection lost the race. Never discard an owned ID.
+        suspend fun negotiate(call: suspend () -> ClientResult<PlayOutcome>): PlayOutcome? {
+            try {
+                val answer = withContext(NonCancellable) {
+                    attempt(g, a, call).also { outcome ->
+                        (outcome as? PlayOutcome.Play)?.decision?.let(rejectedDecisions::add)
+                    }
+                }
+                currentCoroutineContext().ensureActive()
+                return answer
+            } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+        }
+        var outcome = negotiate { playbackClient.prepareFor(a, item.id, profile, maxBitrate,
+            PlaybackRequest(startPosition = start.seconds, audioStreamIndex = audio, subtitleStreamIndex = subtitle, mediaSourceId = sourceId)) }
         var negotiatedAudio = audio
         var negotiatedSubtitle = subtitle
         if (outcome is PlayOutcome.Play) {
@@ -518,11 +555,11 @@ class DesktopController(
                 val needsBitmapRetry = bitmapFormat != null
                 if (needsExternalRetry || needsBitmapRetry) {
                     val retryProfile = if (needsBitmapRetry) profile.forDesktopSubtitle(selected.codec) else profile.forDesktopSubtitle(null)
-                    outcome = try { attempt(g, a) {
+                    outcome = negotiate {
                         playbackClient.prepareFor(a, item.id, retryProfile, maxBitrate,
                             PlaybackRequest(startPosition = start.seconds, audioStreamIndex = initialAudio,
                                 subtitleStreamIndex = initialSubtitle, mediaSourceId = firstDecision.mediaSourceId))
-                    } } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+                    }
                     val retryDecision = (outcome as? PlayOutcome.Play)?.decision
                     if (retryDecision != null) rejectedDecisions += retryDecision
                     val retriedSubtitle = retryDecision?.mediaSource?.mediaStreams?.firstOrNull {
@@ -560,6 +597,30 @@ class DesktopController(
             return
         }
         val decision = outcome.decision
+        // A subtitle retry may allocate a different owned live source. Release superseded
+        // ownership before adoption, while preserving identities shared with the final decision.
+        var supersededClean = true
+        try {
+            withContext(NonCancellable) {
+                rejectedDecisions.mapNotNull { it.ownedLiveStreamId }.distinct()
+                    .filter { it != decision.ownedLiveStreamId }
+                    .forEach { id -> if (runCatching { playbackClient.closeLiveStream(a, id) }.getOrNull() !is ClientResult.Success) supersededClean = false }
+                rejectedDecisions.distinctBy { it.playSessionId }
+                    .filter { it.method == PlayMethod.Transcode && it.playSessionId != null && it.playSessionId != decision.playSessionId }
+                    .forEach { old -> if (runCatching { playbackClient.stopEncoding(a, requireNotNull(old.playSessionId)) }.getOrNull() !is ClientResult.Success) supersededClean = false }
+                if (supersededClean) {
+                    rejectedDecisions.clear()
+                    rejectedDecisions += decision
+                }
+            }
+            currentCoroutineContext().ensureActive()
+        } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+        if (!supersededClean) {
+            discardPreparedPlayer()
+            events.log("playback superseded-source cleanup=failed")
+            publish(g) { it.copy(error = "The previous live source could not be released. Playback did not start. Check the server connection before tuning again.") }
+            return
+        }
         val streams = decision.mediaSource.mediaStreams
         val ai = negotiatedAudio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
         val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)
@@ -568,8 +629,8 @@ class DesktopController(
         val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
-        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000), error = takeCarriedReportError()) }
-        seekTarget = null
+        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000, liveChannel = liveChannel), error = takeCarriedReportError()) }
+        seekTarget = null; pausedLivePosition = null
         try {
             viewingMutex.withLock {
                 currentCoroutineContext().ensureActive()
@@ -579,7 +640,10 @@ class DesktopController(
             currentCoroutineContext().ensureActive()
         }
         catch (e: Throwable) {
-            if (e is CancellationException) throw e
+            if (e is CancellationException) {
+                withContext(NonCancellable) { finishViewing() }
+                throw e
+            }
             if (e is VirtualMachineError || e is ThreadDeath) throw e
             recordDesktopPlayerFailure("open", e)
             runCatching { player.close() }
@@ -598,7 +662,7 @@ class DesktopController(
                     if (v.closing || viewing !== v) break
                     val snap = player.snapshot()
                     mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
-                        paused = snap.paused, ready = snap.ready)) else s }
+                        paused = snap.paused, ready = snap.ready, liveWindow = snap.liveWindow, bufferExpired = snap.liveWindow?.pausedPositionExpired(pausedLivePosition) == true)) else s }
                     if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); mutable.update { it.copy(error = snap.error) }; break }
                     if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
                     if (snap.ready && !v.startAttempted) v.reports.withLock {
@@ -619,7 +683,13 @@ class DesktopController(
                     elapsed++
                     if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
-                    if (snap.ended) { onPhysicalEnd(v, snap); break }
+                    if (snap.ended) {
+                        if (liveChannel != null || v.decision.isLive) {
+                            mutable.update { it.copy(error = "The live stream ended. Return to Live TV and tune again.") }
+                            scope.launch { finishViewing() }
+                        } else onPhysicalEnd(v, snap)
+                        break
+                    }
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
@@ -656,9 +726,38 @@ class DesktopController(
             viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } }
         }
     }
-    fun playerToggle() { if (viewing?.closing == true) return; engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
+    @Volatile private var pausedLivePosition: Long? = null
+    fun goLive() {
+        val p = mutable.value.playback ?: return
+        val w = runCatching { engine?.snapshot()?.liveWindow }.getOrNull() ?: return
+        val edge = w.goLivePosition() ?: return
+        engine?.seek((w.offsetMs + edge) / 1000.0)
+        pausedLivePosition = null
+        if (p.paused) engine?.togglePause()
+    }
+    fun playerToggle() {
+        val p = mutable.value.playback
+        if (p?.liveChannel != null || p?.decision?.isLive == true) {
+            val snap = runCatching { engine?.snapshot() }.getOrNull() ?: return
+            val w = snap.liveWindow ?: return
+            if (!w.canTimeShift) return
+            if (snap.paused && w.pausedPositionExpired(pausedLivePosition)) { goLive(); return }
+            pausedLivePosition = if (!snap.paused) (snap.positionSeconds * 1000).toLong() else null
+        }
+        if (viewing?.closing == true) return; engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
     fun seek(seconds: Double) {
         if (viewing?.closing == true || !seconds.isFinite()) return
+        val p = mutable.value.playback
+        if (p?.liveChannel != null || p?.decision?.isLive == true) {
+            val w = runCatching { engine?.snapshot()?.liveWindow }.getOrNull() ?: return
+            val edge = w.goLivePosition() ?: return
+            if (!w.canTimeShift || p.bufferExpired) return
+            val target = (seconds * 1000).toLong().coerceIn(w.offsetMs, w.offsetMs + edge) / 1000.0
+            engine?.seek(target)
+            seekTarget = target; seekTargetAt = System.nanoTime()
+            if (p.paused) pausedLivePosition = (target * 1000).toLong()
+            return
+        }
         val duration = mutable.value.playback?.durationSeconds?.takeIf { it > 0 }
         val target = seconds.coerceAtLeast(0.0).let { if (duration != null) it.coerceAtMost(duration) else it }
         engine?.seek(target)
@@ -708,8 +807,8 @@ class DesktopController(
         val requestedSubtitleCodec = subtitle?.takeIf { it >= 0 }?.let { index -> p.subtitleTracks.firstOrNull { it.index == index }?.codec }
         page(DesktopRoute.Player) { g ->
             finishViewing()
-            prepareViewing(g, a, p.item, p.positionSeconds, audio ?: p.audioIndex, subtitle ?: p.subtitleIndex, p.decision.mediaSourceId,
-                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec)
+            prepareViewing(g, a, p.item, if (p.isLiveChannel) 0.0 else p.positionSeconds, audio ?: p.audioIndex, subtitle ?: p.subtitleIndex, p.decision.mediaSourceId,
+                current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec, p.liveChannel)
         }
     }
     /** Manual "Next episode" in the control bar, or Play now on the end card. */
@@ -733,6 +832,14 @@ class DesktopController(
         page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, item, 0.0) }
     }
     fun stopPlayback() {
+        if (mutable.value.playback?.let { it.liveChannel != null || it.decision.isLive } == true) {
+            synchronized(history) { if (history.lastOrNull()?.route == DesktopRoute.LiveTv) history.removeAt(history.lastIndex) }
+            page(DesktopRoute.LiveTv) { g ->
+                finishViewing()
+                publish(g) { it.copy(playback = null, detail = null) }
+            }
+            return
+        }
         // page() clears the playback before this block runs, so read the end state first.
         val finished = mutable.value.playback?.end != null
         page(DesktopRoute.Detail) { g -> stopPlaybackPage(g, finished) }
@@ -774,6 +881,12 @@ class DesktopController(
         }
     }
     private suspend fun releaseEncoding(v: Viewing): Boolean {
+        val live = v.decision.ownedLiveStreamId
+        val closed = live == null || runCatching { playbackClient.closeLiveStream(v.account, live) }.getOrNull() is ClientResult.Success
+        val encoding = releaseEncodingOnly(v)
+        return closed && encoding
+    }
+    private suspend fun releaseEncodingOnly(v: Viewing): Boolean {
         val session = v.decision.playSessionId ?: return true
         if (v.decision.method != PlayMethod.Transcode) return true
         return runCatching { playbackClient.stopEncoding(v.account, session) }.getOrNull() is ClientResult.Success
