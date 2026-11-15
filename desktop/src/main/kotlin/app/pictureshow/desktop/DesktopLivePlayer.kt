@@ -40,7 +40,7 @@ internal fun DesktopPlaybackState.canTimeShift(): Boolean = liveWindow?.canTimeS
             Text(when {
                 p.bufferExpired -> "Buffer expired · Go live to resume"
                 w == null || !w.canTimeShift -> "Time shift unavailable"
-                p.paused -> "Paused${behind?.let { " · −${clock(it / 1000.0)}" } ?: ""}"
+                p.paused -> if (w.atLiveEdge(position, p.bufferExpired)) "Paused · At live edge" else "Paused${behind?.let { " · −${clock(it / 1000.0)}" } ?: ""}"
                 behind != null && !edge -> "−${clock(behind / 1000.0)} behind live"
                 else -> "At live edge"
             }, style = MaterialTheme.typography.bodySmall)

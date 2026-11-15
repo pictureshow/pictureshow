@@ -35,12 +35,12 @@ import java.util.Date
 fun DesktopLiveTvPage(c: DesktopController) {
     val state by c.liveTv.state.collectAsState()
     val account = c.state.value.account
-    LiveTvPage(state, account, c.liveTv, c::tuneChannel, c::play, c::back)
+    LiveTvPage(state, account, c.liveTv, c::tuneChannel, c::play, c::back, c::detail)
 }
 
 @Composable
 internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLiveTv,
-                        tune: (LiveChannel) -> Unit, play: (MediaItem) -> Unit, back: () -> Unit) {
+                        tune: (LiveChannel) -> Unit, play: (MediaItem) -> Unit, back: () -> Unit, detail: (MediaItem) -> Unit = {}) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
     val fresh = s.actionsAvailable(now) && !s.writing
@@ -89,7 +89,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             val none = when {
                 s.loading && s.fetchedAt == null -> "Loading Live TV…"
                 s.offline && s.fetchedAt == null -> "Live TV couldn’t load"
-                s.channels.isEmpty() -> "No channels available"
+                s.channels.isEmpty() && s.tab in listOf(DesktopLiveTab.Channels, DesktopLiveTab.Guide) -> if (s.tunerEnabled == false) "Live TV is not set up" else "No channels available"
                 channels.isEmpty() && s.tab in listOf(DesktopLiveTab.Channels, DesktopLiveTab.Guide) -> if (s.favorites && s.search.isBlank()) "No favorite channels" else "No matching channels"
                 else -> null
             }
@@ -113,7 +113,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                                 LiveChannelMark(channel, account)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(listOfNotNull(channel.number, channel.name).joinToString(" · "), style = MaterialTheme.typography.titleMedium)
-                                    Text(current?.let { "Now · ${it.name} · ${liveRange(it.startDate, it.endDate)}" } ?: if (programs.isEmpty()) "No guide data" else "Nothing on now", style = MaterialTheme.typography.bodyMedium)
+                                    Text(current?.let { "Now · ${it.name} · ${liveRange(it.startDate, it.endDate)}" } ?: if (s.offline) "Guide unavailable" else if (s.loading) "Updating guide…" else if (programs.isEmpty()) "No guide data" else "Nothing on now", style = MaterialTheme.typography.bodyMedium)
                                     next?.let { Text("Next · ${liveClock(liveInstant(it.startDate))} · ${it.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                     current?.let { p ->
                                         val start = liveInstant(p.startDate)!!; val end = liveInstant(p.endDate)!!
@@ -140,6 +140,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                         items(recordings, key = { "recording:${it.id}" }) { item ->
                             ListItem(headlineContent = { Text(item.name) }, supportingContent = { Text(listOfNotNull(if (item.isInProgress) "Recording now" else item.recordingStatus?.let(::recordingStatus), if (item.userData.playbackPositionTicks > 0) "Resume from ${clock(item.userData.playbackPositionTicks / 10_000_000.0)}" else "Recorded video").joinToString(" · ")) },
                                 trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton({ detail(item) }, modifier = Modifier.controlFocus().probe("live:recording-details:${item.id}")) { Text("Details") }
                                     Button({ play(item) }, enabled = fresh, modifier = Modifier.controlFocus().probe("live:recording:${item.id}")) { Text(if (item.userData.playbackPositionTicks > 0) "Resume" else "Play") }
                                     if (item.canDelete == true || s.policy?.deleteContent == true && item.canDelete != false) TextButton({ confirmation = LiveConfirmation(item = item) }, enabled = fresh, modifier = Modifier.controlFocus()) { Text("Delete…") }
                                 } })
@@ -247,7 +248,8 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         FilterChip(linear, { linear = !linear }, label = { Text("List view") }, modifier = Modifier.controlFocus().probe("live:guide:list"))
     }
     val programs = guidePrograms(s.programs, channels.map { it.id }.toSet(), iso(s.start), iso(s.start + DesktopLiveTv.WINDOW))
-    if (programs.isEmpty()) LiveEmpty("No guide data", "You can still watch channels. Your server administrator can add a guide source in Jellyfin’s Live TV settings.", "Go to channels", { owner.tab(DesktopLiveTab.Channels) })
+    if (programs.isEmpty() && s.offline) LiveEmpty("Guide unavailable", "The guide couldn’t be loaded. Retry before tuning or scheduling.", "Retry", { owner.refresh() })
+    else if (programs.isEmpty()) LiveEmpty("No guide data", "You can still watch channels. Your server administrator can add a guide source in Jellyfin’s Live TV settings.", "Go to channels", { owner.tab(DesktopLiveTab.Channels) })
     else if (linear) LiveScroll(vertical) {
         channels.forEach { channel ->
             item(key = "heading:${channel.id}") { Text(listOfNotNull(channel.number, channel.name).joinToString(" · "), Modifier.padding(top = 8.dp).semantics { heading() }, style = MaterialTheme.typography.titleMedium) }
@@ -297,19 +299,34 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) { Spacer(Modifier.width(channelWidth)); HorizontalScrollbar(rememberScrollbarAdapter(horizontal), Modifier.weight(1f)) }
     }
     if (datePicker) {
-        val local = Instant.ofEpochMilli(s.start).atZone(ZoneId.systemDefault())
-        var date by remember { mutableStateOf(local.toLocalDate().toString()) }
-        var time by remember { mutableStateOf(local.toLocalTime().toString().take(5)) }
-        var error by remember { mutableStateOf<String?>(null) }
+        val zone = ZoneId.systemDefault()
+        val initial = Instant.ofEpochMilli(s.start).atZone(zone).toLocalDate()
+        var day by remember { mutableStateOf(initial) }
+        var selected by remember { mutableStateOf(s.start) }
+        var daysOpen by remember { mutableStateOf(false) }
+        var timesOpen by remember { mutableStateOf(false) }
+        val first = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        // Enumerating instants offers both fall-back offsets and never offers a nonexistent spring hour.
+        val times = remember(day) { generateSequence(first) { it + 1_800_000 }.takeWhile { it < end }.toList() }
         AlertDialog(onDismissRequest = { datePicker = false }, title = { Text("Guide date and time") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(date, { date = it }, label = { Text("Date (YYYY-MM-DD)") }, singleLine = true)
-            OutlinedTextField(time, { time = it }, label = { Text("Time (HH:MM, 24-hour)") }, singleLine = true)
-            Text("Local time · ${ZoneId.systemDefault().id}", style = MaterialTheme.typography.bodySmall)
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        } }, dismissButton = { TextButton({ datePicker = false }) { Text("Cancel") } }, confirmButton = { Button({
-            runCatching { java.time.LocalDateTime.parse("${date}T$time").atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }
-                .onSuccess { owner.moveWindow(it); datePicker = false }.onFailure { error = "Enter a valid date and time." }
-        }) { Text("Show guide") } })
+            Box {
+                OutlinedButton({ daysOpen = true }) { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(day)) }
+                DropdownMenu(daysOpen, { daysOpen = false }) {
+                    val today = Instant.now().atZone(zone).toLocalDate()
+                    (listOf(initial) + (0L..6L).map { today.plusDays(it) }).distinct().forEach { date ->
+                        DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
+                    }
+                }
+            }
+            Box {
+                OutlinedButton({ timesOpen = true }) { Text(liveClock(selected)) }
+                DropdownMenu(timesOpen, { timesOpen = false }, modifier = Modifier.heightIn(max = 280.dp)) {
+                    times.forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, onClick = { selected = instant; timesOpen = false }) }
+                }
+            }
+            Text("Local time · ${zone.id}", style = MaterialTheme.typography.bodySmall)
+        } }, dismissButton = { TextButton({ datePicker = false }) { Text("Cancel") } }, confirmButton = { Button({ owner.moveWindow(selected); datePicker = false }) { Text("Show guide") } })
     }
 }
 

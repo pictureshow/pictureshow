@@ -191,7 +191,7 @@ internal fun LibraryPage(state: DesktopState, c: DesktopController) {
     val grid = rememberLazyGridState()
     LaunchedEffect(state.library?.id, state.sortBy, state.descending) { grid.scrollToItem(0) }
     LaunchedEffect(grid, state.items.size) { snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if(it >= state.items.size-12 && !state.busy && state.items.size < state.total) c.loadMore() } }
-    if (state.library?.let(c::isLiveTvView) == true) { LiveTvComingPage(state.library); return }
+    if (state.library?.let(c::isLiveTvView) == true) { DesktopLiveTvPage(c); return }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             CatalogHeading(state.library?.name ?: "Library", Modifier.weight(1f))
@@ -212,22 +212,7 @@ internal fun LibraryPage(state: DesktopState, c: DesktopController) {
         }
     }
 }
-/** D-5 interim (web W-5's copy): Live TV is its own port (spec live-tv.md, gap C34); never "This library is empty." */
-@Composable
-internal fun LiveTvComingPage(view: MediaItem) {
-    Column(Modifier.fillMaxSize().padding(24.dp).probe("livetv-coming"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        CatalogHeading(view.name)
-        Column(Modifier.widthIn(max = 640.dp).semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CatalogHeading("Live TV is coming to the desktop app", section = true)
-            Text(
-                "This desktop app can't show your server's channels and guide yet. You can watch Live TV today in the " +
-                    "Pictureshow app for Android TV, Google TV, Fire TV and Android phones.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
+
 
 @Composable
 internal fun DetailPage(state: DesktopState, c: DesktopController) {

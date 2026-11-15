@@ -117,11 +117,15 @@ class DesktopCatalogPagesTest {
         }
     }
 
-    @Test fun liveTvOpensAnHonestInterimPageNotAnEmptyLibrary() = runComposeUiTest {
+    @Test fun liveTvOpensNativeTabsInsteadOfAnInterimPageOrEmptyLibrary() = runComposeUiTest {
         controller().use { c ->
             val live = MediaItem("live", "Live TV", "UserView", collectionType = "livetv", isFolder = true)
             window(DesktopState(route = DesktopRoute.Library, account = account, library = live), c) { LibraryPage(DesktopState(route = DesktopRoute.Library, account = account, library = live), c) }
-            onNodeWithText("Live TV is coming to the desktop app").assertExists()
+            onNodeWithText("Channels").assertExists()
+            onNodeWithText("Guide").assertExists()
+            onNodeWithText("Recordings").assertExists()
+            onNodeWithText("Schedules").assertExists()
+            onNodeWithText("Live TV is coming to the desktop app").assertDoesNotExist()
             onNodeWithText("Pictureshow app for Android TV", substring = true).assertExists()
             onNodeWithText("This library is empty.").assertDoesNotExist()
             onNodeWithText("0 items").assertDoesNotExist()
