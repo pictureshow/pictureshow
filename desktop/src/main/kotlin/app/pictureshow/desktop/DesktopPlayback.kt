@@ -162,6 +162,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var proxy: DesktopMediaProxy? = null
     private var layer: NativeLayer? = null
     @Volatile private var surface: Pointer? = null
+    private val receiptAccess = DesktopNativeReceiptAccess()
     private var nativeOwner: DesktopNativeOwner<Pointer>? = null
     private val playerRelease = DesktopPlayerRelease { mpv?.close(); mpv = null }
     private val stopped = AtomicBoolean(false)
@@ -270,14 +271,14 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
                     }
                 },
                 finish = { target -> check(bridge.ps_finish(target) >= 0) { "Native GPU drain failed" } },
-                destroy = { target -> bridge.ps_destroy(target); surface = null },
+                destroy = { target -> receiptAccess.close { surface = null; bridge.ps_destroy(target) } },
                 player = playerRelease,
                 failed = { if (!stopped.get()) failure.set("The video surface stopped. Return to the title and try again.") }
             )
             nativeOwner = owner
             render.submit(owner)
-            val createdSurface = owner.created.get(40, TimeUnit.SECONDS)
-            if (Platform.isMac()) File(directory, "native-surface.json").writeText(bridge.ps_receipt(createdSurface))
+            owner.created.get(40, TimeUnit.SECONDS)
+            if (Platform.isMac()) nativeReceipt()?.let { File(directory, "native-surface.json").writeText(it) }
             fun sync() { if (stopped.get()) return; val t = w.graphicsConfiguration.defaultTransform; pixels.set(Dimension((w.width * t.scaleX).toInt(), (w.height * t.scaleY).toInt())); surface?.let(bridge::ps_sync) }
             onEdt {
                 listener = object : ComponentAdapter() { override fun componentMoved(e: ComponentEvent) = sync(); override fun componentResized(e: ComponentEvent) = sync() }
@@ -320,9 +321,10 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     }
     private fun currentHdrOutput(): HdrOutput {
         linux?.let { return it.hdrOutput() }
-        val receipt = runCatching { surface?.let { layer?.ps_receipt(it) } }.getOrNull()
+        val receipt = runCatching { nativeReceipt() }.getOrNull()
         return nativeHdrOutput(if (Platform.isMac()) "mac" else "windows", receipt)
     }
+    private fun nativeReceipt(): String? = receiptAccess.read { surface?.let { layer?.ps_receipt(it) } }
     @Synchronized override fun selectAudio(index: Int): Boolean {
         val d = sourceDecision ?: return false
         if (d.method == PlayMethod.Transcode) return false
@@ -375,7 +377,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null
         val dimensions=mpv?.get("osd-dimensions")?.let { Json.parseToJsonElement(it) } ?: return null
         val (top,bottom)=viewportMargins.get()
-        val submitted = surface?.let { target -> layer?.ps_receipt(target) }?.let { Json.parseToJsonElement(it).jsonObject["submittedFrames"] }
+        val submitted = nativeReceipt()?.let { Json.parseToJsonElement(it).jsonObject["submittedFrames"] }
         return buildJsonObject { put("topRatio",top);put("bottomRatio",bottom);put("dimensions",dimensions);put("submittedFrames",submitted ?: JsonNull) }.toString()
     }
     private fun applyViewport() {
@@ -407,6 +409,17 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (errors.isNotEmpty()) throw IllegalStateException("The player could not complete every native cleanup step", errors.first())
     }
     private fun onEdt(block: () -> Unit) { if (SwingUtilities.isEventDispatchThread()) block() else SwingUtilities.invokeAndWait(block) }
+}
+
+/** Native receipts borrow mutable bridge storage. Copy under one lock, and drain readers before destruction. */
+internal class DesktopNativeReceiptAccess {
+    private var closed = false
+    @Synchronized fun <T> read(copy: () -> T): T? = if (closed) null else copy()
+    @Synchronized fun close(destroy: () -> Unit) {
+        if (closed) return
+        closed = true
+        destroy()
+    }
 }
 /** A handle has one release action even if caller and owning native thread finish together. */
 internal class DesktopPlayerRelease(private val releaseHandle: () -> Unit) {
