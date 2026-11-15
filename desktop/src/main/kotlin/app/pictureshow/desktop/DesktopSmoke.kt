@@ -564,7 +564,18 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
         waitFor("natural EOF autoplay",35){c.state.value.playback?.let{it.ready&&it.item.id!=episode.id}==true};checks["autoplayNext"]=true
         click("stop");ready(DesktopRoute.Detail);click("nav:settings");ready(DesktopRoute.Settings);screenshot("11-settings");screenshot("11b-settings-minimum",listOf(800 to 600));if(System.getenv("PICTURESHOW_SMOKE_4K")=="1") screenshot("11c-settings-4k",listOf(3840 to 2160))
         click("conversion");ready(DesktopRoute.Settings);check(!c.state.value.settings.conversionNotice);click("conversion");ready(DesktopRoute.Settings);checks["settings"]=true
-        click("nav:accounts");ready(DesktopRoute.Accounts);screenshot("12-accounts")
+        // D-1: every sidebar destination stays inside the minimum window with Living-room size on.
+        click("large-interface");waitFor("Living-room size on"){c.state.value.settings.largeInterface&&!c.state.value.busy}
+        SwingUtilities.invokeAndWait { windowState.placement=WindowPlacement.Floating;windowState.size=DpSize(800.dp,600.dp);window.setSize(800,600) }
+        waitFor("minimum window"){window.width==800&&window.height==600}
+        for(tag in listOf("nav:account","nav:home","nav:settings")) waitFor("$tag inside the 800x600 window with Living-room size") {
+            val scale=window.graphicsConfiguration.defaultTransform.scaleY
+            DesktopUiProbe.bounds[tag]?.let { it.height>0f && it.top>=0f && it.bottom<=window.height*scale+0.5 && it.right<=window.width*scale+0.5 }==true
+        }
+        screenshot("11d-settings-minimum-living-room",listOf(800 to 600))
+        SwingUtilities.invokeAndWait { windowState.size=DpSize(1280.dp,800.dp);window.setSize(1280,800) }
+        click("large-interface");waitFor("Living-room size off"){!c.state.value.settings.largeInterface&&!c.state.value.busy}
+        click("nav:account");click("account-menu:switch");ready(DesktopRoute.Accounts);screenshot("12-accounts")
         val removeKey=c.state.value.accounts.first().key
         click("remove:$removeKey");waitFor("removal dialog initially focuses Cancel") { DesktopUiProbe.focus["remove-cancel"]==true };screenshot("12b-remove-confirmation");waitFor("Cancel remains focused after capture") { DesktopUiProbe.focus["remove-cancel"]==true }
         key(KeyEvent.VK_LEFT);key(KeyEvent.VK_DOWN)

@@ -67,7 +67,7 @@ class DesktopController(
         val g = generation.incrementAndGet()
         pageJob?.cancel()
         if (route !in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect)) { pendingQuick = null; quickOwner = null }
-        mutable.update { it.copy(route = route, busy = true, error = null, errorKind = null) }
+        mutable.update { it.copy(route = route, busy = true, error = null, errorKind = null, root = desktopRootFor(route, it.root)) }
         pageJob = scope.launch {
             try {
                 if (before.route == DesktopRoute.Player && route != DesktopRoute.Player) {
@@ -175,7 +175,8 @@ class DesktopController(
             }
         }
     }
-    fun accounts() = page(DesktopRoute.Accounts) { _ -> snapshotAccounts() }
+    // Back from the picker returns to the page it was opened from (D-6); re-opening it doesn't stack.
+    fun accounts() = page(DesktopRoute.Accounts, remember = mutable.value.route != DesktopRoute.Accounts) { _ -> snapshotAccounts() }
     fun addServer() = page(DesktopRoute.Servers) { _ -> }
     fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
@@ -208,7 +209,7 @@ class DesktopController(
     fun home() = page(DesktopRoute.Home) { g -> synchronized(history) { history.clear() }; loadHome(g) }
     private suspend fun loadHome(g: Long) = coroutineScope {
         val a = mutable.value.account ?: return@coroutineScope
-        publish(g) { it.copy(route = DesktopRoute.Home) }
+        publish(g) { it.copy(route = DesktopRoute.Home, root = DESKTOP_ROOT_HOME) }
         val views = async { attempt(g, a) { client.views(a) }?.items.orEmpty() }
         val resume = async { attempt(g, a) { client.resume(a) }?.items.orEmpty() }
         val next = async { attempt(g, a) { client.nextUp(a) }?.items.orEmpty() }
@@ -219,6 +220,8 @@ class DesktopController(
         val rows = assembleHome(libraries, resume.await(), next.await(), latest)
         publish(g) { it.copy(homeRows = rows) }
     }
+    /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
+    fun browseRoot(library: MediaItem) { browse(library); mutable.update { it.copy(root = desktopLibraryRoot(library.id)) } }
     fun open(item: MediaItem) {
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
@@ -282,7 +285,7 @@ class DesktopController(
             publish(g) { it.copy(detail = it.detail?.copy(userData = ud), homeRows = it.homeRows.map { row -> row.copy(items = row.items.map { card -> if (card.id == d.id) card.copy(userData = ud) else card }) }, items = it.items.map { card -> if (card.id == d.id) card.copy(userData = ud) else card }) }
         }
     }
-    fun settings() = page(DesktopRoute.Settings, remember = true) { _ -> }
+    fun settings() = page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> }
     fun saveSettings(settings: DesktopSettings) = page(DesktopRoute.Settings) { g -> settingsStore.write(settings); publish(g) { it.copy(settings = settings) }; engine?.volume(settings.volume) }
     fun back() {
         val s = mutable.value

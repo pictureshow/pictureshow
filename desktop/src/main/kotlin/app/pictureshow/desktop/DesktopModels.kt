@@ -58,5 +58,17 @@ data class DesktopState(
     val episodes: List<MediaItem> = emptyList(),
     val selectedSeason: MediaItem? = null,
     val settings: DesktopSettings = DesktopSettings(),
-    val playback: DesktopPlaybackState? = null
+    val playback: DesktopPlaybackState? = null,
+    /** TOUCH-02: the sidebar root this page was opened under, stored when it opens; Detail keeps its opener's root. */
+    val root: String? = null
 )
+
+internal const val DESKTOP_ROOT_HOME = "home"
+internal const val DESKTOP_ROOT_SETTINGS = "settings"
+internal fun desktopLibraryRoot(id: String) = "library:$id"
+/** A root page owns itself; any other page keeps the root it was opened from. */
+internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = when (route) {
+    DesktopRoute.Home -> DESKTOP_ROOT_HOME
+    DesktopRoute.Settings -> DESKTOP_ROOT_SETTINGS
+    else -> previous
+}

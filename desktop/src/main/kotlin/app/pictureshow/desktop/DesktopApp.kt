@@ -136,6 +136,10 @@ internal fun ShortcutRow(keys: String, action: String) {
 @Composable
 fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscreen: Boolean, windowKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit,
     macChrome: Boolean = false,
+    /** Receives the bubble-phase handler: keys that no focused control consumed. */
+    windowFallbackKeys: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean) -> Unit = {},
+    /** macOS keeps ⌘, for the app menu's Settings item; elsewhere Ctrl+, is the window shortcut. */
+    macShortcuts: Boolean = macChrome,
     chrome: @Composable (@Composable () -> Unit) -> Unit = { it() },
     windowControls: @Composable RowScope.() -> Unit = {}) {
     val state by controller.state.collectAsState()
@@ -152,11 +156,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
         if(!state.busy) {
             delay(150)
             if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
-                val target = DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
+                // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
+                // when the player page provides one) or on nothing, so Space and arrows reach playback.
+                val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }
+                else DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
                     DesktopRoute.Servers -> "server-address"
                     DesktopRoute.SignIn -> "username"
                     DesktopRoute.Detail -> "play"
-                    DesktopRoute.Player -> "pause"
                     DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
                     DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" }
                     else -> null
@@ -192,7 +198,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 hoverColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
         ) {
-            // Window shortcuts remain active when resize or pointer input clears a
+            // Preview phase: only what must win over every control (fullscreen, and keeping
+            // modal dialogs modal). It stays active when resize or pointer input clears a
             // child's focus, and when focus is in the custom title bar.
             SideEffect { windowKeys { e ->
                     if (e.type != KeyEventType.KeyDown) false
@@ -201,16 +208,34 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
                         (help || remove != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
-                        e.key == Key.Escape && fullscreen -> { onFullscreen(); true }
-                        e.key == Key.Escape -> { controller.back(); true }
-                        state.route == DesktopRoute.Player && !help && remove == null && e.key == Key.Spacebar -> { controller.playerToggle(); true }
-                        state.route == DesktopRoute.Player && e.key == Key.DirectionLeft && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) - 10); true }
-                        state.route == DesktopRoute.Player && e.key == Key.DirectionRight && !e.isAltPressed -> { controller.seek((state.playback?.positionSeconds ?: 0.0) + 10); true }
-                        state.route in listOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> {
-                            focus.moveFocus(when(e.key) { Key.DirectionLeft -> FocusDirection.Left; Key.DirectionRight -> FocusDirection.Right; Key.DirectionUp -> FocusDirection.Up; else -> FocusDirection.Down }); true
-                        }
                         else -> false
                     }
+            } }
+            // Bubble phase (D-7, D-12): keys reach the window only after the focused control and
+            // its groups declined them, so a focused button keeps Space and a row keeps its arrows.
+            SideEffect { windowFallbackKeys { e ->
+                if (help || remove != null) return@windowFallbackKeys false
+                val typed = (e.nativeKeyEvent as? java.awt.event.KeyEvent)?.takeIf { it.id == java.awt.event.KeyEvent.KEY_TYPED }?.keyChar
+                if (e.type != KeyEventType.KeyDown && typed == null) return@windowFallbackKeys false
+                val press = ShellKeyPress(e.key, e.isCtrlPressed, e.isMetaPressed, e.isAltPressed, e.isShiftPressed, typed)
+                if (typed != null && typed != '?') return@windowFallbackKeys false
+                val action = shellFallbackAction(press, state.route, DesktopUiProbe.focus.values.any { it }, fullscreen, macShortcuts, state.account != null)
+                    ?: return@windowFallbackKeys false
+                when (action) {
+                    ShellAction.ExitFullscreen -> onFullscreen()
+                    ShellAction.Back -> controller.back()
+                    ShellAction.Fullscreen -> onFullscreen()
+                    ShellAction.TogglePlay -> controller.playerToggle()
+                    ShellAction.SeekBack -> controller.seek((state.playback?.positionSeconds ?: 0.0) - 10)
+                    ShellAction.SeekForward -> controller.seek((state.playback?.positionSeconds ?: 0.0) + 10)
+                    ShellAction.Help -> { modalReturnFocus = DesktopUiProbe.focus.entries.firstOrNull { it.value }?.key; help = true }
+                    ShellAction.Settings -> if (state.route != DesktopRoute.Settings) controller.settings()
+                    ShellAction.Left -> focus.moveFocus(FocusDirection.Left)
+                    ShellAction.Right -> focus.moveFocus(FocusDirection.Right)
+                    ShellAction.Up -> focus.moveFocus(FocusDirection.Up)
+                    ShellAction.Down -> focus.moveFocus(FocusDirection.Down)
+                }
+                true
             } }
             CompositionLocalProvider(LocalModalOpen provides (help || remove != null)) {
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
@@ -218,30 +243,27 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.Settings) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
                     windowControls()
                 }
                 }
-                Row(Modifier.weight(1f)) {
+                // The body is a directional fence: arrows never walk out of it into the title bar's
+                // icons (D-7); Tab and Shift+Tab still reach them.
+                Row(Modifier.weight(1f).directionalFence()) {
                     if (sidebarAccount != null && state.route !in listOf(DesktopRoute.Player, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Accounts, DesktopRoute.Servers)) {
-                        Column(Modifier.width(184.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(sidebarAccount.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-
-                            DesktopTooltip(sidebarAccount.server.name) {
-
-                                Text(sidebarAccount.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = sidebarAccount.server.name })
-                            }
-                            NavigationDrawerItem(label = { Text("Home", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.route == DesktopRoute.Home, onClick = controller::home, modifier = Modifier.controlFocus().probe("nav:home"))
-                            state.homeRows.filter { it.library }.flatMap { it.items }.forEach { library ->
-                                NavigationDrawerItem(label = { Text(library.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.library?.id == library.id && state.route == DesktopRoute.Library, onClick = { controller.browse(library) }, modifier = Modifier.controlFocus().probe("nav:library:${library.id}"))
-                            }
-                            Spacer(Modifier.weight(1f))
-                            NavigationDrawerItem(label = { Text("Settings", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = state.route == DesktopRoute.Settings, onClick = controller::settings, modifier = Modifier.controlFocus().probe("nav:settings"))
-                            NavigationDrawerItem(label = { Text("Accounts", maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = false, onClick = controller::accounts, modifier = Modifier.controlFocus().probe("nav:accounts"))
-                        }
+                        DesktopSidebar(
+                            account = sidebarAccount,
+                            libraries = state.homeRows.filter { it.library }.flatMap { it.items },
+                            root = state.root,
+                            onHome = controller::home,
+                            onLibrary = controller::browseRoot,
+                            onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
+                            onAccounts = controller::accounts,
+                            onSignOut = controller::signOut
+                        )
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         state.error?.takeIf { state.errorKind != ErrorKind.INVALID_CREDENTIALS }?.let { error ->
@@ -274,22 +296,137 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     }
                 }
             }
-            if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Anywhere", style = MaterialTheme.typography.titleSmall)
-                ShortcutRow(if (macChrome) "Tab / ⇧Tab" else "Tab / Shift+Tab", "Move between controls")
-                ShortcutRow("↑ ↓ ← →", "Browse cards and menus")
-                ShortcutRow("Enter / Space", "Activate focused control")
-                ShortcutRow("Esc", "Close a dialog, exit fullscreen, or go back")
-                ShortcutRow(if (macChrome) "⌃⌘F" else "F11 / Alt+Enter", "Fullscreen")
-                HorizontalDivider()
-                Text("During playback", style = MaterialTheme.typography.titleSmall)
-                ShortcutRow("Space", "Pause or play")
-                ShortcutRow("← / →", "Seek 10 seconds")
-                Text("Playback actions are also available in the control bar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
+            if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = {
+                val sheet = rememberScrollState()
+                Box {
+                Column(Modifier.verticalScroll(sheet).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    desktopShortcutSheet(macShortcuts, macChrome).forEachIndexed { i, section ->
+                        if (i > 0) HorizontalDivider()
+                        Text(section.title, style = MaterialTheme.typography.titleSmall)
+                        section.rows.forEach { (keys, action) -> ShortcutRow(keys, action) }
+                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+                VerticalScrollbar(rememberScrollbarAdapter(sheet), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+                }
+            }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
             remove?.let { a ->
                 AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus(allowInModal = true).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { modalReturnFocus = null; remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus(allowInModal = true).probe("remove-confirm")) { Text("Remove account") } }) }
             }
+        }
+    }
+}
+
+internal data class ShortcutSection(val title: String, val rows: List<Pair<String, String>>, val note: String? = null)
+
+/** The ? sheet. The playback rows are the PLAY-29 set; the player page owns M and the volume keys. */
+internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<ShortcutSection> = listOf(
+    ShortcutSection("Anywhere", listOf(
+        (if (mac) "Tab / ⇧Tab" else "Tab / Shift+Tab") to "Move between controls",
+        "↑ ↓ ← →" to "Browse cards and menus",
+        "Enter / Space" to "Activate focused control",
+        "Esc" to "Close a dialog, exit fullscreen, or go back",
+        (if (mac) "⌘," else "Ctrl+,") to "Settings",
+        (if (macChrome) "⌃⌘F" else "F11 / Alt+Enter") to "Fullscreen",
+        "?" to "This list"
+    )),
+    ShortcutSection("During playback", listOf(
+        "Space / K" to "Play or pause",
+        "← → / J L" to "Back or forward 10 seconds",
+        "↑ / ↓" to "Volume up or down",
+        "M" to "Mute or unmute",
+        "F" to "Full screen",
+        "Esc" to "Close a panel, hide the controls, then leave the player"
+    ), note = "Space and the arrows act on the video when no button has focus. Playback actions are also in the control bar.")
+)
+
+/** Arrow keys never leave this group (D-7); Tab and Shift+Tab still do. */
+internal fun Modifier.directionalFence(): Modifier = focusProperties {
+    onExit = { if (requestedFocusDirection != FocusDirection.Next && requestedFocusDirection != FocusDirection.Previous) cancelFocusChange() }
+}.focusGroup()
+
+internal const val SIDEBAR_WIDTH_DP = 208
+
+/**
+ * The sidebar (D-1, D-6, D-14): an account menu on top, a scrolling list of Home and the
+ * libraries with its own scrollbar, and a pinned footer, so every destination stays inside the
+ * window at 800×600 with Living-room size and any number of libraries. Focus moving into a
+ * hidden item scrolls it into view.
+ */
+@Composable
+internal fun DesktopSidebar(
+    account: Account,
+    libraries: List<MediaItem>,
+    root: String?,
+    onHome: () -> Unit,
+    onLibrary: (MediaItem) -> Unit,
+    onSettings: () -> Unit,
+    onAccounts: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
+        DesktopAccountMenu(account, onSettings, onAccounts, onSignOut, Modifier.padding(horizontal = 12.dp))
+        Spacer(Modifier.height(8.dp))
+        val scroll = rememberScrollState()
+        Box(Modifier.weight(1f).fillMaxWidth().testTag("sidebar-list")) {
+            Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SidebarItem("Home", root == DESKTOP_ROOT_HOME, "nav:home", onHome)
+                libraries.forEach { library ->
+                    SidebarItem(library.name, root == desktopLibraryRoot(library.id), "nav:library:${library.id}") { onLibrary(library) }
+                }
+            }
+            VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 2.dp))
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        // Pinned footer. Search joins it above Settings when it exists (D-2); no placeholder until then.
+        Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SidebarItem("Settings", root == DESKTOP_ROOT_SETTINGS, "nav:settings", onSettings)
+        }
+    }
+}
+
+/** A destination: up to two lines, and a tooltip with the full name when even two don't fit (D-14). */
+@Composable
+private fun SidebarItem(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+    var clipped by remember(label) { mutableStateOf(false) }
+    TooltipArea(
+        tooltip = { if (clipped) Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = RoundedCornerShape(4.dp)) {
+            Text(label, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface)
+        } },
+        delayMillis = 500,
+        tooltipPlacement = TooltipPlacement.CursorPoint(alignment = Alignment.BottomCenter, offset = DpOffset(0.dp, 24.dp))
+    ) {
+        NavigationDrawerItem(
+            label = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis, onTextLayout = { clipped = it.hasVisualOverflow }) },
+            selected = selected, onClick = onClick,
+            modifier = Modifier.heightIn(min = 48.dp).controlFocus().probe(tag)
+        )
+    }
+}
+
+/** The name and server as one button with a chevron; its menu holds Switch account, Settings and Sign out (D-6, CAT-01a). */
+@Composable
+private fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccounts: () -> Unit, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        DesktopTooltip("${account.user.name} on ${account.server.name}") {
+            Surface(onClick = { open = true }, shape = RoundedCornerShape(12.dp), color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth().controlFocus(RoundedCornerShape(12.dp)).probe("nav:account")
+                    .semantics { contentDescription = "${account.user.name} on ${account.server.name}. Account menu"; role = Role.DropdownList }) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(account.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(account.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(DesktopGlyph.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
+            DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.probe("account-menu:switch"))
+            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.probe("account-menu:settings"))
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; onSignOut() }, modifier = Modifier.probe("account-menu:sign-out"))
         }
     }
 }
