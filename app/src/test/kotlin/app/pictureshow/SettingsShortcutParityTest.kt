@@ -263,6 +263,7 @@ class SettingsShortcutParityTest {
         panelChoice("Audio passthrough").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
         verifyDisabledRows()
         closePanel()
-        compose.onNodeWithTag("settings:advanced:Audio output").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
+        compose.onNodeWithTag("settings:advanced:Audio output")
+            .assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
     }
 }

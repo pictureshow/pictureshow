@@ -116,8 +116,11 @@ class SettingsOrderTest {
         // Each group's rows sit under its own heading and above the next one.
         val groups = mapOf(
             "Playback & quality" to listOf(
-                "settings:advanced:Network quality", "settings:advanced:Playback", "settings:conversion-notice",
-                "settings:music-quality", "settings:phone-remote"
+                "settings:advanced:Network quality",
+                "settings:advanced:Playback",
+                "settings:conversion-notice",
+                "settings:music-quality",
+                "settings:phone-remote"
             ),
             "Subtitles" to listOf("settings:advanced:Subtitle appearance", "settings:advanced:Subtitle conversion"),
             "Audio & video output" to listOf("settings:advanced:Audio output", "settings:advanced:Video output", "settings:this-tv"),

@@ -150,7 +150,8 @@ class AccessibilitySemanticsTest {
             }
         }
         // The switch lives in Audio output, the one place it appears on TV (T-9).
-        compose.onNodeWithTag("settings:advanced:Audio output").performSemanticsAction(SemanticsActions.OnClick) { kotlin.test.assertTrue(it()) }
+        compose.onNodeWithTag("settings:advanced:Audio output")
+            .performSemanticsAction(SemanticsActions.OnClick) { kotlin.test.assertTrue(it()) }
         compose.waitForIdle()
         val toggle = compose.onNodeWithTag("settings:Audio passthrough")
         toggle.assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
