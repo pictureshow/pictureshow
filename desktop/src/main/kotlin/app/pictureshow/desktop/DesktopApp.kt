@@ -463,7 +463,7 @@ internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String, blocked
         if (state.route == DesktopRoute.Search) {
             delay(150)
             if (!blockedNow && !destinationHasFocus()) {
-                val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
+                val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey]?.takeIf { DesktopUiProbe.requestFocus.containsKey(it) } ?: "search-field"
                 runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
             }
         }

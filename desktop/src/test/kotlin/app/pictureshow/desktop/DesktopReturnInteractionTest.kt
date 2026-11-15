@@ -126,18 +126,21 @@ class DesktopReturnInteractionTest {
     }
 
     @Test fun delayedPageEntryDoesNotTakeFocusFromAModal() = runComposeUiTest {
+        var blocked by mutableStateOf(false)
         mainClock.autoAdvance = false
         setContent {
             MaterialTheme {
                 Column {
                     CompositionLocalProvider(LocalDesktopPage provides "Settings") {
                         Button({}, Modifier.probe("sign-out")) { Text("Page action") }
-                        DesktopPageEntryFocus(DesktopState(route = DesktopRoute.Settings), "Settings", blocked = true)
+                        DesktopPageEntryFocus(DesktopState(route = DesktopRoute.Settings), "Settings", blocked = blocked)
                     }
                     Button({}, Modifier.probe("modal-control")) { Text("Modal action") }
                 }
             }
         }
+        runOnIdle { blocked = true }
+        mainClock.advanceTimeByFrame()
         runOnIdle { DesktopUiProbe.requestFocus.getValue("modal-control").requestFocus() }
         mainClock.advanceTimeBy(300)
         waitForIdle()
