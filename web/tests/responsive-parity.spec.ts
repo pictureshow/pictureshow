@@ -70,7 +70,20 @@ test("focused TV card metadata and selected track rows keep WCAG text contrast",
         expect(failures).toEqual([]);
     };
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.locator('[data-focus="resume:movie"]').focus();
+    await page.keyboard.press("Shift");
+    // Sample the first focus frame: animating only the background briefly puts
+    // dark focused text on the old dark card, even when settled contrast passes.
+    const firstFrame = await page
+        .locator('[data-focus="resume:movie"]')
+        .evaluate((element: HTMLElement) => {
+            element.focus();
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, color: style.color };
+        });
+    expect(firstFrame).toEqual({
+        background: "rgb(230, 225, 229)",
+        color: "rgb(49, 48, 51)",
+    });
     await contrast();
     await page.keyboard.press("Enter");
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(

@@ -59,6 +59,9 @@ video:focus-visible {
 button:focus-visible,
 button[data-ring]:focus {
     background: #494151;
+    /* Focus can swap foreground and background to a light treatment. Change
+       those colors together so the first frame retains readable contrast. */
+    transition: transform 0.15s;
 }
 header {
     display: flex;
