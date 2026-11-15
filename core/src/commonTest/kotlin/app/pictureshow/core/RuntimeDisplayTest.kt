@@ -24,10 +24,20 @@ class RuntimeDisplayTest {
         assertEquals("10h 30m", runtimeLabel(378_000_000_000))
         assertEquals("1h 2m", runtimeLabel(37_230_000_000))
         assertEquals("1m", runtimeLabel(600_000_000))
-        assertEquals("1m", runtimeLabel(1))
+        assertEquals("1 s", runtimeLabel(1))
         assertEquals("", runtimeLabel(null))
         assertEquals("", runtimeLabel(0))
         assertEquals("", runtimeLabel(-1))
+    }
+
+    @Test
+    fun aClipUnderAMinuteNamesItsSecondsInsteadOfOneMinute() {
+        assertEquals("31 s", runtimeLabel(310_000_000))
+        assertEquals("31 s", runtimeLabel(312_000_000))
+        assertEquals("1 s", runtimeLabel(2_000_000))
+        assertEquals("59 s", runtimeLabel(599_999_999))
+        assertEquals("1m", runtimeLabel(600_000_000))
+        assertEquals("1m", runtimeLabel(1_190_000_000))
     }
 
     @Test

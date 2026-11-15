@@ -142,6 +142,19 @@ const pendingApplicationCases = new Map([
     ["catalog-announcement-season-count", "catalog-announcement"],
     ["catalog-announcement-empty", "catalog-announcement"],
     ["catalog-announcement-resume", "catalog-announcement"],
+    // Desktop real-user round (D-15, P-7): sub-minute runtimes and library placeholder kinds.
+    ["runtime-label-under-minute", "runtime-label"],
+    ["runtime-label-tiny", "runtime-label"],
+    ["runtime-label-just-under-minute", "runtime-label"],
+    ["runtime-label-one-minute", "runtime-label"],
+    ["runtime-label-hours", "runtime-label"],
+    ["runtime-label-implausible", "runtime-label"],
+    ["placeholder-kind-movies", "catalog-placeholder-kind"],
+    ["placeholder-kind-shows", "catalog-placeholder-kind"],
+    ["placeholder-kind-livetv", "catalog-placeholder-kind"],
+    ["placeholder-kind-unknown-library", "catalog-placeholder-kind"],
+    ["placeholder-kind-boxset", "catalog-placeholder-kind"],
+    ["placeholder-kind-title", "catalog-placeholder-kind"],
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))

@@ -146,7 +146,9 @@ fun runtimeLabel(ticks: Long?): String {
     // A generous 24-hour display ceiling rejects overflow-derived DVD runtimes. Neither chapters
     // (start positions) nor an EOF playhead after a seek establishes a replacement total. Omit it.
     if (ticks == null || ticks !in 1..864_000_000_000L) return ""
-    val minutes = (ticks / 600_000_000).coerceAtLeast(1)
+    // A clip under a minute names its seconds; "1m" for 31 s overstated it (CAT-05). Never "0 s" or "60 s".
+    if (ticks < 600_000_000) return "${((ticks + 5_000_000) / 10_000_000).coerceIn(1, 59)} s"
+    val minutes = ticks / 600_000_000
     val hours = minutes / 60
     return if (hours > 0) "${hours}h ${minutes % 60}m" else "${minutes}m"
 }
@@ -179,4 +181,30 @@ fun detailPlayItem(item: MediaItem?, nextUp: List<MediaItem>, episodes: List<Med
     "Season" -> episodes.firstOrNull { !it.userData.played } ?: episodes.firstOrNull()
     "Movie", "Episode", "Video" -> item
     else -> null
+}
+
+/**
+ * What a library-like tile with no art shows instead (CAT-20): the kind of media it holds, never an initial.
+ * Null for a title, which keeps the title's own fallback. Platforms map each kind to their own icon.
+ */
+fun catalogPlaceholderKind(item: MediaItem): String? {
+    val library = item.type in setOf("CollectionFolder", "UserView") || (item.type == "Folder" && item.collectionType != null)
+    return when {
+        library -> when (item.collectionType) {
+            "movies" -> "movies"
+            "tvshows" -> "shows"
+            "music" -> "music"
+            "musicvideos", "homevideos" -> "videos"
+            "photos" -> "photos"
+            "books" -> "books"
+            "livetv" -> "livetv"
+            "playlists" -> "playlists"
+            "boxsets" -> "collections"
+            else -> "folder"
+        }
+        item.type == "BoxSet" -> "collections"
+        item.type == "Playlist" -> "playlists"
+        item.type == "Folder" -> "folder"
+        else -> null
+    }
 }

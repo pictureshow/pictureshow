@@ -231,6 +231,8 @@ class DesktopController(
     }
     /** A sidebar library: its top page, lit as its own root (TOUCH-02). Folders opened inside it keep this root. */
     fun browseRoot(library: MediaItem) { browse(library); mutable.update { it.copy(root = desktopLibraryRoot(library.id)) } }
+    /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
+    internal fun isLiveTvView(item: MediaItem) = item.collectionType == "livetv"
     fun open(item: MediaItem) {
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
@@ -240,6 +242,8 @@ class DesktopController(
             val a = mutable.value.account ?: return@page
             nextPageIndex = 0
             publish(g) { it.copy(library = item, sortBy = sortBy, descending = descending, items = emptyList(), total = 0) }
+            // D-5 interim: the Live TV view has no browsable children here; LibraryPage explains instead of "empty".
+            if (isLiveTvView(item)) return@page
             val p = attempt(g, a) { client.items(a, BrowseQuery(item.id, sortBy = sortBy, descending = descending)) } ?: return@page
             if (generation.get() == g) nextPageIndex = p.startIndex + p.items.size
             publish(g) { it.copy(items = p.items.distinctBy(MediaItem::id), total = p.totalRecordCount) }
@@ -247,7 +251,7 @@ class DesktopController(
     }
     fun loadMore() {
         val before = mutable.value
-        if (before.route != DesktopRoute.Library || before.busy || nextPageIndex >= before.total) return
+        if (before.route != DesktopRoute.Library || before.busy || nextPageIndex >= before.total || before.library?.let(::isLiveTvView) == true) return
         val a = before.account ?: return; val library = before.library ?: return
         val g = generation.get(); val startIndex = nextPageIndex; mutable.update { it.copy(busy = true) }
         pageJob = scope.launch {
