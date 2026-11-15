@@ -6,7 +6,7 @@ package app.pictureshow.desktop
 import androidx.compose.ui.input.key.Key
 
 /** What a window-level key does once every focused control has had its turn (the bubble phase). */
-internal enum class ShellAction { Back, ExitFullscreen, Fullscreen, TogglePlay, SeekBack, SeekForward, Help, Settings, Left, Right, Up, Down }
+internal enum class ShellAction { Back, ExitFullscreen, Fullscreen, TogglePlay, SeekBack, SeekForward, Help, Search, Settings, Left, Right, Up, Down }
 
 /** One key press as the shell sees it; [char] is the typed character when the platform reports one. */
 internal data class ShellKeyPress(
@@ -19,9 +19,9 @@ internal data class ShellKeyPress(
 )
 
 /** Pages whose fields take typed text, where letters and ? are never shortcuts. */
-internal val DESKTOP_TYPING_ROUTES = setOf(DesktopRoute.Servers, DesktopRoute.SignIn, DesktopRoute.QuickConnect)
+internal val DESKTOP_TYPING_ROUTES = setOf(DesktopRoute.Servers, DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Search)
 /** Pages that show the sidebar, where the Settings shortcut applies. */
-internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings)
+internal val DESKTOP_SIDEBAR_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person)
 private val ARROW_ROUTES = setOf(DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Accounts, DesktopRoute.Settings)
 
 /**
@@ -43,6 +43,7 @@ internal fun shellFallbackAction(
 ): ShellAction? {
     if (press.key == Key.Escape && !press.ctrl && !press.meta && !press.alt) return if (fullscreen) ShellAction.ExitFullscreen else ShellAction.Back
     val command = if (mac) press.meta && !press.ctrl else press.ctrl && !press.meta
+    if (command && !press.alt && !press.shift && press.key == Key.F) return if (signedIn && route in DESKTOP_SIDEBAR_ROUTES) ShellAction.Search else null
     if (command && !press.alt && press.key == Key.Comma) return if (signedIn && route in DESKTOP_SIDEBAR_ROUTES) ShellAction.Settings else null
     if (press.ctrl || press.meta || press.alt) return null
     val typing = route in DESKTOP_TYPING_ROUTES

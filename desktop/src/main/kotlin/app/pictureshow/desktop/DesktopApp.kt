@@ -171,6 +171,13 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
             }
         }
     }
+    LaunchedEffect(state.returnFocus, pageKey) {
+        state.returnFocus?.let { tag ->
+            delay(100)
+            DesktopUiProbe.requestFocus[tag]?.requestFocus()
+            controller.returnFocusDone()
+        }
+    }
     val focus = LocalFocusManager.current
     var help by remember { mutableStateOf(false) }
     var remove by remember { mutableStateOf<Account?>(null) }
@@ -231,6 +238,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     ShellAction.SeekBack -> controller.seek((state.playback?.positionSeconds ?: 0.0) - 10)
                     ShellAction.SeekForward -> controller.seek((state.playback?.positionSeconds ?: 0.0) + 10)
                     ShellAction.Help -> { modalReturnFocus = DesktopUiProbe.focus.entries.firstOrNull { it.value }?.key; help = true }
+                    ShellAction.Search -> controller.search()
                     ShellAction.Settings -> if (state.route != DesktopRoute.Settings) controller.settings()
                     ShellAction.Left -> focus.moveFocus(FocusDirection.Left)
                     ShellAction.Right -> focus.moveFocus(FocusDirection.Right)
@@ -245,7 +253,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.Settings) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -261,6 +269,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             libraries = state.homeRows.filter { it.library }.flatMap { it.items },
                             root = state.root,
                             onHome = controller::home,
+                            onSearch = controller::search,
                             onLibrary = controller::browseRoot,
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
@@ -287,6 +296,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.QuickConnect -> QuickConnectPage(state, controller)
                                 DesktopRoute.Accounts -> AccountsPage(state, controller, onRemove = { a -> modalReturnFocus = "remove:${a.key}"; remove = a })
                                 DesktopRoute.Home -> HomePage(state, controller)
+                                DesktopRoute.Search -> SearchPage(state, controller)
+                                DesktopRoute.Person -> SearchPersonPage(state, controller)
                                 DesktopRoute.Library -> LibraryPage(state, controller)
                                 DesktopRoute.Detail -> DetailPage(state, controller)
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
@@ -332,6 +343,7 @@ internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<Shortc
         (if (macChrome) "⌃⌘F" else "F11 / Alt+Enter") to "Fullscreen",
         "?" to "This list"
     )),
+    ShortcutSection("Browsing", listOf((if (mac) "⌘F" else "Ctrl+F") to "Search your libraries"), note = "Search opens with the field focused. Down enters results; Escape goes back. Unavailable during playback."),
     ShortcutSection("During playback", listOf(
         "Space / K" to "Play or pause",
         "← → / J L" to "Back or forward 10 seconds",
@@ -361,6 +373,7 @@ internal fun DesktopSidebar(
     libraries: List<MediaItem>,
     root: String?,
     onHome: () -> Unit,
+    onSearch: () -> Unit = {},
     onLibrary: (MediaItem) -> Unit,
     onSettings: () -> Unit,
     onAccounts: () -> Unit,
@@ -380,8 +393,9 @@ internal fun DesktopSidebar(
             VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 2.dp))
         }
         HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
-        // Pinned footer. Search joins it above Settings when it exists (D-2); no placeholder until then.
+        // Search and Settings stay reachable independently of the number of libraries.
         Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SidebarItem("Search", root == DESKTOP_ROOT_SEARCH, "nav:search", onSearch)
             SidebarItem("Settings", root == DESKTOP_ROOT_SETTINGS, "nav:settings", onSettings)
         }
     }

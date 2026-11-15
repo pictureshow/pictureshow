@@ -107,7 +107,7 @@ class CorpusVectorsTest {
                     "sync-source",
                     "sync-state"
                 ),
-            "grid-vectors" to setOf("grid-navigation", "home-browse"),
+            "grid-vectors" to setOf("grid-navigation", "home-browse", "search-presentation"),
             "live-vectors" to setOf("live-guide", "live-dvr", "live-source"),
             "android-native-vectors" to
                 setOf(
