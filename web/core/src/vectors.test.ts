@@ -47,6 +47,7 @@ import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
 import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
+import * as playbackFormats from "./playback-formats";
 import { controlProjection, controlSuites, runControlCase } from "./control";
 import { playerTrackLabels } from "../../src/player-track-labels";
 const spec =
@@ -173,6 +174,7 @@ for (const file of files) {
             "application",
             "recovery",
             "playback-information",
+            "playback-formats",
             ...controlSuites,
             ...pendingPortSuites,
         ].includes(suite.suite) ||
@@ -247,6 +249,16 @@ for (const file of files) {
                 const i = c.input,
                     ctx = suite.context;
                 let value: unknown;
+                if (suite.suite === "playback-formats") {
+                    switch (c.operation) {
+                        case "range": value = playbackFormats.sourceRange(i.range, i.profile); break;
+                        case "decoder": value = playbackFormats.decoder(i.hwdec); break;
+                        case "display": value = playbackFormats.display(i.transfer, i.output); break;
+                        default: throw new Error("Unknown playback format operation");
+                    }
+                    expect(value).toEqual(c.expected);
+                    return;
+                }
                 if (suite.suite === "playback-information") {
                     // One strict runner: unknown operations and malformed inputs throw.
                     expect(playbackInformation.runVector(c)).toEqual(
