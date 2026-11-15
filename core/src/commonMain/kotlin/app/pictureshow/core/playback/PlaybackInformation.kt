@@ -136,13 +136,7 @@ object PlaybackInformation {
 
     /** PLAY-26: what Playback info leads with. [remedies] are shared; a platform adds its own for a video limit. */
     /** [method] and [heading] follow [kind], so a Transcode that only repackages reads as a direct stream. */
-    data class Explanation(
-        val kind: String,
-        val method: String,
-        val heading: String?,
-        val summary: String,
-        val remedies: List<String>
-    )
+    data class Explanation(val kind: String, val method: String, val heading: String?, val summary: String, val remedies: List<String>)
 
     private val videoWhat: List<Pair<Set<String>, String>> = listOf(
         setOf("videocodecnotsupported") to "video format",
