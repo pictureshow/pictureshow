@@ -559,7 +559,11 @@ three-profile native layout/paint suite includes the640×360 joined-player case.
 Phone overlay controls outside the bottom panel need picture backing over bright
 video. While the controls are visible, a30–40% black whole-picture scrim sits after
 the decoded picture and before subtitles and chrome. Hiding the controls removes
-this scrim, while the group chip remains visible. The existing bottom gradient
+this scrim, while the group chip remains visible. Both touch seek actions also use
+a40% black circular backing and white Material replay/forward-10 ink. This local
+backing combines with the picture scrim to preserve glyph contrast even over a
+white frame; ordinary VOD keeps its24dp Material glyph, while the larger live mark
+remains live-only. The existing bottom gradient
 continues to deepen the panel and preserve subtitle placement. Right-edge Quality
 text aligns optically with the total clock within2dp; its target remains at least
 48dp. Native white-picture paint and actual text-ink profiles check these outcomes,

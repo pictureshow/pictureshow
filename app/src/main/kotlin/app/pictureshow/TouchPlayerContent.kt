@@ -612,7 +612,14 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 val canSeek = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
-                PlayerIconButton("back10", "Back 10 seconds", Modifier.testTag("touch:back10"), enabled = canSeek, liveSeek = host.isLive) {
+                PlayerIconButton(
+                    "back10",
+                    "Back 10 seconds",
+                    Modifier.testTag("touch:back10"),
+                    enabled = canSeek,
+                    liveSeek = host.isLive,
+                    videoSeekBacking = true
+                ) {
                     host.seek(-TOUCH_SEEK_STEP_MS)
                 }
                 FilledIconButton(
@@ -636,7 +643,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                     "Forward 10 seconds",
                     Modifier.testTag("touch:forward10"),
                     enabled = canSeek && liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired),
-                    liveSeek = host.isLive
+                    liveSeek = host.isLive,
+                    videoSeekBacking = true
                 ) {
                     host.seek(TOUCH_SEEK_STEP_MS)
                 }

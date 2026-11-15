@@ -13,7 +13,7 @@
       "id": "bright-video-whole-seek-target-backing-and-hidden-release",
       "profile": "actual-player-native-paint",
       "input": {"widthDp":640,"heightDp":360,"fontScale":1.0,"videoArgb":"FFFFFFFF","targetTags":["touch:back10","touch:forward10"],"controlsInitiallyVisible":true},
-      "expected": {"seekTargetSizeDp":48,"borderInsetDp":2,"minimumVideoChannelWhenShown":140,"maximumVideoChannelWhenShown":190,"maximumHiddenWhiteChannelDelta":2,"bottomGradientStillDeepens":true}
+      "expected": {"seekTargetSizeDp":48,"borderInsetDp":2,"minimumVideoChannelWhenShown":90,"maximumVideoChannelWhenShown":190,"maximumSeekLocalBackingChannel":110,"maximumHiddenWhiteChannelDelta":2,"bottomGradientStillDeepens":true}
     },
     {
       "id": "quality-and-total-clock-painted-right-edge",

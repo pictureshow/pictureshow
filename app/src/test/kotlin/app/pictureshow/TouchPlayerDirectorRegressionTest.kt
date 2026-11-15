@@ -346,6 +346,16 @@ class TouchPlayerDirectorRegressionTest {
             val bounds = node.fetchSemanticsNode().boundsInRoot
             assertEquals(e.number("seekTargetSizeDp"), bounds.width / density, 1f)
             assertEquals(e.number("seekTargetSizeDp"), bounds.height / density, 1f)
+            // The circular local backing must protect the Material glyph, beyond the whole-picture scrim.
+            // At 16dp from center this samples backing outside its 24dp glyph and inside the 48dp circle.
+            for (direction in listOf(-1, 1)) {
+                val x = (bounds.center.x + direction * 16f * density - frame.left).roundToInt()
+                val y = (bounds.center.y - frame.top).roundToInt()
+                assertTrue(
+                    rgb(shown.getPixel(x, y)).all { it <= e.number("maximumSeekLocalBackingChannel") },
+                    "Bright-video seek needs local contrast backing: ($x,$y)=${rgb(shown.getPixel(x, y))}"
+                )
+            }
             // Probe the full target perimeter, away from the centered 24dp white glyph.
             // This rejects backing that protects only the glyph or only one part of the target.
             val inset = e.number("borderInsetDp") * density

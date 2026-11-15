@@ -71,18 +71,19 @@ internal fun PlayerIconButton(
     enabled: Boolean = true,
     state: String? = null,
     liveSeek: Boolean = false,
+    videoSeekBacking: Boolean = false,
     onClick: () -> Unit
 ) {
     IconButton(
         onClick,
         modifier.size(48.dp)
-            .then(if (liveSeek) Modifier.background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape) else Modifier)
+            .then(if (liveSeek || videoSeekBacking) Modifier.background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape) else Modifier)
             .semantics {
                 contentDescription = label
                 state?.let { stateDescription = it }
             },
         enabled = enabled,
-        colors = if (liveSeek) {
+        colors = if (liveSeek || videoSeekBacking) {
             IconButtonDefaults.iconButtonColors(
                 contentColor = Color.White,
                 disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
