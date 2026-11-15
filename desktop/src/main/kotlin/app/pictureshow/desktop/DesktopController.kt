@@ -53,6 +53,8 @@ class DesktopController(
     /** A report error from a viewing that has closed; shown by whatever opens next instead of being wiped (D-4). */
     @Volatile private var carriedReportError: String? = null
     private var endJob: Job? = null
+    @Volatile private var informationOpen = false
+    fun playbackInformationOpen(open: Boolean) { informationOpen = open }
     @Volatile private var seekTarget: Double? = null
     @Volatile private var seekTargetAt = 0L
     private data class Viewing(
@@ -457,6 +459,7 @@ class DesktopController(
             if (outcome is PlayOutcome.Unplayable) publish(g) { it.copy(error = outcome.message) }
             return
         }
+        informationOpen = false
         val decision = outcome.decision
         val streams = decision.mediaSource.mediaStreams
         val ai = negotiatedAudio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
@@ -517,7 +520,7 @@ class DesktopController(
                     elapsed++
                     if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
-                    if (snap.ended) { onPhysicalEnd(v, snap); break }
+                    if (snap.ended && !informationOpen && !snap.informationOpen) { onPhysicalEnd(v, snap); break }
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {

@@ -752,4 +752,22 @@ class DesktopControllerTest {
         }
     }
 
+    @Test fun playbackInfoDefersEndCardAndAutoplayUntilClosed(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }, endCountdownSeconds = 0).use { c ->
+                c.login(f); c.play(MediaItem("movie", "Film", "Movie"))
+                c.await { it.playback?.ready == true }
+                c.playbackInformationOpen(true)
+                engine.ended = true
+                delay(1200)
+                assertNull(c.state.value.playback?.end)
+                assertFalse(engine.closed)
+                c.playbackInformationOpen(false)
+                c.await { it.playback?.end != null }
+                poll { engine.closed }
+            }
+        }
+    }
+
 }

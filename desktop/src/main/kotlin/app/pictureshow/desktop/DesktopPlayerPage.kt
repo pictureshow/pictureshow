@@ -132,7 +132,9 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
     LaunchedEffect(flashSerial) { if (flash != null) { delay(1500); flash = null } }
     // PLAY-29: the playback surface holds focus when a viewing opens, so every key works before anything is clicked.
     LaunchedEffect(p.decision) { withFrameNanos { }; runCatching { surfaceFocus.requestFocus() } }
-    LaunchedEffect(p.end != null) { if (p.end != null) menu = null }
+    LaunchedEffect(p.end != null) { if (p.end != null && menu != "info") menu = null }
+    LaunchedEffect(menu == "info") { c.playbackInformationOpen(menu == "info") }
+    DisposableEffect(c) { onDispose { c.playbackInformationOpen(false) } }
     val current by rememberUpdatedState(p)
     val currentMenu by rememberUpdatedState(menu)
     val currentFullscreen by rememberUpdatedState(fullscreen)

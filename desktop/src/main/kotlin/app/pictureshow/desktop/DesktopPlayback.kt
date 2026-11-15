@@ -78,7 +78,7 @@ internal fun nativeSubtitleOrdinal(streams: List<MediaStream>, index: Int): Int?
 
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
     val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false,
-    val received: DesktopReceivedFormats = DesktopReceivedFormats())
+    val received: DesktopReceivedFormats = DesktopReceivedFormats(), val informationOpen: Boolean = false)
 
 /** A per-viewing loopback capability. Every redirect and HLS reference is checked before credentials leave the process. */
 internal class DesktopMediaProxy(private val account: Account, private val decision: PlayDecision) : AutoCloseable {
@@ -306,7 +306,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             durationSeconds = (p.get("duration")?.toDoubleOrNull() ?: 0.0) + offset,
             paused = p.get("pause") == "yes", ready = ready,
             ended = p.get("eof-reached") == "yes", error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true,
-            received = if (ready) receivedFormats(p::get, currentHdrOutput()) else DesktopReceivedFormats()
+            received = if (ready) receivedFormats(p::get, currentHdrOutput()) else DesktopReceivedFormats(),
+            informationOpen = linux?.informationOpen() == true
         )
     }
     private fun currentHdrOutput(): HdrOutput {
@@ -476,6 +477,8 @@ private class LinuxPlayerWindow(
     private val pause: () -> Unit, private val skip: (Double) -> Unit, private val releasePlayer: () -> Unit,
     private val info: () -> List<PlaybackInfoSection>
 ) : AutoCloseable {
+    private val showingInfo = androidx.compose.runtime.mutableStateOf(false)
+    fun informationOpen() = showingInfo.value
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "pictureshow-wayland-ui").apply { isDaemon = true } }
     private val running = AtomicBoolean(true)
     private val failure = AtomicReference<String?>(null)
@@ -499,7 +502,6 @@ private class LinuxPlayerWindow(
                 var width = 0; var height = 0
                 val paused = androidx.compose.runtime.mutableStateOf(false)
                 val infoScroll = androidx.compose.foundation.ScrollState(0)
-                var showingInfo by androidx.compose.runtime.mutableStateOf(false)
                 var sections by androidx.compose.runtime.mutableStateOf(emptyList<PlaybackInfoSection>())
                 var dirty = true
                 var lastUpdate = System.nanoTime()
@@ -516,10 +518,10 @@ private class LinuxPlayerWindow(
                         scene = androidx.compose.ui.ImageComposeScene(width = w, height = h) {
                             androidx.compose.material.MaterialTheme(colors = androidx.compose.material.darkColors()) {
                                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
-                                    if (showingInfo) {
+                                    if (showingInfo.value) {
                                         androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF141820)).padding(24.dp)) {
                                             androidx.compose.material.Text("Playback info", style = androidx.compose.material.MaterialTheme.typography.h6)
-                                            androidx.compose.material.OutlinedButton(onClick = { showingInfo = false }) { androidx.compose.material.Text("Close") }
+                                            androidx.compose.material.OutlinedButton(onClick = { showingInfo.value = false }) { androidx.compose.material.Text("Close") }
                                             androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f).verticalScroll(infoScroll), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
                                                 sections.forEach { section ->
                                                     androidx.compose.material.Text(section.title, style = androidx.compose.material.MaterialTheme.typography.subtitle1)
@@ -531,7 +533,7 @@ private class LinuxPlayerWindow(
                                     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth().background(androidx.compose.ui.graphics.Color(0xEE141820)).padding(12.dp)) {
                                         androidx.compose.material.Text("Playback controls · Space pause · ←/→ seek · F fullscreen · Esc return", color = androidx.compose.ui.graphics.Color.White)
                                         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-                                            androidx.compose.material.OutlinedButton(onClick = { sections = info(); showingInfo = true }) { androidx.compose.material.Text("Playback info (I)") }
+                                            androidx.compose.material.OutlinedButton(onClick = { sections = info(); showingInfo.value = true }) { androidx.compose.material.Text("Playback info (I)") }
                                             androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }) { androidx.compose.material.Text("Back to title") }
                                             androidx.compose.material.Button(onClick = pause) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
                                             androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }) { androidx.compose.material.Text("Back 10s") }
@@ -554,11 +556,11 @@ private class LinuxPlayerWindow(
                                 val pressed = event[0] == 3
                                 val awt = java.awt.event.KeyEvent(fakeComponent, if (pressed) java.awt.event.KeyEvent.KEY_PRESSED else java.awt.event.KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0, code, java.awt.event.KeyEvent.CHAR_UNDEFINED)
                                 val keyEvent = androidx.compose.ui.input.key.KeyEvent(awt)
-                                val scrollTarget = if (showingInfo && pressed) playbackInfoScrollTarget(keyEvent.key, infoScroll.value, infoScroll.maxValue) else null
+                                val scrollTarget = if (showingInfo.value && pressed) playbackInfoScrollTarget(keyEvent.key, infoScroll.value, infoScroll.maxValue) else null
                                 val consumed = if (scrollTarget != null) { kotlinx.coroutines.runBlocking { infoScroll.scrollTo(scrollTarget) }; true } else scene!!.sendKeyEvent(keyEvent)
-                                if (pressed && !consumed && (!showingInfo || code == java.awt.event.KeyEvent.VK_ESCAPE)) when (code) {
-                                    java.awt.event.KeyEvent.VK_ESCAPE -> if (showingInfo) showingInfo = false else exitRequested = true
-                                    java.awt.event.KeyEvent.VK_I -> { sections = info(); showingInfo = true }
+                                if (pressed && !consumed && (!showingInfo.value || code == java.awt.event.KeyEvent.VK_ESCAPE)) when (code) {
+                                    java.awt.event.KeyEvent.VK_ESCAPE -> if (showingInfo.value) showingInfo.value = false else exitRequested = true
+                                    java.awt.event.KeyEvent.VK_I -> { sections = info(); showingInfo.value = true }
                                     java.awt.event.KeyEvent.VK_SPACE -> pause()
                                     java.awt.event.KeyEvent.VK_F -> fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0)
                                     java.awt.event.KeyEvent.VK_LEFT -> skip(-10.0)
@@ -568,7 +570,7 @@ private class LinuxPlayerWindow(
                         }
                         dirty = true
                     }
-                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); paused.value = mpv.get("pause") == "yes"; if (showingInfo) sections = info(); dirty = true }
+                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); paused.value = mpv.get("pause") == "yes"; if (showingInfo.value) sections = info(); dirty = true }
                     val sc = scene!!
                     if (dirty || sc.hasInvalidations()) {
                         sc.render(System.nanoTime()).use { image ->
