@@ -32,6 +32,14 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
     val scope = rememberCoroutineScope()
     val field = remember { FocusRequester() }
     val firstTag = search.rows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "search:${row.key}:${it.id}" } }
+    val firstRowIndex = (if (search.storageError != null) 1 else 0) + (if (search.completed && (search.someFailed || search.libraryError)) 1 else 0)
+    val enterResults: () -> Unit = {
+        firstTag?.let { tag -> scope.launch {
+            list.scrollToItem(firstRowIndex)
+            androidx.compose.runtime.withFrameNanos { }
+            DesktopUiProbe.requestFocus[tag]?.requestFocus()
+        } }
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val contentWidth = (maxWidth - 48.dp).coerceAtLeast(120.dp)
     // Whole cards fill the viewport; the scrollbar reveals that more cards follow without a clipped sliver.
@@ -50,14 +58,14 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                     modifier = Modifier.fillMaxWidth().focusRequester(field).probe("search-field")
                         .onPreviewKeyEvent { e ->
                             if (e.type == KeyEventType.KeyDown && !e.isAltPressed && !e.isCtrlPressed && !e.isMetaPressed && e.key == Key.DirectionDown && firstTag != null) {
-                                scope.launch { list.scrollToItem(0); androidx.compose.runtime.withFrameNanos { }; DesktopUiProbe.requestFocus[firstTag]?.requestFocus() }; true
+                                enterResults(); true
                             } else false
                         },
                     label = { Text("Search your libraries") }, singleLine = true,
                     placeholder = { Text("Movies, shows, people, music…") },
                     trailingIcon = { if (search.query.isNotEmpty()) TextButton(onClick = { c.searchQuery(""); field.requestFocus() }, modifier = Modifier.controlFocus().probe("search-clear")) { Text("Clear") } },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { c.rememberSearch(); if (firstTag != null) DesktopUiProbe.requestFocus[firstTag]?.requestFocus() })
+                    keyboardActions = KeyboardActions(onSearch = { c.rememberSearch(); enterResults() })
                 )
                 if (search.loading) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Searching" })
             }
@@ -70,7 +78,7 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     CatalogHeading("Recent searches", section = true)
                                     search.recent.forEachIndexed { i, term -> TextButton(onClick = { c.searchQuery(term, immediate = true); field.requestFocus() }, modifier = Modifier.controlFocus().probe("search-recent:$i")) { Text(term) } }
-                                    InlineTextAction("Clear recent searches", "search-clear-recent", { c.rememberSearch(clear = true) })
+                                    InlineTextAction("Clear recent searches", "search-clear-recent", { c.rememberSearch(clear = true); field.requestFocus() })
                                 }
                             }
                         }
@@ -78,8 +86,8 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                     search.storageError?.let { item { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                     if (search.completed && (search.someFailed || search.libraryError)) item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SearchMessage(if (search.allFailed) "Search couldn't connect" else "Some results are unavailable", if (search.allFailed) "Check your connection and try again." else if (search.libraryError) "Some library names couldn't load. Try again to tell copies apart." else "The results that loaded are shown below. Try again for the remaining groups.")
-                            InlineTextAction("Retry", "search-retry", { c.searchQuery(search.query, immediate = true) })
+                            SearchMessage(if (search.allFailed) "Search is unavailable" else "Some results are unavailable", if (search.allFailed) "Check your server or connection, then try again." else if (search.libraryError) "Some library names couldn't load. Try again to tell copies apart." else "The results that loaded are shown below. Try again for the remaining groups.")
+                            InlineTextAction("Retry", "search-retry", { c.searchQuery(search.query, immediate = true); field.requestFocus() })
                         }
                     }
                     if (search.completed && !search.someFailed && search.rows.isEmpty()) item { SearchMessage("No results for “${normalizeSearch(search.query)}”", "Try another title, person or artist.") }

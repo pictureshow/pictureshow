@@ -149,6 +149,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
         DesktopRoute.Detail -> ":${state.detail?.id}"
+        DesktopRoute.Person -> ":${state.person?.id}"
         else -> ""
     }
     val savedPages = rememberSaveableStateHolder()

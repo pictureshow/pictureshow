@@ -231,7 +231,7 @@ class DesktopController(
         store.removeAccount(key); snapshotAccounts()
         publish(g) { if (it.account?.key == key) it.copy(account = null, homeRows = emptyList(), items = emptyList(), detail = null) else it }
     }
-    fun search() {
+    @Synchronized fun search() {
         if (mutable.value.account == null) return
         if (mutable.value.route == DesktopRoute.Search) {
             mutable.update { it.copy(returnFocus = "search-field") }
@@ -409,7 +409,7 @@ class DesktopController(
     }
     fun settings() = page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> }
     fun saveSettings(settings: DesktopSettings) = page(DesktopRoute.Settings) { g -> settingsStore.write(settings); publish(g) { it.copy(settings = settings) }; engine?.volume(settings.volume) }
-    fun back() {
+    @Synchronized fun back() {
         val s = mutable.value
         if (s.route == DesktopRoute.Player) { stopPlayback(); return }
         if (s.route == DesktopRoute.QuickConnect) { page(DesktopRoute.SignIn) { _ -> }; return }

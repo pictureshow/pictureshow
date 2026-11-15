@@ -216,6 +216,17 @@ class DesktopSearchTest {
                 waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
                 onNodeWithTag("search-field").assertTextContains("Cloud")
                 onNodeWithTag("nav:search").assertIsDisplayed()
+                onRoot().performKeyInput { withKeyDown(Key.MetaLeft) { pressKey(Key.F) } }
+                waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search-field"] == true }
+                onNodeWithTag("search-field").assertTextContains("Cloud")
+                f.failAll = true
+                c.searchQuery("Cloud", immediate = true)
+                waitUntil(timeoutMillis = 8000) { c.state.value.search.allFailed }
+                onNodeWithTag("search-retry").requestFocus()
+                f.failAll = false
+                onNodeWithTag("search-retry").performKeyInput { pressKey(Key.Enter) }
+                waitUntil(timeoutMillis = 8000) { c.state.value.search.completed && !c.state.value.search.someFailed }
+                onNodeWithTag("search-field").assertIsFocused()
             }
         }
     }
