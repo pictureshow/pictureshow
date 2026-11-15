@@ -65,8 +65,9 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                 OutlinedTextField(
                     fieldValue, { value ->
                         val text = value.text.take(SEARCH_QUERY_LIMIT)
+                        val changed = text != fieldValue.text
                         fieldValue = value.copy(text = text, selection = TextRange(value.selection.start.coerceAtMost(text.length), value.selection.end.coerceAtMost(text.length)))
-                        c.searchQuery(text)
+                        if (changed) c.searchQuery(text)
                     },
                     modifier = Modifier.fillMaxWidth().focusRequester(field).probe("search-field")
                         .onFocusChanged { if (it.isFocused) fieldValue = fieldValue.copy(selection = TextRange(0, fieldValue.text.length)) }
