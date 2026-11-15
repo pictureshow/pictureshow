@@ -345,14 +345,14 @@ private data class LiveConfirmation(val item: MediaItem? = null, val schedule: L
                 DesktopDropdownMenu(daysOpen, { daysOpen = false }, dayOpener, dayFocus) {
                     val today = Instant.now().atZone(zone).toLocalDate()
                     (listOf(day, initial) + (0L..6L).map { today.plusDays(it) }).distinct().forEach { date ->
-                        DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, modifier = Modifier.then(if (date == day) Modifier.focusRequester(dayFocus) else Modifier).controlFocus(RoundedCornerShape(4.dp), allowInModal = true).probe("live:guide-day:$date"), onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
+                        DropdownMenuItem(text = { Text(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).format(date)) }, modifier = Modifier.then(if (date == day) Modifier.focusRequester(dayFocus) else Modifier).menuItemFocus().probe("live:guide-day:$date"), onClick = { day = date; selected = date.atStartOfDay(zone).toInstant().toEpochMilli(); daysOpen = false })
                     }
                 }
             }
             Box {
                 OutlinedButton({ timesOpen = true }, modifier = Modifier.focusRequester(timeOpener).controlFocus(allowInModal = true, enabled = !timesOpen).probe("live:guide-time")) { Text(liveClock(selected)) }
                 DesktopDropdownMenu(timesOpen, { timesOpen = false }, timeOpener, timeFocus, modifier = Modifier.heightIn(max = 280.dp)) {
-                    (listOf(selected) + times).distinct().sorted().forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, modifier = Modifier.then(if (selected == instant) Modifier.focusRequester(timeFocus) else Modifier).controlFocus(RoundedCornerShape(4.dp), allowInModal = true).probe("live:guide-time:$instant"), onClick = { selected = instant; timesOpen = false }) }
+                    (listOf(selected) + times).distinct().sorted().forEach { instant -> DropdownMenuItem(text = { Text(liveClock(instant)) }, leadingIcon = { RadioButton(selected == instant, null) }, modifier = Modifier.then(if (selected == instant) Modifier.focusRequester(timeFocus) else Modifier).menuItemFocus().probe("live:guide-time:$instant"), onClick = { selected = instant; timesOpen = false }) }
                 }
             }
             Text("Local time · ${zone.id}", style = MaterialTheme.typography.bodySmall)

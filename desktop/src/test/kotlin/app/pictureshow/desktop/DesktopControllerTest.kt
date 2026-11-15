@@ -487,6 +487,24 @@ class DesktopControllerTest {
         }
     }
 
+    @Test fun signOutTargetsKeptCardAndSelectingItSuppliesSavedUsernameOnly(): Unit = runBlocking {
+        Fixture().use { f ->
+            DesktopController(directory()).use { c ->
+                c.login(f)
+                val saved = requireNotNull(c.state.value.account)
+                c.accounts(); c.await { it.route == DesktopRoute.Accounts && !it.busy }
+                c.signOut(); c.await { it.account == null && !it.busy }
+                assertEquals("account:${saved.key}", c.state.value.returnFocus)
+                c.selectAccount(saved.key); c.await { it.route == DesktopRoute.SignIn && !it.busy }
+                assertEquals(saved.user.name, c.state.value.signInUsername)
+                assertEquals(saved.server, c.state.value.server)
+                assertNull(c.state.value.returnFocus)
+                c.addAccountOn(saved.server); c.await { it.route == DesktopRoute.SignIn && !it.busy }
+                assertNull(c.state.value.signInUsername, "Another user must start with a blank username")
+            }
+        }
+    }
+
     @Test fun quickConnectBackAndReopenRetainsAttemptAndAcceptsOnce(): Unit = runBlocking {
         Fixture().use { f -> DesktopController(directory()).use { c ->
             c.start(); c.await { !it.busy }; c.connect(f.url); c.await { it.route == DesktopRoute.SignIn && !it.busy }

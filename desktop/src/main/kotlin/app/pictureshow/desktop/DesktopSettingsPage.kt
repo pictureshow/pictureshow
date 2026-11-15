@@ -117,12 +117,12 @@ internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:S
                 if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
             }
         }
-        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,initialFocus=initialFocus,modifier=Modifier.widthIn(min=menuMinWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Column { Text(text); if (tag == "quality") qualitySupport((key as? Int) ?: 0)?.let { Text(it, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) } }},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).controlFocus(RoundedCornerShape(4.dp), allowInModal = true).probe("$tag:$key")) } }
+        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,initialFocus=initialFocus,modifier=Modifier.widthIn(min=menuMinWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Column { Text(text); if (tag == "quality") qualitySupport((key as? Int) ?: 0)?.let { Text(it, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) } }},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("$tag:$key")) } }
     }
 }
 
 internal fun qualitySupport(mbps: Int): String? = when (mbps) {
-    0 -> "Keep the file’s quality when this computer can play it"
+    0 -> "Keep original quality when supported"
     4 -> "For slow connections; a softer picture"
     10 -> "A smaller cap for everyday streaming"
     20 -> "More detail with a steady connection"

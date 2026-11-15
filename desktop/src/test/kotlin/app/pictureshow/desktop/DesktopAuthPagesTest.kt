@@ -98,6 +98,48 @@ class DesktopAuthPagesTest {
         assertEquals(false, DesktopUiProbe.focus["remove:${mei.key}"])
     }
 
+    @Test fun savedAccountReauthenticationPrefillsNameFocusesPasswordAndDoesNotKeepPasswords() = runComposeUiTest {
+        val r = Recorder()
+        var state by mutableStateOf(DesktopState(route = DesktopRoute.SignIn, server = home, signInUsername = "ux-mei"))
+        setContent { PictureshowTheme { SignInForm(state, r) } }
+        onNodeWithTag("username").assertTextContains("ux-mei")
+        onNodeWithTag("password").assertIsFocused().performTextInput("temporary-password")
+        runOnIdle { state = state.copy(signInUsername = "ux-tom") }
+        onNodeWithTag("username").assertTextContains("ux-tom")
+        onNodeWithTag("password").assertIsFocused()
+        assertEquals("", onNodeWithTag("password").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+        onNodeWithTag("password").performTextInput("tom-password")
+        pressReturn("password")
+        assertEquals(listOf("signIn:ux-tom:tom-password"), r.actions())
+        runOnIdle { state = state.copy(signInUsername = null) }
+        onNodeWithTag("username").assertIsFocused()
+        assertEquals("", onNodeWithTag("username").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+        assertEquals("", onNodeWithTag("password").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+    }
+
+    @Test fun signingOutOnSameChooserFocusesKeptCardOnceAndShowsSignInAffordance() = runComposeUiTest {
+        val mei = account(home, "m", "ux-mei")
+        val tom = account(home, "t", "ux-tom")
+        val r = Recorder()
+        var state by mutableStateOf(DesktopState(route = DesktopRoute.Accounts, account = mei,
+            accounts = listOf(tom, mei), rememberedServers = listOf(home)))
+        setContent { PictureshowTheme {
+            AccountsList(state, r, onFocusRestored = { state = state.copy(returnFocus = null) }) {}
+        } }
+        onNodeWithTag("add-account:${home.id}").requestFocus().assertIsFocused()
+        runOnIdle { state = state.copy(account = null, accounts = listOf(tom, mei.copy(accessToken = "", expired = true)),
+            returnFocus = "account:${mei.key}") }
+        onNodeWithTag("account:${mei.key}").assertIsFocused()
+        onNodeWithTag("account-sign-in:${mei.key}", useUnmergedTree = true).assertExists()
+        runOnIdle { assertNull(state.returnFocus) }
+        onNodeWithTag("add-account:${home.id}").requestFocus()
+        runOnIdle { state = state.copy(error = "A harmless repaint") }
+        onNodeWithTag("add-account:${home.id}").assertIsFocused()
+        onNodeWithTag("account:${mei.key}").requestFocus()
+        pressReturn("account:${mei.key}")
+        assertEquals(listOf("select:${mei.key}"), r.actions())
+    }
+
     @Test fun returnWithoutUsernameSaysWhatIsMissing() = runComposeUiTest {
         val r = Recorder()
         setContent { PictureshowTheme { SignInForm(DesktopState(route = DesktopRoute.SignIn, server = home), r) } }

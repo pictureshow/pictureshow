@@ -84,7 +84,7 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
                         Box {
                             OutlinedButton({ open = true }, enabled = !busy, modifier = Modifier.focusRequester(opener).controlFocus(allowInModal = true, enabled = !open).probe("live:retention")) { Text(labels[current] ?: "Provider retention setting") }
                             DesktopDropdownMenu(open, { open = false }, opener, initialFocus) {
-                                choices.forEach { choice -> DropdownMenuItem(text = { Text(labels[choice] ?: "Provider retention setting") }, leadingIcon = { RadioButton(current == choice, null) }, modifier = Modifier.then(if (choice == (current ?: choices.first())) Modifier.focusRequester(initialFocus) else Modifier).controlFocus(androidx.compose.foundation.shape.RoundedCornerShape(4.dp), allowInModal = true).probe("live:retention:$choice"), onClick = { edits = edits + ("KeepUntil" to JsonPrimitive(choice)); open = false }) }
+                                choices.forEach { choice -> DropdownMenuItem(text = { Text(labels[choice] ?: "Provider retention setting") }, leadingIcon = { RadioButton(current == choice, null) }, modifier = Modifier.then(if (choice == (current ?: choices.first())) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("live:retention:$choice"), onClick = { edits = edits + ("KeepUntil" to JsonPrimitive(choice)); open = false }) }
                             }
                         }
                     }

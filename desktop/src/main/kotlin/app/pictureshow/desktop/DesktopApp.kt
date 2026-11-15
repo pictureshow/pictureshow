@@ -88,20 +88,25 @@ internal fun Modifier.focusOutline(): Modifier {
 
 /** A focus ring outside the control fill stays visible on primary and tonal controls. */
 @Composable
-internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50), allowInModal: Boolean = false, enabled: Boolean = true): Modifier {
+internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50), allowInModal: Boolean = false, enabled: Boolean = true, insetRing: Boolean = false): Modifier {
     var focused by remember { mutableStateOf(false) }
     val color = MaterialTheme.colorScheme.primary
     val modalOpen = LocalModalOpen.current
     return onFocusChanged { focused = it.isFocused }.drawWithContent {
         drawContent()
         if (focused && enabled && (!modalOpen || allowInModal)) {
-            val gap = 4.dp.toPx()
-            inset(-gap, -gap, -gap, -gap) {
+            val gap = if (insetRing) 3.dp.toPx() else -4.dp.toPx()
+            inset(gap, gap, gap, gap) {
                 drawOutline(shape.createOutline(size, layoutDirection, this), color, style = Stroke(2.dp.toPx()))
             }
         }
     }
 }
+
+/** Popups clip their full-width rows: keep the complete ring inside the row and away from neighbors. */
+@Composable
+internal fun Modifier.menuItemFocus(): Modifier = padding(horizontal = 4.dp)
+    .controlFocus(RoundedCornerShape(6.dp), allowInModal = true, insetRing = true)
 
 @Composable
 internal fun DesktopTooltip(label: String, above: Boolean = false, content: @Composable () -> Unit) {
@@ -298,20 +303,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     }
                 }
             }
-            if (help) AlertDialog(onDismissRequest = { help = false }, title = { Text("Keyboard shortcuts") }, text = {
-                val sheet = rememberScrollState()
-                Box {
-                Column(Modifier.verticalScroll(sheet).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    desktopShortcutSheet(macShortcuts, macChrome).forEachIndexed { i, section ->
-                        if (i > 0) HorizontalDivider()
-                        Text(section.title, style = MaterialTheme.typography.titleSmall)
-                        section.rows.forEach { (keys, action) -> ShortcutRow(keys, action) }
-                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                }
-                VerticalScrollbar(rememberScrollbarAdapter(sheet), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
-                }
-            }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
+            val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+            if (help) DesktopShortcutsDialog(macShortcuts, macChrome, (windowHeight - 64.dp).coerceAtLeast(240.dp)) { help = false }
             signOut?.let { a ->
                 SignOutConfirmation(a.user.name, onCancel = { signOut = null }, onConfirm = {
                     modalReturnFocus = null; signOut = null; controller.signOut()
@@ -343,7 +336,7 @@ internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<Shortc
         "← → / J L" to "Back or forward 10 seconds",
         "↑ / ↓" to "Volume up or down",
         "M" to "Mute or unmute",
-        "F" to "Full screen",
+        "F" to "Fullscreen",
         "Esc" to "Close a panel, hide the controls, then leave the player"
     ), note = "Space and the arrows act on the video when no button has focus. Playback actions are also in the control bar.")
 )
@@ -438,10 +431,10 @@ internal fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAcco
             }
         }
         DesktopDropdownMenu(expanded = open, onDismissRequest = { open = false }, opener = opener, initialFocus = initialFocus, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
-            DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.focusRequester(initialFocus).controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:switch"))
-            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:settings"))
+            DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.focusRequester(initialFocus).menuItemFocus().probe("account-menu:switch"))
+            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.menuItemFocus().probe("account-menu:settings"))
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; onSignOut() }, modifier = Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:sign-out"))
+            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; onSignOut() }, modifier = Modifier.menuItemFocus().probe("account-menu:sign-out"))
         }
     }
 }
@@ -516,8 +509,27 @@ internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route
 internal fun SignOutConfirmation(name: String, onCancel: () -> Unit, onConfirm: () -> Unit) {
     val cancelFocus = remember { FocusRequester() }
     AlertDialog(onDismissRequest = onCancel, title = { Text("Sign out of $name?") },
-        text = { Text("Sign out of $name? $SIGN_OUT_PASSWORD_COPY") },
+        text = { Text(SIGN_OUT_CONSEQUENCE_COPY) },
         dismissButton = { TextButton(onCancel, Modifier.focusRequester(cancelFocus).controlFocus(allowInModal = true).probe("sign-out-cancel")) { Text("Cancel") } },
         confirmButton = { TextButton(onConfirm, Modifier.controlFocus(allowInModal = true).probe("sign-out-confirm")) { Text("Sign out") } })
     LaunchedEffect(Unit) { withFrameNanos { }; cancelFocus.requestFocus() }
+}
+
+@Composable
+internal fun DesktopShortcutsDialog(mac: Boolean, macChrome: Boolean, maxHeight: Dp, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.heightIn(max = maxHeight).probe("help-dialog"),
+        title = { Text("Keyboard shortcuts") }, text = {
+            val sheet = rememberScrollState()
+            Box(Modifier.heightIn(max = (maxHeight - 160.dp).coerceAtLeast(80.dp))) {
+                Column(Modifier.verticalScroll(sheet).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    desktopShortcutSheet(mac, macChrome).forEachIndexed { i, section ->
+                        if (i > 0) HorizontalDivider()
+                        Text(section.title, style = MaterialTheme.typography.titleSmall)
+                        section.rows.forEach { (keys, action) -> ShortcutRow(keys, action) }
+                        section.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+                VerticalScrollbar(rememberScrollbarAdapter(sheet), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+            }
+        }, confirmButton = { TextButton(onDismiss, Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
 }

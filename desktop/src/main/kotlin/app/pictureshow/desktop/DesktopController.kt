@@ -163,7 +163,7 @@ class DesktopController(
                 is ClientResult.Success -> { updateState { it.copy(account = account) }; loadHome(g) }
                 is ClientResult.Failure -> if (checked.error.kind == ErrorKind.INVALID_CREDENTIALS) {
                     store.expire(account.key, account.accessToken); snapshotAccounts()
-                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
+                    publish(g) { it.copy(route = DesktopRoute.SignIn, server = account.server, signInUsername = account.user.name, error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
                 } else publish(g) { it.copy(route = DesktopRoute.Home, account = account, error = checked.error.message, errorKind = checked.error.kind) }
             }
         } else publish(g) { it.copy(route = if (s.accounts.isNotEmpty()) DesktopRoute.Accounts else DesktopRoute.Servers) }
@@ -178,10 +178,10 @@ class DesktopController(
         }
     }
     fun connect(address: String) {
-        updateState { it.copy(serverAddress = address) }
+        updateState { it.copy(serverAddress = address, signInUsername = null) }
         page(DesktopRoute.Servers) { g ->
             val server = attempt(g) { client.probe(address) } ?: return@page
-            publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null) }
+            publish(g) { it.copy(server = server, route = DesktopRoute.SignIn, publicUsers = emptyList(), quickCode = null, signInUsername = null) }
             val users = attempt(g) { client.publicUsers(server) }.orEmpty()
             publish(g) { it.copy(publicUsers = users) }
         }
@@ -201,7 +201,7 @@ class DesktopController(
         snapshotAccounts()
         synchronized(history) { history.clear() }
         pendingQuick = null; quickOwner = null
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, detail = null, playback = null, homeRows = emptyList()) }
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }
         loadHome(g)
     }
     fun quickConnect() {
@@ -209,6 +209,7 @@ class DesktopController(
         if (mutable.value.busy && mutable.value.route == DesktopRoute.QuickConnect) return
         if (quickOwner != server) { pendingQuick = null; quickOwner = server }
         page(DesktopRoute.QuickConnect) { g ->
+            publish(g) { it.copy(signInUsername = null) }
             identityClient().quickConnect(server, pendingQuick) { pendingQuick = it }.collect { q ->
                 when (q) {
                     is QuickConnectState.Code -> publish(g) { it.copy(quickCode = q.code, busy = false, error = null, errorKind = null) }
@@ -221,29 +222,33 @@ class DesktopController(
     }
     // Back from the picker returns to the page it was opened from (D-6); re-opening it doesn't stack.
     fun accounts() = page(DesktopRoute.Accounts, remember = mutable.value.route != DesktopRoute.Accounts) { _ -> snapshotAccounts() }
-    fun addServer() = page(DesktopRoute.Servers) { _ -> }
+    fun addServer() = page(DesktopRoute.Servers) { g -> publish(g) { it.copy(signInUsername = null) } }
     /** AUTH-07: another viewer on a saved server goes straight to its sign-in; Back returns to the chooser. */
     fun addAccountOn(server: Server) {
         if (mutable.value.busy && mutable.value.route == DesktopRoute.SignIn) return
         page(DesktopRoute.SignIn, remember = true) { g ->
-            publish(g) { it.copy(server = server, publicUsers = emptyList(), quickCode = null) }
+            publish(g) { it.copy(server = server, publicUsers = emptyList(), quickCode = null, signInUsername = null) }
             val users = attempt(g) { client.publicUsers(server) }.orEmpty()
             publish(g) { it.copy(publicUsers = users) }
         }
     }
     fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
-        if (account.expired || account.accessToken.isBlank()) { publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn) }; return@page }
+        if (account.expired || account.accessToken.isBlank()) {
+            publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn, signInUsername = account.user.name,
+                publicUsers = emptyList(), quickCode = null, returnFocus = null) }
+            return@page
+        }
         if (attempt(g, account) { client.me(account) } == null) {
             if (store.snapshots.value.accounts.firstOrNull { it.key == key }?.expired == true) {
-                publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn,
+                publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn, signInUsername = account.user.name,
                     error = "Your session ended. Sign in again.", errorKind = ErrorKind.EXPIRED) }
             }
             return@page
         }
         liveTv.clear()
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
-        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, signInUsername = null, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
     }
     fun signOut() {
         val account = mutable.value.account ?: return
@@ -251,7 +256,8 @@ class DesktopController(
             finishViewing()
             store.signOutKeepingAccount(account.key); snapshotAccounts(); synchronized(history) { history.clear() }
             publish(g) { DesktopState(route = if (store.snapshots.value.accounts.isEmpty()) DesktopRoute.SignIn else DesktopRoute.Accounts,
-                server = account.server, accounts = store.snapshots.value.accounts, rememberedServers = store.snapshots.value.rememberedServers, settings = it.settings) }
+                server = account.server, accounts = store.snapshots.value.accounts, rememberedServers = store.snapshots.value.rememberedServers,
+                returnFocus = "account:${account.key}", settings = it.settings) }
             liveTv.clear()
             runCatching { client.logout(account) }
         }

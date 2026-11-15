@@ -105,6 +105,7 @@ internal fun DesktopController.authActions(): AuthActions {
 
 /** AUTH-04: the copy for a username and password the server refused at sign-in. */
 internal const val SIGN_OUT_PASSWORD_COPY = "You'll need the password to sign in again."
+internal const val SIGN_OUT_CONSEQUENCE_COPY = "$SIGN_OUT_PASSWORD_COPY Your account stays saved on this computer."
 internal const val WRONG_CREDENTIALS_COPY = "That username and password didn't work. Check them and try again."
 /** AUTH-04: how many public users the picker shows before "Show all N users". */
 internal const val PUBLIC_USERS_SHOWN = 8
@@ -148,11 +149,12 @@ internal fun SignInPage(state: DesktopState, c: DesktopController) = SignInForm(
 @Composable
 internal fun SignInForm(state: DesktopState, c: AuthActions) {
     val serverKey = state.server?.let { it.id to it.url }
-    var username by remember(serverKey) { mutableStateOf("") }
-    var password by remember(serverKey) { mutableStateOf(TextFieldValue("")) }
-    var picked by remember(serverKey) { mutableStateOf<String?>(null) }
-    var missing by remember(serverKey) { mutableStateOf(false) }
-    var allUsers by remember(serverKey) { mutableStateOf(false) }
+    val savedUsername = state.signInUsername
+    var username by remember(serverKey, savedUsername) { mutableStateOf(savedUsername.orEmpty()) }
+    var password by remember(serverKey, savedUsername) { mutableStateOf(TextFieldValue("")) }
+    var picked by remember(serverKey, savedUsername) { mutableStateOf(savedUsername) }
+    var missing by remember(serverKey, savedUsername) { mutableStateOf(false) }
+    var allUsers by remember(serverKey, savedUsername) { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     var show by remember { mutableStateOf(false) }
     val usernameFocus = remember { FocusRequester() }
@@ -169,10 +171,16 @@ internal fun SignInForm(state: DesktopState, c: AuthActions) {
     // A sign-in that opens with no username starts there, whatever this page last had focused (a new account after an
     // earlier sign-in left Password as the page's remembered focus). Fields are disabled while busy, so wait for idle.
     val page = LocalDesktopPage.current
-    LaunchedEffect(serverKey, state.busy) {
-        if (!state.busy && username.isBlank() && !credentialsRejected) {
-            DesktopUiProbe.lastFocus.remove(page)
-            runCatching { usernameFocus.requestFocus() }
+    LaunchedEffect(serverKey, savedUsername, state.busy) {
+        if (!state.busy && !credentialsRejected) {
+            if (!savedUsername.isNullOrBlank() && username == savedUsername) {
+                withFrameNanos { }
+                DesktopUiProbe.lastFocus[page] = "password"
+                passwordFocus.requestFocus()
+            } else if (username.isBlank()) {
+                DesktopUiProbe.lastFocus.remove(page)
+                runCatching { usernameFocus.requestFocus() }
+            }
         }
     }
     val submit = {
@@ -279,13 +287,23 @@ internal fun AccountAvatar(account: Account) {
 
 @Composable
 internal fun AccountsPage(state: DesktopState, controller: DesktopController, onRemove: (Account) -> Unit) =
-    AccountsList(state, remember(controller) { controller.authActions() }, onRemove)
+    AccountsList(state, remember(controller) { controller.authActions() }, onFocusRestored = controller::returnFocusDone, onRemove = onRemove)
 
 @Composable
-internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Account) -> Unit) {
+internal fun AccountsList(state: DesktopState, c: AuthActions, onFocusRestored: () -> Unit = {}, onRemove: (Account) -> Unit) {
     val servers = (state.rememberedServers + state.accounts.map { it.server }).distinctBy { it.id to it.url }
     val page = LocalDesktopPage.current
-    LaunchedEffect(state.busy, state.account?.key, state.accounts.map { it.key }) {
+    LaunchedEffect(state.busy, state.account?.key, state.accounts.map { it.key }, state.returnFocus) {
+        val preferred = state.returnFocus?.takeIf { tag -> state.accounts.any { "account:${it.key}" == tag } }
+        if (!state.busy && preferred != null) {
+            withFrameNanos { }
+            DesktopUiProbe.requestFocus[preferred]?.let { requester ->
+                DesktopUiProbe.lastFocus[page] = preferred
+                requester.requestFocus()
+                onFocusRestored()
+            }
+            return@LaunchedEffect
+        }
         // The shell restores a page's last focus when it settles. On this page that could be a Remove button (after an
         // earlier removal dialog) or Sign out, which is gone once used: start on the current or first account instead.
         val last = DesktopUiProbe.lastFocus[page]
@@ -302,7 +320,7 @@ internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Accoun
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Signed in as ${current.user.name} on ${serverLabel(current.server, servers)}.")
-                    Text("$SIGN_OUT_PASSWORD_COPY Your account stays saved on this computer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(SIGN_OUT_CONSEQUENCE_COPY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = c::signOut, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("accounts-sign-out")) { Text("Sign out") }
             }
@@ -344,6 +362,10 @@ private fun AccountRow(a: Account, current: Boolean, select: () -> Unit, remove:
             Text(a.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if (current) "Watching now" else if (a.expired || a.accessToken.isBlank()) "Signed out · Sign in again to continue" else "Saved on this computer",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (!current && (a.expired || a.accessToken.isBlank())) {
+            Icon(DesktopGlyph.ChevronRight, contentDescription = "Sign in as ${a.user.name}",
+                modifier = Modifier.size(20.dp).probe("account-sign-in:${a.key}"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // The icon alone didn't read as Remove (D-15): the word shows while the row or the button has the pointer or
         // focus. The button keeps its width so nothing shifts when it appears.

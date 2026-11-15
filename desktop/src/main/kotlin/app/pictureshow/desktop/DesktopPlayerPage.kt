@@ -363,7 +363,7 @@ internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.gra
                         Text(label, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         items.forEach { (key, text) ->
                             DropdownMenuItem(text = { Text(text) }, onClick = { onDismiss(); onChoose(key) }, leadingIcon = { RadioButton(selected == key, null) },
-                                modifier = Modifier.fillMaxWidth().then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key"))
+                                modifier = Modifier.fillMaxWidth().then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("$tag:$key"))
                         }
                         note?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }

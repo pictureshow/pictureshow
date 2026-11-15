@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.*
 import app.pictureshow.core.*
@@ -99,7 +102,8 @@ class DesktopRoundThreeTest {
     @Test fun signOutConfirmationDefaultsToCancelAndExplainsPassword() = runComposeUiTest {
         var open by mutableStateOf(true); var signedOut = 0
         setContent { MaterialTheme { if (open) SignOutConfirmation("Viewer", { open = false }, { signedOut++; open = false }) } }
-        onNodeWithText("Sign out of Viewer? You'll need the password to sign in again.").assertExists()
+        onNodeWithText("Sign out of Viewer?").assertExists()
+        onNodeWithText(SIGN_OUT_CONSEQUENCE_COPY).assertExists()
         onNodeWithTag("sign-out-cancel").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         assertEquals(0, signedOut); assertFalse(open)
     }
@@ -135,6 +139,44 @@ class DesktopRoundThreeTest {
             assertTrue(onNodeWithText("First episode finished").fetchSemanticsNode().boundsInRoot.top <
                 onNodeWithText("Next: Episode · Second episode").fetchSemanticsNode().boundsInRoot.top, "Finished title leads the secondary next suggestion")
         } finally { controller.close(); directory.deleteRecursively() }
+    }
+
+    @Test fun popupFocusOutlineHasAllFourSidesInsideTheClippedRow() = runComposeUiTest {
+        setContent { MaterialTheme(colorScheme = darkColorScheme(primary = Color.Magenta)) {
+            Choice("Quality", listOf(0 to "Original", 4 to "4 Mbps"), 0, "quality") {}
+        } }
+        onNodeWithTag("quality").requestFocus().performKeyInput { pressKey(Key.Enter) }
+        val row = onNodeWithTag("quality:0").assertIsFocused()
+        val pixels = row.captureToImage().toPixelMap()
+        fun ink(x: Int, y: Int): Boolean {
+            val c = pixels[x,y]
+            return c.red > .8f && c.green < .2f && c.blue > .8f
+        }
+        val midX = pixels.width / 2; val midY = pixels.height / 2
+        val horizontalBand = (pixels.width / 8).coerceAtLeast(8)
+        val verticalBand = (pixels.height / 4).coerceAtLeast(8)
+        assertTrue((0 until horizontalBand).any { ink(it, midY) }, "left side must be inside the row clip")
+        assertTrue((pixels.width-horizontalBand until pixels.width).any { ink(it, midY) }, "right side must be inside the row clip")
+        assertTrue((0 until verticalBand).any { ink(midX, it) }, "top side must not be clipped")
+        assertTrue((pixels.height-verticalBand until pixels.height).any { ink(midX, it) }, "bottom side must not be clipped")
+    }
+
+    @Test fun originalQualitySupportingLineFitsWithoutAnOrphan() = runComposeUiTest {
+        setContent { MaterialTheme { Choice("Quality", listOf(0 to VIDEO_QUALITY_ORIGINAL, 4 to "4 Mbps"), 0, "quality", menuMinWidth=340.dp) {} } }
+        onNodeWithTag("quality").performClick()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        onNodeWithText("Keep original quality when supported", useUnmergedTree=true).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        assertTrue(layouts.single().lineCount <= 2)
+        assertFalse(layouts.single().hasVisualOverflow)
+    }
+
+    @Test fun shortcutsFrameFitsInsideA600PixelWindowWithCloseVisible() = runDesktopComposeUiTest(800,600) {
+        setContent { MaterialTheme { DesktopShortcutsDialog(true, true, 536.dp) {} } }
+        assertTrue(onNodeWithTag("help-dialog").getUnclippedBoundsInRoot().height <= 536.dp)
+        onNodeWithTag("help-close").assertIsDisplayed()
+        val fs = desktopShortcutSheet(true,true).flatMap { it.rows }.filter { it.first in setOf("F", "⌃⌘F") }.map { it.second }.toSet()
+        assertEquals(setOf("Fullscreen"), fs)
     }
 
     @Test fun countsOnlyDiagnosticsEmitRouteTransitionsAndActiveIntervals() {
