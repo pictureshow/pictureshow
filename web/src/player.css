@@ -359,6 +359,8 @@
     display: grid;
     grid-template-columns: minmax(9rem, 16rem) 1fr;
     gap: 1rem;
+    /* Keycaps are taller than text: line the description up with them. */
+    align-items: baseline;
 }
 .player-overlay .shortcut-list dt {
     display: flex;
