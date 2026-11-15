@@ -89,7 +89,13 @@ object PlaybackInformation {
             canonical(before) != canonical(after) &&
             codes.none {
                 it in
-                    setOf("videocodecnotsupported", "videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported")
+                    setOf(
+                        "videocodecnotsupported",
+                        "videoprofilenotsupported",
+                        "videolevelnotsupported",
+                        "videobitdepthnotsupported",
+                        "videocodectagnotsupported"
+                    )
             }
         ) {
             add("Video changed from $before to $after during playback. The server did not report a codec reason.")
@@ -137,6 +143,22 @@ object PlaybackInformation {
         }
         if (normalized == "audiocodecnotsupported" && audioCodec != null) {
             return "This device cannot decode $audioCodec. The server converts the audio. Choose a compatible audio track if available."
+        }
+        if (videoCodec != null) {
+            when (normalized) {
+                "videoprofilenotsupported" ->
+                    return "This device does not support the $videoCodec codec profile. The server converts the video."
+                "videolevelnotsupported" ->
+                    return "$videoCodec exceeds the decoder's supported codec level. The server converts the video."
+                "videocodectagnotsupported" ->
+                    return "This device does not recognize the $videoCodec codec tag. The server makes a compatible stream."
+                "videobitdepthnotsupported" ->
+                    return "This device cannot decode $videoCodec at this bit depth. The server converts the video."
+            }
+        }
+        if (normalized == "audioprofilenotsupported" && audioCodec != null) {
+            return "This device does not support the $audioCodec codec profile. The server converts the audio. " +
+                "Choose another audio track if available."
         }
         if (normalized == "subtitlecodecnotsupported" && tuning.subtitleBurnIn == SubtitleBurnIn.Always) {
             return "Your subtitle burn-in setting requires conversion of the video. " +

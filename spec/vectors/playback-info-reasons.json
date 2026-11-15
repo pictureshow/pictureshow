@@ -309,6 +309,78 @@
       "expected": [
         "Scaled from 3840\u00d72160 to 1920\u00d72160 during playback. The server did not report a resolution reason."
       ]
+    },
+    {
+      "id": "playback-info-reasons.named-codec-constraints",
+      "input": {
+        "method": "Transcode",
+        "reasons": [
+          "VideoProfileNotSupported",
+          "VideoLevelNotSupported",
+          "VideoCodecTagNotSupported",
+          "VideoBitDepthNotSupported",
+          "AudioProfileNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {},
+        "receiverAudio": false
+      },
+      "expected": [
+        "This device does not support the HEVC Main 10 codec profile. The server converts the video.",
+        "HEVC Main 10 exceeds the decoder's supported codec level. The server converts the video.",
+        "This device does not recognize the HEVC Main 10 codec tag. The server makes a compatible stream.",
+        "This device cannot decode HEVC Main 10 at this bit depth. The server converts the video.",
+        "This device does not support the TRUEHD codec profile. The server converts the audio. Choose another audio track if available."
+      ]
+    },
+    {
+      "id": "playback-info-reasons.codec-tag-covers-change",
+      "input": {
+        "method": "Transcode",
+        "reasons": [
+          "VideoCodecTagNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Profile": "Main 10",
+              "Width": 3840,
+              "Height": 2160
+            },
+            {
+              "Type": "Audio",
+              "Codec": "truehd",
+              "Index": 1
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        },
+        "received": {
+          "codec": "h264"
+        },
+        "receiverAudio": false
+      },
+      "expected": [
+        "This device does not recognize the HEVC Main 10 codec tag. The server makes a compatible stream."
+      ]
     }
   ]
 }
