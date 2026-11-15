@@ -247,3 +247,69 @@ test("a later accepted unwatch choice wins while the completion read remains hel
         1,
     );
 });
+
+test("a film that plays to its end returns to a visible Finished line with Play again (web-kofi F11)", async ({
+    page,
+}) => {
+    await fixture(page);
+    let finishing = false;
+    const headers = {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json",
+    };
+    const done = {
+        ...movie,
+        UserData: { Played: true, PlaybackPositionTicks: 0 },
+    };
+    await page.route("https://jellyfin.example/**", async (route) => {
+        const url = new URL(route.request().url());
+        if (
+            finishing &&
+            url.pathname === "/Items/movie" &&
+            !url.searchParams.has("fields")
+        )
+            return route.fulfill({ headers, body: JSON.stringify(done) });
+        if (
+            finishing &&
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return route.fulfill({
+                headers,
+                body: JSON.stringify({ Items: [done] }),
+            });
+        return route.fallback();
+    });
+    await signIn(page);
+    await page.locator('[data-focus="resume:movie"]').click();
+    await page
+        .getByRole("button", { name: "Resume from 0:10", exact: true })
+        .click();
+    const video = page.locator("video");
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), {
+            timeout: 20000,
+        })
+        .toBeGreaterThanOrEqual(2);
+    if (
+        await page.getByRole("status").filter({ hasText: "Press Play" }).count()
+    )
+        await page.getByRole("button", { name: "Play", exact: true }).click();
+    finishing = true;
+    await video.evaluate((v: HTMLVideoElement) => {
+        v.currentTime = 39.75;
+        v.playbackRate = 16;
+        void v.play();
+    });
+    const line = page.locator(".catalog-finished");
+    await expect(line).toHaveText(
+        `Finished. You watched ${movie.Name} to the end.`,
+        {
+            timeout: 20000,
+        },
+    );
+    const play = page.locator('[data-focus="play"]');
+    await expect(play).toHaveText("▶ Play again");
+    await expect(play).toBeFocused();
+    await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
+});

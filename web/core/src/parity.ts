@@ -31,6 +31,33 @@ export function serverLabel(
     return repeats ? name + " · " + server.url : name;
 }
 
+/**
+ * Which search results need their library named, because another result of the same kind shows the same card text: the
+ * same title, year and (for episodes) series. Two copies of one film in two libraries are otherwise identical cards
+ * (CAT-14a). People are never labelled with a library. Returned in input order.
+ */
+export function searchDuplicateLabels(
+    items: {
+        id: string;
+        type?: string;
+        name?: string;
+        year?: number | null;
+        seriesName?: string | null;
+    }[],
+): string[] {
+    const norm = (s?: string | null) =>
+        (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+    const key = (i: (typeof items)[number]) =>
+        [i.type ?? "", norm(i.name), i.year ?? "", norm(i.seriesName)].join("\u0000");
+    const counts = new Map<string, number>();
+    for (const i of items)
+        if (i.type !== "Person" && norm(i.name))
+            counts.set(key(i), (counts.get(key(i)) ?? 0) + 1);
+    return items
+        .filter((i) => (counts.get(key(i)) ?? 0) > 1)
+        .map((i) => i.id);
+}
+
 export const BITRATES = [null, 120, 80, 40, 20, 10, 4] as const;
 export const SEGMENT_TYPES = [
     "Intro",

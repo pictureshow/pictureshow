@@ -115,6 +115,8 @@ export function AccountChooser({
                                         Continue as {a.user.Name}
                                     </button>
                                     <button
+                                        // Set apart from Continue (web-kofi): it asks before it forgets.
+                                        className="account-remove"
                                         data-focus={"remove:" + accountKey(a)}
                                         onClick={(e) =>
                                             onRemove(a, e.currentTarget)
@@ -474,12 +476,15 @@ export function SignIn({
                     </output>
                     <ul className="quick-steps">
                         <li>
-                            In another Jellyfin app, open your profile or
-                            Settings, then Quick Connect, and enter the code.
+                            In a Jellyfin app where you're signed in, open your
+                            profile or Settings, choose Quick Connect, and enter
+                            the code.
                         </li>
                         <li>
-                            Or open {client.server.url} in a browser, sign in,
-                            then choose your user icon → Quick Connect.
+                            Or, in any web browser, go to your Jellyfin
+                            server's own website at {client.server.url}, sign
+                            in there, then choose your user icon → Quick
+                            Connect.
                         </li>
                     </ul>
                     <p className="muted">

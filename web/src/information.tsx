@@ -1,7 +1,11 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import React, { useEffect, useState } from "react";
 import "./information.css";
-import { browserPlaybackSummary, browserProfile } from "@pictureshow/core";
+import {
+    browserPlaybackSummary,
+    browserProfile,
+    elementProbe,
+} from "@pictureshow/core";
 export type InformationRoute =
     | { kind: "about" | "device" | "support" | "licenses" }
     | { kind: "license"; index: number };
@@ -65,16 +69,17 @@ export function Information({
     function refresh() {
         try {
             const video = document.createElement("video");
-            const probe = (t: string) => !!video.canPlayType(t);
+            const probe = elementProbe(video);
             setSummary(
                 browserPlaybackSummary(
                     probe,
                     typeof MediaSource !== "undefined" ||
-                        probe("application/vnd.apple.mpegurl"),
+                        // A bare type answers "maybe" at best.
+                        !!video.canPlayType("application/vnd.apple.mpegurl"),
                 ),
             );
             setProfile({
-                profile: browserProfile((t) => !!video.canPlayType(t)),
+                profile: browserProfile(probe),
                 display: {
                     width: screen.width,
                     height: screen.height,
@@ -186,6 +191,10 @@ export function Information({
                 <p>Your collection. Your screen.</p>
                 <p>Web 0.1.0 · MPL-2.0 · Legitimate LLC</p>
                 <p>Free and open source. Built for your own Jellyfin server.</p>
+                <p className="muted">
+                    These links open the website in a new tab; Pictureshow stays
+                    open here.
+                </p>
                 <p>
                     Source:{" "}
                     <a
@@ -194,6 +203,8 @@ export function Information({
                         rel="noreferrer"
                     >
                         github.com/pictureshow/pictureshow
+                        <span aria-hidden="true"> ↗</span>
+                        <span className="sr-only"> (opens in a new tab)</span>
                     </a>
                 </p>
                 <p>
@@ -204,6 +215,8 @@ export function Information({
                         rel="noreferrer"
                     >
                         pictureshow.app/privacy/
+                        <span aria-hidden="true"> ↗</span>
+                        <span className="sr-only"> (opens in a new tab)</span>
                     </a>
                 </p>
                 <button

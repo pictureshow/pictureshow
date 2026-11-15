@@ -72,6 +72,20 @@ class ApplicationParityVectorsTest {
                             Json.decodeFromJsonElement(input.getValue("streams"))
                         ).map(::JsonPrimitive)
                     )
+                    "search-duplicate-labels" -> JsonArray(
+                        searchDuplicateLabels(
+                            input.getValue("items").jsonArray.map { raw ->
+                                val o = raw.jsonObject
+                                SearchLabelItem(
+                                    id = o.getValue("id").jsonPrimitive.content,
+                                    type = o["type"]?.jsonPrimitive?.contentOrNull,
+                                    name = o["name"]?.jsonPrimitive?.contentOrNull,
+                                    year = o["year"]?.jsonPrimitive?.intOrNull,
+                                    seriesName = o["seriesName"]?.jsonPrimitive?.contentOrNull
+                                )
+                            }
+                        ).map(::JsonPrimitive)
+                    )
                     "server-label" -> JsonPrimitive(
                         serverLabel(
                             Json.decodeFromJsonElement<Server>(input.getValue("server")),

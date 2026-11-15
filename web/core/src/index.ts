@@ -385,6 +385,14 @@ export type Decision = {
     playSessionId?: string;
 };
 export type Probe = (mime: string) => boolean;
+/**
+ * The one capability probe: the player negotiates with it and Troubleshooting lists
+ * what it accepts, so both screens state the same truth. "maybe" is not a yes.
+ */
+export const elementProbe =
+    (el: Pick<HTMLMediaElement, "canPlayType">): Probe =>
+    (mime) =>
+        el.canPlayType(mime) === "probably";
 const videoCodecs: Record<string, string> = {
     h264: "avc1.640028",
     hevc: "hvc1.1.6.L120.B0",
@@ -468,35 +476,72 @@ export function canDecodeVideo(source: Source | undefined, probe: Probe) {
  * re-encode every 5.1 track to stereo (SET-19: no downmix by default).
  */
 export const BROWSER_AUDIO_CHANNELS = 6;
-export function browserProfile(probe: Probe, bitrate = 200_000_000) {
+/**
+ * Video formats the server may copy, unconverted, into fragmented-MP4 HLS for this
+ * browser: the ones this browser's own probe plays. MPEG-TS can carry only H.264 to
+ * hls.js, so without this an AV1, HEVC or VP9 file the browser decodes was re-encoded
+ * and Playback info blamed the browser for a format Troubleshooting said it plays.
+ * With a `source`, its own video format is offered only when this browser decodes that
+ * file (bit depth, size, frame rate: `canDecodeVideo`), because Jellyfin 12 reports a
+ * copy for codec conditions it later fails at stream time.
+ */
+export function hlsCopyVideoCodecs(probe: Probe, source?: Source) {
+    const own = source?.MediaStreams?.find((s) => s.Type === "Video")?.Codec;
+    return (["hevc", "av1", "vp9"] as const).filter(
+        (codec) =>
+            probe(`video/mp4; codecs="${videoCodecs[codec]}"`) &&
+            (own !== codec || canDecodeVideo(source, probe)),
+    );
+}
+/** The audio formats a converted stream carries; a track in another format is converted. */
+export function hlsAudioCodec(probe: Probe) {
+    return probe(`audio/mp4; codecs="${audioCodecs.aac}"`) ? "aac" : "mp3";
+}
+export function browserProfile(
+    probe: Probe,
+    bitrate = 200_000_000,
+    source?: Source,
+) {
     const video = Object.entries(videoCodecs)
         .filter(([, v]) => probe(`video/mp4; codecs="${v}"`))
         .map(([k]) => k);
-    const audio = Object.entries(audioCodecs)
-        .filter(([, v]) => probe(`audio/mp4; codecs="${v}"`))
-        .map(([k]) => k);
+    const target = video.includes("h264")
+        ? "h264"
+        : video.includes("vp9")
+          ? "vp9"
+          : "h264";
+    const copy = hlsCopyVideoCodecs(probe, source).filter((c) => c !== target);
+    const ts = {
+        Container: "ts",
+        Type: "Video",
+        VideoCodec: target,
+        AudioCodec: hlsAudioCodec(probe),
+        Protocol: "hls",
+        Context: "Streaming",
+        // Browsers decode 5.1 and mix it down themselves, so a 5.1 AAC
+        // track is copied, not converted to stereo by the server.
+        MaxAudioChannels: String(BROWSER_AUDIO_CHANNELS),
+        MinSegments: 2,
+        BreakOnNonKeyFrames: true,
+    };
     return {
         Name: "Pictureshow Web",
         MaxStreamingBitrate: bitrate,
         DirectPlayProfiles: [],
+        // The server ranks profiles by what each lets it copy and keeps list order
+        // on a tie, so H.264 files stay on TS and only a copyable AV1, HEVC or VP9
+        // video takes fMP4. The first codec is the conversion target in both.
         TranscodingProfiles: [
-            {
-                Container: "ts",
-                Type: "Video",
-                VideoCodec: video.includes("h264")
-                    ? "h264"
-                    : video.includes("vp9")
-                      ? "vp9"
-                      : "h264",
-                AudioCodec: audio.includes("aac") ? "aac" : "mp3",
-                Protocol: "hls",
-                Context: "Streaming",
-                // Browsers decode 5.1 and mix it down themselves, so a 5.1 AAC
-                // track is copied, not converted to stereo by the server.
-                MaxAudioChannels: String(BROWSER_AUDIO_CHANNELS),
-                MinSegments: 2,
-                BreakOnNonKeyFrames: true,
-            },
+            ts,
+            ...(copy.length
+                ? [
+                      {
+                          ...ts,
+                          Container: "mp4",
+                          VideoCodec: [target, ...copy].join(","),
+                      },
+                  ]
+                : []),
         ],
         SubtitleProfiles: [
             { Format: "vtt", Method: "External" },
@@ -827,7 +872,7 @@ export class Jellyfin {
             AllowVideoStreamCopy: true,
             AllowAudioStreamCopy: true,
             DeviceProfile: {
-                ...browserProfile(probe, bitrate),
+                ...browserProfile(probe, bitrate, metadata),
                 DirectPlayProfiles: direct
                     ? [
                           {

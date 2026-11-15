@@ -684,6 +684,7 @@ export function conversionRemedies(
     kind: ConversionKind,
     browser: BrowserFamily,
     os: OsFamily = "other",
+    /** Other audio tracks that play as they are (`playableOtherAudioTracks`). */
     audioTracks = 0,
 ): string[] {
     switch (kind) {
@@ -731,12 +732,42 @@ export function conversionRemedies(
 }
 
 /**
+ * PLAY-26: how many of the source's other audio tracks the server would copy as they are.
+ * The transcoding URL names the formats its stream carries (`AudioCodec`) and the track
+ * being converted (`AudioStreamIndex`); a track in another format is converted too, so
+ * advice to switch tracks needs a track in one of those formats. No list, no advice.
+ */
+export function playableOtherAudioTracks(
+    source: { MediaStreams?: Array<Record<string, unknown>> } | null | undefined,
+    url: unknown,
+): number {
+    const name = (codec: unknown) => {
+        const c = typeof codec === "string" ? codec.trim().toLowerCase() : "";
+        return c === "dca" ? "dts" : c;
+    };
+    const carried = new Set(
+        (urlParameter(url, "AudioCodec") ?? "")
+            .split(",")
+            .map(name)
+            .filter((c) => c && c !== "copy"),
+    );
+    const selected = Number(urlParameter(url, "AudioStreamIndex"));
+    return (source?.MediaStreams ?? []).filter(
+        (s) =>
+            s.Type === "Audio" &&
+            !(Number.isInteger(selected) && s.Index === selected) &&
+            carried.has(name(s.Codec)),
+    ).length;
+}
+
+/**
  * PLAY-26 remedies every platform shares. A video limit has none here: its fixes depend on
- * the platform (web adds browser steps). A remedy that names another track needs one to exist.
+ * the platform (web adds browser steps). A remedy that names another track needs one that
+ * plays without conversion (`playableOtherAudioTracks`).
  */
 export function sharedRemedies(
     kind: ConversionKind,
-    audioTracks: number,
+    playableAudioTracks: number,
     device = CONVERSION_DEVICE,
 ): string[] {
     switch (kind) {
@@ -749,7 +780,7 @@ export function sharedRemedies(
                 "Raise Max streaming bitrate in Settings to try the original quality.",
             ];
         case "audio":
-            return audioTracks >= 2
+            return playableAudioTracks >= 1
                 ? [
                       `Choose another audio track in Audio; one that ${device} can play needs no conversion.`,
                   ]
@@ -811,9 +842,7 @@ export function conversionExplanation(
         codes,
         subtitleDelivery(decision.source, subtitleIndex) === "Burned in",
     );
-    const audioTracks = (decision.source?.MediaStreams ?? []).filter(
-        (s) => s.Type === "Audio",
-    ).length;
+    const audioTracks = playableOtherAudioTracks(decision.source, decision.url);
     return {
         kind,
         ...explainedMethod(kind, decision.method, decision.url),

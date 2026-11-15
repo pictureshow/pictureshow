@@ -538,8 +538,10 @@
         font-size: 0.8rem;
         padding: 0.45rem 0.65rem;
     }
+    /* A narrow or zoomed desktop window keeps a short slider (web-jo N1, 200%
+       zoom); only touch screens, which have volume buttons, drop it below. */
     .player-overlay .volume-control input {
-        display: none;
+        width: 5.5rem;
     }
     .player-overlay .player-timeline {
         gap: 0.4rem;
@@ -601,8 +603,10 @@
         min-height: 48px;
         padding: 0.3rem 0.7rem;
     }
+    /* A narrow or zoomed desktop window keeps a short slider (web-jo N1, 200%
+       zoom); only touch screens, which have volume buttons, drop it below. */
     .player-overlay .volume-control input {
-        display: none;
+        width: 5.5rem;
     }
     .player-overlay .player-panel {
         max-height: 95dvh;
@@ -824,5 +828,12 @@
     }
     .player-overlay .conversion-notice-title {
         font-size: 1.125rem;
+    }
+}
+
+@media (pointer: coarse) and (max-width: 650px),
+    (pointer: coarse) and (max-height: 480px) {
+    .player-overlay .volume-control input {
+        display: none;
     }
 }

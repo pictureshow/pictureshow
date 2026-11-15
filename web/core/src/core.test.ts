@@ -4,6 +4,10 @@
 import { describe, it, expect } from "vitest";
 import {
     canDecodeVideo,
+    browserProfile,
+    browserPlaybackSummary,
+    hlsCopyVideoCodecs,
+    elementProbe,
     authenticatedMediaRequest,
     progressReport,
     ticks,
@@ -403,5 +407,86 @@ describe("PLAY-27 per-file browser video gate", () => {
         ).toBe(false);
         expect(canDecodeVideo(source("mpeg2video"), all)).toBe(false);
         expect(canDecodeVideo(undefined, all)).toBe(false);
+    });
+});
+describe("browser profile claims exactly what the probe plays (web-ana N1)", () => {
+    const probe = (accepted: string[]) => (mime: string) =>
+        accepted.some((c) => mime.includes(c));
+    const av1 = (bitDepth = 8): Source => ({
+        Id: "s",
+        Container: "mkv",
+        MediaStreams: [
+            {
+                Type: "Video",
+                Index: 0,
+                Codec: "av1",
+                BitDepth: bitDepth,
+                Width: 640,
+                Height: 360,
+            },
+            { Type: "Audio", Index: 1, Codec: "eac3" },
+        ],
+    });
+    it("offers fMP4 HLS that may copy AV1 when the browser plays AV1", () => {
+        const p = browserProfile(probe(["avc1", "av01", "mp4a"]), 1, av1());
+        expect(
+            p.TranscodingProfiles.map((t) => [t.Container, t.VideoCodec]),
+        ).toEqual([
+            ["ts", "h264"],
+            ["mp4", "h264,av1"],
+        ]);
+        expect(
+            browserPlaybackSummary(probe(["avc1", "av01"]), true).video,
+        ).toContain("AV1");
+    });
+    it("claims no AV1 copy when the browser can't play AV1, matching Troubleshooting", () => {
+        const p = browserProfile(probe(["avc1", "mp4a"]), 1, av1());
+        expect(p.TranscodingProfiles.map((t) => t.Container)).toEqual(["ts"]);
+        expect(
+            browserPlaybackSummary(probe(["avc1"]), true).video,
+        ).not.toContain("AV1");
+    });
+    it("does not offer to copy this file's AV1 when the browser can't decode this file", () => {
+        expect(hlsCopyVideoCodecs(probe(["avc1", "av01"]), av1(10))).toEqual(
+            [],
+        );
+        // Other formats stay claimed for that file.
+        expect(
+            hlsCopyVideoCodecs(probe(["avc1", "av01", "vp09"]), av1(10)),
+        ).toEqual(["vp9"]);
+    });
+    it('treats a "maybe" answer as no, on both screens', () => {
+        const maybe = elementProbe({ canPlayType: () => "maybe" });
+        expect(maybe('video/mp4; codecs="av01.0.08M.08"')).toBe(false);
+        expect(elementProbe({ canPlayType: () => "probably" })("x")).toBe(true);
+    });
+    it("sends the file-aware profile to PlaybackInfo", async () => {
+        const calls: { init: RequestInit }[] = [];
+        const client = new Jellyfin(server, "device", account, (async (
+            _url: string,
+            init: RequestInit,
+        ) => {
+            calls.push({ init });
+            return new Response(
+                JSON.stringify({
+                    MediaSources: [
+                        { ...av1(), TranscodingUrl: "/videos/m/master.m3u8" },
+                    ],
+                }),
+                { status: 200 },
+            );
+        }) as typeof fetch);
+        await client.prepare(
+            { ...movie, MediaSources: [av1()] },
+            probe(["avc1", "av01", "mp4a"]),
+            0,
+        );
+        const request = JSON.parse(String(calls[0].init.body));
+        expect(request.DeviceProfile.TranscodingProfiles[1]).toMatchObject({
+            Container: "mp4",
+            Protocol: "hls",
+            VideoCodec: "h264,av1",
+            AudioCodec: "aac",
+        });
     });
 });

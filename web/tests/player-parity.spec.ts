@@ -997,6 +997,53 @@ test("a narrow desktop window, as at 200% zoom, has no orientation toggle", asyn
     ).toHaveCount(0);
 });
 
+test("PLAY-29: controls that hide on their own tell a keyboard viewer how to bring them back (web-kofi F3)", async ({
+    page,
+}) => {
+    // Controls hide on their own only with "Ask before playing the next episode" off.
+    await page.addInitScript(() =>
+        localStorage.setItem(
+            "pictureshow.preferences",
+            JSON.stringify({ screenReader: false }),
+        ),
+    );
+    await fixture(page);
+    await openMovie(page);
+    await page.locator("video").evaluate((v: HTMLVideoElement) => {
+        v.loop = true;
+    });
+    // A key press makes this a keyboard viewing; then nothing for 10 s.
+    await page.keyboard.press("Shift");
+    const pause = page.getByRole("button", { name: "Pause", exact: true });
+    await expect(pause).toBeHidden({ timeout: 15000 });
+    await expect(
+        page.locator(".playback-feedback", {
+            hasText: "Controls hidden. Press Enter to show them.",
+        }),
+    ).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(pause).toBeVisible();
+});
+
+test("the Volume slider stays in the control bar at 200% zoom on a desktop (web-jo N1)", async ({
+    page,
+}) => {
+    await fixture(page);
+    await openMovie(page);
+    // 1280x800 at 200% zoom leaves a 640x400 CSS viewport with a fine pointer.
+    await page.setViewportSize({ width: 640, height: 400 });
+    await page.mouse.move(320, 200);
+    const volume = page.getByRole("slider", { name: "Volume", exact: true });
+    await expect(volume).toBeVisible();
+    await volume.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect
+        .poll(() =>
+            page.locator("video").evaluate((v: HTMLVideoElement) => v.volume),
+        )
+        .toBeLessThan(1);
+});
+
 test("phone rotation preserves viewing, pause intent and selected sheet", async ({
     browser,
     browserName,

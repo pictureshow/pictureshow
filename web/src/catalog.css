@@ -663,3 +663,9 @@
         display: block;
     }
 }
+
+/* A viewing that ended at the end of the media (web-kofi F11). */
+.catalog-finished {
+    margin: 0.75rem 0 0;
+    font-size: 1rem;
+}

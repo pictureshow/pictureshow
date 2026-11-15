@@ -125,7 +125,11 @@ function App() {
         [confirmError, setConfirmError] = useState(""),
         // A film that played to its end returns to detail with a polite
         // "Finished" and a visible ring on the control that takes focus.
-        [announcement, setAnnouncement] = useState("");
+        [announcement, setAnnouncement] = useState(""),
+        // The title that just played to its end, shown on the detail page the
+        // player returns to (web-kofi F11): readers hear "Finished", and now
+        // everyone sees it too. Cleared by the next viewing.
+        [finished, setFinished] = useState<{ id: string; name: string }>();
     const ringReturn = useRef(false);
     const device = useRef(
             (() => {
@@ -415,6 +419,11 @@ function App() {
             window.removeEventListener("keydown", disarm, true);
         };
     }, []);
+    useEffect(() => {
+        // "Finished" belongs to the return from that viewing, not to later visits.
+        if (finished && (route.kind !== "detail" || route.id !== finished.id))
+            setFinished(undefined);
+    }, [route]);
     useEffect(() => {
         if (!announcement) return;
         const timer = setTimeout(() => {
@@ -891,6 +900,11 @@ function App() {
                         navigate={navigate}
                         onError={fail}
                         onBack={rawBack}
+                        finished={
+                            finished?.id === route.id
+                                ? finished.name
+                                : undefined
+                        }
                     />
                 ) : route.kind === "player" ? (
                     <Player
@@ -910,7 +924,13 @@ function App() {
                             if (outcome === "finished") {
                                 ringReturn.current = true;
                                 setAnnouncement("Finished");
-                            }
+                                const back = stack.at(-2)?.route;
+                                if (back?.kind === "detail")
+                                    setFinished({
+                                        id: back.id,
+                                        name: route.item.Name,
+                                    });
+                            } else setFinished(undefined);
                             rawBack();
                         }}
                         onBack={(message?: string) => {

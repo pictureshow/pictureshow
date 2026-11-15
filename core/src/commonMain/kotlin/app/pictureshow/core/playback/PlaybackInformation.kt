@@ -213,12 +213,12 @@ object PlaybackInformation {
             }
             else -> "The server is converting this video and did not say why."
         }
-        val audioTracks = decision.mediaSource.mediaStreams.count { it.type == MediaStreamType.Audio }
+        val audioTracks = playableOtherAudioTracks(decision)
         val remedies = when (kind) {
             "burn-in" -> listOf("Turn subtitles off, or choose a text subtitle track, so they don't need to be burned in.")
             "bitrate" -> listOf("Raise Max streaming bitrate in Settings to try the original quality.")
-            // A remedy that names another track needs one to exist.
-            "audio" -> if (audioTracks >= 2) {
+            // A remedy that names another track needs one that plays without conversion.
+            "audio" -> if (audioTracks >= 1) {
                 listOf("Choose another audio track in Audio; one that $device can play needs no conversion.")
             } else {
                 emptyList()
@@ -231,6 +231,21 @@ object PlaybackInformation {
             else -> "Transcode" to "Why the server converts"
         }
         return Explanation(kind, shownMethod, heading, summary, remedies)
+    }
+
+    /**
+     * How many of the source's other audio tracks the server would copy as they are. The transcoding URL names the
+     * formats its stream carries (`AudioCodec`) and the track being converted (`AudioStreamIndex`); a track in another
+     * format is converted too, so advice to switch tracks needs one in a carried format. No list, no advice.
+     */
+    fun playableOtherAudioTracks(decision: PlayDecision): Int {
+        fun name(codec: String?) = codec.orEmpty().trim().lowercase().let { if (it == "dca") "dts" else it }
+        val carried = parameter(decision, "AudioCodec").orEmpty().split(',').map(::name)
+            .filter { it.isNotEmpty() && it != "copy" }.toSet()
+        val selected = parameter(decision, "AudioStreamIndex")?.toIntOrNull()
+        return decision.mediaSource.mediaStreams.count {
+            it.type == MediaStreamType.Audio && it.index != selected && name(it.codec) in carried
+        }
     }
 
     /** An explicit `VideoCodec=copy` means the server repackages the video without re-encoding it. */

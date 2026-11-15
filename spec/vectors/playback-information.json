@@ -1475,10 +1475,10 @@
     {
       "id": "playback-information.conversion-explanation.audio-format-two-tracks",
       "operation": "conversion-explanation",
-      "description": "With a second track the remedy names it.",
+      "description": "Another track in a format the stream carries (AudioCodec lists aac) is named as the remedy.",
       "input": {
         "method": "Transcode",
-        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioCodecNotSupported",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&AudioStreamIndex=2&TranscodeReasons=AudioCodecNotSupported",
         "reasons": [
           "AudioCodecNotSupported"
         ],
@@ -1499,6 +1499,112 @@
               "Type": "Audio",
               "Index": 2,
               "Codec": "flac"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this TV can play.\nChoose another audio track in Audio; one that this TV can play needs no conversion."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-other-tracks-also-converted",
+      "operation": "conversion-explanation",
+      "description": "TrueHD with DTS and Vorbis alternatives on a stream that carries only AAC (web): every track would be converted, so switching tracks is not offered.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&AudioStreamIndex=1&TranscodeReasons=AudioCodecNotSupported,DirectPlayError",
+        "reasons": [
+          "AudioCodecNotSupported",
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "truehd"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "dts"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "vorbis"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this browser can play."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-selected-track-not-counted",
+      "operation": "conversion-explanation",
+      "description": "The track being converted is never its own remedy: the only carried format belongs to the selected track (AudioStreamIndex), and codec names compare case-insensitively.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=AAC,EAC3&AudioStreamIndex=1&TranscodeReasons=AudioChannelsNotSupported,AudioCodecNotSupported",
+        "reasons": [
+          "AudioChannelsNotSupported",
+          "AudioCodecNotSupported"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "eac3"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "truehd"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this browser can play."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-carried-alternative-dca",
+      "operation": "conversion-explanation",
+      "description": "Jellyfin names DTS \"dca\" in AudioCodec; a DTS alternative on a stream that carries it is named as the remedy.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac,ac3,dca&AudioStreamIndex=1&TranscodeReasons=AudioCodecNotSupported",
+        "reasons": [
+          "AudioCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "truehd"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "dts"
             }
           ]
         }

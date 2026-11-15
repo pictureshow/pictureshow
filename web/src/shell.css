@@ -190,6 +190,10 @@ fieldset {
     display: flex;
     gap: 16px;
 }
+/* Remove sits well apart from Continue, so a slip lands on nothing (it confirms anyway). */
+.account-list .account-remove {
+    margin-inline-start: 48px;
+}
 .license-list button {
     text-align: left;
     white-space: normal;
@@ -586,6 +590,9 @@ a:focus-visible,
     .account-list button {
         width: 100%;
         min-width: 0;
+    }
+    .account-list .account-remove {
+        margin: 12px 0 0;
     }
     .signin .code {
         font-size: 40px;
