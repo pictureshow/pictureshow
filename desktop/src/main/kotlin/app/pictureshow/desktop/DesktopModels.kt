@@ -33,7 +33,8 @@ data class DesktopPlaybackState(
     val nextEpisode: MediaItem? = null,
     val muted: Boolean = false,
     /** Set once the viewing reached its physical end (PLAY-17): the end card replaces the transport. */
-    val end: DesktopEndCard? = null
+    val end: DesktopEndCard? = null,
+    val received: DesktopReceivedFormats = DesktopReceivedFormats()
 )
 
 /**

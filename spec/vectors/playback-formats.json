@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-formats",
+  "cases": [
+    {
+      "id": "range-HDR10",
+      "operation": "range",
+      "input": {
+        "range": "HDR10",
+        "profile": 8
+      },
+      "expected": "HDR10"
+    },
+    {
+      "id": "range-HDR10Plus",
+      "operation": "range",
+      "input": {
+        "range": "HDR10Plus",
+        "profile": 8
+      },
+      "expected": "HDR10+"
+    },
+    {
+      "id": "range-HLG",
+      "operation": "range",
+      "input": {
+        "range": "HLG",
+        "profile": 8
+      },
+      "expected": "HLG"
+    },
+    {
+      "id": "range-SDR",
+      "operation": "range",
+      "input": {
+        "range": "SDR",
+        "profile": 8
+      },
+      "expected": "SDR"
+    },
+    {
+      "id": "range-Unknown",
+      "operation": "range",
+      "input": {
+        "range": "Unknown",
+        "profile": 8
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "range-DOVI",
+      "operation": "range",
+      "input": {
+        "range": "DOVI",
+        "profile": 5
+      },
+      "expected": "Dolby Vision profile 5"
+    },
+    {
+      "id": "range-DOVIWithHDR10",
+      "operation": "range",
+      "input": {
+        "range": "DOVIWithHDR10",
+        "profile": 8
+      },
+      "expected": "Dolby Vision profile 8 \u00b7 HDR10 base layer"
+    },
+    {
+      "id": "range-DOVIWithHDR10Plus",
+      "operation": "range",
+      "input": {
+        "range": "DOVIWithHDR10Plus",
+        "profile": 8
+      },
+      "expected": "Dolby Vision profile 8 \u00b7 HDR10+ base layer"
+    },
+    {
+      "id": "range-DOVIWithHLG",
+      "operation": "range",
+      "input": {
+        "range": "DOVIWithHLG",
+        "profile": 8
+      },
+      "expected": "Dolby Vision profile 8 \u00b7 HLG base layer"
+    },
+    {
+      "id": "range-DOVIWithSDR",
+      "operation": "range",
+      "input": {
+        "range": "DOVIWithSDR",
+        "profile": 8
+      },
+      "expected": "Dolby Vision profile 8 \u00b7 SDR base layer"
+    },
+    {
+      "id": "range-DOVIInvalid",
+      "operation": "range",
+      "input": {
+        "range": "DOVIInvalid",
+        "profile": 8
+      },
+      "expected": "Dolby Vision (invalid metadata)"
+    },
+    {
+      "id": "missing-range",
+      "operation": "range",
+      "input": {},
+      "expected": "Not reported"
+    },
+    {
+      "id": "invalid-profile",
+      "operation": "range",
+      "input": {
+        "range": "DOVI",
+        "profile": 999
+      },
+      "expected": "Dolby Vision"
+    },
+    {
+      "id": "decoder-software",
+      "operation": "decoder",
+      "input": {
+        "hwdec": "no"
+      },
+      "expected": "Software (mpv)"
+    },
+    {
+      "id": "decoder-hardware",
+      "operation": "decoder",
+      "input": {
+        "hwdec": "videotoolbox"
+      },
+      "expected": "Hardware (mpv \u00b7 videotoolbox)"
+    },
+    {
+      "id": "decoder-missing",
+      "operation": "decoder",
+      "input": {
+        "hwdec": null
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "decoder-unsafe",
+      "operation": "decoder",
+      "input": {
+        "hwdec": "https://private.invalid/key"
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "display-mac",
+      "operation": "display",
+      "input": {
+        "transfer": "pq",
+        "output": "HdrEdR"
+      },
+      "expected": "HDR active (EDR)"
+    },
+    {
+      "id": "display-windows",
+      "operation": "display",
+      "input": {
+        "transfer": "hlg",
+        "output": "HdrScRgb"
+      },
+      "expected": "HDR active (scRGB)"
+    },
+    {
+      "id": "display-sdr-monitor",
+      "operation": "display",
+      "input": {
+        "transfer": "pq",
+        "output": "Sdr"
+      },
+      "expected": "HDR video on an SDR display \u00b7 mapped to SDR"
+    },
+    {
+      "id": "display-linux",
+      "operation": "display",
+      "input": {
+        "transfer": "pq",
+        "output": "WaylandPq"
+      },
+      "expected": "HDR sent to compositor (PQ / BT.2020) \u00b7 display HDR not reported"
+    },
+    {
+      "id": "display-unknown",
+      "operation": "display",
+      "input": {
+        "transfer": "pq",
+        "output": "Unknown"
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "display-sdr-on-hdr",
+      "operation": "display",
+      "input": {
+        "transfer": "bt.1886",
+        "output": "HdrEdR"
+      },
+      "expected": "SDR video"
+    },
+    {
+      "id": "display-missing-frame",
+      "operation": "display",
+      "input": {
+        "transfer": null,
+        "output": "HdrEdR"
+      },
+      "expected": "Not reported"
+    }
+  ]
+}

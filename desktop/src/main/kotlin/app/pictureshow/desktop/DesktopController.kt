@@ -496,7 +496,7 @@ class DesktopController(
                     if (v.closing || viewing !== v) break
                     val snap = player.snapshot()
                     mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
-                        paused = snap.paused, ready = snap.ready)) else s }
+                        paused = snap.paused, ready = snap.ready, received = snap.received)) else s }
                     if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); mutable.update { it.copy(error = snap.error) }; break }
                     if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
                     if (snap.ready && !v.startAttempted) v.reports.withLock {
