@@ -559,9 +559,15 @@ internal fun TouchCatalogDetail(
                                             }
                                             onDownload?.invoke(item, season?.id, season?.name)
                                         }
-                                        // A download already here shows itself in Download's place: its state, Remove, and streaming instead.
+                                        // A download already here shows itself in Download's place: state, Remove, streaming instead.
                                         if (download?.offline != null) {
-                                            TouchDetailDownloadPanel(item.name, download, page.streamInstead, !state.busy && !state.loading, startDownload)
+                                            TouchDetailDownloadPanel(
+                                                item.name,
+                                                download,
+                                                page.streamInstead,
+                                                !state.busy && !state.loading,
+                                                startDownload
+                                            )
                                         } else if (onDownload != null && offlineOffersDownload(item)) {
                                             OutlinedButton(
                                                 onClick = startDownload,

@@ -102,7 +102,8 @@ class OfflineDetailTest {
     @Test fun reachIsUnreachableOnlyWhenNothingAnswered() {
         val base = CatalogDetailState(account, MediaItem("movie", "A Film", "Movie"), loading = false)
         assertEquals(OfflineServerReach.unreachable, touchDetailServerReach(OfflineNetwork.none, base))
-        assertEquals(OfflineServerReach.unreachable, touchDetailServerReach(OfflineNetwork.unmetered, base.copy(readFailed = true, readUnreachable = true)))
+        val noAnswer = base.copy(readFailed = true, readUnreachable = true)
+        assertEquals(OfflineServerReach.unreachable, touchDetailServerReach(OfflineNetwork.unmetered, noAnswer))
         // A server that answered with an error is there; its actions say what it said.
         assertEquals(OfflineServerReach.unknown, touchDetailServerReach(OfflineNetwork.unmetered, base.copy(readFailed = true)))
         assertEquals(OfflineServerReach.reachable, touchDetailServerReach(OfflineNetwork.unmetered, base.copy(readSucceeded = true)))
@@ -159,7 +160,18 @@ class OfflineDetailTest {
         )
         compose.setContent {
             MaterialTheme {
-                TouchCatalogDetail(state, {}, {}, {}, {}, {}, { _, _ -> taps.streamed++ }, {}, onDownload = { _, _, _ -> }, download = download)
+                TouchCatalogDetail(
+                    state,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { _, _ -> taps.streamed++ },
+                    {},
+                    onDownload = { _, _, _ -> },
+                    download = download
+                )
             }
         }
     }

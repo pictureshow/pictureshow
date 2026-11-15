@@ -17,8 +17,9 @@ enum class OfflineDetailSource { local, stream, unavailable }
  * server known to be out of reach it is unavailable and says why, rather than opening a player that can only fail.
  */
 fun offlineDetailPlaySource(ready: Boolean, server: OfflineServerReach, explicitStream: Boolean): OfflineDetailSource = when {
-    explicitStream || !ready -> if (server == OfflineServerReach.unreachable) OfflineDetailSource.unavailable else OfflineDetailSource.stream
-    else -> OfflineDetailSource.local
+    !explicitStream && ready -> OfflineDetailSource.local
+    server == OfflineServerReach.unreachable -> OfflineDetailSource.unavailable
+    else -> OfflineDetailSource.stream
 }
 
 /**

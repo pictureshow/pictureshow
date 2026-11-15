@@ -4,8 +4,8 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -194,11 +194,15 @@ internal fun TouchDetailDownloadPanel(
             )
         }
         if (confirming) {
-            Text("Remove $title from this phone? You can still stream it from your server.", Modifier.testTag("touch:detail:offline:question"))
+            Text(
+                "Remove $title from this phone? You can still stream it from your server.",
+                Modifier.testTag("touch:detail:offline:question")
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { confirming = false }, modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:offline:cancel")) {
-                    Text("Cancel")
-                }
+                OutlinedButton(
+                    onClick = { confirming = false },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:offline:cancel")
+                ) { Text("Cancel") }
                 OutlinedButton(
                     onClick = {
                         confirming = false

@@ -61,7 +61,8 @@ private const val RELOAD_FIRST = "Reload the item before changing it."
 
 /** Said by a server-only action when the server is known to be out of reach: it explains rather than failing or looking live. */
 internal const val DETAIL_TV_NEEDS_SERVER = "Play on TV needs your server, and Pictureshow can't reach it right now."
-internal const val DETAIL_STREAM_NEEDS_SERVER = "Streaming needs your server, and Pictureshow can't reach it right now. The download still plays."
+internal const val DETAIL_STREAM_NEEDS_SERVER =
+    "Streaming needs your server, and Pictureshow can't reach it right now. The download still plays."
 internal const val DETAIL_STREAM_NOT_LOADED = "The server hasn't answered yet. Try again in a moment, or play the download."
 
 /** A ready download of this title: the page's Play, Resume and Play from start use it, starting at [startTicks]. */
@@ -446,7 +447,11 @@ internal fun rememberTouchDetailPresentation(
             pendingEnabled -> captureOpen && !(inPlaySlot && playQueued != null && !requested)
             else -> fresh && playItem != null
         },
-        state = if (serverOut) "Needs your server" else TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && inPlaySlot && playQueued != null && !requested },
+        state = if (serverOut) {
+            "Needs your server"
+        } else {
+            TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && inPlaySlot && playQueued != null && !requested }
+        },
         requested = requested,
         onClick = {
             when {
@@ -483,7 +488,9 @@ internal fun rememberTouchDetailPresentation(
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
                 reserve = listOf("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable"),
                 enabled = local != null || if (pendingEnabled) playOpen("primary") else canFreshPlay,
-                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { local == null && pendingEnabled && playQueued != null && playQueued != "primary" },
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
+                    local == null && pendingEnabled && playQueued != null && playQueued != "primary"
+                },
                 requested = local == null && pendingEnabled && playQueued == "primary",
                 onClick = {
                     if (local != null) {
@@ -550,7 +557,9 @@ internal fun rememberTouchDetailPresentation(
                     "Start unavailable"
                 ),
                 enabled = local != null || if (pendingEnabled) playOpen("from-start") else canFreshPlay,
-                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { local == null && pendingEnabled && playQueued != null && playQueued != "from-start" },
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
+                    local == null && pendingEnabled && playQueued != null && playQueued != "from-start"
+                },
                 requested = local == null && pendingEnabled && playQueued == "from-start",
                 // CAT: a resume-only action; the returning layout keeps its place until the fresh position is known.
                 visible = if (local != null) {
