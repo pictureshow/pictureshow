@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -49,7 +48,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -405,7 +403,7 @@ fun CatalogHome(
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Up from the first shelf lands on Search; Settings is beside it. The account chip leads the row
                     // (Switch user · Sign out · Settings), and the same two buttons stay below every shelf.
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).
                         AccountChip(
                             account.user.name,
@@ -726,7 +724,7 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
     Button(
         onClick = onClick,
         enabled = enabled,
-        // A long server name ellipsizes here and shows in full in the menu; the header row scrolls rather than clip at 1.3x type.
+        // A long name ellipsizes at a fixed width, so the header fits 960x540 at 1.3x type; the menu shows it in full.
         modifier = modifier.semantics {
             contentDescription = "Account: ${accountChipLabel(user, server)}"
             onClick(label = "Account options", action = null)
@@ -3353,29 +3351,6 @@ private fun DetailActions(
                     }
                 }
             }
-            if (stableLayout) {
-                key("from-start") {
-                    Box {
-                        val click = pending?.onFromStart ?: {
-                            playItem?.let { onPlay(it, false) }
-                            Unit
-                        }
-                        Button(
-                            onClick = { if (!blocked) click() },
-                            enabled = !blocked && (pending != null || playItem != null),
-                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                                .then(actionModifier("from-start", "from-start", click))
-                        ) {
-                            DetailActionLabel(
-                                labels.getValue("from-start"),
-                                if (stableLayout || compact) "from-start" else null,
-                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
-                                compact = compact
-                            )
-                        }
-                    }
-                }
-            }
             if (!stableLayout && position > 0) {
                 key("from-start") {
                     Box {
@@ -3479,6 +3454,31 @@ private fun DetailActions(
                             )
                         } else {
                             Text("Download")
+                        }
+                    }
+                }
+            }
+            // After playback Play from start keeps its last place, so the pending handoff and the ready row agree on Right
+            // from the primary landing on Mark watched (CAT-08..12); the shorter hero keeps a wrapped second row on screen (T-8).
+            if (stableLayout) {
+                key("from-start") {
+                    Box {
+                        val click = pending?.onFromStart ?: {
+                            playItem?.let { onPlay(it, false) }
+                            Unit
+                        }
+                        Button(
+                            onClick = { if (!blocked) click() },
+                            enabled = !blocked && (pending != null || playItem != null),
+                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                .then(actionModifier("from-start", "from-start", click))
+                        ) {
+                            DetailActionLabel(
+                                labels.getValue("from-start"),
+                                if (stableLayout || compact) "from-start" else null,
+                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                                compact = compact
+                            )
                         }
                     }
                 }

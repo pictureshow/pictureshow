@@ -31,7 +31,7 @@ import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
-import app.pictureshow.core.resumeLabel
+import app.pictureshow.core.detailPlayLabel
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.asImage
@@ -203,7 +203,8 @@ class DetailHeaderTest {
             }
         )
         assertHeader(series.name)
-        compose.onNodeWithText(resumeLabel(episode.userData.playbackPositionTicks)).assertIsDisplayed()
+        // A series names the episode it resumes (T-13), not just the position.
+        compose.onNodeWithText(detailPlayLabel(series, episode)).assertIsDisplayed()
         key(Key.DirectionCenter)
         compose.runOnIdle {
             assertEquals(episode.id, playedItem?.id)
