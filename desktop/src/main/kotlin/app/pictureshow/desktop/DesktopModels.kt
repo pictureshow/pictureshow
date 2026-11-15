@@ -6,7 +6,7 @@ package app.pictureshow.desktop
 import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 
-enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Library, Detail, Player, Settings }
+enum class DesktopRoute { Loading, Servers, Accounts, SignIn, QuickConnect, Home, Search, Person, Library, Detail, Player, Settings }
 
 data class DesktopSettings(
     val bitrateMbps: Int? = null,
@@ -71,15 +71,19 @@ data class DesktopState(
     /** TOUCH-02: the sidebar root this page was opened under, stored when it opens; Detail keeps its opener's root. */
     val root: String? = null,
     /** A control tag the next page focuses once, e.g. "play" on the title after a film finishes (PLAY-17). */
-    val returnFocus: String? = null
+    val returnFocus: String? = null,
+    val search: DesktopSearchState = DesktopSearchState(),
+    val person: MediaItem? = null
 )
 
 internal const val DESKTOP_ROOT_HOME = "home"
+internal const val DESKTOP_ROOT_SEARCH = "search"
 internal const val DESKTOP_ROOT_SETTINGS = "settings"
 internal fun desktopLibraryRoot(id: String) = "library:$id"
 /** A root page owns itself; any other page keeps the root it was opened from. */
 internal fun desktopRootFor(route: DesktopRoute, previous: String?): String? = when (route) {
     DesktopRoute.Home -> DESKTOP_ROOT_HOME
+    DesktopRoute.Search -> DESKTOP_ROOT_SEARCH
     DesktopRoute.Settings -> DESKTOP_ROOT_SETTINGS
     else -> previous
 }

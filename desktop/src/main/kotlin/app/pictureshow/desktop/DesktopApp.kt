@@ -149,11 +149,12 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     val pageKey = state.route.name + when(state.route) {
         DesktopRoute.Library -> ":${state.library?.id}:${state.sortBy}:${state.descending}"
         DesktopRoute.Detail -> ":${state.detail?.id}"
+        DesktopRoute.Person -> ":${state.person?.id}"
         else -> ""
     }
     val savedPages = rememberSaveableStateHolder()
     LaunchedEffect(pageKey, state.busy) {
-        if(!state.busy) {
+        if(!state.busy && state.route != DesktopRoute.Search) {
             delay(150)
             if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
                 // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
@@ -165,10 +166,28 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     DesktopRoute.Detail -> "play"
                     DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
                     DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" }
+                    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
+                    DesktopRoute.Search -> "search-field"
                     else -> null
                 }
                 target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
             }
+        }
+    }
+    // Restore Search once on entry, not on every debounce completion: a viewer may have
+    // deliberately moved to the sidebar while a query is pending.
+    LaunchedEffect(pageKey) {
+        if (state.route == DesktopRoute.Search) {
+            delay(150)
+            val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
+            runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
+        }
+    }
+    LaunchedEffect(state.returnFocus, pageKey) {
+        if (state.route == DesktopRoute.Search && state.returnFocus == "search-field") {
+            delay(100)
+            runCatching { DesktopUiProbe.requestFocus["search-field"]?.requestFocus() }
+            controller.returnFocusDone()
         }
     }
     val focus = LocalFocusManager.current
@@ -231,6 +250,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     ShellAction.SeekBack -> controller.seek((state.playback?.positionSeconds ?: 0.0) - 10)
                     ShellAction.SeekForward -> controller.seek((state.playback?.positionSeconds ?: 0.0) + 10)
                     ShellAction.Help -> { modalReturnFocus = DesktopUiProbe.focus.entries.firstOrNull { it.value }?.key; help = true }
+                    ShellAction.Search -> controller.search()
                     ShellAction.Settings -> if (state.route != DesktopRoute.Settings) controller.settings()
                     ShellAction.Left -> focus.moveFocus(FocusDirection.Left)
                     ShellAction.Right -> focus.moveFocus(FocusDirection.Right)
@@ -245,7 +265,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("PICTURESHOW", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(20.dp))
-                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.Settings) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
+                    if (state.route in setOf(DesktopRoute.SignIn, DesktopRoute.QuickConnect, DesktopRoute.Detail, DesktopRoute.Player, DesktopRoute.Library, DesktopRoute.Settings, DesktopRoute.Search, DesktopRoute.Person) || (state.route == DesktopRoute.Accounts && state.account != null)) TextButton(onClick = controller::back, modifier = Modifier.controlFocus().probe("back")) { Icon(DesktopGlyph.Back, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Back") }
                     Spacer(Modifier.weight(1f))
                     DesktopUtility("Keyboard shortcuts", DesktopGlyph.Keyboard, "shortcuts") { modalReturnFocus = "shortcuts"; help = true }
                     DesktopUtility(if(fullscreen) "Exit fullscreen" else "Fullscreen", DesktopGlyph.Fullscreen, "fullscreen", onFullscreen)
@@ -261,6 +281,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             libraries = state.homeRows.filter { it.library }.flatMap { it.items },
                             root = state.root,
                             onHome = controller::home,
+                            onSearch = controller::search,
                             onLibrary = controller::browseRoot,
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
@@ -272,11 +293,11 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             Card(Modifier.fillMaxWidth().widthIn(max = 560.dp).align(Alignment.CenterHorizontally).padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.controlFocus().probe("retry")) { Text("Retry") }
+                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Person, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.controlFocus().probe("retry")) { Text("Retry") }
                                 }
                             }
                         }
-                        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
+                        if (state.busy && state.route != DesktopRoute.Search) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading" })
                         Box(Modifier.fillMaxSize()) {
                             savedPages.SaveableStateProvider(pageKey) {
                             CompositionLocalProvider(LocalDesktopPage provides pageKey) {
@@ -287,6 +308,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.QuickConnect -> QuickConnectPage(state, controller)
                                 DesktopRoute.Accounts -> AccountsPage(state, controller, onRemove = { a -> modalReturnFocus = "remove:${a.key}"; remove = a })
                                 DesktopRoute.Home -> HomePage(state, controller)
+                                DesktopRoute.Search -> SearchPage(state, controller)
+                                DesktopRoute.Person -> SearchPersonPage(state, controller)
                                 DesktopRoute.Library -> LibraryPage(state, controller)
                                 DesktopRoute.Detail -> DetailPage(state, controller)
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
@@ -332,6 +355,7 @@ internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<Shortc
         (if (macChrome) "⌃⌘F" else "F11 / Alt+Enter") to "Fullscreen",
         "?" to "This list"
     )),
+    ShortcutSection("Browsing", listOf((if (mac) "⌘F" else "Ctrl+F") to "Search your libraries"), note = "Search opens with the field focused. Down enters results; Escape goes back. Unavailable during playback."),
     ShortcutSection("During playback", listOf(
         "Space / K" to "Play or pause",
         "← → / J L" to "Back or forward 10 seconds",
@@ -364,7 +388,8 @@ internal fun DesktopSidebar(
     onLibrary: (MediaItem) -> Unit,
     onSettings: () -> Unit,
     onAccounts: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onSearch: () -> Unit = {}
 ) {
     Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
         DesktopAccountMenu(account, onSettings, onAccounts, onSignOut, Modifier.padding(horizontal = 12.dp))
@@ -380,8 +405,9 @@ internal fun DesktopSidebar(
             VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 2.dp))
         }
         HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
-        // Pinned footer. Search joins it above Settings when it exists (D-2); no placeholder until then.
+        // Search and Settings stay reachable independently of the number of libraries.
         Column(Modifier.padding(horizontal = 12.dp).testTag("sidebar-footer"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SidebarItem("Search", root == DESKTOP_ROOT_SEARCH, "nav:search", onSearch)
             SidebarItem("Settings", root == DESKTOP_ROOT_SETTINGS, "nav:settings", onSettings)
         }
     }

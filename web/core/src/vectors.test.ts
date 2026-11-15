@@ -56,6 +56,8 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
+    "search-presentation",
     "frame-rate-match",
     "playback-start",
     "playback-settings",

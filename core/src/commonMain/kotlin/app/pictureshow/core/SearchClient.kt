@@ -4,6 +4,7 @@
 package app.pictureshow.core
 
 import io.ktor.client.HttpClient
+import io.ktor.http.encodeURLPathPart
 
 const val SEARCH_QUERY_LIMIT = 200
 fun normalizeSearch(query: String): String = query.trim().take(SEARCH_QUERY_LIMIT).trimEnd()
@@ -23,6 +24,9 @@ enum class SearchKind(val itemType: String, val title: String) {
 }
 
 interface SearchService {
+    suspend fun searchAncestors(account: Account, itemId: String): ClientResult<List<MediaItem>> =
+        ClientResult.Failure(ClientError(ErrorKind.SERVER, "Library information is unavailable."))
+
     suspend fun search(account: Account, query: String, kind: SearchKind): ClientResult<ItemPage>
 
     suspend fun personItems(account: Account, personId: String, startIndex: Int = 0, limit: Int = 60): ClientResult<ItemPage>
@@ -31,6 +35,9 @@ interface SearchService {
 /** Separate queries prevent music and high-volume types from crowding video results out of the limit. */
 internal class SearchClient(client: HttpClient, identity: ClientIdentity) : SearchService {
     private val transport = CatalogClient(client, identity)
+
+    override suspend fun searchAncestors(account: Account, itemId: String): ClientResult<List<MediaItem>> =
+        transport.request(account, "Items/${itemId.encodeURLPathPart()}/Ancestors")
 
     override suspend fun search(account: Account, query: String, kind: SearchKind): ClientResult<ItemPage> {
         val term = normalizeSearch(query)

@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "suite": "search-presentation",
+  "cases": [
+    {
+      "id": "search-presentation.same-title-year",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "b",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": "search-presentation.same-title-different-year",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "b",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2025
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "search-presentation.normalized-title",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "b",
+            "Name": "  CLOUD  ",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": "search-presentation.one-item-repeated-is-not-two-copies",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "search-presentation.different-types",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "b",
+            "Name": "Cloud",
+            "Type": "Series",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "search-presentation.missing-years-still-ambiguous",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": null
+          },
+          {
+            "Id": "b",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": null
+          }
+        ]
+      },
+      "expected": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": "search-presentation.unique-titles",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": [
+          {
+            "Id": "a",
+            "Name": "Cloud",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "b",
+            "Name": "Spring",
+            "Type": "Movie",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "search-presentation.empty",
+      "operation": "search-duplicate-ids",
+      "input": {
+        "items": []
+      },
+      "expected": []
+    },
+    {
+      "id": "search-presentation.library-from-visible-view",
+      "operation": "search-library-name",
+      "input": {
+        "ancestors": [
+          {
+            "Id": "folder",
+            "Name": "Cloud",
+            "Type": "Folder",
+            "ProductionYear": 2026
+          },
+          {
+            "Id": "open",
+            "Name": "Open Movies",
+            "Type": "CollectionFolder",
+            "ProductionYear": 2026
+          }
+        ],
+        "libraries": [
+          {
+            "Id": "open",
+            "Name": "Open films",
+            "Type": "CollectionFolder",
+            "ProductionYear": 2026
+          }
+        ]
+      },
+      "expected": "Open films"
+    },
+    {
+      "id": "search-presentation.ancestor-library-fallback",
+      "operation": "search-library-name",
+      "input": {
+        "ancestors": [
+          {
+            "Id": "open",
+            "Name": "Open Movies",
+            "Type": "CollectionFolder",
+            "ProductionYear": 2026
+          }
+        ],
+        "libraries": []
+      },
+      "expected": "Open Movies"
+    },
+    {
+      "id": "search-presentation.no-guessed-folder",
+      "operation": "search-library-name",
+      "input": {
+        "ancestors": [
+          {
+            "Id": "folder",
+            "Name": "Private path",
+            "Type": "Folder",
+            "ProductionYear": 2026
+          }
+        ],
+        "libraries": []
+      },
+      "expected": null
+    }
+  ]
+}

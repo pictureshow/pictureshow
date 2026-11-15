@@ -173,7 +173,7 @@ class DesktopController(
         snapshotAccounts()
         synchronized(history) { history.clear() }
         pendingQuick = null; quickOwner = null
-        publish(g) { it.copy(account = account, server = account.server, quickCode = null, detail = null, playback = null, homeRows = emptyList()) }
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, quickCode = null, detail = null, playback = null, homeRows = emptyList()) }
         loadHome(g)
     }
     fun quickConnect() {
@@ -214,7 +214,7 @@ class DesktopController(
             return@page
         }
         store.select(key); snapshotAccounts(); synchronized(history) { history.clear() }
-        publish(g) { it.copy(account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
+        publish(g) { it.copy(search = DesktopSearchState(), account = account, server = account.server, detail = null, playback = null, homeRows = emptyList()) }; loadHome(g)
     }
     fun signOut() {
         val account = mutable.value.account ?: return
@@ -230,6 +230,98 @@ class DesktopController(
         if (mutable.value.account?.key == key) finishViewing()
         store.removeAccount(key); snapshotAccounts()
         publish(g) { if (it.account?.key == key) it.copy(account = null, homeRows = emptyList(), items = emptyList(), detail = null) else it }
+    }
+    @Synchronized fun search() {
+        if (mutable.value.account == null) return
+        if (mutable.value.route == DesktopRoute.Search) {
+            mutable.update { it.copy(returnFocus = "search-field") }
+            return
+        }
+        val a = mutable.value.account ?: return
+        val previous = synchronized(history) {
+            val index = history.indexOfLast { it.route == DesktopRoute.Search && it.account?.key == a.key }
+            if (index < 0) null else history[index].also { while (history.size > index) history.removeAt(history.lastIndex) }
+        }
+        if (previous != null) {
+            generation.incrementAndGet(); pageJob?.cancel()
+            mutable.value = previous.copy(busy = false, settings = mutable.value.settings, returnFocus = "search-field",
+                search = previous.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = mutable.value.search.storageError))
+            if (previous.search.loading) searchQuery(previous.search.query, immediate = true)
+            return
+        }
+        page(DesktopRoute.Search, remember = true) { g ->
+            publish(g) { it.copy(search = DesktopSearchState(recent = store.snapshots.value.recentSearches[a.key].orEmpty()), returnFocus = "search-field") }
+        }
+    }
+    @Synchronized fun searchQuery(value: String, immediate: Boolean = false) {
+        if (mutable.value.route != DesktopRoute.Search) return
+        val bounded = value.take(SEARCH_QUERY_LIMIT)
+        val term = normalizeSearch(bounded)
+        mutable.update { it.copy(search = it.search.copy(query = bounded, rows = emptyList(), loading = term.length >= 2,
+            completed = false, someFailed = false, allFailed = false, libraries = emptyMap(), libraryError = false)) }
+        page(DesktopRoute.Search) { g ->
+            if (term.length < 2) return@page
+            if (!immediate) delay(300)
+            val a = mutable.value.account ?: return@page
+            val results = coroutineScope {
+                SearchKind.entries.map { kind -> async { kind to client.search(a, term, kind) } }.awaitAll().toMap()
+            }
+            if (searchSessionEnded(g, a, results.values)) return@page
+            val rows = searchRows(results)
+            val duplicates = searchDuplicateIds(rows.flatMap { it.items })
+            val ancestors = coroutineScope {
+                duplicates.map { id -> async { id to client.searchAncestors(a, id) } }.awaitAll().toMap()
+            }
+            if (searchSessionEnded(g, a, ancestors.values)) return@page
+            val labels = ancestors.mapValues { (_, response) ->
+                (response as? ClientResult.Success)?.value?.let { parents ->
+                    searchLibraryName(parents, mutable.value.homeRows.filter { row -> row.library }.flatMap { row -> row.items })
+                } ?: if (response is ClientResult.Failure) "Library unavailable" else "Library not provided"
+            }
+            publish(g) { it.copy(search = it.search.copy(rows = rows, loading = false, completed = true,
+                someFailed = results.values.any { result -> result is ClientResult.Failure },
+                allFailed = results.values.all { result -> result is ClientResult.Failure },
+                libraries = labels, libraryError = ancestors.values.any { response -> response is ClientResult.Failure })) }
+
+        }
+    }
+    private suspend fun searchSessionEnded(g: Long, account: Account, results: Collection<ClientResult<*>>): Boolean {
+        currentCoroutineContext().ensureActive()
+        if (generation.get() != g) return true
+        val failure = results.filterIsInstance<ClientResult.Failure>().firstOrNull {
+            it.error.kind in setOf(ErrorKind.EXPIRED, ErrorKind.INVALID_CREDENTIALS)
+        } ?: return false
+        attempt<Unit>(g, account) { failure }
+        return true
+    }
+    fun rememberSearch(clear: Boolean = false) {
+        val a = mutable.value.account ?: return
+        val term = normalizeSearch(mutable.value.search.query)
+        scope.launch {
+            try {
+                if (clear) store.clearSearches(a.key) else if (term.length >= 2) store.recordSearch(a.key, term)
+                mutable.update { if (it.account?.key == a.key) it.copy(search = it.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = null)) else it }
+            } catch (_: Exception) {
+                mutable.update { if (it.account?.key == a.key) it.copy(search = it.search.copy(storageError = "Could not save recent searches.")) else it }
+            }
+        }
+    }
+    fun openSearchResult(item: MediaItem) { rememberSearch(); open(item) }
+    fun person(item: MediaItem) = page(DesktopRoute.Person, remember = true) { g ->
+        publish(g) { it.copy(person = item, items = emptyList(), total = 0) }
+        val a = mutable.value.account ?: return@page
+        val p = attempt(g, a) { client.personItems(a, item.id) } ?: return@page
+        publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
+    }
+    fun morePerson() {
+        if (mutable.value.busy) return
+        val before = mutable.value
+        val person = before.person ?: return
+        page(DesktopRoute.Person) { g ->
+            val a = mutable.value.account ?: return@page
+            val p = attempt(g, a) { client.personItems(a, person.id, before.items.size) } ?: return@page
+            publish(g) { it.copy(items = (it.items + p.items).distinctBy(MediaItem::id), total = if (p.items.isEmpty()) it.items.size else p.totalRecordCount) }
+        }
     }
     fun home() = page(DesktopRoute.Home) { g -> synchronized(history) { history.clear() }; loadHome(g) }
     private suspend fun loadHome(g: Long) = coroutineScope {
@@ -250,6 +342,7 @@ class DesktopController(
     /** Live TV (gap C34) has its own leg; until then the view opens an honest interim page, never "empty". */
     internal fun isLiveTvView(item: MediaItem) = item.collectionType == "livetv"
     fun open(item: MediaItem) {
+        if (item.type == "Person") { person(item); return }
         if (item.type in setOf("CollectionFolder", "Folder", "BoxSet", "Playlist") || item.isFolder && item.type !in setOf("Series", "Season")) browse(item) else detail(item)
     }
     fun browse(item: MediaItem, sortBy: String = "SortName", descending: Boolean = false) {
@@ -316,14 +409,17 @@ class DesktopController(
     }
     fun settings() = page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> }
     fun saveSettings(settings: DesktopSettings) = page(DesktopRoute.Settings) { g -> settingsStore.write(settings); publish(g) { it.copy(settings = settings) }; engine?.volume(settings.volume) }
-    fun back() {
+    @Synchronized fun back() {
         val s = mutable.value
         if (s.route == DesktopRoute.Player) { stopPlayback(); return }
         if (s.route == DesktopRoute.QuickConnect) { page(DesktopRoute.SignIn) { _ -> }; return }
         val previous = synchronized(history) { if (history.isEmpty()) null else history.removeAt(history.lastIndex) }
         generation.incrementAndGet(); pageJob?.cancel()
-        if (previous != null) mutable.value = previous.copy(busy = false, error = null, errorKind = null, settings = s.settings)
-        else when (s.route) {
+        if (previous != null) {
+            mutable.value = previous.copy(busy = false, error = null, errorKind = null, settings = s.settings,
+                search = previous.search.copy(recent = store.snapshots.value.recentSearches[previous.account?.key].orEmpty(), storageError = s.search.storageError))
+            if (previous.route == DesktopRoute.Search && previous.search.loading) searchQuery(previous.search.query, immediate = true)
+        } else when (s.route) {
             DesktopRoute.SignIn -> addServer()
             DesktopRoute.Accounts, DesktopRoute.Servers -> if (s.account != null) home() else addServer()
             else -> if (s.account != null) home() else addServer()
@@ -334,6 +430,12 @@ class DesktopController(
         when (s.route) {
             DesktopRoute.Loading -> start()
             DesktopRoute.Home -> home()
+            DesktopRoute.Search -> searchQuery(s.search.query, immediate = true)
+            DesktopRoute.Person -> s.person?.let { item -> page(DesktopRoute.Person) { g ->
+                val a = mutable.value.account ?: return@page
+                val p = attempt(g, a) { client.personItems(a, item.id) } ?: return@page
+                publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
+            } }
             DesktopRoute.Library -> s.library?.let { browse(it, s.sortBy, s.descending) }
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()
