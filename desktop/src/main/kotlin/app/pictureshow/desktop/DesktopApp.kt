@@ -153,7 +153,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     }
     val savedPages = rememberSaveableStateHolder()
     LaunchedEffect(pageKey, state.busy) {
-        if(!state.busy) {
+        if(!state.busy && state.route != DesktopRoute.Search) {
             delay(150)
             if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
                 // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
@@ -171,6 +171,15 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
             }
+        }
+    }
+    // Restore Search once on entry, not on every debounce completion: a viewer may have
+    // deliberately moved to the sidebar while a query is pending.
+    LaunchedEffect(pageKey) {
+        if (state.route == DesktopRoute.Search) {
+            delay(150)
+            val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
+            runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
         }
     }
     LaunchedEffect(state.returnFocus, pageKey) {
