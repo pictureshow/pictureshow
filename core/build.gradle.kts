@@ -95,7 +95,8 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
             "live-presentation.json",
             "player-overlay-layout.json",
             "touch-player-director-clearance-paint-edges.json",
-            "player-control-affordances.json"
+            "player-control-affordances.json",
+            "player-hud-clocks.json"
         )
         exclude(controlSuites)
         exclude(remoteSuites)
@@ -116,7 +117,8 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
             "live-presentation.json",
             "player-overlay-layout.json",
             "touch-player-director-clearance-paint-edges.json",
-            "player-control-affordances.json"
+            "player-control-affordances.json",
+            "player-hud-clocks.json"
         )
         into("android-native-vectors")
     }
