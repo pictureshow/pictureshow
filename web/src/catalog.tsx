@@ -425,7 +425,28 @@ export function Cards({
                                     ) : (
                                         <span aria-hidden="true">
                                             {/* A neutral glyph: ▶ on a card reads as a Play button. */}
-                                            {item.Type === "Person" ? "♙" : "▤"}
+                                            {item.Type === "Person"
+                                                ? "♙"
+                                                : item.Type === "BoxSet" ||
+                                                    item.CollectionType ===
+                                                        "boxsets"
+                                                  ? "▦"
+                                                  : item.CollectionType ===
+                                                      "livetv"
+                                                    ? "▣"
+                                                    : item.CollectionType ===
+                                                        "tvshows"
+                                                      ? "▰"
+                                                      : item.CollectionType ===
+                                                          "movies"
+                                                        ? "▥"
+                                                        : item.CollectionType ===
+                                                            "playlists"
+                                                          ? "☷"
+                                                          : item.CollectionType ===
+                                                              "music"
+                                                            ? "♫"
+                                                            : "◇"}
                                         </span>
                                     )}
                                     {progress(item) > 0 && (
@@ -488,7 +509,13 @@ function RetryNotice({
     return (
         <div className="catalog-error" role={announce ? "alert" : undefined}>
             <p>{error}</p>
-            <button type="button" onClick={retry} disabled={busy}>
+            <button
+                type="button"
+                onClick={() => {
+                    if (!busy) retry();
+                }}
+                aria-disabled={busy}
+            >
                 {busy ? "Retrying…" : label}
             </button>
         </div>
@@ -658,8 +685,10 @@ export function Home({
                     <h2>Your library is empty.</h2>
                     <p>Add media to your Jellyfin server, then refresh.</p>
                     <button
-                        onClick={() => setAttempt((value) => value + 1)}
-                        disabled={busy}
+                        onClick={() => {
+                            if (!busy) setAttempt((value) => value + 1);
+                        }}
+                        aria-disabled={busy}
                     >
                         Refresh
                     </button>
@@ -1614,6 +1643,17 @@ export function Detail({
                         >
                             {actionLabel("play", "Play")}
                         </button>
+                        {!finished && (
+                            // A finished viewing leaves no resume position (W-20).
+                            <button
+                                data-focus="restart"
+                                aria-label={queuedActionName("restart")}
+                                {...slotState(false)}
+                                onClick={() => offer({ kind: "restart" })}
+                            >
+                                {actionLabel("restart", "Play from start")}
+                            </button>
+                        )}
                         <button
                             data-focus="watched"
                             aria-label={queuedActionName("watched")}
@@ -1635,17 +1675,6 @@ export function Detail({
                         >
                             {actionLabel("favorite", "Favorite")}
                         </button>
-                        {!finished && (
-                            // A finished viewing leaves no resume position (W-20).
-                            <button
-                                data-focus="restart"
-                                aria-label={queuedActionName("restart")}
-                                {...slotState(false)}
-                                onClick={() => offer({ kind: "restart" })}
-                            >
-                                {actionLabel("restart", "Play from start")}
-                            </button>
-                        )}
                     </div>
                 </div>
                 {!readError && !reportError && !writeError && (
@@ -1831,6 +1860,29 @@ export function Detail({
                                                   )}
                                         </button>
                                     )}
+                                {(playable(shown) || isContainer) &&
+                                    initial &&
+                                    (target?.UserData?.PlaybackPositionTicks ??
+                                        0) > 0 && (
+                                        <button
+                                            data-focus="restart"
+                                            aria-label={queuedActionName(
+                                                "restart",
+                                            )}
+                                            {...slotState(!target && !loading)}
+                                            disabled={!target && !loading}
+                                            onClick={() =>
+                                                offer({ kind: "restart" })
+                                            }
+                                        >
+                                            {ready
+                                                ? "Play from start"
+                                                : actionLabel(
+                                                      "restart",
+                                                      "Play from start",
+                                                  )}
+                                        </button>
+                                    )}
                                 <button
                                     data-focus="watched"
                                     aria-label={queuedActionName("watched")}
@@ -1884,29 +1936,6 @@ export function Detail({
                                               : "Add favorite"
                                           : actionLabel("favorite", "Favorite")}
                                 </button>
-                                {(playable(shown) || isContainer) &&
-                                    initial &&
-                                    (target?.UserData?.PlaybackPositionTicks ??
-                                        0) > 0 && (
-                                        <button
-                                            data-focus="restart"
-                                            aria-label={queuedActionName(
-                                                "restart",
-                                            )}
-                                            {...slotState(!target && !loading)}
-                                            disabled={!target && !loading}
-                                            onClick={() =>
-                                                offer({ kind: "restart" })
-                                            }
-                                        >
-                                            {ready
-                                                ? "Play from start"
-                                                : actionLabel(
-                                                      "restart",
-                                                      "Play from start",
-                                                  )}
-                                        </button>
-                                    )}
                             </div>
                         )}
                         {empty && (
@@ -1918,6 +1947,7 @@ export function Detail({
                         )}
                     </div>
                     {!isLibrary &&
+                        shown.Type !== "BoxSet" &&
                         (art ? (
                             <PrivateImage
                                 className="catalog-detail-art"
@@ -2683,9 +2713,7 @@ function BrowseGrid({
                         key: `grid:${parent.Id}`,
                         title: person
                             ? "Movies and shows"
-                            : library && exact
-                              ? titleCountLabel(count)
-                              : `${count}${exact ? "" : "+"} ${count === 1 && exact ? "item" : "items"}`,
+                            : titleCountLabel(count, exact),
                         items: state.items,
                     }}
                     grid
@@ -2739,8 +2767,10 @@ function BrowseGrid({
                 {!state.done && !error && (
                     <button
                         className="catalog-load-more"
-                        disabled={busy}
-                        onClick={() => void load()}
+                        aria-disabled={busy}
+                        onClick={() => {
+                            if (!busy) void load();
+                        }}
                     >
                         Load more titles
                     </button>
@@ -2754,9 +2784,14 @@ function BrowseGrid({
                     onApply={updateFilters}
                     onClose={() => {
                         setFiltering(false);
-                        requestAnimationFrame(() =>
-                            filterButton.current?.focus(),
-                        );
+                        requestAnimationFrame(() => {
+                            // Restore only while focus is unclaimed after the dialog closes.
+                            if (
+                                !document.activeElement ||
+                                document.activeElement === document.body
+                            )
+                                filterButton.current?.focus();
+                        });
                     }}
                 />
             )}

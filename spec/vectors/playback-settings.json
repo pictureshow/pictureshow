@@ -581,7 +581,7 @@
           "subtitleBurnIn": "Always"
         }
       },
-      "expected": "Your subtitle burn-in setting requires conversion of the video. Set subtitle burn-in to Automatic in Playback settings, or turn subtitles off."
+      "expected": "Your subtitle burn-in setting requires conversion of the video."
     },
     {
       "id": "playback-settings.information.hdr-disabled",
@@ -592,7 +592,7 @@
           "hdr": "Disable"
         }
       },
-      "expected": "HDR or Dolby Vision is disabled in Playback settings. Restore detected support to try original video; device or server limits may still require conversion."
+      "expected": "HDR or Dolby Vision is disabled in Playback settings. The server converts the video."
     },
     {
       "id": "playback-settings.information.quality-below-one-mbps",
@@ -601,7 +601,7 @@
         "reason": "VideoBitrateNotSupported",
         "activeBitrate": 300000
       },
-      "expected": "Quality is capped at 300 kbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+      "expected": "Quality is capped at 300 kbps for this viewing. The server lowers the bitrate."
     },
     {
       "id": "playback-settings.information.quality-network-cap",
@@ -610,7 +610,7 @@
         "reason": "ContainerBitrateExceedsLimit",
         "activeBitrate": 4000000
       },
-      "expected": "Quality is capped at 4.00 Mbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+      "expected": "Quality is capped at 4.00 Mbps for this viewing. The server lowers the bitrate."
     },
     {
       "id": "playback-settings.quality.reduction-no-change",
@@ -696,7 +696,7 @@
         "reason": "VideoBitrateNotSupported",
         "activeBitrate": 80
       },
-      "expected": "Quality is capped at <1 kbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+      "expected": "Quality is capped at <1 kbps for this viewing. The server lowers the bitrate."
     },
     {
       "id": "playback-settings.network.ipv6-fc",

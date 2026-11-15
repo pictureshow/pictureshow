@@ -170,7 +170,10 @@ test("Settings: jump list, read-only passthrough, Accessibility switch writes sc
 }) => {
     await fixture(page);
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await expect(
         page.getByRole("heading", { name: "Settings", exact: true }),
     ).toBeVisible();
@@ -223,7 +226,10 @@ test("Support and Troubleshooting speak plainly; the technical report sits under
 }) => {
     await fixture(page);
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await page
         .getByRole("button", { name: "Support Pictureshow", exact: true })
         .click();

@@ -37,7 +37,7 @@ import {
     transcodeReason,
     transcodeReasons,
 } from "@pictureshow/core/playback-information";
-import { useLastInput } from "./last-input";
+import { lastInput as currentInput, useLastInput } from "./last-input";
 import {
     visibilityPlay,
     WEB_FOREGROUND_REQUIRED,
@@ -198,13 +198,16 @@ type Panel =
     | "Seek"
     | "Speed"
     | "Info"
-    | "Shortcuts";
+    | "Shortcuts"
+    | "More";
 const panelTitle = (panel: Panel) =>
     panel === "Info"
         ? "Playback info"
         : panel === "Shortcuts"
           ? "Keyboard shortcuts"
-          : panel;
+          : panel === "More"
+            ? "More controls"
+            : panel;
 const clock = (s: number) =>
     `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
 const plausibleDuration = (n: number) =>
@@ -347,6 +350,7 @@ export function Player({
         retries = useRef(0),
         lastActivity = useRef(Date.now()),
         panelOpener = useRef<HTMLElement | null>(null),
+        panelInput = useRef(currentInput()),
         pendingSeek = useRef<number | undefined>(undefined),
         trackOrigins = useRef({ audio: false, subtitle: false }),
         subtitleSelection = useRef(0),
@@ -799,7 +803,11 @@ export function Player({
         void leave(!!error);
     }
     function openPanel(value: Panel, opener?: HTMLElement) {
-        panelOpener.current = opener ?? (document.activeElement as HTMLElement);
+        if (panel !== "More") {
+            panelOpener.current =
+                opener ?? (document.activeElement as HTMLElement);
+            panelInput.current = currentInput();
+        }
         if (value === "Audio" || value === "Subtitles") {
             pendingPanel.current = {
                 value,
@@ -819,7 +827,11 @@ export function Player({
     }
     function closePanel() {
         pendingPanel.current = undefined;
-        const opener = panelOpener.current;
+        const opener =
+            panelInput.current === "keyboard" &&
+            panelOpener.current?.isConnected
+                ? panelOpener.current
+                : video.current;
         panelElement.current?.close();
         setPanel(undefined);
         setSeekPreview(undefined);
@@ -1800,6 +1812,7 @@ export function Player({
                 return;
             }
             if (replacing.current) return;
+            if (!owned && !el.ended) pauseIntent.current = true;
             // This handler reports below; update() must not add its periodic one.
             periodicProgressAt.current = Date.now();
             update();
@@ -2343,12 +2356,14 @@ export function Player({
         decision,
     ]);
     useEffect(() => {
-        if (panel && !panelElement.current?.open) {
-            panelElement.current?.showModal();
+        if (panel) {
+            if (!panelElement.current?.open) panelElement.current?.showModal();
             // The committed dialog already exists. Choose initial selection now;
             // a later animation frame must not override the viewer's next move.
             const selected = panelElement.current?.querySelector<HTMLElement>(
-                '[aria-checked="true"], [aria-current="true"], [data-panel-first]',
+                panel === "More"
+                    ? ".more-tools button:not([disabled])"
+                    : '[aria-checked="true"], [aria-current="true"], [data-panel-first]',
             );
             selected?.focus();
             selected?.scrollIntoView({ block: "nearest" });
@@ -2732,7 +2747,7 @@ export function Player({
         let frame: number | undefined;
         const overlays = Array.from(
             player.querySelectorAll<HTMLElement>(
-                ".player-controls > .transport, .player-timeline, .track-controls, .skip-segment, .next-episode, .trickplay-preview",
+                ".player-controls > .transport, .player-timeline, .track-controls, .player-messages, .trickplay-preview",
             ),
         );
         const measure = () => {
@@ -2754,6 +2769,12 @@ export function Player({
                       )
                     : 100;
             player.style.setProperty("--controls-top", `${controlsTop}%`);
+            const heading =
+                player.querySelector<HTMLElement>(".player-heading");
+            player.style.setProperty(
+                "--heading-bottom",
+                `${heading ? heading.getBoundingClientRect().bottom - bounds.top : 0}px`,
+            );
             const occupied = overlays
                 .filter(
                     (element) =>
@@ -3102,6 +3123,140 @@ export function Player({
             <p>{clock(seekPreview)}</p>
         </aside>
     );
+    const secondaryTools = (
+        <>
+            <button
+                onClick={(e) => openPanel("Chapters", e.currentTarget)}
+                disabled={!chapters.length}
+            >
+                Chapters
+            </button>
+            <button
+                aria-label={`Speed, ${rateLabel(speed)}`}
+                onClick={(e) => openPanel("Speed", e.currentTarget)}
+                disabled={(!decision && !viewing.current.decision) || !!error}
+            >
+                Speed {rateLabel(speed)}
+            </button>
+            <button
+                onClick={(e) => openPanel("Info", e.currentTarget)}
+                // Like Audio and Speed: after a failure there is no stream to describe.
+                disabled={(!decision && !viewing.current.decision) || !!error}
+            >
+                Playback info
+            </button>
+            <div className="volume-control">
+                <button
+                    className="icon-control"
+                    aria-label={muted ? "Unmute" : "Mute"}
+                    aria-keyshortcuts="M"
+                    title={`${muted ? "Unmute" : "Mute"} (M)`}
+                    onClick={toggleMute}
+                >
+                    <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+                        {muted ? (
+                            <path d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
+                        ) : (
+                            <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+                        )}
+                    </svg>
+                </button>
+                <input
+                    aria-label="Volume"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step=".1"
+                    value={volume}
+                    onChange={(e) => {
+                        setVolume(+e.target.value);
+                        video.current!.volume = +e.target.value;
+                    }}
+                />
+            </div>
+            {fullscreenAvailable && (
+                <button
+                    className="icon-control"
+                    aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+                    title={fullscreen ? "Exit full screen" : "Full screen"}
+                    aria-keyshortcuts="F"
+                    onClick={toggleFullscreen}
+                >
+                    <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                    >
+                        <path
+                            d={
+                                fullscreen
+                                    ? "M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5"
+                                    : "M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6"
+                            }
+                        />
+                    </svg>
+                </button>
+            )}
+            <button
+                className="shortcuts-control icon-control"
+                aria-label="Keyboard shortcuts (?)"
+                aria-keyshortcuts="?"
+                title="Keyboard shortcuts (?)"
+                onClick={(e) => openPanel("Shortcuts", e.currentTarget)}
+            >
+                <span aria-hidden="true">?</span>
+            </button>
+            {orientationLockable && (
+                <button
+                    className="orientation-control"
+                    onClick={async () => {
+                        const target = orientation ? "portrait" : "landscape";
+                        const screenOrientation =
+                            screen.orientation as ScreenOrientation & {
+                                lock?: (value: string) => Promise<void>;
+                            };
+                        if (!screenOrientation?.lock) {
+                            setNotice(
+                                "Rotate your device to change orientation.",
+                            );
+                            return;
+                        }
+                        try {
+                            if (
+                                !document.fullscreenElement &&
+                                root.current?.requestFullscreen
+                            )
+                                await root.current.requestFullscreen();
+                            await screenOrientation.lock(target);
+                            orientationOwned.current = true;
+                            setOrientation(target === "landscape");
+                        } catch {
+                            setNotice(
+                                "Rotate your device to change orientation.",
+                            );
+                        }
+                    }}
+                >
+                    {orientation ? "Portrait" : "Landscape"}
+                </button>
+            )}
+        </>
+    );
     return (
         <section
             ref={root}
@@ -3149,54 +3304,6 @@ export function Player({
                     />
                 )}
             </video>
-            <div
-                className="playback-feedback"
-                role="status"
-                // A panel owns the screen; its own status says what matters there.
-                data-covered={panel ? "" : undefined}
-                // An error or report failure sits directly above its own buttons.
-                data-anchor={
-                    error ? "error" : reportError ? "report" : undefined
-                }
-            >
-                {error ||
-                    reportError ||
-                    notice ||
-                    (buffering ? "Preparing playback…" : speedNote)}
-            </div>
-            {reportError && !error && (
-                <button
-                    className="report-retry"
-                    onClick={() => report("progress")}
-                >
-                    Retry reporting
-                </button>
-            )}
-            {error && (
-                <div className="player-error">
-                    <button
-                        onClick={() => {
-                            if (completionError) {
-                                completing.current = false;
-                                setCompletionError(false);
-                                void complete(completionNext.current, true);
-                            } else
-                                change(
-                                    desired.current.audio,
-                                    desired.current.subtitle,
-                                    viewing.current.position,
-                                    true,
-                                );
-                        }}
-                    >
-                        Retry playback
-                    </button>
-                    <button onClick={() => leave(true)}>Back to details</button>
-                </div>
-            )}
-            <div className="sr-only" aria-live="polite" aria-atomic="true">
-                {announcement}
-            </div>
             {noticeVisible && conversion && (
                 <div
                     className="conversion-notice"
@@ -3227,62 +3334,129 @@ export function Player({
                     </p>
                 </div>
             )}
-            {nextEligible && !panel && (
-                <aside className="next-episode" aria-label={nextHeading}>
-                    <h2>
-                        {nextHeading}
-                        {!reader ? (
-                            <span aria-hidden="true">
-                                {" "}
-                                ·{" "}
-                                {credits
-                                    ? countdown
-                                    : Math.max(
-                                          0,
-                                          Math.ceil(duration - position),
-                                      )}{" "}
-                                s left
-                            </span>
-                        ) : null}
-                    </h2>
-                    <p>{next?.Name}</p>
-                    <button className="primary" onClick={() => complete(next)}>
-                        Play now
-                    </button>
+            <div
+                className="player-messages"
+                data-covered={panel ? "" : undefined}
+            >
+                <div
+                    className="playback-feedback"
+                    role="status"
+                    // A panel owns the screen; its own status says what matters there.
+                    data-covered={panel ? "" : undefined}
+                    // An error or report failure sits directly above its own buttons.
+                    data-anchor={
+                        error ? "error" : reportError ? "report" : undefined
+                    }
+                >
+                    {error ||
+                        reportError ||
+                        notice ||
+                        (buffering ? "Preparing playback…" : speedNote)}
+                </div>
+                {reportError && !error && (
                     <button
-                        onClick={() => {
-                            setCancelNext(true);
-                            completionNext.current = null;
-                            if (
-                                completionDeferred.current &&
-                                viewing.current.stopped
-                            ) {
-                                void leave();
-                                return;
-                            }
-                            video.current?.focus();
-                        }}
+                        className="report-retry"
+                        onClick={() => report("progress")}
                     >
-                        Cancel next {nextNoun}
-                    </button>
-                </aside>
-            )}
-            {segment &&
-                !panel &&
-                (preferences.segments?.[segment.Type as SegmentType] ??
-                    "Ask") === "Ask" &&
-                !skipUsed.current.has(segmentKey) && (
-                    <button
-                        className="skip-segment"
-                        data-skip="true"
-                        onClick={skip}
-                    >
-                        Skip{" "}
-                        {segment.Type === "Outro"
-                            ? "credits"
-                            : segment.Type.toLowerCase()}
+                        Retry reporting
                     </button>
                 )}
+                {error && (
+                    <div className="player-error">
+                        <button
+                            onClick={() => {
+                                if (completionError) {
+                                    completing.current = false;
+                                    setCompletionError(false);
+                                    void complete(completionNext.current, true);
+                                } else
+                                    change(
+                                        desired.current.audio,
+                                        desired.current.subtitle,
+                                        viewing.current.position,
+                                        true,
+                                    );
+                            }}
+                        >
+                            Retry playback
+                        </button>
+                        <button onClick={() => leave(true)}>
+                            Back to details
+                        </button>
+                    </div>
+                )}
+                <div className="sr-only" aria-live="polite" aria-atomic="true">
+                    {announcement}
+                </div>
+                {nextEligible && !panel && (
+                    <aside className="next-episode" aria-label={nextHeading}>
+                        <h2>
+                            {nextHeading}
+                            {!reader ? (
+                                <span aria-hidden="true">
+                                    {" "}
+                                    ·{" "}
+                                    {credits
+                                        ? countdown
+                                        : Math.max(
+                                              0,
+                                              Math.ceil(duration - position),
+                                          )}{" "}
+                                    s left
+                                </span>
+                            ) : null}
+                        </h2>
+                        <p>{next?.Name}</p>
+                        {segment?.Type === "Outro" &&
+                            !skipUsed.current.has(segmentKey) &&
+                            (preferences.segments?.Outro ?? "Ask") ===
+                                "Ask" && (
+                                <button data-skip="true" onClick={skip}>
+                                    Skip credits
+                                </button>
+                            )}
+                        <button
+                            className="primary"
+                            onClick={() => complete(next)}
+                        >
+                            Play now
+                        </button>
+                        <button
+                            onClick={() => {
+                                setCancelNext(true);
+                                completionNext.current = null;
+                                if (
+                                    completionDeferred.current &&
+                                    viewing.current.stopped
+                                ) {
+                                    void leave();
+                                    return;
+                                }
+                                video.current?.focus();
+                            }}
+                        >
+                            Cancel next {nextNoun}
+                        </button>
+                    </aside>
+                )}
+                {segment &&
+                    !(nextEligible && segment.Type === "Outro") &&
+                    !panel &&
+                    (preferences.segments?.[segment.Type as SegmentType] ??
+                        "Ask") === "Ask" &&
+                    !skipUsed.current.has(segmentKey) && (
+                        <button
+                            className="skip-segment"
+                            data-skip="true"
+                            onClick={skip}
+                        >
+                            Skip{" "}
+                            {segment.Type === "Outro"
+                                ? "credits"
+                                : segment.Type.toLowerCase()}
+                        </button>
+                    )}
+            </div>
             {controls && (
                 <div
                     className="player-controls"
@@ -3415,135 +3589,15 @@ export function Player({
                             Subtitles
                         </button>
                         <button
-                            onClick={(e) =>
-                                openPanel("Chapters", e.currentTarget)
-                            }
-                            disabled={!chapters.length}
+                            className="more-control"
+                            aria-haspopup="dialog"
+                            onClick={(e) => openPanel("More", e.currentTarget)}
                         >
-                            Chapters
+                            More
                         </button>
-                        <button
-                            aria-label={`Speed, ${rateLabel(speed)}`}
-                            onClick={(e) => openPanel("Speed", e.currentTarget)}
-                            disabled={
-                                (!decision && !viewing.current.decision) ||
-                                !!error
-                            }
-                        >
-                            Speed {rateLabel(speed)}
-                        </button>
-                        <button
-                            onClick={(e) => openPanel("Info", e.currentTarget)}
-                            // Like Audio and Speed: after a failure there is no stream to describe.
-                            disabled={
-                                (!decision && !viewing.current.decision) ||
-                                !!error
-                            }
-                        >
-                            Playback info
-                        </button>
-                        <div className="volume-control">
-                            <button
-                                className="icon-control"
-                                aria-label={muted ? "Unmute" : "Mute"}
-                                aria-keyshortcuts="M"
-                                title={`${muted ? "Unmute" : "Mute"} (M)`}
-                                onClick={toggleMute}
-                            >
-                                <svg
-                                    aria-hidden="true"
-                                    viewBox="0 0 24 24"
-                                    width="24"
-                                    height="24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path
-                                        d="M4 9h4l5-4v14l-5-4H4z"
-                                        fill="currentColor"
-                                    />
-                                    {muted ? (
-                                        <path d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
-                                    ) : (
-                                        <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
-                                    )}
-                                </svg>
-                            </button>
-                            <input
-                                aria-label="Volume"
-                                type="range"
-                                min="0"
-                                max="1"
-                                step=".1"
-                                value={volume}
-                                onChange={(e) => {
-                                    setVolume(+e.target.value);
-                                    video.current!.volume = +e.target.value;
-                                }}
-                            />
+                        <div className="secondary-controls">
+                            {secondaryTools}
                         </div>
-                        {fullscreenAvailable && (
-                            <button
-                                aria-keyshortcuts="F"
-                                onClick={toggleFullscreen}
-                            >
-                                {fullscreen
-                                    ? "Exit full screen"
-                                    : "Full screen"}
-                            </button>
-                        )}
-                        <button
-                            className="shortcuts-control icon-control"
-                            aria-label="Keyboard shortcuts (?)"
-                            aria-keyshortcuts="?"
-                            title="Keyboard shortcuts (?)"
-                            onClick={(e) =>
-                                openPanel("Shortcuts", e.currentTarget)
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </button>
-                        {orientationLockable && (
-                            <button
-                                className="orientation-control"
-                                onClick={async () => {
-                                    const target = orientation
-                                        ? "portrait"
-                                        : "landscape";
-                                    const screenOrientation =
-                                        screen.orientation as ScreenOrientation & {
-                                            lock?: (
-                                                value: string,
-                                            ) => Promise<void>;
-                                        };
-                                    if (!screenOrientation?.lock) {
-                                        setNotice(
-                                            "Rotate your device to change orientation.",
-                                        );
-                                        return;
-                                    }
-                                    try {
-                                        if (
-                                            !document.fullscreenElement &&
-                                            root.current?.requestFullscreen
-                                        )
-                                            await root.current.requestFullscreen();
-                                        await screenOrientation.lock(target);
-                                        orientationOwned.current = true;
-                                        setOrientation(target === "landscape");
-                                    } catch {
-                                        setNotice(
-                                            "Rotate your device to change orientation.",
-                                        );
-                                    }
-                                }}
-                            >
-                                {orientation ? "Portrait" : "Landscape"}
-                            </button>
-                        )}
                     </div>
                 </div>
             )}
@@ -3564,6 +3618,21 @@ export function Player({
                         e.preventDefault();
                         e.stopPropagation();
                         if (!e.repeat) closePanel();
+                    } else if (
+                        e.target instanceof HTMLInputElement &&
+                        e.target.type === "range" &&
+                        [
+                            "ArrowLeft",
+                            "ArrowRight",
+                            "Home",
+                            "End",
+                            "PageUp",
+                            "PageDown",
+                        ].includes(e.key)
+                    ) {
+                        // Keep the slider's native adjustment; the player's
+                        // shortcuts must not also seek or change focus.
+                        e.stopPropagation();
                     } else if (e.key.startsWith("Arrow")) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -3626,6 +3695,9 @@ export function Player({
                 )}
                 {/* The body scrolls; the title and Done stay in view. */}
                 <div className="player-panel-body">
+                    {panel === "More" && (
+                        <div className="more-tools">{secondaryTools}</div>
+                    )}
                     {panel === "Speed" && (
                         <div>
                             <div role="radiogroup" aria-label="Playback speed">

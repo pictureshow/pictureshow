@@ -4,7 +4,7 @@ export const focusable =
 export function spatialKey(e: KeyboardEvent, back: () => void) {
     const active = document.activeElement as HTMLElement | null;
     const editing = active?.matches("input,textarea,select");
-    if (e.key === "Escape" || (e.key === "Backspace" && !editing)) {
+    if ((e.key === "Escape" || e.key === "Backspace") && !editing) {
         e.preventDefault();
         back();
         return;

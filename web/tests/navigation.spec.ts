@@ -57,7 +57,7 @@ test("a navigation press opens the root's top page from anywhere, and Back retur
     await expect(lit(page)).toHaveText("Libraries");
     // Leaving and coming back does not restore the inner page.
     await nav(page, "Home").click();
-    await expect(page.locator('[data-focus="home-settings"]')).toBeVisible();
+    await expect(heading(page, "Home")).toBeVisible();
     await nav(page, "Libraries").click();
     await expect(heading(page, "Libraries")).toBeVisible();
     await expect(lit(page)).toHaveText("Libraries");
@@ -87,17 +87,20 @@ test("a page opened from Home stays under Home, and pressing Home returns to Hom
     await openFilmsThenMovie(page);
     await expect(lit(page)).toHaveText("Home");
     await nav(page, "Home").click();
-    await expect(page.locator('[data-focus="home-settings"]')).toBeVisible();
+    await expect(heading(page, "Home")).toBeVisible();
     await expect(lit(page)).toHaveText("Home");
-    // Home's own Settings button opens Settings, and Settings is lit there.
-    await page.locator('[data-focus="home-settings"]').click();
+    // The sidebar's Settings button opens Settings, and Settings is lit there.
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await expect(heading(page, "Settings")).toBeVisible();
     await expect(lit(page)).toHaveText("Settings");
     await page.reload();
     await expect(heading(page, "Settings")).toBeVisible();
     await expect(lit(page)).toHaveText("Settings");
     await page.getByRole("button", { name: "← Back" }).click();
-    await expect(page.locator('[data-focus="home-settings"]')).toBeVisible();
+    await expect(heading(page, "Home")).toBeVisible();
     await expect(lit(page)).toHaveText("Home");
 });
 test("one Main navigation landmark is exposed at every width", async ({

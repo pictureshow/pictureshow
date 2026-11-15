@@ -11,6 +11,7 @@ let installed = false;
 const listeners = new Set<() => void>();
 
 function set(value: NoticeInput) {
+    document.documentElement.dataset.input = value;
     if (value === current) return;
     current = value;
     listeners.forEach((l) => l());
@@ -28,6 +29,7 @@ function guess(): NoticeInput {
 export function installLastInput(target: Window = window) {
     if (installed) return;
     installed = true;
+    target.document.documentElement.dataset.input = lastInput();
     target.addEventListener(
         "pointerdown",
         (e) => set(e.pointerType === "mouse" ? "mouse" : "touch"),

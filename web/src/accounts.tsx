@@ -114,25 +114,43 @@ export function AccountChooser({
                                     >
                                         Continue as {a.user.Name}
                                     </button>
-                                    <button
-                                        // Set apart from Continue (web-kofi): it asks before it forgets.
-                                        className="account-remove"
-                                        data-focus={"remove:" + accountKey(a)}
-                                        onClick={(e) =>
-                                            onRemove(a, e.currentTarget)
-                                        }
-                                    >
-                                        Remove {a.user.Name}
-                                    </button>
                                 </li>
                             ))}
                     </ul>
+                    {saved.accounts.some((a) => a.server.id === s.id) && (
+                        <details className="account-management">
+                            <summary>
+                                Manage saved sign-ins on{" "}
+                                {serverLabel(s, saved.servers)}
+                            </summary>
+                            <ul className="account-list">
+                                {saved.accounts
+                                    .filter((a) => a.server.id === s.id)
+                                    .map((a) => (
+                                        <li key={accountKey(a)}>
+                                            <button
+                                                className="account-remove"
+                                                data-focus={
+                                                    "remove:" + accountKey(a)
+                                                }
+                                                onClick={(e) =>
+                                                    onRemove(a, e.currentTarget)
+                                                }
+                                            >
+                                                Remove {a.user.Name}
+                                            </button>
+                                        </li>
+                                    ))}
+                            </ul>
+                        </details>
+                    )}
                     <div className="actions">
                         <button
                             data-focus={"login:" + s.id}
                             onClick={() => onLogin(s)}
                         >
-                            Sign in another user on {serverLabel(s, saved.servers)}
+                            Sign in another user on{" "}
+                            {serverLabel(s, saved.servers)}
                         </button>
                         <button
                             data-focus={"remove-server:" + s.id}
@@ -194,10 +212,15 @@ export function Confirmation({
             </p>
             {error && <p role="alert">{error}</p>}
             <div className="actions">
-                <button disabled={busy} onClick={cancel}>
+                <button aria-disabled={busy} onClick={cancel}>
                     Cancel
                 </button>
-                <button disabled={busy} onClick={onConfirm}>
+                <button
+                    aria-disabled={busy}
+                    onClick={() => {
+                        if (!busy) onConfirm();
+                    }}
+                >
                     {busy ? "Removing…" : "Remove"}
                 </button>
             </div>
@@ -278,7 +301,7 @@ export function ServerForm({
                         ? ", so type it or choose a remembered server above."
                         : ", so type it here."}
                 </p>
-                <button className="primary" disabled={busy}>
+                <button className="primary" aria-disabled={busy}>
                     {busy ? "Connecting…" : "Connect to server →"}
                 </button>
             </form>
@@ -305,6 +328,7 @@ export function SignIn({
     onError: (e: unknown) => void;
     onBack: () => void;
 }) {
+    const [signInError, setSignInError] = useState(false);
     const [username, setUsername] = useState(initialUsername),
         [password, setPassword] = useState(""),
         [shown, setShown] = useState(false),
@@ -481,10 +505,9 @@ export function SignIn({
                             the code.
                         </li>
                         <li>
-                            Or, in any web browser, go to your Jellyfin
-                            server's own website at {client.server.url}, sign
-                            in there, then choose your user icon → Quick
-                            Connect.
+                            Or, in any web browser, go to your Jellyfin server's
+                            own website at {client.server.url}, sign in there,
+                            then choose your user icon → Quick Connect.
                         </li>
                     </ul>
                     <p className="muted">
@@ -537,6 +560,7 @@ export function SignIn({
                             }
                             inflight.current = true;
                             setBusy(true);
+                            setSignInError(false);
                             try {
                                 const a = await client.authenticate(
                                     username,
@@ -551,7 +575,16 @@ export function SignIn({
                                     );
                                 }
                             } catch (e) {
-                                if (alive.current) onError(e);
+                                if (alive.current) {
+                                    onError(e);
+                                    setSignInError(true);
+                                    const passwordField =
+                                        document.getElementById(
+                                            "password",
+                                        ) as HTMLInputElement | null;
+                                    passwordField?.focus();
+                                    passwordField?.select();
+                                }
                             } finally {
                                 inflight.current = false;
                                 if (alive.current) setBusy(false);
@@ -620,12 +653,22 @@ export function SignIn({
                                 autoComplete="current-password"
                                 enterKeyHint="go"
                                 aria-describedby={
-                                    picked !== undefined && picked === username
-                                        ? "signing-in-as"
-                                        : undefined
+                                    [
+                                        picked !== undefined &&
+                                        picked === username
+                                            ? "signing-in-as"
+                                            : "",
+                                        signInError ? "app-error-message" : "",
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" ") || undefined
                                 }
+                                aria-invalid={signInError || undefined}
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    setSignInError(false);
+                                }}
                             />
                             <button
                                 type="button"
@@ -638,15 +681,16 @@ export function SignIn({
                                 {shown ? "Hide" : "Show"}
                             </button>
                         </div>
-                        <button className="primary" disabled={busy}>
+                        <button className="primary" aria-disabled={busy}>
                             {busy ? "Signing in…" : "Sign in"}
                         </button>
                     </form>
                     {enabled ? (
                         <button
                             className="secondary primary"
-                            disabled={busy}
+                            aria-disabled={busy}
                             onClick={() => {
+                                if (inflight.current) return;
                                 setQuick(true);
                                 setQuickError("");
                             }}

@@ -28,7 +28,10 @@ test("130 percent layout budget keeps phone, desktop and TV keyboard targets rea
         await expect(play).toBeInViewport({ ratio: 1 });
         await page.keyboard.press("Escape");
         await expect(card).toBeFocused();
-        await page.locator('[data-focus="home-settings"]').click();
+        await page
+            .getByRole("navigation", { name: "Main navigation" })
+            .getByRole("button", { name: "Settings", exact: true })
+            .click();
         // Settings lands focus on its first setting below the jump list, and that
         // focus has to be on screen without the test moving it.
         const select = page.getByLabel("Max streaming bitrate");

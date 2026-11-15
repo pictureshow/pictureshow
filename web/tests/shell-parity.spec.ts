@@ -53,6 +53,9 @@ test("saved accounts isolate device identities, Cancel restores opener, and loca
     await page
         .getByRole("button", { name: "Switch user", exact: true })
         .click();
+    await page
+        .getByText("Manage saved sign-ins on Evening Cinema", { exact: true })
+        .click();
     const remove = page.getByRole("button", {
         name: "Remove Viewer",
         exact: true,
@@ -122,7 +125,10 @@ test("settings preserve unknown server fields and rejected desired writes can re
         },
     );
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await expect(
         page.getByRole("combobox", { name: "Credits", exact: true }),
     ).toHaveValue("Ask");
@@ -175,7 +181,10 @@ test("Settings reads the server language settings, and a failed read says so wit
     await signIn(page);
     // The shared fixture answers the user's configuration, so a healthy Settings
     // shows its server-saved language choices and no error.
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await expect(
         page.getByRole("combobox", { name: "Audio language", exact: true }),
     ).toHaveValue("");
@@ -194,7 +203,10 @@ test("Settings reads the server language settings, and a failed read says so wit
               })
             : route.fallback(),
     );
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     // SET-09: the failure replaces the Loading label; it never claims to still load.
     await expect(
         page.getByText("Your language settings could not be loaded."),
@@ -229,8 +241,15 @@ test("an error that renders above Settings' landing focus keeps that focus fully
             body: "Try again",
         });
     });
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
+    await expect(
+        page.getByRole("heading", { name: "Settings", exact: true }),
+    ).toBeFocused();
     const select = page.getByLabel("Max streaming bitrate");
+    await select.focus();
     await expect(select).toBeFocused();
     await expect(select).toBeInViewport({ ratio: 1 });
     // The failed read now inserts the app's error banner above the page.
@@ -261,8 +280,15 @@ test("once the viewer scrolls Settings, a late error does not pull the page back
             body: "Try again",
         });
     });
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
+    await expect(
+        page.getByRole("heading", { name: "Settings", exact: true }),
+    ).toBeFocused();
     const select = page.getByLabel("Max streaming bitrate");
+    await select.focus();
     await expect(select).toBeFocused();
     await page.mouse.move(400, 400);
     await page.mouse.wheel(0, 900);
@@ -283,7 +309,10 @@ test("About, all bundled license text, device JSON and unavailable support are r
 }) => {
     await fixture(page);
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     await page
         .getByRole("button", { name: "About Pictureshow", exact: true })
         .click();

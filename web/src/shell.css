@@ -31,7 +31,7 @@ main {
 .welcome,
 .signin {
     max-width: 720px;
-    margin: 24px auto;
+    margin: 24px 0;
 }
 .welcome h1,
 .signin h1 {
@@ -51,7 +51,7 @@ button {
 .account-page,
 .information {
     max-width: 1000px;
-    margin: 24px auto;
+    margin: 24px 0;
 }
 .setting-list {
     max-width: 720px;
@@ -150,7 +150,7 @@ fieldset {
     margin: 16px 0 0;
     scroll-margin-top: 24px;
 }
-.settings-page .settings-heading:focus-visible {
+html[data-input="keyboard"] .settings-page .settings-heading:focus {
     outline: 3px solid #eaddff;
     outline-offset: 5px;
     box-shadow: 0 0 0 8px #625071;
@@ -264,7 +264,11 @@ a:focus-visible,
 }
 /* A heading that takes focus (a page holding focus while it loads, a reader landing on it) wears the
    buttons' ring from style.css, with a rounded corner, not a square near-white outline. */
-#main :is(h1, h2)[tabindex]:focus-visible {
+#main :is(h1, h2)[tabindex]:focus {
+    outline: none;
+    box-shadow: none;
+}
+html[data-input="keyboard"] #main :is(h1, h2)[tabindex]:focus {
     outline: 3px solid #eaddff;
     outline-offset: 5px;
     box-shadow: 0 0 0 8px #625071;

@@ -178,7 +178,7 @@ const homeBrowse: Record<string, (i: any) => unknown> = {
     }),
     "filter-constraint-label": (i) => browse.constraintLabel(i.filters, i.key),
     "resolution-summary": (i) => browse.resolutionSummary(i.resolution),
-    "title-count-label": (i) => browse.titleCountLabel(i.count),
+    "title-count-label": (i) => browse.titleCountLabel(i.count, i.exact ?? true),
     "sort-direction-label": (i) => browse.sortDirectionLabel(i.descending),
     "library-browse-scope": (i) => browse.libraryBrowseScope(i.collectionType),
     "letter-jump": (i) => browse.letterJump(i.sortNames, i.letter),

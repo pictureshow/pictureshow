@@ -93,9 +93,7 @@ test("player overlay, panel Back priority, audio Off and one viewing across trac
         page.getByRole("dialog", { name: "Subtitles", exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(
-        page.getByRole("button", { name: "Subtitles", exact: true }),
-    ).toBeFocused();
+    await expect(page.locator("video")).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(
         page.getByRole("button", { name: "Stop and go back" }),
@@ -252,9 +250,7 @@ test("chapters and trickplay seek once and return to opener; credible intro expo
     await page
         .getByRole("button", { name: "The middle · 0:20", exact: true })
         .click();
-    await expect(
-        page.getByRole("button", { name: "Chapters", exact: true }),
-    ).toBeFocused();
+    await expect(page.locator("video")).toBeFocused();
     await expect
         .poll(() =>
             page

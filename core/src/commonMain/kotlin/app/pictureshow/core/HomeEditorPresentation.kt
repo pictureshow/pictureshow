@@ -70,13 +70,13 @@ fun offerRestoreAllSeries(hidden: Set<String>, available: Set<String>): Boolean 
 fun nextUpSeriesHint(shown: Boolean): String = if (shown) "Shown in Next up" else "Removed from Next up"
 
 fun homePinPickerSupport(pinned: Boolean, count: Int?): String? =
-    listOfNotNull(if (pinned) "On your home" else null, count?.let(::titleCountLabel)).joinToString(" · ").ifBlank { null }
+    listOfNotNull(if (pinned) "On your home" else null, count?.let { titleCountLabel(it) }).joinToString(" · ").ifBlank { null }
 
 /** A confirmed home reset keeps independent library display choices. */
 fun resetHomeLayout(preferences: HomePreferences, confirmed: Boolean): HomePreferences =
     if (confirmed) HomePreferences(libraries = preferences.libraries) else preferences
 
-fun titleCountLabel(count: Int): String = if (count == 1) "1 title" else "$count titles"
+fun titleCountLabel(count: Int, exact: Boolean = true): String = if (count == 1 && exact) "1 title" else "$count${if (exact) "" else "+"} titles"
 
 fun VideoResolution.summary(): String = when (this) {
     VideoResolution.ANY -> "Any"

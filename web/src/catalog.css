@@ -38,7 +38,7 @@
 .catalog-grid {
     list-style: none;
     padding: 0.75rem 0.6rem 1.25rem;
-    margin: 0 -0.6rem;
+    margin: 0 calc(-1rem - 2px);
     gap: 1.2rem;
 }
 .catalog-cards {
@@ -365,6 +365,10 @@
     }
     .catalog-card {
         padding: 0.3rem;
+    }
+    .catalog-cards,
+    .catalog-grid {
+        margin-inline: calc(-0.9rem - 2px);
     }
     .catalog-card-title {
         font-size: 0.94rem;
@@ -710,7 +714,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.1rem;
-    margin: 1rem 0 0;
+    margin: 1rem 0 0 calc(-0.95rem + 0.3em);
 }
 .catalog-letter-rail button {
     min-width: 1.9rem;
@@ -809,4 +813,23 @@
     .library-filter-fields {
         grid-template-columns: minmax(0, 1fr);
     }
+}
+
+/* Wide layouts already have Search and Settings in the navigation rail. */
+@media (min-width: 1001px) {
+    .catalog-home-heading nav {
+        display: none;
+    }
+}
+/* A box set without its own art leads directly into the posters below. */
+.catalog-detail-hero:not(:has(> .catalog-detail-art)) {
+    min-height: 0;
+}
+.account-management {
+    margin: 1rem 0 1.5rem;
+}
+.account-management summary {
+    width: fit-content;
+    cursor: pointer;
+    padding: 0.75rem 0;
 }

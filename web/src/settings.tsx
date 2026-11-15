@@ -182,7 +182,9 @@ export function Settings({
     }
     return (
         <section className="settings-page">
-            <h1>Settings</h1>
+            <h1 tabIndex={-1} data-autofocus>
+                Settings
+            </h1>
             <nav className="settings-jump" aria-label="Settings sections">
                 <ul>
                     {sections.map(([id, label]) => (
@@ -219,7 +221,6 @@ export function Settings({
                 <label>
                     Max streaming bitrate
                     <select
-                        data-autofocus
                         data-focus="setting:bitrate"
                         value={value.bitrateMbps ?? "auto"}
                         onChange={(e) =>
@@ -362,7 +363,7 @@ export function Settings({
                 ) : !config ? (
                     <p role="status">Loading your language settings…</p>
                 ) : (
-                    <fieldset disabled={busy}>
+                    <fieldset aria-busy={busy}>
                         <legend>Language and subtitles</legend>
                         {[
                             ["AudioLanguagePreference", "Audio language"],
@@ -371,6 +372,7 @@ export function Settings({
                             <label key={key}>
                                 {label}
                                 <select
+                                    aria-disabled={busy}
                                     value={String(config[key] ?? "")}
                                     onChange={(e) =>
                                         void save(key, e.target.value)
@@ -387,6 +389,7 @@ export function Settings({
                         <label>
                             Subtitle mode
                             <select
+                                aria-disabled={busy}
                                 value={String(config.SubtitleMode ?? "Default")}
                                 onChange={(e) =>
                                     void save("SubtitleMode", e.target.value)

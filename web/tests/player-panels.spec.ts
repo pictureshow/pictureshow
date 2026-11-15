@@ -158,7 +158,8 @@ test("conversion notice appears once after ready, never takes focus, hides under
     await capture(page, "notice-over-video");
     // A panel hides it; on return it is visible again but not re-announced.
     const speed = page.getByRole("button", { name: /^Speed, / });
-    await speed.click();
+    await speed.focus();
+    await page.keyboard.press("Enter");
     await expect(notice(page)).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(speed).toBeFocused();
@@ -342,7 +343,10 @@ test("a click anywhere on a setting row's title or help text flips its switch", 
 }) => {
     await fixture(page);
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     const rows = page.locator(".setting-list .switch-row");
     // Web has two switches: SET-02 passthrough is read-only text in a browser.
     expect(await rows.count()).toBeGreaterThanOrEqual(2);
@@ -378,7 +382,10 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
 }) => {
     await converting(page, "VideoCodecNotSupported");
     await signIn(page);
-    await page.locator('[data-focus="home-settings"]').click();
+    await page
+        .getByRole("navigation", { name: "Main navigation" })
+        .getByRole("button", { name: "Settings", exact: true })
+        .click();
     const toggle = page.getByRole("switch", { name: /Conversion notice/ });
     // The label names the setting; the switch carries the state.
     await expect(toggle).toHaveAccessibleName("Conversion notice");
@@ -506,7 +513,8 @@ test("speed panel opens on the current rate, applies with pitch preserved, survi
     await play(page);
     const speed = page.getByRole("button", { name: /^Speed, / });
     await expect(speed).toHaveAccessibleName("Speed, 1×");
-    await speed.click();
+    await speed.focus();
+    await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Speed" });
     await expect(
         dialog.getByRole("radio", { name: "1× (normal)" }),
@@ -527,7 +535,8 @@ test("speed panel opens on the current rate, applies with pitch preserved, survi
         }));
     expect(await rate()).toEqual({ rate: 1.5, pitch: true });
     // Reopening enters on the active rate.
-    await speed.click();
+    await speed.focus();
+    await page.keyboard.press("Enter");
     await expect(dialog.getByRole("radio", { name: "1.5×" })).toBeFocused();
     await expect(dialog.getByRole("radio", { name: "1.5×" })).toHaveAttribute(
         "aria-checked",
@@ -669,7 +678,8 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
     const f = await fixture(page);
     await play(page);
     const speed = page.getByRole("button", { name: /^Speed, / });
-    await speed.click();
+    await speed.focus();
+    await page.keyboard.press("Enter");
     await page.getByRole("radio", { name: "1.5×" }).click();
     await expect(speed).toHaveAccessibleName("Speed, 1.5×");
     // From here this decoder cannot change speed: it reports 1× whatever is set.
@@ -710,7 +720,8 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
     }
     await capture(page, "speed-reset");
     await page.setViewportSize({ width: 1280, height: 800 });
-    await speed.click();
+    await speed.focus();
+    await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Speed" });
     await expect(dialog.getByRole("status")).toHaveText(
         `${reason} Choose a speed to try again.`,
@@ -1023,7 +1034,7 @@ test("keyboard: Down then Playback info opens the panel the notice points to", a
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
-test("pointer: a click on the backdrop closes a panel and restores its opener", async ({
+test("pointer: a click on the backdrop closes a panel and returns to video", async ({
     page,
 }) => {
     await fixture(page);
@@ -1037,7 +1048,7 @@ test("pointer: a click on the backdrop closes a panel and restores its opener", 
     await expect(dialog).toBeVisible();
     await page.mouse.click(4, 4);
     await expect(dialog).toBeHidden();
-    await expect(opener).toBeFocused();
+    await expect(page.locator("video")).toBeFocused();
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
@@ -1047,7 +1058,10 @@ test("the conversion notice switch applies the next time the player opens, both 
     await converting(page, "VideoCodecNotSupported");
     await signIn(page);
     const settings = async (checked: boolean) => {
-        await page.locator('[data-focus="home-settings"]').click();
+        await page
+            .getByRole("navigation", { name: "Main navigation" })
+            .getByRole("button", { name: "Settings", exact: true })
+            .click();
         const toggle = page.getByRole("switch", { name: "Conversion notice" });
         if ((await toggle.isChecked()) !== checked) await toggle.click();
         await expect(toggle).toBeChecked({ checked });
@@ -1080,7 +1094,10 @@ test.describe("touch", () => {
     }) => {
         await fixture(page);
         await signIn(page);
-        await page.locator('[data-focus="home-settings"]').tap();
+        await page
+            .getByRole("navigation", { name: "Main navigation" })
+            .getByRole("button", { name: "Settings", exact: true })
+            .tap();
         const rows = page.locator(".setting-list .switch-row");
         // Web has two switches: SET-02 passthrough is read-only text in a browser.
         expect(await rows.count()).toBeGreaterThanOrEqual(2);
@@ -1112,7 +1129,10 @@ test.describe("touch", () => {
     }) => {
         await fixture(page);
         await signIn(page);
-        await page.locator('[data-focus="home-settings"]').tap();
+        await page
+            .getByRole("navigation", { name: "Main navigation" })
+            .getByRole("button", { name: "Settings", exact: true })
+            .tap();
         const rows = page.locator(".setting-list .switch-row");
         // Web has two switches: SET-02 passthrough is read-only text in a browser.
         expect(await rows.count()).toBeGreaterThanOrEqual(2);

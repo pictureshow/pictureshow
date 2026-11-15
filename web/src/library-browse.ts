@@ -187,8 +187,8 @@ export function filteredEmptyLabel(collectionType?: string | null) {
     return `No ${noun} match these filters`;
 }
 
-export const titleCountLabel = (count: number) =>
-    count === 1 ? "1 title" : `${count} titles`;
+export const titleCountLabel = (count: number, exact = true) =>
+    count === 1 && exact ? "1 title" : `${count}${exact ? "" : "+"} titles`;
 export const sortDirectionLabel = (descending: boolean) =>
     descending ? "Descending" : "Ascending";
 

@@ -2589,6 +2589,33 @@
       "operation": "queue-limit",
       "input": {},
       "expected": 300
+    },
+    {
+      "id": "home-browse.title-count.inexact-0",
+      "operation": "title-count-label",
+      "input": {
+        "count": 0,
+        "exact": false
+      },
+      "expected": "0+ titles"
+    },
+    {
+      "id": "home-browse.title-count.inexact-1",
+      "operation": "title-count-label",
+      "input": {
+        "count": 1,
+        "exact": false
+      },
+      "expected": "1+ titles"
+    },
+    {
+      "id": "home-browse.title-count.inexact-35",
+      "operation": "title-count-label",
+      "input": {
+        "count": 35,
+        "exact": false
+      },
+      "expected": "35+ titles"
     }
   ]
 }

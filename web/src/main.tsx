@@ -785,7 +785,7 @@ function App() {
                 </div>
                 {error && (
                     <div role="alert" className="error">
-                        <span className="error-message">{error}</span>
+                        <span id="app-error-message" className="error-message">{error}</span>
                         {errorDetail?.message === error && (
                             <details className="error-detail">
                                 <summary>More details</summary>
