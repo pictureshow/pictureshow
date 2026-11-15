@@ -163,3 +163,28 @@ for (const zoom of [1, 2])
         ).toBeFocused();
         await context.close();
     });
+// Down from a newly opened library reaches its posters; it never changes the sort.
+// Passes once the library page stops autofocusing the Sort select (catalog.tsx).
+test("Down from a newly opened library lands on a poster", async ({ page }) => {
+    await withLibrary(page);
+    await signIn(page);
+    await page.locator('[data-focus="libraries:library"]').focus();
+    await page.keyboard.press("Enter");
+    await expect(heading(page, "Films")).toBeVisible();
+    await expect(
+        page.locator('[data-focus="grid:library:movie"]'),
+    ).toBeVisible();
+    await expect
+        .poll(() =>
+            page.evaluate(() => document.activeElement !== document.body),
+        )
+        .toBe(true);
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(":focus")).toHaveAttribute(
+        "data-focus",
+        /^grid:library:/,
+    );
+    await expect(page.getByLabel("Sort by", { exact: true })).toHaveValue(
+        "SortName",
+    );
+});

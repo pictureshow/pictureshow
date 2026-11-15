@@ -216,6 +216,14 @@ a:focus-visible,
     outline: 3px solid #eaddff;
     outline-offset: 4px;
 }
+/* A heading that takes focus (a page holding focus while it loads, a reader landing on it) wears the
+   buttons' ring from style.css, with a rounded corner, not a square near-white outline. */
+#main :is(h1, h2)[tabindex]:focus-visible {
+    outline: 3px solid #eaddff;
+    outline-offset: 5px;
+    box-shadow: 0 0 0 8px #625071;
+    border-radius: 0.65rem;
+}
 @media (min-width: 1500px) {
     :root {
         font-size: 20px;

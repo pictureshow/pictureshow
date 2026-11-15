@@ -648,7 +648,9 @@ function App() {
                     // A fragment navigation fires popstate, which the app history
                     // would read as leaving for Home. Move focus without navigating.
                     e.preventDefault();
-                    document.getElementById("main")?.focus();
+                    document
+                        .getElementById("main")
+                        ?.focus({ preventScroll: true });
                 }}
             >
                 Skip to content
