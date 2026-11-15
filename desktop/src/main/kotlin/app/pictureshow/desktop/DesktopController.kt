@@ -24,7 +24,9 @@ class DesktopController(
     private val store: AccountStore = AccountStore(DesktopTextPersistence(File(directory, "accounts.json"))),
     private val discovery: ServerDiscovery = JvmServerDiscovery(),
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val playbackFactory: (File) -> DesktopPlaybackEngine = { NativeDesktopPlayback(it) }
+    private val playbackFactory: (File) -> DesktopPlaybackEngine = { NativeDesktopPlayback(it) },
+    /** PLAY-17's countdown after a genuine end before the next episode opens. */
+    private val endCountdownSeconds: Int = 10
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val mutable = MutableStateFlow(DesktopState())
@@ -47,12 +49,24 @@ class DesktopController(
     @Volatile private var closing = false
     @Volatile private var nextPageIndex = 0
     private val viewingMutex = kotlinx.coroutines.sync.Mutex()
+    private val events = DesktopEventLog(File(directory, "app.log"))
+    /** A report error from a viewing that has closed; shown by whatever opens next instead of being wiped (D-4). */
+    @Volatile private var carriedReportError: String? = null
+    private var endJob: Job? = null
+    @Volatile private var seekTarget: Double? = null
+    @Volatile private var seekTargetAt = 0L
     private data class Viewing(
         val account: Account, val item: MediaItem, val decision: PlayDecision, val engine: DesktopPlaybackEngine,
         var startReported: Boolean = false, var startAttempted: Boolean = false, var audioChosen: Boolean = false, var subtitleChosen: Boolean = false,
         @Volatile var stopped: Boolean = false, @Volatile var closing: Boolean = false,
-        val reports: Mutex = Mutex()
+        val reports: Mutex = Mutex(),
+        /** The engine reached the physical end of the media (PLAY-18): watched state completes on close. */
+        @Volatile var ended: Boolean = false, @Volatile var endPosition: Double = 0.0,
+        /** The media itself failed (decoder/stream error). Only this is reported to the server as Failed. */
+        @Volatile var playbackFailed: Boolean = false,
+        @Volatile var muted: Boolean = false
     )
+    private fun takeCarriedReportError(): String? = carriedReportError.also { carriedReportError = null }
 
     private fun installationId(): String {
         val file = File(directory, "device-id")
@@ -108,6 +122,8 @@ class DesktopController(
     catch (e: DesktopFailure) { publish(g) { it.copy(error = e.message, errorKind = e.kind) }; null }
 
     fun clearError() { mutable.update { it.copy(error = null, errorKind = null) } }
+    /** The page that honoured [DesktopState.returnFocus] clears it, so it applies once. */
+    fun returnFocusDone() { mutable.update { it.copy(returnFocus = null) } }
 
     fun start() = page(DesktopRoute.Loading) { g ->
         val s = store.load()
@@ -450,7 +466,8 @@ class DesktopController(
         val v = Viewing(a, item, decision, player, audioChosen = audioChosen, subtitleChosen = subtitleChosen)
         viewing = v
         val notice = if (mutable.value.settings.conversionNotice) ConversionNotice.of(decision, si, "this computer") else null
-        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000), error = null) }
+        publish(g) { it.copy(playback = DesktopPlaybackState(item, decision, notice, streams.filter { t -> t.type == MediaStreamType.Audio }, streams.filter { t -> t.type == MediaStreamType.Subtitle }, ai, si, positionSeconds = start, durationSeconds = (item.runTimeTicks ?: 0).toDouble() / 10_000_000), error = takeCarriedReportError()) }
+        seekTarget = null
         try {
             viewingMutex.withLock {
                 currentCoroutineContext().ensureActive()
@@ -480,7 +497,7 @@ class DesktopController(
                     val snap = player.snapshot()
                     mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
                         paused = snap.paused, ready = snap.ready)) else s }
-                    if (snap.error != null) { mutable.update { it.copy(error = snap.error) }; break }
+                    if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); mutable.update { it.copy(error = snap.error) }; break }
                     if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
                     if (snap.ready && !v.startAttempted) v.reports.withLock {
                         if (!v.closing && !v.startAttempted) {
@@ -491,8 +508,8 @@ class DesktopController(
                                 val report = PlaybackReports(decision).progress(observed.positionSeconds.seconds, observed.paused,
                                     p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen })
                                 when (val sent = playbackClient.reportStart(a, report)) {
-                                    is ClientResult.Failure -> if (viewing === v) mutable.update { it.copy(error = sent.error.message) }
-                                    is ClientResult.Success -> v.startReported = true
+                                    is ClientResult.Failure -> { events.log("playback start item=${v.item.id} report=failed:${sent.error.kind}"); if (viewing === v) mutable.update { it.copy(error = sent.error.message) } }
+                                    is ClientResult.Success -> { v.startReported = true; events.log("playback start item=${v.item.id} method=${decision.method} report=ok") }
                                 }
                             }
                         }
@@ -500,13 +517,15 @@ class DesktopController(
                     elapsed++
                     if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
-                    if (snap.ended) {
-                        if (mutable.value.settings.autoplayNext) nextEpisode() else stopPlayback()
-                        break
-                    }
+                    if (snap.ended) { onPhysicalEnd(v, snap); break }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { if (viewing === v) mutable.update { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") } }
+            catch (e: Exception) {
+                if (viewing === v && !v.ended) {
+                    events.log("playback loop-failed item=${v.item.id} type=${e.javaClass.simpleName}")
+                    mutable.update { it.copy(error = "Playback stopped unexpectedly. Return to the title and try again.") }
+                }
+            }
         }
         if (item.type == "Episode" && item.seriesId != null) {
             val next = attempt(g, a) { extras.nextEpisode(a, item) }
@@ -521,7 +540,7 @@ class DesktopController(
             return@withLock
         }
         val r = playbackClient.reportProgress(v.account, PlaybackReports(v.decision).progress(observed.positionSeconds.seconds, observed.paused,
-            p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }))
+            p.audioIndex.takeIf { v.audioChosen }, p.subtitleIndex.takeIf { v.subtitleChosen }).copy(isMuted = v.muted))
         if (r is ClientResult.Failure && viewing === v) mutable.update { it.copy(error = "Progress could not be saved. ${r.error.message}") }
     }
     fun fullscreen(enabled: Boolean) { engine?.fullscreen(enabled) }
@@ -536,7 +555,39 @@ class DesktopController(
         }
     }
     fun playerToggle() { if (viewing?.closing == true) return; engine?.togglePause(); viewing?.let { v -> scope.launch { delay(100); if (viewing === v) sendProgress(v) } } }
-    fun seek(seconds: Double) { if (viewing?.closing == true) return; if (seconds.isFinite()) engine?.seek(seconds.coerceAtLeast(0.0)) }
+    fun seek(seconds: Double) {
+        if (viewing?.closing == true || !seconds.isFinite()) return
+        val duration = mutable.value.playback?.durationSeconds?.takeIf { it > 0 }
+        val target = seconds.coerceAtLeast(0.0).let { if (duration != null) it.coerceAtMost(duration) else it }
+        engine?.seek(target)
+        seekTarget = target; seekTargetAt = System.nanoTime()
+        mutable.update { s -> s.copy(playback = s.playback?.copy(positionSeconds = target)) }
+    }
+    /** Relative seek for keys and the 10 s buttons. Repeats inside 1.5 s build on the last target, so the
+     * 500 ms clock poll cannot swallow a second press (PLAY-07's intent, desktop's version). */
+    fun seekBy(deltaSeconds: Double) {
+        val recent = seekTarget?.takeIf { System.nanoTime() - seekTargetAt < 1_500_000_000L }
+        seek((recent ?: mutable.value.playback?.positionSeconds ?: return) + deltaSeconds)
+    }
+    fun toggleMute() {
+        val v = viewing ?: return
+        if (v.closing || v.stopped) return
+        val muted = !v.muted
+        if (runCatching { v.engine.mute(muted) }.isFailure) return
+        v.muted = muted
+        mutable.update { s -> s.copy(playback = s.playback?.copy(muted = muted)) }
+        scope.launch { if (viewing === v) sendProgress(v) }
+    }
+    /** Arrow-key volume: saved like the Settings volume, without leaving the player. Raising it unmutes. */
+    fun changeVolume(delta: Int) {
+        val settings = mutable.value.settings
+        val volume = (settings.volume + delta).coerceIn(0, 100)
+        val updated = settings.copy(volume = volume)
+        mutable.update { it.copy(settings = updated) }
+        engine?.let { e -> runCatching { e.volume(volume) } }
+        if (delta > 0 && viewing?.muted == true) toggleMute()
+        scope.launch { runCatching { settingsStore.write(updated) } }
+    }
     fun selectAudio(index: Int) = changeTrack(index, null)
     fun selectSubtitle(index: Int) = changeTrack(null, index)
     private fun changeTrack(audio: Int?, subtitle: Int?) {
@@ -559,58 +610,145 @@ class DesktopController(
                 current.audioChosen || audio != null, current.subtitleChosen || subtitle != null, requestedSubtitleCodec)
         }
     }
+    /** Manual "Next episode" in the control bar, or Play now on the end card. */
     fun nextEpisode() {
         val p = mutable.value.playback ?: return
-        val next = p.nextEpisode
+        val next = p.end?.next ?: p.nextEpisode
         if (next == null) { stopPlayback(); return }
         val a = mutable.value.account ?: return
         page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, next, 0.0) }
     }
-    fun stopPlayback() = page(DesktopRoute.Detail) { g ->
+    /** End card Cancel: the countdown stops and the card stays, offering Play now and Back to title. */
+    fun cancelEndCountdown() {
+        countdownCancelled = true
+        mutable.update { s -> s.copy(playback = s.playback?.let { p -> p.end?.let { p.copy(end = it.copy(secondsLeft = null)) } ?: p }) }
+    }
+    @Volatile private var countdownCancelled = false
+    /** End card Replay: a new viewing of the same item from the start. */
+    fun replay() {
+        val item = mutable.value.playback?.item ?: return
+        val a = mutable.value.account ?: return
+        page(DesktopRoute.Player) { g -> finishViewing(); prepareViewing(g, a, item, 0.0) }
+    }
+    fun stopPlayback() {
+        // page() clears the playback before this block runs, so read the end state first.
+        val finished = mutable.value.playback?.end != null
+        page(DesktopRoute.Detail) { g -> stopPlaybackPage(g, finished) }
+    }
+    private suspend fun stopPlaybackPage(g: Long, finished: Boolean) {
         val old = mutable.value.playback?.item ?: mutable.value.detail
         finishViewing()
-        publish(g) { it.copy(playback = null) }
+        publish(g) { it.copy(playback = null, returnFocus = if (finished) "play" else null) }
+        takeCarriedReportError()?.let { e -> publish(g) { it.copy(error = e) } }
         if (old != null) loadDetail(g, old)
+    }
+    /**
+     * PLAY-17/18 at the physical end: show the end card at once, close the viewing (one Stop, then one watched
+     * mark) without waiting for the viewer, then count down to the next episode when autoplay is on.
+     */
+    private fun onPhysicalEnd(v: Viewing, snap: EngineSnapshot) {
+        if (v.ended || viewing !== v) return
+        v.endPosition = maxOf(snap.positionSeconds, snap.durationSeconds)
+        v.ended = true
+        val next = mutable.value.playback?.nextEpisode
+        val countdown = if (next != null && mutable.value.settings.autoplayNext) endCountdownSeconds.coerceAtLeast(0) else null
+        countdownCancelled = false
+        mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(end = DesktopEndCard(next, countdown),
+            positionSeconds = v.endPosition, paused = true)) else s }
+        events.log("playback end item=${v.item.id} next=${next?.id ?: "none"} countdown=${countdown ?: "off"}")
+        val g = generation.get()
+        endJob = scope.launch {
+            finishViewing()
+            if (countdown == null || next == null) return@launch
+            var left = countdown
+            while (left > 0) {
+                delay(1000)
+                if (generation.get() != g || countdownCancelled || mutable.value.playback?.end?.next?.id != next.id) return@launch
+                left--
+                mutable.update { s -> s.copy(playback = s.playback?.let { p -> p.end?.takeIf { it.secondsLeft != null }?.let { p.copy(end = it.copy(secondsLeft = left)) } ?: p }) }
+            }
+            if (generation.get() == g && !countdownCancelled && mutable.value.route == DesktopRoute.Player &&
+                mutable.value.playback?.end?.let { it.next?.id == next.id && it.secondsLeft != null } == true) nextEpisode()
+        }
     }
     private suspend fun releaseEncoding(v: Viewing): Boolean {
         val session = v.decision.playSessionId ?: return true
         if (v.decision.method != PlayMethod.Transcode) return true
         return runCatching { playbackClient.stopEncoding(v.account, session) }.getOrNull() is ClientResult.Success
     }
+    /** Marks a genuinely finished item watched once (PLAY-18). The Stop report usually did it already; then no mutation. */
+    private suspend fun completeWatched(v: Viewing) {
+        val current = runCatching { client.item(v.account, v.item.id) }.getOrNull()
+        if (current is ClientResult.Success && current.value.isWatched) {
+            events.log("playback mark item=${v.item.id} result=already-played"); return
+        }
+        var marked = runCatching { client.played(v.account, v.item.id, true) }.getOrNull()
+        if (marked !is ClientResult.Success) marked = runCatching { client.played(v.account, v.item.id, true) }.getOrNull()
+        when (marked) {
+            is ClientResult.Success -> events.log("playback mark item=${v.item.id} result=marked")
+            is ClientResult.Failure -> {
+                events.log("playback mark item=${v.item.id} result=failed:${marked.error.kind}")
+                carriedReportError = "${v.item.name} finished, but it could not be marked as watched. ${marked.error.message}"
+            }
+            null -> {
+                events.log("playback mark item=${v.item.id} result=failed:exception")
+                carriedReportError = "${v.item.name} finished, but it could not be marked as watched. Check the connection."
+            }
+        }
+        carriedReportError?.let { e -> mutable.update { it.copy(error = e) } }
+    }
     private suspend fun finishViewing() = withContext(NonCancellable) {
         viewingMutex.withLock {
             val v = viewing ?: return@withLock
             if (v.stopped) return@withLock
             v.closing = true
-            var cleanupFailed = false
+            // Cleanup is local housekeeping. Its failure is logged and never sent to the server as a failed
+            // playback: Jellyfin skips every play-state update for a Failed stop, which left finished episodes
+            // unwatched (D-4). Only a media error observed during playback is Failed.
+            val cleanupFailures = mutableListOf<String>()
             var observed: EngineSnapshot? = null
             try {
                 // Each phase is independent: an unavailable property, failed GPU drain or
                 // rejected report must not prevent the other resources being released.
-                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailed = true }
-                if (observed?.paused == false) runCatching { v.engine.togglePause() }.onFailure { cleanupFailed = true }
-                runCatching { reportJob?.join() }.onFailure { cleanupFailed = true }
+                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailures += "snapshot" }
+                if (observed?.paused == false && observed?.ended != true) runCatching { v.engine.togglePause() }.onFailure { cleanupFailures += "pause" }
+                runCatching { reportJob?.join() }.onFailure { cleanupFailures += "report-loop" }
                 reportJob = null
-                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailed = true }
-                runCatching { v.engine.close() }.onFailure { cleanupFailed = true }
+                runCatching { v.engine.snapshot() }.onSuccess { observed = it }.onFailure { cleanupFailures += "final-snapshot" }
+                runCatching { v.engine.close() }.onFailure { cleanupFailures += "close" }
                 if (engine === v.engine) engine = null
                 v.reports.withLock {
                     if (v.startAttempted) {
-                        val position = observed?.positionSeconds ?: mutable.value.playback?.positionSeconds ?: 0.0
+                        val seen = observed?.positionSeconds?.takeIf { it > 0 } ?: mutable.value.playback?.positionSeconds ?: 0.0
+                        val position = if (v.ended) maxOf(seen, v.endPosition) else seen
+                        val failed = v.playbackFailed && !v.ended
                         runCatching {
-                            playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds, failed = cleanupFailed))
+                            playbackClient.reportStopped(v.account, PlaybackReports(v.decision).stopped(position.seconds, failed = failed))
                         }.onSuccess { stopped ->
-                            if (stopped is ClientResult.Failure) mutable.update { it.copy(error = "Playback ended, but progress could not be saved. ${stopped.error.message}") }
-                        }.onFailure { cleanupFailed = true }
+                            if (stopped is ClientResult.Failure) {
+                                events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=failed:${stopped.error.kind}")
+                                carriedReportError = "Playback ended, but progress could not be saved. ${stopped.error.message}"
+                                mutable.update { it.copy(error = carriedReportError) }
+                            } else events.log("playback stop item=${v.item.id} position=${position.toLong()} failed=$failed ended=${v.ended} report=ok")
+                        }.onFailure { e ->
+                            events.log("playback stop item=${v.item.id} report=failed:${e.javaClass.simpleName}")
+                            carriedReportError = "Playback ended, but progress could not be saved. Check the connection."
+                            mutable.update { it.copy(error = carriedReportError) }
+                        }
                     }
+                    if (v.ended) completeWatched(v)
                 }
             } finally {
                 // The encoder may already exist even if native startup or Start failed.
-                if (!releaseEncoding(v)) cleanupFailed = true
+                if (!releaseEncoding(v)) cleanupFailures += "encoding"
                 v.stopped = true
                 if (engine === v.engine) engine = null
                 if (viewing === v) viewing = null
-                if (cleanupFailed) mutable.update { it.copy(error = "Playback ended, but the player could not finish every cleanup step. You can return to the title and try again.") }
+                if (cleanupFailures.isNotEmpty()) {
+                    events.log("playback cleanup item=${v.item.id} failed=${cleanupFailures.joinToString(",")}")
+                    // After a genuine end the viewer has nothing to do about it; otherwise keep the existing hint.
+                    if (!v.ended) mutable.update { it.copy(error = "Playback ended, but the player could not finish every cleanup step. You can return to the title and try again.") }
+                }
             }
         }
     }

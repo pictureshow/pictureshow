@@ -208,6 +208,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
                         (help || remove != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
+                        // PLAY-29: the player page owns its keys (DesktopPlayerPage.kt, playerKeyAction), including a menu's Escape.
+                        state.route == DesktopRoute.Player && !help && remove == null && PlayerKeyboard.handle(e) { modalReturnFocus = null; help = true } -> true
                         else -> false
                     }
             } }

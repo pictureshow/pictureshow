@@ -26,9 +26,11 @@ class DesktopControllerTest {
         var openedAudio: Int? = null; var openedSubtitle: Int? = null
         var failSubtitleSelection = false
         var throwOpen = false; var throwSnapshot = false; var throwClose = false
+        @Volatile var ended = false; @Volatile var error: String? = null; var muted = false
         override fun attach(window: java.awt.Window) {}
         override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; openedAudio = audio; openedSubtitle = subtitle; this.position = position; if (throwOpen) error("startup failed after media opened") }
-        override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready) }
+        override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready, ended = ended, error = error) }
+        override fun mute(muted: Boolean) { this.muted = muted }
         override fun togglePause() { paused = !paused }
         override fun seek(seconds: Double) { position = seconds }
         override fun volume(value: Int) {}
@@ -58,6 +60,11 @@ class DesktopControllerTest {
         val startEntered = java.util.concurrent.CountDownLatch(1)
         val startRelease = java.util.concurrent.CountDownLatch(1)
         val reportCompletions = CopyOnWriteArrayList<String>()
+        /** Item IDs the server already counts as played (the Stop report did it). */
+        val serverPlayed: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        @Volatile var failStop = false
+        private fun episode(id: String, name: String, index: Int) =
+            """{"Id":"$id","Name":"$name","Type":"Episode","SeriesId":"show","SeasonId":"season","ParentIndexNumber":1,"IndexNumber":$index,"RunTimeTicks":600000000,"UserData":{"Played":${id in serverPlayed}}}"""
         init {
             server.executor = executor
             server.createContext("/") { e ->
@@ -81,7 +88,16 @@ class DesktopControllerTest {
                     path == "/Items" && failLatest && e.requestURI.rawQuery.orEmpty().split("&").containsAll(
                         listOf("parentId=library", "sortBy=DateCreated", "sortOrder=Descending")
                     ) -> { latestFailures.incrementAndGet(); status = 500; "" }
-                    path == "/Users/viewer/Items/movie" || path == "/Items/movie" -> { if (slowMovie) Thread.sleep(350); movie }
+                    path == "/Users/viewer/Items/movie" || path == "/Items/movie" -> { if (slowMovie) Thread.sleep(350); if ("movie" in serverPlayed) movie.replace("\"UserData\":{", "\"UserData\":{\"Played\":true,") else movie }
+                    path == "/Items" && e.requestURI.rawQuery.orEmpty().split("&").any { it == "ids=e1" || it == "ids=e2" } -> {
+                        val id = e.requestURI.rawQuery.orEmpty().split("&").first { it.startsWith("ids=") }.removePrefix("ids=")
+                        """{"Items":[${episode(id, if (id == "e1") "Pilot" else "Second", if (id == "e1") 1 else 2)}],"TotalRecordCount":1}"""
+                    }
+                    path == "/Items/e1" -> episode("e1", "Pilot", 1)
+                    path == "/Items/e2" -> episode("e2", "Second", 2)
+                    path == "/Shows/show/Episodes" -> """{"Items":[${episode("e1", "Pilot", 1)},${episode("e2", "Second", 2)}],"TotalRecordCount":2}"""
+                    path.startsWith("/UserPlayedItems/") -> """{"Played":true,"PlayCount":1}"""
+                    path == "/Sessions/Playing/Stopped" && failStop -> { status = 500; "" }
                     path.endsWith("/PlaybackInfo") && transcode -> playbackInfo(request, transcoding = true)
                     path.endsWith("/PlaybackInfo") -> playbackInfo(request)
                     path == "/Items" || path == "/Users/viewer/Items" -> """{"Items":[$movie],"TotalRecordCount":1}"""
@@ -568,6 +584,157 @@ class DesktopControllerTest {
             assertFailsWith<IllegalArgumentException> { proxy.rewriteManifest("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"https://elsewhere.invalid/key\"", decision.url) }
             val rewritten = proxy.rewriteManifest("#EXTM3U\nsegment.ts\n#EXT-X-MAP:URI=\"init.mp4\"", decision.url)
             assertTrue(rewritten.contains("http://127.0.0.1:")); assertFalse(rewritten.contains("private")); assertFalse(rewritten.contains("secret"))
+        }
+    }
+
+    private val e1 = MediaItem("e1", "Pilot", "Episode", seriesId = "show")
+    private suspend fun DesktopController.endWhenReady(engine: () -> Engine) {
+        await { s -> s.playback?.let { it.ready && (it.nextEpisode != null || it.item.type == "Movie") } == true }
+        engine().ended = true
+    }
+    /** For conditions outside controller state (server requests): state.first would never re-check them. */
+    private suspend fun poll(condition: (Unit) -> Boolean) = withTimeout(10000) { while (!condition(Unit)) delay(20) }
+    private fun Fixture.count(path: String) = requests.count { it.first == path }
+    private fun Fixture.stops() = requests.filter { it.first == "/Sessions/Playing/Stopped" }.map { it.second }
+
+    // D-4: a GPU drain failure after a genuine end used to send Failed=true, and Jellyfin then skips the whole
+    // play-state update, leaving the finished episode unwatched. Cleanup is never a playback failure.
+    @Test fun genuineEndWithFailingCloseMarksTheEpisodeWatchedOnceBeforeOpeningTheNext(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engines = CopyOnWriteArrayList<Engine>()
+            val dir = directory()
+            DesktopController(dir, playbackFactory = { Engine().also { if (engines.isEmpty()) it.throwClose = true; engines += it } }, endCountdownSeconds = 0).use { c ->
+                c.login(f)
+                c.play(e1)
+                c.endWhenReady { engines.first() }
+                c.await { it.playback?.item?.id == "e2" && it.playback?.ready == true }
+
+                assertTrue(engines.first().closed)
+                assertEquals(1, f.count("/UserPlayedItems/e1"), "exactly one watched mutation for the finished episode")
+                assertEquals(0, f.count("/UserPlayedItems/e2"))
+                val stop = f.stops().single()
+                assertTrue(stop.contains("\"ItemId\":\"e1\""))
+                assertFalse(stop.contains("\"Failed\":true"), "a cleanup failure must not be reported as a failed playback: $stop")
+                assertTrue(stop.contains("\"PositionTicks\":1800000000"), "the stop reports the physical end: $stop")
+                val order = f.requests.map { it.first }
+                assertTrue(order.indexOf("/UserPlayedItems/e1") < order.indexOfLast { it == "/Items/e2/PlaybackInfo" }, "completion precedes the next episode")
+                assertNull(c.state.value.error, "the finished episode needs nothing from the viewer")
+                val log = File(dir, "app.log").readText()
+                assertTrue(log.contains("playback stop item=e1") && log.contains("failed=false ended=true report=ok"), log)
+                assertTrue(log.contains("playback mark item=e1 result=marked"), log)
+                assertTrue(log.contains("playback cleanup item=e1 failed=close"), log)
+            }
+        }
+    }
+
+    @Test fun stopReportThatAlreadyMarkedPlayedIsNotCountedTwice(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.serverPlayed += "e1"
+            val engines = CopyOnWriteArrayList<Engine>()
+            DesktopController(directory(), playbackFactory = { Engine().also { engines += it } }, endCountdownSeconds = 0).use { c ->
+                c.login(f)
+                c.play(e1)
+                c.endWhenReady { engines.first() }
+                c.await { it.playback?.item?.id == "e2" && it.playback?.ready == true }
+                assertEquals(0, f.count("/UserPlayedItems/e1"))
+                assertEquals(1, f.stops().size)
+            }
+        }
+    }
+
+    @Test fun mediaErrorIsTheOnlyFailedStop(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.playback?.ready == true }
+                poll { f.count("/Sessions/Playing") == 1 }
+                engine.error = "The stream could not be decoded."
+                c.await { it.error == "The stream could not be decoded." }
+                c.stopPlayback(); c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertTrue(f.stops().single().contains("\"Failed\":true"))
+                assertEquals(0, f.count("/UserPlayedItems/movie"))
+            }
+        }
+    }
+
+    @Test fun countdownAdvancesCancelHoldsAndPlayNowAdvancesOnce(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engines = CopyOnWriteArrayList<Engine>()
+            DesktopController(directory(), playbackFactory = { Engine().also { engines += it } }, endCountdownSeconds = 2).use { c ->
+                c.login(f)
+                c.play(e1)
+                c.endWhenReady { engines.first() }
+                val card = c.await { it.playback?.end != null }.playback!!.end!!
+                assertEquals("e2", card.next?.id); assertEquals(2, card.secondsLeft)
+                c.await { it.playback?.end?.secondsLeft == 1 }
+                c.cancelEndCountdown()
+                assertNull(c.state.value.playback?.end?.secondsLeft)
+                delay(2500)
+                assertEquals("e1", c.state.value.playback?.item?.id, "Cancel keeps the card instead of advancing")
+                assertEquals(DesktopRoute.Player, c.state.value.route)
+                assertEquals(1, f.count("/UserPlayedItems/e1"), "the end already completed watched state")
+                c.nextEpisode()
+                c.await { it.playback?.item?.id == "e2" && it.playback?.ready == true }
+                assertEquals(1, f.count("/UserPlayedItems/e1"))
+                assertEquals(1, f.stops().size, "one Stop for E1; E2 is still playing")
+            }
+        }
+    }
+
+    @Test fun finishedFilmOffersBackToTitleThatFocusesPlay(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.endWhenReady { engine }
+                val card = c.await { it.playback?.end != null }.playback!!.end!!
+                assertNull(card.next); assertNull(card.secondsLeft)
+                poll { f.count("/UserPlayedItems/movie") == 1 }
+                c.stopPlayback()
+                val back = c.await { it.route == DesktopRoute.Detail && !it.busy }
+                assertEquals("play", back.returnFocus)
+                c.returnFocusDone(); assertNull(c.state.value.returnFocus)
+                assertEquals(1, f.count("/UserPlayedItems/movie"))
+            }
+        }
+    }
+
+    @Test fun previousViewingReportErrorStaysVisibleWhenTheNextEpisodeOpens(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.failStop = true
+            val engines = CopyOnWriteArrayList<Engine>()
+            DesktopController(directory(), playbackFactory = { Engine().also { engines += it } }, endCountdownSeconds = 0).use { c ->
+                c.login(f)
+                c.play(e1)
+                c.endWhenReady { engines.first() }
+                val s = c.await { it.playback?.item?.id == "e2" && it.playback?.ready == true }
+                assertTrue(s.error.orEmpty().startsWith("Playback ended, but progress could not be saved."), s.error)
+                assertEquals(1, f.count("/UserPlayedItems/e1"), "a failed Stop still completes watched state")
+            }
+        }
+    }
+
+    @Test fun repeatedSeekKeysBuildOnTheLastTargetAndMuteIsReported(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f)
+                c.play(MediaItem("movie", "The first picture", "Movie"))
+                c.await { it.playback?.ready == true }
+                poll { f.count("/Sessions/Playing") == 1 }
+                val start = engine.position
+                c.seekBy(10.0); c.seekBy(10.0); c.seekBy(-10.0)
+                assertEquals(start + 10, engine.position)
+                c.toggleMute()
+                assertTrue(engine.muted); assertEquals(true, c.state.value.playback?.muted)
+                poll { f.requests.any { it.first == "/Sessions/Playing/Progress" && it.second.contains("\"IsMuted\":true") } }
+                c.changeVolume(5)
+                assertFalse(engine.muted, "raising the volume unmutes")
+                assertEquals(85, c.state.value.settings.volume)
+            }
         }
     }
 }
