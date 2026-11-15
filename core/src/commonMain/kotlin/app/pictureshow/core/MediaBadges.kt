@@ -58,7 +58,8 @@ private fun spatialBadge(stream: MediaStream): String? {
     return when {
         format.equals("DolbyAtmos", ignoreCase = true) -> "Atmos"
         format.equals("DTSX", ignoreCase = true) -> "DTS:X"
-        format != null && !format.equals("None", ignoreCase = true) -> null
+        // A server that reports the field has decided, "None" included; only an older one falls back to the profile.
+        format != null -> null
         profile.contains("Dolby Atmos", ignoreCase = true) -> "Atmos"
         profile.contains("DTS:X", ignoreCase = true) -> "DTS:X"
         else -> null

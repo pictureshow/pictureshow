@@ -166,6 +166,7 @@ internal fun PlaybackSettingsScreen(
     var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val local = state.local
     val configuration = state.configuration
+
     @Composable
     fun group(name: String, modifier: Modifier = Modifier) {
         val requester = remember(name) { FocusRequester() }
@@ -183,8 +184,8 @@ internal fun PlaybackSettingsScreen(
                         "with a live preview"
                 "Subtitle conversion" -> "When the server draws subtitles into the picture"
                 "Playback" -> "After credits and returning to a saved position"
-                "Audio output" -> "Passthrough: " +
-                    app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
+                "Audio output" ->
+                    "Passthrough: " + app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
                         local.passthrough,
                         supportedPassthrough,
                         checking = acceptedAudio.startsWith("Checking"),

@@ -160,6 +160,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
+private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "customize", "profile")
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -198,7 +199,7 @@ fun CatalogHome(
             android.util.Log.d(
                 "CatalogFocus",
                 "home-entry saved=${selectedRow.isNotEmpty()} " +
-                    "header=${selectedRow.takeIf { it in listOf("account", "search", "settings", "live-tv", "customize", "profile") } ?: "card"} " +
+                    "header=${selectedRow.takeIf { it in HEADER_ROWS } ?: "card"} " +
                     "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
             )
         }
@@ -3781,8 +3782,11 @@ internal fun CatalogCard(
                         if (item.type == "Episode") {
                             Text(
                                 // The episode's length rides on the same line, so a series page says how long each one is (T-13).
-                                listOfNotNull(item.seriesName, episodeLabel(item), runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank))
-                                    .joinToString(" · "),
+                                listOfNotNull(
+                                    item.seriesName,
+                                    episodeLabel(item),
+                                    runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)
+                                ).joinToString(" · "),
                                 maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = CatalogMuted,
