@@ -290,13 +290,13 @@ internal fun PlaybackSettingsScreen(
             state.error?.let { error ->
                 TvSettingsActionRow("Retry", supportingText = error, onClick = onRetry)
             }
+            TvSettingsSectionHeader("Pictureshow")
             TvSettingsActionRow(
                 androidx.compose.ui.res.stringResource(R.string.sync_title),
                 Modifier.testTag("settings:syncplay"),
                 navigation = true,
                 onClick = onSyncPlay
             )
-            TvSettingsSectionHeader("Pictureshow")
             TvSettingsActionRow(
                 stringResource(R.string.supporter_title),
                 Modifier.focusRequester(supportFocus).testTag("settings:supporter"),

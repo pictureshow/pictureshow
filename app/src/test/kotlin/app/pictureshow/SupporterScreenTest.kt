@@ -72,7 +72,9 @@ class SupporterScreenTest {
                 }
             }
             compose.onNodeWithTag("settings:bitrate").assertIsFocused()
-            compose.walkSettingsFromHomeTo("settings:supporter")
+            compose.walkSettingsFromHomeTo("settings:syncplay")
+            compose.onNodeWithTag("settings:syncplay").assertIsFocused()
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             compose.onNodeWithTag("settings:supporter").assertIsFocused()
             compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitUntil(5_000) { controller.state.value is SupporterState.Offer }

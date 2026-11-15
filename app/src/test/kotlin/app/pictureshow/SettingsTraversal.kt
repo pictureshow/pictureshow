@@ -17,7 +17,7 @@ internal val settingsViewerTags = listOf("settings:bitrate", "settings:passthrou
     listOf("settings:music-quality", "settings:phone-remote", "settings:size", "settings:background") +
     playbackGroups.map { "settings:advanced:$it" } +
     SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
-    listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode")
+    listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode", "settings:syncplay")
 
 internal fun ComposeContentTestRule.walkSettingsFromHomeTo(tag: String) {
     val path = settingsViewerTags + listOf("settings:supporter", "settings:about", "settings:this-tv", "settings:back")

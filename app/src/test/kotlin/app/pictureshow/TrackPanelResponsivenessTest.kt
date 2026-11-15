@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -167,7 +168,11 @@ class TrackPanelResponsivenessTest {
             compose.waitForIdle()
             assertSame(first, menu, "An unrelated player tick rebuilt all track labels")
         }
-        compose.runOnIdle { streams = original.map { if (it.index == 0) it.copy(title = "Commentary") else it } }
+        compose.runOnIdle {
+            Snapshot.withMutableSnapshot {
+                streams = original.map { if (it.index == 0) it.copy(title = "Commentary") else it }
+            }
+        }
         compose.waitUntil(5_000) {
             shadowOf(Looper.getMainLooper()).idle()
             menu != null && menu !== first

@@ -226,6 +226,24 @@
           "People watching"
         ]
       }
+    },
+    {
+      "id": "settings-secondary-watch-together-order",
+      "profile": "settings-secondary-navigation",
+      "input": {
+        "platform": "tv",
+        "fontScale": 1.0
+      },
+      "expected": {
+        "sectionHeading": "Pictureshow",
+        "rowTag": "settings:syncplay",
+        "nextTag": "settings:supporter",
+        "followingTags": [
+          "settings:about",
+          "settings:this-tv"
+        ],
+        "presentation": "secondary-navigation"
+      }
     }
   ]
 }

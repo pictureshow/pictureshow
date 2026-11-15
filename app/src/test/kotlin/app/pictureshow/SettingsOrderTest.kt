@@ -19,7 +19,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.MaterialTheme
+import java.io.File
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -82,6 +87,18 @@ class SettingsOrderTest {
     fun viewerSettingsComeBeforeTheThisTvReport() {
         open()
         compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        val contract = listOf(
+            File("../spec/vectors/sync-tv-structure-discovery.json"),
+            File("spec/vectors/sync-tv-structure-discovery.json")
+        )
+            .first { it.isFile }.readText().let { Json.parseToJsonElement(it).jsonObject.getValue("cases").jsonArray }
+            .map { it.jsonObject }.single { it.getValue("id").jsonPrimitive.content == "settings-secondary-watch-together-order" }
+            .getValue("expected").jsonObject
+        val section = compose.onNodeWithText(contract.getValue("sectionHeading").jsonPrimitive.content).getUnclippedBoundsInRoot()
+        val together = compose.onNodeWithTag(contract.getValue("rowTag").jsonPrimitive.content).getUnclippedBoundsInRoot()
+        val supporter = compose.onNodeWithTag(contract.getValue("nextTag").jsonPrimitive.content).getUnclippedBoundsInRoot()
+        assertTrue(section.bottom <= together.top, "Watch together belongs below its section heading")
+        assertTrue(together.bottom <= supporter.top, "Watch together precedes Support Pictureshow")
         val thisTv = compose.onNodeWithTag("settings:this-tv").getUnclippedBoundsInRoot()
         viewerSettings.forEach { tag ->
             val setting = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
@@ -97,6 +114,7 @@ class SettingsOrderTest {
             key(Key.DirectionDown)
             compose.onNodeWithTag(tag).assertIsFocused()
         }
+        compose.onNodeWithTag("settings:syncplay").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionDown)
         compose.onNodeWithTag("settings:supporter").assertIsFocused()
         key(Key.DirectionDown)
@@ -114,7 +132,11 @@ class SettingsOrderTest {
     @Test
     fun backFromAboutLandsOnAboutNotTheFirstSetting() {
         open()
-        compose.walkSettingsFromHomeTo("settings:about")
+        compose.walkSettingsFromHomeTo("settings:syncplay")
+        compose.onNodeWithTag("settings:syncplay").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("settings:supporter").assertIsFocused()
+        key(Key.DirectionDown)
         compose.onNodeWithTag("settings:about").assertIsFocused()
         key(Key.DirectionCenter)
         compose.onNodeWithTag("about:licenses").assertIsFocused()

@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
@@ -72,7 +73,8 @@ class PlayerTrackMenuPreparationTest {
             val first = requireNotNull(preparation)
             assertNull(first.menus)
             // The UI must be free to process a new source while metadata work is still blocked.
-            compose.runOnIdle { source = "source-b" }
+            // Publish fixture inputs explicitly, independently of earlier tests' pending notifications.
+            compose.runOnIdle { Snapshot.withMutableSnapshot { source = "source-b" } }
             compose.waitUntil(5_000) {
                 shadowOf(Looper.getMainLooper()).idle()
                 preparation !== first
@@ -111,8 +113,10 @@ class PlayerTrackMenuPreparationTest {
             }
             val old = requireNotNull(preparation)
             compose.runOnIdle {
-                source = "new-source"
-                streams = listOf(subtitle.copy(index = 9, title = "Commentary"), audio)
+                Snapshot.withMutableSnapshot {
+                    source = "new-source"
+                    streams = listOf(subtitle.copy(index = 9, title = "Commentary"), audio)
+                }
             }
             compose.waitUntil(5_000) {
                 shadowOf(Looper.getMainLooper()).idle()

@@ -73,7 +73,6 @@ internal fun PlayerIconButton(
     liveSeek: Boolean = false,
     onClick: () -> Unit
 ) {
-    val transportSeek = icon == "back10" || icon == "forward10"
     IconButton(
         onClick,
         modifier.size(48.dp)
@@ -83,7 +82,7 @@ internal fun PlayerIconButton(
                 state?.let { stateDescription = it }
             },
         enabled = enabled,
-        colors = if (liveSeek || transportSeek) {
+        colors = if (liveSeek) {
             IconButtonDefaults.iconButtonColors(
                 contentColor = Color.White,
                 disabledContentColor = Color.White.copy(alpha = LIVE_SEEK_DISABLED_ALPHA)
@@ -92,19 +91,7 @@ internal fun PlayerIconButton(
             IconButtonDefaults.iconButtonColors()
         }
     ) {
-        if (liveSeek) {
-            LiveSeekMark(forward = icon == "forward10")
-        } else if (transportSeek) {
-            // Keep the full48dp picture backing and add contrast around the seek mark itself.
-            Box(
-                Modifier.size(40.dp).background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                LiveSeekMark(forward = icon == "forward10")
-            }
-        } else {
-            Icon(playerActionIcon(icon), null, Modifier.size(24.dp))
-        }
+        if (liveSeek) LiveSeekMark(forward = icon == "forward10") else Icon(playerActionIcon(icon), null, Modifier.size(24.dp))
     }
 }
 
