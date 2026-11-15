@@ -14,6 +14,22 @@ export function pageHeading(main: HTMLElement): HTMLElement {
     return heading;
 }
 
+// Scrolls the page the least distance that shows all of `e` and its focus ring.
+// Whole pixels with a margin: scrollIntoView's "nearest" can stop a fraction of a
+// pixel short at the window's edge, leaving the control and its ring clipped.
+function keepInView(e: HTMLElement) {
+    const r = e.getBoundingClientRect(),
+        margin = 8;
+    if (r.top < margin) window.scrollBy(0, Math.floor(r.top - margin));
+    else if (r.bottom > innerHeight - margin)
+        window.scrollBy(
+            0,
+            Math.ceil(
+                Math.min(r.bottom - innerHeight + margin, r.top - margin),
+            ),
+        );
+}
+
 export function restorePageFocus(
     main: HTMLElement,
     entry: { focus?: string; scroll?: number },
@@ -23,7 +39,16 @@ export function restorePageFocus(
         acceptAutofocus = !entry.focus,
         first = true,
         settled: HTMLElement | undefined,
-        holding: HTMLElement | undefined;
+        holding: HTMLElement | undefined,
+        // Set by the viewer's first key, pointer, wheel or touch on the page. Until
+        // then a control this function placed focus on is kept fully on screen when
+        // content (a late error, a loaded row) is inserted above it (WCAG 2.4.11);
+        // after it, the viewer's own scrolling and focus are never overridden.
+        acted = false;
+    const act = () => {
+        acted = true;
+    };
+    const inputs = ["keydown", "pointerdown", "wheel", "touchstart"] as const;
     const find = () => {
         if (wanted) {
             const keyed = [
@@ -42,6 +67,8 @@ export function restorePageFocus(
         const active = document.activeElement as HTMLElement | null;
         const lost = !active || active === document.body || !active.isConnected;
         if (settled) {
+            if (settled.isConnected && active === settled && !acted)
+                keepInView(settled);
             if (settled.isConnected || !lost) return;
             // The focused control went away, as Detail's loading Play does when the
             // loaded page arrives. Its successor has the same key; a page with no such
@@ -58,11 +85,13 @@ export function restorePageFocus(
         const target = find();
         if (target) {
             target.focus({ preventScroll: true });
-            // A successor (the loaded page's Play after the loading one) can sit lower
-            // on the page than the control it replaces; keep it on screen too.
-            target.scrollIntoView({ block: "nearest", inline: "nearest" });
+            // Back's saved scroll comes first, then the focused control is kept on
+            // screen: restoring the scroll after it could leave focus below the fold.
+            // A successor (the loaded page's Play after the loading one) can also sit
+            // lower on the page than the control it replaces.
             if (first && entry.scroll !== undefined)
                 window.scrollTo(0, entry.scroll);
+            target.scrollIntoView({ block: "nearest", inline: "nearest" });
             first = false;
             settled = target;
             holding = undefined;
@@ -75,6 +104,12 @@ export function restorePageFocus(
     };
     const observer = new MutationObserver(restore);
     observer.observe(main, { childList: true, subtree: true });
+    for (const type of inputs)
+        window.addEventListener(type, act, { capture: true, passive: true });
     restore();
-    return () => observer.disconnect();
+    return () => {
+        observer.disconnect();
+        for (const type of inputs)
+            window.removeEventListener(type, act, { capture: true });
+    };
 }

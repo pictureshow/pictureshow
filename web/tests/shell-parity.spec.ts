@@ -168,6 +168,116 @@ test("settings preserve unknown server fields and rejected desired writes can re
         page.getByRole("combobox", { name: "Subtitle size", exact: true }),
     ).toHaveValue("Large");
 });
+test("Settings reads the server language settings, and a failed read says so with its own Retry", async ({
+    page,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    // The shared fixture answers the user's configuration, so a healthy Settings
+    // shows its server-saved language choices and no error.
+    await page.locator('[data-focus="home-settings"]').click();
+    await expect(
+        page.getByRole("combobox", { name: "Audio language", exact: true }),
+    ).toHaveValue("");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(
+        page.getByRole("heading", { name: "Home", level: 1 }),
+    ).toBeVisible();
+    let fail = true;
+    await page.route("https://jellyfin.example/Users/viewer", (route) =>
+        fail
+            ? route.fulfill({
+                  status: 503,
+                  headers: { "access-control-allow-origin": "*" },
+                  body: "Try again",
+              })
+            : route.fallback(),
+    );
+    await page.locator('[data-focus="home-settings"]').click();
+    // SET-09: the failure replaces the Loading label; it never claims to still load.
+    await expect(
+        page.getByText("Your language settings could not be loaded."),
+    ).toBeVisible();
+    await expect(page.getByText("Loading your language settings…")).toHaveCount(
+        0,
+    );
+    fail = false;
+    await page.getByRole("button", { name: "Retry loading languages" }).click();
+    await expect(
+        page.getByRole("combobox", { name: "Audio language", exact: true }),
+    ).toHaveValue("");
+    await expect(
+        page.getByText("Your language settings could not be loaded."),
+    ).toHaveCount(0);
+});
+test("an error that renders above Settings' landing focus keeps that focus fully on screen", async ({
+    page,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    // A 1280x700 window at 130% zoom: the first setting lands near the bottom of
+    // the window, so the error banner's height is enough to push it off screen.
+    await page.setViewportSize({ width: 985, height: 540 });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("https://jellyfin.example/Users/viewer", async (route) => {
+        await held;
+        await route.fulfill({
+            status: 503,
+            headers: { "access-control-allow-origin": "*" },
+            body: "Try again",
+        });
+    });
+    await page.locator('[data-focus="home-settings"]').click();
+    const select = page.getByLabel("Max streaming bitrate");
+    await expect(select).toBeFocused();
+    await expect(select).toBeInViewport({ ratio: 1 });
+    // The failed read now inserts the app's error banner above the page.
+    release();
+    await expect(page.locator("div.error")).toBeVisible();
+    await expect(
+        page.getByText("Your language settings could not be loaded."),
+    ).toBeVisible();
+    // The banner did push the page down, and focus stayed fully in view anyway.
+    const pushed = await page.evaluate(() => scrollY);
+    expect(pushed).toBeGreaterThan(0);
+    await expect(select).toBeFocused();
+    await expect(select).toBeInViewport({ ratio: 1 });
+});
+test("once the viewer scrolls Settings, a late error does not pull the page back to focus", async ({
+    page,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    await page.setViewportSize({ width: 985, height: 615 });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("https://jellyfin.example/Users/viewer", async (route) => {
+        await held;
+        await route.fulfill({
+            status: 503,
+            headers: { "access-control-allow-origin": "*" },
+            body: "Try again",
+        });
+    });
+    await page.locator('[data-focus="home-settings"]').click();
+    const select = page.getByLabel("Max streaming bitrate");
+    await expect(select).toBeFocused();
+    await page.mouse.move(400, 400);
+    await page.mouse.wheel(0, 900);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(500);
+    await expect(select).not.toBeInViewport();
+    const scrolled = await page.evaluate(() => scrollY);
+    release();
+    await expect(
+        page.getByText("Your language settings could not be loaded."),
+    ).toBeVisible();
+    await expect(select).toBeFocused();
+    // The viewer's place is kept: no jump back up to the focused select.
+    await expect(select).not.toBeInViewport();
+    expect(await page.evaluate(() => scrollY)).toBeGreaterThanOrEqual(scrolled);
+});
 test("About, all bundled license text, device JSON and unavailable support are reachable and readable", async ({
     page,
 }) => {

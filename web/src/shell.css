@@ -165,6 +165,15 @@ fieldset {
     font-size: 0.95rem;
     font-weight: 600;
 }
+/* SET-09: a failed server read sits where the language settings would be. */
+.setting-list .setting-load-error {
+    display: grid;
+    gap: 8px;
+    justify-items: start;
+}
+.setting-list .setting-load-error p {
+    margin: 0;
+}
 .settings-links {
     display: flex;
     flex-wrap: wrap;

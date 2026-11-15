@@ -100,6 +100,8 @@ export function Settings({
 }) {
     const [config, setConfig] = useState<Record<string, unknown>>(),
         [error, setError] = useState(""),
+        // A failed read of the server preferences, shown where they would be.
+        [loadError, setLoadError] = useState(""),
         [busy, setBusy] = useState(false),
         [attempt, setAttempt] = useState(0);
     const live = useRef(true),
@@ -110,7 +112,7 @@ export function Settings({
     useEffect(() => {
         live.current = true;
         setConfig(undefined);
-        setError("");
+        setLoadError("");
         client
             .request<{ Configuration: Record<string, unknown> }>(
                 "Users/" + encode(client.account!.user.Id),
@@ -120,7 +122,11 @@ export function Settings({
             })
             .catch((e) => {
                 if (live.current) {
-                    setError(e.message);
+                    setLoadError(
+                        e instanceof Error
+                            ? e.message
+                            : "Your language settings could not be loaded.",
+                    );
                     onError(e);
                 }
             });
@@ -340,7 +346,20 @@ export function Settings({
                     Saved on your server, so they apply in every Jellyfin app
                     you use.
                 </p>
-                {!config ? (
+                {loadError ? (
+                    // SET-09: a failed read says so where the settings would be, with
+                    // its Retry, instead of a Loading label that never finishes.
+                    <div role="alert" className="setting-load-error">
+                        <p>Your language settings could not be loaded.</p>
+                        <p className="muted">{loadError}</p>
+                        <button
+                            data-focus="settings:languages-retry"
+                            onClick={() => setAttempt((x) => x + 1)}
+                        >
+                            Retry loading languages
+                        </button>
+                    </div>
+                ) : !config ? (
                     <p role="status">Loading your language settings…</p>
                 ) : (
                     <fieldset disabled={busy}>

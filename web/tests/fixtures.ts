@@ -101,6 +101,18 @@ export async function fixture(page: Page) {
                 AccessToken: "viewer-only-token",
             };
         else if (p === "/Users/Me") body = user;
+        // Settings reads the user's server configuration (SET-06..08) and saves it whole.
+        else if (p === "/Users/viewer")
+            body = {
+                ...user,
+                Configuration: {
+                    AudioLanguagePreference: "",
+                    SubtitleLanguagePreference: "",
+                    SubtitleMode: "Default",
+                },
+            };
+        else if (p === "/Users/Configuration")
+            return route.fulfill({ status: 204, headers });
         else if (p === "/UserViews")
             body = {
                 Items: [
