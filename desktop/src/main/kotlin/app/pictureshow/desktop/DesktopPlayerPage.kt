@@ -349,8 +349,16 @@ internal fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.gra
             Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
                 LaunchedEffect(Unit) { if (items.isNotEmpty()) { withFrameNanos { }; initialFocus.requestFocus() } }
                 val maxHeight = with(density) { (ceiling - 2 * gap).coerceAtLeast(160).toDp() }
+                val popupFocus = LocalFocusManager.current
                 Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 3.dp, shadowElevation = 8.dp,
-                    modifier = Modifier.onPreviewKeyEvent(menuKeys).widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
+                    modifier = Modifier.onPreviewKeyEvent { event ->
+                        if (menuKeys(event)) true
+                        else if (event.key == Key.DirectionDown || event.key == Key.DirectionUp) {
+                            if (event.type == KeyEventType.KeyDown) popupFocus.moveFocus(
+                                if (event.key == Key.DirectionDown) FocusDirection.Next else FocusDirection.Previous)
+                            true
+                        } else false
+                    }.widthIn(min = 240.dp, max = 440.dp).heightIn(max = maxHeight)) {
                     Column(Modifier.width(IntrinsicSize.Max).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                         Text(label, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         items.forEach { (key, text) ->
