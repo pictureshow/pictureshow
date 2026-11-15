@@ -92,7 +92,17 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                             item {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     CatalogHeading("Recent searches", section = true)
-                                    search.recent.forEachIndexed { i, term -> TextButton(onClick = { c.searchQuery(term, immediate = true); field.requestFocus() }, modifier = Modifier.controlFocus().probe("search-recent:$i")) { Text(term) } }
+                                    search.recent.forEachIndexed { i, term ->
+                                        TextButton(
+                                            onClick = { c.searchQuery(term, immediate = true); field.requestFocus() },
+                                            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(min = 48.dp)
+                                                .controlFocus(MaterialTheme.shapes.small).probe("search-recent:$i"),
+                                            shape = MaterialTheme.shapes.small,
+                                            contentPadding = PaddingValues(vertical = 12.dp)
+                                        ) {
+                                            Text(term, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
                                     InlineTextAction("Clear recent searches", "search-clear-recent", { c.rememberSearch(clear = true); field.requestFocus() })
                                 }
                             }
@@ -100,9 +110,9 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                     }
                     search.storageError?.let { item { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                     if (search.completed && (search.someFailed || search.libraryError)) item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             SearchMessage(if (search.allFailed) "Search is unavailable" else "Some results are unavailable", if (search.allFailed) "Check your server or connection, then try again." else if (search.libraryError) "Some library names couldn't load. Try again to tell copies apart." else "The results that loaded are shown below. Try again for the remaining groups.")
-                            InlineTextAction("Retry", "search-retry", { c.searchQuery(search.query, immediate = true); field.requestFocus() })
+                            FilledTonalButton(onClick = { c.searchQuery(search.query, immediate = true); field.requestFocus() }, modifier = Modifier.controlFocus().probe("search-retry")) { Text("Retry") }
                         }
                     }
                     if (search.completed && !search.someFailed && search.rows.isEmpty()) item { SearchMessage("No results for “${normalizeSearch(search.query)}”", "Try another title, person or artist.") }
