@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextRange
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import java.net.URLDecoder
@@ -222,6 +224,9 @@ class DesktopSearchTest {
                 onRoot().performKeyInput { withKeyDown(Key.MetaLeft) { pressKey(Key.F) } }
                 waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search-field"] == true }
                 onNodeWithTag("search-field").assertTextContains("Cloud")
+                onNodeWithTag("search-field").assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(0, 5)))
+                onNodeWithTag("search-field").performTextInput("Rain")
+                assertEquals("Rain", c.state.value.search.query)
                 f.failAll = true
                 c.searchQuery("Cloud", immediate = true)
                 waitUntil(timeoutMillis = 8000) { c.state.value.search.allFailed }

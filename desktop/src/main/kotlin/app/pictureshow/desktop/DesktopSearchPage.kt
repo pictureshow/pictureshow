@@ -14,6 +14,8 @@ import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardActions
@@ -28,6 +30,13 @@ import kotlinx.coroutines.launch
 internal fun SearchPage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
     val search = state.search
+    var fieldValue by remember { mutableStateOf(TextFieldValue(search.query)) }
+    LaunchedEffect(search.query) {
+        if (fieldValue.text != search.query) fieldValue = TextFieldValue(search.query, TextRange(search.query.length))
+    }
+    LaunchedEffect(state.returnFocus) {
+        if (state.returnFocus == "search-field") fieldValue = fieldValue.copy(selection = TextRange(0, fieldValue.text.length))
+    }
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val field = remember { FocusRequester() }
@@ -54,8 +63,13 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
             Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CatalogHeading("Search")
                 OutlinedTextField(
-                    search.query, { c.searchQuery(it) },
+                    fieldValue, { value ->
+                        val text = value.text.take(SEARCH_QUERY_LIMIT)
+                        fieldValue = value.copy(text = text, selection = TextRange(value.selection.start.coerceAtMost(text.length), value.selection.end.coerceAtMost(text.length)))
+                        c.searchQuery(text)
+                    },
                     modifier = Modifier.fillMaxWidth().focusRequester(field).probe("search-field")
+                        .onFocusChanged { if (it.isFocused) fieldValue = fieldValue.copy(selection = TextRange(0, fieldValue.text.length)) }
                         .onPreviewKeyEvent { e ->
                             if (e.type == KeyEventType.KeyDown && !e.isAltPressed && !e.isCtrlPressed && !e.isMetaPressed && e.key == Key.DirectionDown && firstTag != null) {
                                 enterResults(); true
