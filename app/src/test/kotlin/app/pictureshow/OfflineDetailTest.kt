@@ -47,7 +47,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
-/** P-1 and P-11 of the 2026-11-15 phone review: a downloaded title's own page plays the download, and leaving it says where progress went. */
+/** Phone review P-1 and P-11: a title's own page plays its download, and leaving says where progress went. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h1600dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
