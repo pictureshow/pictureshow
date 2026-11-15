@@ -85,6 +85,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
             "offline-plan.json",
             "offline-reconnect.json",
             "offline-next.json",
+            "offline-detail-source.json",
             "offline-fmp4.json"
         )
     from(rootProject.file("spec/vectors")) {

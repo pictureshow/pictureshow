@@ -61,6 +61,7 @@ import kotlinx.coroutines.plus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 
 internal data class OfflineLiveProgress(val received: Long, val total: Long?)
@@ -104,6 +105,9 @@ private val OFFLINE_UNFINISHED = setOf(
     OfflinePhase.verifying
 )
 private const val OFFLINE_STORAGE_MARGIN = 16L * 1024 * 1024
+
+/** Long enough for a server on the LAN or a VPN to read, write and read back; short enough that its notice still belongs to the exit. */
+private const val OFFLINE_SETTLE_MILLIS = 10_000L
 
 internal class OfflineEngine(
     private val context: Context,
@@ -165,6 +169,19 @@ internal class OfflineEngine(
     private var lastNetwork: OfflineNetwork? = null
 
     val libraries: StateFlow<Map<String, OfflineLibrary>> = mutableLibraries
+
+    /**
+     * A local viewing ended (P-11): settle its progress now if the server answers, within a deadline a viewer leaving the player won't
+     * notice. No network answers Failed without a request; the record stays in the outbox for the next sync either way.
+     */
+    val viewings = OfflineViewingSettler(this.scope) { account, itemId ->
+        if (this.networkState() == OfflineNetwork.none) {
+            OfflineSettleResult.Failed
+        } else {
+            withTimeoutOrNull(OFFLINE_SETTLE_MILLIS) { progressStore(account).settle(itemId, OfflineApiProgressRemote(api())) }
+                ?: OfflineSettleResult.Failed
+        }
+    }
 
     private suspend fun api(): OfflineApi = api ?: OfflineApi(apiCalls, identity()).also { api = it }
 

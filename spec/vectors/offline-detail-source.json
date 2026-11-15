@@ -1,0 +1,590 @@
+{
+  "schemaVersion": 1,
+  "suite": "offline-detail-source",
+  "cases": [
+    {
+      "id": "offline-detail-source.ready-plays-local-online",
+      "note": "A ready download plays on its own page even with the server answering: no data spent on a copy already here.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "reachable",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "local"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.ready-plays-local-unreachable",
+      "note": "The plane case: server out of reach, the page's Play uses the download.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "unreachable",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "local"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.ready-plays-local-unknown",
+      "note": "Nothing has failed yet: the download still plays, with no wait for a server check.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "unknown",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "local"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.stream-instead-is-deliberate",
+      "note": "Stream from server instead, with the server answering, streams.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "reachable",
+            "explicitStream": true
+          },
+          "expected": {
+            "source": "stream"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.stream-instead-unknown-tries",
+      "note": "Stream instead with reachability unknown tries the server; the player reports a failure.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "unknown",
+            "explicitStream": true
+          },
+          "expected": {
+            "source": "stream"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.stream-instead-unreachable-explains",
+      "note": "Stream instead with the server out of reach is unavailable and says why, rather than opening a player that can only fail.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": true,
+            "server": "unreachable",
+            "explicitStream": true
+          },
+          "expected": {
+            "source": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.no-download-streams",
+      "note": "Not downloaded: Play streams as always.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": false,
+            "server": "reachable",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "stream"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.no-download-unknown-tries",
+      "note": "Not downloaded, nothing failed yet: try the server.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": false,
+            "server": "unknown",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "stream"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.no-download-unreachable-explains",
+      "note": "Not downloaded and the server out of reach: unavailable, with the reason on the page.",
+      "operation": "detail-source",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "ready": false,
+            "server": "unreachable",
+            "explicitStream": false
+          },
+          "expected": {
+            "source": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-from-start",
+      "note": "Play from start is zero whatever is known.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": true,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "500",
+              "played": null,
+              "phase": "dirty",
+              "conflict": null,
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "900",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-unsent-local-wins",
+      "note": "An unsent local place is newer than the server's: it wins over a fresh read.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "500",
+              "played": null,
+              "phase": "dirty",
+              "conflict": null,
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "300",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "500"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-unsent-played-is-zero",
+      "note": "An unsent completion starts the next viewing at the beginning.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": null,
+              "played": true,
+              "phase": "dirty",
+              "conflict": null,
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "300",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-synced-takes-fresh-server",
+      "note": "Nothing unsent: a fresh server read is newest, e.g. another device moved it.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": null,
+              "played": null,
+              "phase": "synced",
+              "conflict": null,
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "900",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "900"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-no-outbox-takes-fresh-server",
+      "note": "No outbox record and a fresh read: the server's place.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": null,
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "900",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "900"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-server-played-is-zero",
+      "note": "The server says watched: start from the beginning.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": null,
+            "lastKnown": {
+              "positionTicks": "100",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "900",
+              "played": true,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-conflict-takes-fresh-server",
+      "note": "A conflict's place is never a resume point; the fresh server read is.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "500",
+              "played": null,
+              "phase": "conflict",
+              "conflict": {
+                "serverPositionTicks": "700",
+                "serverPlayed": false,
+                "localPositionTicks": "500",
+                "localPlayed": null,
+                "fields": [
+                  "position"
+                ]
+              },
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "700",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": {
+              "positionTicks": "800",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "startTicks": "800"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-conflict-offline-takes-last-known",
+      "note": "A conflict with no server: the last-known (server) place, never the conflict's.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "500",
+              "played": null,
+              "phase": "conflict",
+              "conflict": {
+                "serverPositionTicks": "700",
+                "serverPlayed": false,
+                "localPositionTicks": "500",
+                "localPlayed": null,
+                "fields": [
+                  "position"
+                ]
+              },
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "700",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": null
+          },
+          "expected": {
+            "startTicks": "700"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-offline-last-known",
+      "note": "No server read and nothing unsent: the device's last-known place, as Downloads does.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": null,
+            "lastKnown": {
+              "positionTicks": "410",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": null
+          },
+          "expected": {
+            "startTicks": "410"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-offline-unsent",
+      "note": "No server read: the unsent local place.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "100",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "620",
+              "played": null,
+              "phase": "dirty",
+              "conflict": null,
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "410",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            },
+            "server": null
+          },
+          "expected": {
+            "startTicks": "620"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-detail-source.start-nothing-known",
+      "note": "Nothing known anywhere: the beginning.",
+      "operation": "detail-start",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "fromStart": false,
+            "outbox": null,
+            "lastKnown": null,
+            "server": null
+          },
+          "expected": {
+            "startTicks": "0"
+          }
+        }
+      ]
+    }
+  ]
+}

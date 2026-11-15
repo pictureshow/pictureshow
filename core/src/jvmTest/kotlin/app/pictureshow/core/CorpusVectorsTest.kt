@@ -57,6 +57,7 @@ class CorpusVectorsTest {
             "offline-vectors" to
                 setOf(
                     "offline-budget",
+                    "offline-detail-source",
                     "offline-fmp4",
                     "offline-job",
                     "offline-manifest",

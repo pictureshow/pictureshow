@@ -92,6 +92,16 @@ internal class ServerPlaybackGateway(
     override suspend fun played() = markPlayed()
 }
 
+internal const val PLAYBACK_SERVER_UNREACHED = "Couldn't reach your server. Check your connection and try again."
+
+/**
+ * Why playback couldn't start, in the viewer's terms. A request that never got an answer says the server wasn't reached: blaming the
+ * server's stream for a connection that never happened sends people looking in the wrong place (a downloaded title's own page plays its
+ * download, so this is for titles that have none, or a deliberate stream).
+ */
+internal fun playbackStartFailureCopy(error: app.pictureshow.core.ClientError): String =
+    if (error.kind == app.pictureshow.core.ErrorKind.NETWORK && error.status == null) PLAYBACK_SERVER_UNREACHED else error.message
+
 internal data class PlaybackPosition(val milliseconds: Long, val paused: Boolean)
 
 internal fun startPositionApplied(requestedMs: Long, appliedMs: Long): Boolean =
@@ -674,7 +684,7 @@ internal class PlaybackSession(
         when (val result = gateway.prepare(request)) {
             is ClientResult.Failure -> {
                 trace("failure", "reason=negotiation-${result.error.kind}")
-                mutable.value = mutable.value.copy(preparing = false, error = result.error.message)
+                mutable.value = mutable.value.copy(preparing = false, error = playbackStartFailureCopy(result.error))
                 finishDecision(failed = !closing)
             }
             is ClientResult.Success -> when (val outcome = result.value) {
