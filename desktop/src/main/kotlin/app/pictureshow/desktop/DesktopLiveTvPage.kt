@@ -64,6 +64,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             key?.let { DesktopUiProbe.requestFocus[it]?.let { target -> runCatching { target.requestFocus() } } }
         }
     }
+    CompositionLocalProvider(LocalModalOpen provides (LocalModalOpen.current || confirmation != null || s.selected != null || s.draft != null)) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Live TV", Modifier.padding(top = 12.dp).semantics { heading() }, style = MaterialTheme.typography.headlineMedium)
         PrimaryTabRow(selectedTabIndex = s.tab.ordinal, modifier = Modifier.fillMaxWidth()) {
@@ -183,6 +184,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             }
         }
     }
+    } // Background controls share the shell’s modal focus-ring suppression.
     s.selected?.takeIf { s.draft == null }?.let { program ->
         val channel = s.channels.firstOrNull { it.id == program.channelId }
         AlertDialog(onDismissRequest = owner::dismissProgram,
@@ -367,7 +369,8 @@ internal fun liveRange(start: String?, end: String?): String {
 
 @Composable private fun Modifier.liveTabFocus(): Modifier {
     var focused by remember { mutableStateOf(false) }
-    return onFocusChanged { focused = it.isFocused }.border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(6.dp))
+    val modalOpen = LocalModalOpen.current
+    return onFocusChanged { focused = it.isFocused }.border(2.dp, if (focused && !modalOpen) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(6.dp))
 }
 @Composable private fun LiveToggle(selected: Boolean, action: () -> Unit, label: String, modifier: Modifier = Modifier) {
     val m = modifier.controlFocus().semantics { this.selected = selected; stateDescription = if (selected) "On" else "Off" }
