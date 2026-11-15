@@ -15,6 +15,7 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,15 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
     val scope = rememberCoroutineScope()
     val field = remember { FocusRequester() }
     val firstTag = search.rows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "search:${row.key}:${it.id}" } }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val contentWidth = (maxWidth - 48.dp).coerceAtLeast(120.dp)
+    // Whole cards fill the viewport; the scrollbar reveals that more cards follow without a clipped sliver.
+    fun cardWidth(target: Int): androidx.compose.ui.unit.Dp {
+        val columns = kotlin.math.ceil((contentWidth.value + 16) / (target + 16)).toInt().coerceAtLeast(1)
+        return (contentWidth - 16.dp * (columns - 1)) / columns
+    }
+    val posterWidth = cardWidth(156)
+    val episodeWidth = cardWidth(232)
     CatalogTabScope(Modifier.fillMaxSize().catalogPage()) {
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -52,9 +62,9 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                 if (search.loading) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Searching" })
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(state = list, modifier = Modifier.fillMaxSize().padding(end = 20.dp).probe("search-results"), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                LazyColumn(state = list, modifier = Modifier.fillMaxSize().probe("search-results"), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (normalizeSearch(search.query).length < 2) {
-                        item { SearchMessage("Find something to watch or listen to", "Enter at least 2 characters to search your libraries.") }
+                        item { SearchMessage("Find something to watch or listen to", if (normalizeSearch(search.query).isEmpty()) "Search titles, people and music across all your libraries." else "Enter at least 2 characters to search your libraries.") }
                         if (search.recent.isNotEmpty()) {
                             item {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -76,19 +86,24 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
                     items(search.rows, key = { it.key }) { row ->
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             CatalogHeading(row.title, section = true)
+                            val laneScroll = rememberLazyListState()
+                            val librarySlot = row.items.any { it.id in search.libraries }
                             CatalogLane("search:${row.key}", row.items.firstOrNull()?.id) {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LazyRow(state = laneScroll, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                     items(row.items, key = { it.id }) { item ->
                                         val tag = "search:${row.key}:${item.id}"
                                         val library = search.libraries[item.id]
                                         CatalogCard(item, account, row.wide, { c.openSearchResult(item) },
-                                            Modifier.width(if (row.wide) 232.dp else 156.dp).catalogLaneItem(item.id)
+                                            Modifier.width(if (row.wide) episodeWidth else posterWidth).catalogLaneItem(item.id)
                                                 .focusProperties { if (row == search.rows.first()) up = field }
                                                 .focusOutline().probe(tag), tag = tag,
                                             announcement = listOfNotNull(catalogAnnouncement(item), library).joinToString(". "),
-                                            caption = library?.let { name -> { SearchCaption(item, name) } })
+                                            caption = { SearchCaption(item, library, librarySlot) })
                                     }
                                 }
+                                HorizontalScrollbar(rememberScrollbarAdapter(laneScroll), Modifier.fillMaxWidth().height(8.dp))
+                            }
                             }
                         }
                     }
@@ -97,13 +112,15 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
             }
         }
     }
+    }
 }
 
-@Composable private fun SearchCaption(item: MediaItem, library: String) {
-    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 2)
-        item.productionYear?.let { Text(it.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        Text(library, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+@Composable private fun SearchCaption(item: MediaItem, library: String?, librarySlot: Boolean) {
+    Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(item.name, style = MaterialTheme.typography.titleSmall, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        val meta = if (item.type == "Episode") listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ") else item.productionYear?.toString().orEmpty()
+        Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (librarySlot) Text(library.orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
