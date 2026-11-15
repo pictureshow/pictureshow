@@ -17,6 +17,54 @@ type LabelStream = Stream & {
     IsExternalUrl?: boolean;
 };
 
+// Exact generated names only; see spec/features/track-labels.md and shared vectors.
+const muxerHandlerNames = new Set([
+    "core media audio",
+    "core media video",
+    "core media text",
+    "core media subtitle",
+    "core media closed caption",
+    "core media metadata",
+    "datahandler",
+    "picturehandler",
+    "videohandler",
+    "soundhandler",
+    "closedcaptionhandler",
+    "subtitlehandler",
+    "hinthandler",
+    "timecodehandler",
+    "gopro met",
+    "cam meta",
+    "cam dbgi",
+    "gpac iso video handler",
+    "gpac iso auxiliary video handler",
+    "gpac iso picture sequence handler",
+    "gpac iso audio handler",
+    "gpac iso hint handler",
+    "gpac timed metadata handler",
+    "gpac mpeg-4 od handler",
+    "gpac mpeg-4 ocr handler",
+    "gpac mpeg-4 scene description handler",
+    "gpac mpeg-4 mpeg-7 handler",
+    "gpac mpeg-4 oci handler",
+    "gpac mpeg-4 ipmp handler",
+    "gpac mpeg-4 mpeg-j handler",
+    "gpac streaming text handler",
+    "gpac mpeg subtitle handler",
+    "gpac dims handler",
+    "gpac tmcd handler",
+    "gpac isomedia handler",
+]);
+const lavfIdentifier = /^lavf(?:[0-9]+\.[0-9]+\.[0-9]+)?$/;
+function isMuxerHandlerName(title: string): boolean {
+    const lower = title.toLowerCase();
+    // RegExp's $ also accepts a final newline; compare the entire match for Kotlin parity.
+    return (
+        muxerHandlerNames.has(lower) ||
+        lavfIdentifier.exec(lower)?.[0] === lower
+    );
+}
+
 const bibliographic: Record<string, string> = {
     fre: "fr",
     ger: "de",
@@ -119,7 +167,8 @@ export function playerTrackLabel(
     const parts: string[] = [];
     const fmt = format(s);
     const language = trackLanguage(s.Language);
-    const title = s.Title?.trim() ? s.Title : undefined;
+    const title =
+        s.Title?.trim() && !isMuxerHandlerName(s.Title) ? s.Title : undefined;
     const name =
         language && title && trackMetadataNames(title, language)
             ? title

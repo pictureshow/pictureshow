@@ -3,6 +3,52 @@
  */
 package app.pictureshow.core.playback
 
+// Exact generated names only: a real title can contain any of these words.
+// Sources, matching contract and porting vectors: spec/features/track-labels.md.
+private val muxerHandlerNames = setOf(
+    "core media audio",
+    "core media video",
+    "core media text",
+    "core media subtitle",
+    "core media closed caption",
+    "core media metadata",
+    "datahandler",
+    "picturehandler",
+    "videohandler",
+    "soundhandler",
+    "closedcaptionhandler",
+    "subtitlehandler",
+    "hinthandler",
+    "timecodehandler",
+    "gopro met",
+    "cam meta",
+    "cam dbgi",
+    "gpac iso video handler",
+    "gpac iso auxiliary video handler",
+    "gpac iso picture sequence handler",
+    "gpac iso audio handler",
+    "gpac iso hint handler",
+    "gpac timed metadata handler",
+    "gpac mpeg-4 od handler",
+    "gpac mpeg-4 ocr handler",
+    "gpac mpeg-4 scene description handler",
+    "gpac mpeg-4 mpeg-7 handler",
+    "gpac mpeg-4 oci handler",
+    "gpac mpeg-4 ipmp handler",
+    "gpac mpeg-4 mpeg-j handler",
+    "gpac streaming text handler",
+    "gpac mpeg subtitle handler",
+    "gpac dims handler",
+    "gpac tmcd handler",
+    "gpac isomedia handler"
+)
+private val lavfIdentifier = Regex("lavf(?:[0-9]+\\.[0-9]+\\.[0-9]+)?")
+
+private fun isMuxerHandlerName(title: String): Boolean {
+    val lower = title.lowercase()
+    return lower in muxerHandlerNames || lavfIdentifier.matches(lower)
+}
+
 /**
  * A track's language names it; without one the server's title or the codec/channel description carries the label,
  * and [trackNumber] keeps same-looking tracks apart. "Default" appears only when [showDefault] says it
@@ -41,7 +87,7 @@ fun trackLabelPolicy(
     }
     val format = codec + channels
     val language = languageName(stream.language)
-    val title = stream.title?.takeIf { it.isNotBlank() }
+    val title = stream.title?.takeIf { it.isNotBlank() && !isMuxerHandlerName(it) }
     val name = if (language != null && title?.let { names(it, language) } == true) title else language ?: title
     if (name != null) {
         add(name)
