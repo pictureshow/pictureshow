@@ -173,7 +173,8 @@ class DesktopRoundThreeTest {
 
     @Test fun shortcutsFrameFitsInsideA600PixelWindowWithCloseVisible() = runDesktopComposeUiTest(800,600) {
         setContent { MaterialTheme { DesktopShortcutsDialog(true, true, 536.dp) {} } }
-        assertTrue(onNodeWithTag("help-dialog").getUnclippedBoundsInRoot().height <= 536.dp)
+        val bounds = onNodeWithTag("help-dialog").getUnclippedBoundsInRoot()
+        assertTrue(bounds.bottom - bounds.top <= 536.dp)
         onNodeWithTag("help-close").assertIsDisplayed()
         val fs = desktopShortcutSheet(true,true).flatMap { it.rows }.filter { it.first in setOf("F", "⌃⌘F") }.map { it.second }.toSet()
         assertEquals(setOf("Fullscreen"), fs)
