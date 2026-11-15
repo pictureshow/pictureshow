@@ -4,10 +4,12 @@
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.focusable
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 
 /** One owner per window, including menus inside dialogs and the player's custom-positioned popup. */
@@ -52,5 +54,7 @@ internal fun DesktopMenuRegistration(open: Boolean, opener: FocusRequester, dism
 internal fun DesktopDropdownMenu(expanded: Boolean, onDismissRequest: () -> Unit, opener: FocusRequester,
                                  modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val keys = DesktopMenuRegistration(expanded, opener, onDismissRequest)
-    DropdownMenu(expanded, onDismissRequest, modifier = modifier.onPreviewKeyEvent(keys), content = content)
+    val menuFocus = remember { FocusRequester() }
+    LaunchedEffect(expanded) { if (expanded) { withFrameNanos { }; runCatching { menuFocus.requestFocus() } } }
+    DropdownMenu(expanded, onDismissRequest, modifier = modifier.onPreviewKeyEvent(keys).focusRequester(menuFocus).focusable(), content = content)
 }

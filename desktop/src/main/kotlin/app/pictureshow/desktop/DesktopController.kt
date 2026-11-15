@@ -253,19 +253,19 @@ class DesktopController(
             generation.incrementAndGet(); pageJob?.cancel()
             mutable.value = previous.copy(busy = false, settings = mutable.value.settings, returnFocus = "search-field",
                 search = previous.search.copy(recent = store.snapshots.value.recentSearches[a.key].orEmpty(), storageError = mutable.value.search.storageError))
-            if (previous.search.loading) searchQuery(previous.search.query, immediate = true)
+            searchQuery(previous.search.query, immediate = true, retainResults = true)
             return
         }
         page(DesktopRoute.Search, remember = true) { g ->
             publish(g) { it.copy(search = DesktopSearchState(recent = store.snapshots.value.recentSearches[a.key].orEmpty()), returnFocus = "search-field") }
         }
     }
-    @Synchronized fun searchQuery(value: String, immediate: Boolean = false) {
+    @Synchronized fun searchQuery(value: String, immediate: Boolean = false, retainResults: Boolean = false) {
         if (mutable.value.route != DesktopRoute.Search) return
         val bounded = value.take(SEARCH_QUERY_LIMIT)
         val term = normalizeSearch(bounded)
-        mutable.update { it.copy(search = it.search.copy(query = bounded, rows = emptyList(), loading = term.length >= 2,
-            completed = false, someFailed = false, allFailed = false, libraries = emptyMap(), libraryError = false)) }
+        mutable.update { it.copy(search = it.search.copy(query = bounded, rows = if (retainResults) it.search.rows else emptyList(), loading = term.length >= 2,
+            completed = false, someFailed = false, allFailed = false, libraries = if (retainResults) it.search.libraries else emptyMap(), libraryError = false)) }
         page(DesktopRoute.Search) { g ->
             if (term.length < 2) return@page
             if (!immediate) delay(300)
@@ -458,7 +458,7 @@ class DesktopController(
                     publish(g) { it.copy(items = result.items.distinctBy(MediaItem::id), total = result.totalRecordCount) }
                 }
             }
-            CatalogReturnRefresh.SearchResults -> searchQuery(previous.search.query, immediate = true)
+            CatalogReturnRefresh.SearchResults -> searchQuery(previous.search.query, immediate = true, retainResults = true)
             CatalogReturnRefresh.None -> Unit
         }
     }
