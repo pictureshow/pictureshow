@@ -190,11 +190,14 @@ class OfflineDetailTest {
         val taps = Taps()
         val state = CatalogDetailState(account, MediaItem("movie", "A Film", "Movie"), loading = false, readSucceeded = true)
         detail(state, OfflineServerReach.unreachable, 0, taps)
-        compose.onNodeWithText("Play on TV").assertIsEnabled().performClick()
         compose.waitForIdle()
+        // A notice clears after six seconds, and an idle wait would run the clock past it.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Play on TV").assertIsEnabled().performClick()
+        compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("touch:detail:status").assertTextEquals(DETAIL_TV_NEEDS_SERVER)
         compose.onNodeWithTag("touch:detail:offline:stream").performScrollTo().performClick()
-        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("touch:detail:status").assertTextEquals(DETAIL_STREAM_NEEDS_SERVER)
         assertEquals(0, taps.streamed)
     }

@@ -551,7 +551,7 @@ internal fun TouchCatalogDetail(
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
                                         // Under the grid, so it moves none of the actions the grid holds still.
-                                        val startDownload = {
+                                        val startDownload: () -> Unit = {
                                             val season = if (item.type == "Season") {
                                                 item
                                             } else {
