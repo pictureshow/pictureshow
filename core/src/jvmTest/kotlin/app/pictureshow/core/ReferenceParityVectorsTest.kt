@@ -90,7 +90,7 @@ class ReferenceParityVectorsTest {
                         "application",
                         "recovery",
                         "playback-information",
-                        "playback-formats",
+                        "playback-formats", "catalog-return",
                         "playback-settings",
                         "player-quality",
                         "settings-presentation",

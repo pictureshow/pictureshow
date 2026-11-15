@@ -155,15 +155,6 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     }
     val savedPages = rememberSaveableStateHolder()
     DesktopPageEntryFocus(state, pageKey)
-    // Restore Search once on entry, not on every debounce completion: a viewer may have
-    // deliberately moved to the sidebar while a query is pending.
-    LaunchedEffect(pageKey) {
-        if (state.route == DesktopRoute.Search) {
-            delay(150)
-            val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
-            runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
-        }
-    }
     LaunchedEffect(state.returnFocus, pageKey) {
         if (state.route == DesktopRoute.Search && state.returnFocus == "search-field") {
             delay(100)
@@ -464,6 +455,16 @@ internal fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream):
 /** Entry focus applies after loading and after pointer navigation, without stealing focus during an edit. */
 @Composable
 internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String) {
+    // Restore Search once on entry, not on every debounce completion: a viewer may have
+    // deliberately moved to the sidebar while a query is pending.
+    LaunchedEffect(pageKey) {
+        if (state.route == DesktopRoute.Search) {
+            delay(150)
+            val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
+            runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
+        }
+    }
+
     LaunchedEffect(pageKey, state.busy) {
         if(!state.busy && state.route != DesktopRoute.Search) {
             delay(150)
@@ -471,7 +472,7 @@ internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String) {
                 // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
                 // when the player page provides one) or on nothing, so Space and arrows reach playback.
                 val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }
-                else DesktopUiProbe.lastFocus[pageKey] ?: when(state.route) {
+                else DesktopUiProbe.lastFocus[pageKey]?.takeIf { DesktopUiProbe.requestFocus.containsKey(it) } ?: when(state.route) {
                     DesktopRoute.Servers -> "server-address"
                     DesktopRoute.SignIn -> "username"
                     DesktopRoute.Settings -> "sign-out"

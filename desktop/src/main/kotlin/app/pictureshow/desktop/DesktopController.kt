@@ -421,7 +421,7 @@ class DesktopController(
         page(DesktopRoute.Detail) { g ->
             val a = mutable.value.account ?: return@page
             val ud = attempt(g, a) { if (watched) client.played(a, d.id, !d.isWatched) else client.favorite(a, d.id, !d.userData.isFavorite) } ?: return@page
-            publish(g) { it.copy(detail = it.detail?.copy(userData = ud), homeRows = it.homeRows.map { row -> row.copy(items = row.items.map { card -> if (card.id == d.id) card.copy(userData = ud) else card }) }, items = it.items.map { card -> if (card.id == d.id) card.copy(userData = ud) else card }) }
+            if (generation.get() == g) patchItemUserData(d.id) { ud }
         }
     }
     fun settings() = page(DesktopRoute.Settings, remember = mutable.value.route != DesktopRoute.Settings) { _ -> }
@@ -452,7 +452,7 @@ class DesktopController(
                 val count = maxOf(60, previous.items.size)
                 val result = if (previous.route == DesktopRoute.Library) previous.library?.let {
                     attempt(g, a) { client.items(a, BrowseQuery(it.id, sortBy = previous.sortBy, descending = previous.descending, limit = count)) }
-                } else previous.person?.let { attempt(g, a) { client.personItems(a, it.id) } }
+                } else previous.person?.let { attempt(g, a) { client.personItems(a, it.id, limit = count) } }
                 if (result != null) {
                     nextPageIndex = result.startIndex + result.items.size
                     publish(g) { it.copy(items = result.items.distinctBy(MediaItem::id), total = result.totalRecordCount) }
@@ -465,7 +465,10 @@ class DesktopController(
 
     /** Patch every cached occurrence before a slow/offline return can paint a pre-play badge or resume label. */
     private fun patchPlaybackData(item: MediaItem, position: Double, ended: Boolean) {
-        fun patch(card: MediaItem) = if (card.id == item.id) card.copy(userData = playbackReturnData(card.userData, (position.coerceAtLeast(0.0) * 10_000_000).toLong(), ended)) else card
+        patchItemUserData(item.id) { playbackReturnData(it, (position.coerceAtLeast(0.0) * 10_000_000).toLong(), ended) }
+    }
+    private fun patchItemUserData(itemId: String, update: (ItemUserData) -> ItemUserData) {
+        fun patch(card: MediaItem) = if (card.id == itemId) card.copy(userData = update(card.userData)) else card
         fun patch(s: DesktopState) = s.copy(detail = s.detail?.let(::patch), items = s.items.map(::patch),
             seasons = s.seasons.map(::patch), episodes = s.episodes.map(::patch),
             homeRows = s.homeRows.map { it.copy(items = it.items.map(::patch)) },

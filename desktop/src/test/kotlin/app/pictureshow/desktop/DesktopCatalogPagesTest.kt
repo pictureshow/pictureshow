@@ -65,6 +65,16 @@ class DesktopCatalogPagesTest {
     }
     private fun ComposeUiTest.focusedTag(): String? = onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(SemanticsProperties.TestTag)
 
+    @Test fun titleMetadataIdentifiesLibraryAndSourceHdr() = runComposeUiTest {
+        controller().use { c ->
+            val item = movie("hdr").copy(mediaStreams = listOf(app.pictureshow.core.playback.MediaStream(
+                type = app.pictureshow.core.playback.MediaStreamType.Video, videoRangeType = app.pictureshow.core.playback.VideoRangeType.HDR10)))
+            val state = DesktopState(route = DesktopRoute.Detail, account = account, detail = item, detailLibrary = "Open Movies")
+            window(state, c) { DetailPage(state, c) }
+            onNodeWithText("Open Movies · HDR10 · 2026").assertExists()
+        }
+    }
+
     @Test fun rightAndLeftStopAtTheRowEndsInsteadOfLeavingForTheHeader() = runComposeUiTest {
         controller().use { c ->
             val focus = window(DesktopState(route = DesktopRoute.Home, account = account, homeRows = rows), c)

@@ -72,8 +72,7 @@ class DesktopReturnInteractionTest {
                                 val target = destinations.firstOrNull { it.first == state.route }?.second
                                 if (target != null) Button({}, Modifier.probe(target)) { Text("Page control") }
                                 DesktopPageEntryFocus(state, page)
-                                // Search owns its field focus on entry in the real Search page.
-                                if (state.route == DesktopRoute.Search) LaunchedEffect(page) { withFrameNanos { }; DesktopUiProbe.requestFocus["search-field"]?.requestFocus() }
+
                             }
                         }
                     }
