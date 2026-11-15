@@ -9,13 +9,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -40,6 +43,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -220,6 +224,20 @@ class HomeSettingsAndBackTest {
         key(Key.DirectionCenter)
         compose.onNodeWithTag("home:account-menu").assertIsDisplayed()
         compose.onNodeWithTag("home:account:switch-user").assertIsFocused()
+    }
+
+    @Test
+    fun atLargeTypeTheChipShowsOnlyTheNameAndStillSpeaksTheServer() {
+        // At 1.3x type on 960x540 "user · server" pushed the header's last button onto two lines.
+        RuntimeEnvironment.setFontScale(1.3f)
+        compose.setContent { Harness() }
+        compose.onNodeWithTag("home:account")
+            .assert(hasContentDescription("Account: Jamie · Screen room"))
+            .assert(hasText("Jamie"))
+        compose.onAllNodesWithText("Jamie · Screen room").assertCountEquals(0)
+        val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
+        val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
+        assertEquals(search.height, settings.height, "header buttons keep one line")
     }
 
     @Test

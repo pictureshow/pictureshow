@@ -724,7 +724,7 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
     Button(
         onClick = onClick,
         enabled = enabled,
-        // A long name ellipsizes at a fixed width, so the header fits 960x540 at 1.3x type; the menu shows it in full.
+        // A long name ellipsizes at a fixed width; the menu shows it in full.
         modifier = modifier.semantics {
             contentDescription = "Account: ${accountChipLabel(user, server)}"
             onClick(label = "Account options", action = null)
@@ -739,7 +739,13 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
             ) {
                 Text(user.trim().take(1).uppercase().ifEmpty { "?" }, color = Color.White, style = MaterialTheme.typography.labelMedium)
             }
-            Text(accountChipLabel(user, server), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
+            // Large type keeps only the name, so the header's last button doesn't wrap at 960x540 (the server is still spoken).
+            Text(
+                if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) user else accountChipLabel(user, server),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 180.dp)
+            )
             Text("▾", modifier = Modifier.clearAndSetSemantics {})
         }
     }
