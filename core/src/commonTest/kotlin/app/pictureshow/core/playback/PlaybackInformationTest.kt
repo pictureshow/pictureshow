@@ -43,7 +43,7 @@ class PlaybackInformationTest {
         assertEquals("Not reported", PlaybackInformation.codec("https://private.example.test"))
     }
 
-    @Test fun currentBitrateUsesNegotiatedAudioRatherThanOriginalLosslessTrack() {
+    @Test fun currentBitrateUsesUnchangedBytesRatherThanEncoderCeilings() {
         val source = MediaSourceInfo(
             bitrate = 8_000_000,
             mediaStreams = listOf(
@@ -58,9 +58,9 @@ class PlaybackInformationTest {
             emptyMap(),
             null
         )
-        assertEquals(3_128_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac&AudioBitrate=128000")))
-        assertEquals(null, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac")))
-        assertEquals(8_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=copy")))
-        assertEquals(2_128_000, PlaybackInformation.streamBitrate(stream("VideoCodec=h264&VideoBitrate=2000000&AudioBitrate=128000")))
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac&AudioBitrate=128000")))
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=aac")))
+        assertEquals(3_000_000, PlaybackInformation.streamBitrate(stream("VideoCodec=copy&AudioCodec=copy")))
+        assertEquals(null, PlaybackInformation.streamBitrate(stream("VideoCodec=h264&VideoBitrate=2000000&AudioBitrate=128000")))
     }
 }

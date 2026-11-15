@@ -118,6 +118,78 @@
         "reroute": true,
         "notice": "Lowered to 10 Mbps because the connection slowed. Choose Quality \u2192 Auto to try again."
       }
+    },
+    {
+      "id": "quality-auto-floor.url-ceiling-cannot-inflate-clock",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 1010000
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=199800000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.converted-cap-below-source",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 50000000
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=8000000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.unknown-source-not-a-measured-rate",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": null
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=h264&AudioCodec=aac&VideoBitrate=199800000&AudioBitrate=128000"
+      },
+      "expected": null
+    },
+    {
+      "id": "quality-auto-floor.remux-may-omit-audio-tracks",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 8000000,
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "BitRate": 3000000
+            }
+          ]
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=copy"
+      },
+      "expected": 3000000
+    },
+    {
+      "id": "quality-auto-floor.audio-conversion-copied-video-bound",
+      "operation": "stream-bitrate",
+      "input": {
+        "method": "Transcode",
+        "source": {
+          "Bitrate": 8000000,
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "BitRate": 3000000
+            }
+          ]
+        },
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=aac&AudioBitrate=99999999"
+      },
+      "expected": 3000000
     }
   ]
 }

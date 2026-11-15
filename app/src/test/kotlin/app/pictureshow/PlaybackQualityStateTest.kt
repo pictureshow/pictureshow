@@ -98,6 +98,37 @@ class PlaybackQualityStateTest {
         }
     }
 
+    @Test fun transcodeUrlCeilingDoesNotCauseFalseReductionOnLowRateClock() {
+        val host = createHost()
+        try {
+            host.network = PlaybackNetwork.Home
+            host.stateSource = androidx.compose.runtime.mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = app.pictureshow.core.playback.PlayDecision(
+                        "item",
+                        app.pictureshow.core.playback.MediaSourceInfo(bitrate = 1_010_000),
+                        app.pictureshow.core.playback.PlayMethod.Transcode,
+                        "https://example.test/film?VideoCodec=h264&VideoBitrate=199800000&AudioBitrate=128000",
+                        emptyMap(),
+                        null
+                    )
+                )
+            )
+            for (estimate in listOf(150_000_000L, 500_000L)) {
+                host.resetAutomaticQuality()
+                host.bandwidthSample(estimate, 262_144, 1)
+                host.bandwidthSample(estimate, 262_144, 2)
+                assertNull(host.estimatedBandwidth)
+                assertNull(host.adaptiveQualityNotice)
+                assertEquals(200_000_000, host.effectiveSettings.maxStreamingBitrate)
+            }
+        } finally {
+            host.reportScope.cancel()
+            host.output.release()
+        }
+    }
+
     @Test fun arbitraryChoiceIsExplicitAndViewingScopedAndRejectsUnsupportedValues() {
         val host = createHost()
         val anotherViewing = createHost()

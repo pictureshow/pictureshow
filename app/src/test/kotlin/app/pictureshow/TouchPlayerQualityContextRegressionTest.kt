@@ -131,6 +131,10 @@ class TouchPlayerQualityContextRegressionTest {
             decoder = Decoder()
             host = PlaybackHostState(MediaItem("film", "A film"), 20_000, output, {}, {})
             host.playerSource = mutableStateOf(decoder)
+            host.stateSource = mutableStateOf(PlaybackState(preparing = false, decision = decision(PlayMethod.DirectPlay)))
+            // The reduction happened on known source bytes; its notice survives the replacement conversion.
+            host.bandwidthSample(input.number("bandwidthA"), 262_144, 1)
+            host.bandwidthSample(input.number("bandwidthA"), 262_144, 2)
             host.stateSource = mutableStateOf(PlaybackState(preparing = false, decision = decision(method)))
             host.duration = 60_000
             host.estimatedBandwidth = input.number("bandwidthA")

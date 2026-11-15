@@ -41,20 +41,14 @@ object PlaybackInformation {
 
     fun codec(value: String?): String = value?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,32}")) }?.uppercase() ?: "Not reported"
 
-    /** Requested transcode bitrate takes precedence over original metadata. Unknown output is not guessed. */
+    /** URL bitrate parameters are ceilings, not output measurements. Only unchanged source bytes establish a rate. */
     fun streamBitrate(decision: PlayDecision?): Int? {
         if (decision == null) return null
-        if (decision.method != PlayMethod.Transcode) return decision.mediaSource.bitrate?.takeIf { it > 0 }
-        if (videoCopied(decision)) {
-            if (parameter(decision, "AudioCodec") in listOf(null, "copy")) return decision.mediaSource.bitrate?.takeIf { it > 0 }
-            val video = decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }?.bitRate
-                ?.takeIf { it > 0 } ?: return null
-            val audio = parameter(decision, "AudioBitrate")?.toIntOrNull()?.takeIf { it > 0 } ?: return null
-            return (video.toLong() + audio).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        }
-        val video = parameter(decision, "VideoBitrate")?.toIntOrNull()?.takeIf { it > 0 } ?: return null
-        val audio = parameter(decision, "AudioBitrate")?.toIntOrNull()?.takeIf { it > 0 } ?: 0
-        return (video.toLong() + audio).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val sourceRate = decision.mediaSource.bitrate?.takeIf { it > 0 }
+        if (decision.method != PlayMethod.Transcode) return sourceRate
+        if (!videoCopied(decision)) return null
+        // Remux can omit unselected audio tracks. Copied video alone is a safe lower bound; file total and encoder ceilings are not.
+        return decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }?.bitRate?.takeIf { it > 0 }
     }
 
     data class ReceivedVideo(val width: Int? = null, val height: Int? = null, val codec: String? = null)

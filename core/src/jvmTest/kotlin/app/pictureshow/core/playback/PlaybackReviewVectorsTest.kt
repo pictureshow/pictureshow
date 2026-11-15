@@ -30,6 +30,19 @@ class PlaybackReviewVectorsTest {
         for (entry in cases("quality-auto-floor")) {
             val case = entry.jsonObject
             val i = case.getValue("input").jsonObject
+            if (case["operation"]?.jsonPrimitive?.content == "stream-bitrate") {
+                val decision = PlayDecision(
+                    "film",
+                    PlaybackJson.decodeFromJsonElement<MediaSourceInfo>(i.getValue("source")),
+                    PlayMethod.valueOf(i.getValue("method").jsonPrimitive.content),
+                    i.getValue("url").jsonPrimitive.content,
+                    emptyMap(),
+                    null
+                )
+                val actual = PlaybackInformation.streamBitrate(decision)?.let(::JsonPrimitive) ?: JsonNull
+                assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)
+                continue
+            }
             val ceiling = i.getValue("ceiling").jsonPrimitive.int
             val cap = PlaybackTuning.automaticCap(ceiling, i.getValue("estimate").jsonPrimitive.long)
             val stream = i["streamBitrate"]?.jsonPrimitive?.intOrNull
