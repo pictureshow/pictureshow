@@ -154,7 +154,6 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
         else -> ""
     }
     val savedPages = rememberSaveableStateHolder()
-    DesktopPageEntryFocus(state, pageKey)
     LaunchedEffect(state.returnFocus, pageKey) {
         if (state.route == DesktopRoute.Search && state.returnFocus == "search-field") {
             delay(100)
@@ -166,6 +165,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     var help by remember { mutableStateOf(false) }
     var remove by remember { mutableStateOf<Account?>(null) }
     var modalReturnFocus by remember { mutableStateOf<String?>(null) }
+    DesktopPageEntryFocus(state, pageKey, blocked = help || remove != null)
     LaunchedEffect(help, remove) {
         delay(100)
         val modal = when {
@@ -454,21 +454,25 @@ internal fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream):
 
 /** Entry focus applies after loading and after pointer navigation, without stealing focus during an edit. */
 @Composable
-internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String) {
+internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String, blocked: Boolean = false) {
+    val blockedNow by rememberUpdatedState(blocked)
+    fun destinationHasFocus() = DesktopUiProbe.focus.entries.any { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }
     // Restore Search once on entry, not on every debounce completion: a viewer may have
     // deliberately moved to the sidebar while a query is pending.
     LaunchedEffect(pageKey) {
         if (state.route == DesktopRoute.Search) {
             delay(150)
-            val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
-            runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
+            if (!blockedNow && !destinationHasFocus()) {
+                val tag = if (state.returnFocus == "search-field") "search-field" else DesktopUiProbe.lastFocus[pageKey] ?: "search-field"
+                runCatching { DesktopUiProbe.requestFocus[tag]?.requestFocus() }
+            }
         }
     }
 
     LaunchedEffect(pageKey, state.busy) {
         if(!state.busy && state.route != DesktopRoute.Search) {
             delay(150)
-            if(DesktopUiProbe.focus.entries.none { (tag, focused) -> focused && DesktopUiProbe.pageOfTag[tag] == pageKey }) {
+            if(!blockedNow && !destinationHasFocus()) {
                 // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
                 // when the player page provides one) or on nothing, so Space and arrows reach playback.
                 val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }

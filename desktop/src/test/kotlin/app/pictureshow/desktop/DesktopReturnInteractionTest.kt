@@ -105,4 +105,44 @@ class DesktopReturnInteractionTest {
             onNodeWithTag("header").assertIsNotFocused()
         }
     }
+
+    @Test fun delayedSearchEntryPreservesFocusAlreadyInsideResults() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalDesktopPage provides "Search") {
+                    Column {
+                        Button({}, Modifier.probe("search-field")) { Text("Search field") }
+                        Button({}, Modifier.probe("search:MOVIES:entry")) { Text("First result") }
+                        DesktopPageEntryFocus(DesktopState(route = DesktopRoute.Search), "Search")
+                    }
+                }
+            }
+        }
+        runOnIdle { DesktopUiProbe.requestFocus.getValue("search:MOVIES:entry").requestFocus() }
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        onNodeWithTag("search:MOVIES:entry").assertIsFocused()
+    }
+
+    @Test fun delayedPageEntryDoesNotTakeFocusFromAModal() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        setContent {
+            MaterialTheme {
+                Column {
+                    CompositionLocalProvider(LocalDesktopPage provides "Settings") {
+                        Button({}, Modifier.probe("sign-out")) { Text("Page action") }
+                        DesktopPageEntryFocus(DesktopState(route = DesktopRoute.Settings), "Settings", blocked = true)
+                    }
+                    Button({}, Modifier.probe("modal-control")) { Text("Modal action") }
+                }
+            }
+        }
+        runOnIdle { DesktopUiProbe.requestFocus.getValue("modal-control").requestFocus() }
+        mainClock.advanceTimeBy(300)
+        waitForIdle()
+        onNodeWithTag("modal-control").assertIsFocused()
+        onNodeWithTag("sign-out").assertIsNotFocused()
+    }
+
 }
