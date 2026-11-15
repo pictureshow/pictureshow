@@ -27,6 +27,7 @@ class CorpusVectorsTest {
                     "negotiation",
                     "network",
                     "playback-information",
+                    "playback-formats",
                     "playback",
                     "profiles",
                     "frame-rate-match",
