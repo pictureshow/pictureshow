@@ -50,12 +50,12 @@ import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
 import { controlProjection, controlSuites, runControlCase } from "./control";
 import { playerTrackLabels } from "../../src/player-track-labels";
+import * as browse from "../../src/library-browse";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
-    "home-browse",
     "frame-rate-match",
     "playback-start",
     "playback-settings",
@@ -157,6 +157,31 @@ const pendingApplicationCases = new Map([
     ["placeholder-kind-boxset", "catalog-placeholder-kind"],
     ["placeholder-kind-title", "catalog-placeholder-kind"],
 ]);
+const homeBrowse: Record<string, (i: any) => unknown> = {
+    "library-filter-parameters": (i) => browse.filterParameters(i),
+    "library-filter-remove": (i) => browse.withoutConstraint(i.filters, i.key),
+    "filter-presentation": (i) => ({
+        keys: browse.constraintKeys(i.filters),
+        active: browse.constraintKeys(i.filters).length > 0,
+        empty: browse.filteredEmptyLabel(i.collectionType),
+        ...(i.remove
+            ? {
+                  remaining: browse.constraintKeys(
+                      browse.withoutConstraint(i.filters, i.remove),
+                  ),
+              }
+            : {}),
+    }),
+    "filter-constraint-label": (i) => browse.constraintLabel(i.filters, i.key),
+    "resolution-summary": (i) => browse.resolutionSummary(i.resolution),
+    "title-count-label": (i) => browse.titleCountLabel(i.count),
+    "sort-direction-label": (i) => browse.sortDirectionLabel(i.descending),
+    "library-browse-scope": (i) => browse.libraryBrowseScope(i.collectionType),
+    "letter-jump": (i) => browse.letterJump(i.sortNames, i.letter),
+    "collection-play-scope": (i) =>
+        browse.collectionPlayScope(i.type, i.collectionType),
+    "queue-limit": () => browse.QUEUE_LIMIT,
+};
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
     .map((p) => String(p));
@@ -174,6 +199,7 @@ for (const file of files) {
             "application",
             "recovery",
             "playback-information",
+            "home-browse",
             ...controlSuites,
             ...pendingPortSuites,
         ].includes(suite.suite) ||
@@ -187,6 +213,18 @@ for (const file of files) {
     if (pendingPortSuites.has(suite.suite)) {
         describe("owed " + file, () => {
             for (const c of suite.cases) it.todo(c.id);
+        });
+        continue;
+    }
+    if (suite.suite === "home-browse") {
+        // Web runs the library browse rules it implements (BROWSE-01 to 06);
+        // the home editor and pin rules stay visible todos until ported.
+        describe("shared " + file, () => {
+            for (const c of suite.cases) {
+                const run = homeBrowse[c.operation];
+                if (!run) it.todo(c.id + " (web home editor port owed)");
+                else it(c.id, () => expect(run(c.input)).toEqual(c.expected));
+            }
         });
         continue;
     }

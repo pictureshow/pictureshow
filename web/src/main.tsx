@@ -47,7 +47,13 @@ type Route =
     | CatalogRoute
     | InformationRoute
     | { kind: "settings" | "accounts" }
-    | { kind: "player"; item: Item; start: number };
+    | {
+          kind: "player";
+          item: Item;
+          start: number;
+          // A Play or Shuffle queue (BROWSE-06): its IDs and this item's place.
+          queue?: { ids: string[]; index: number };
+      };
 type Entry = { route: Route; focus?: string; scroll?: number; root?: RootKind };
 function boot() {
     try {
@@ -105,7 +111,10 @@ function App() {
         }),
         [error, setError] = useState(""),
         // The technical causes behind `error`, shown under "More details".
-        [errorDetail, setErrorDetail] = useState<{ message: string; detail: readonly string[] }>(),
+        [errorDetail, setErrorDetail] = useState<{
+            message: string;
+            detail: readonly string[];
+        }>(),
         [busy, setBusy] = useState(false),
         [restoring, setRestoring] = useState(!!initial.saved?.current),
         [verifyAttempt, setVerifyAttempt] = useState(0),
@@ -912,6 +921,12 @@ function App() {
                         client={client}
                         item={route.item}
                         start={route.start}
+                        queueNext={
+                            route.queue
+                                ? (route.queue.ids[route.queue.index + 1] ??
+                                  null)
+                                : undefined
+                        }
                         preferences={preferences}
                         onLeaving={(
                             barrier: Promise<void>,
@@ -939,6 +954,27 @@ function App() {
                         }}
                         onExpired={fail}
                         onNext={(item) => {
+                            if (route.queue) {
+                                // A queue keeps its collection or library page
+                                // under the player; only the player moves on.
+                                const next: Entry[] = [
+                                    ...stack.slice(0, -1),
+                                    {
+                                        route: {
+                                            kind: "player",
+                                            item,
+                                            start: 0,
+                                            queue: {
+                                                ids: route.queue.ids,
+                                                index: route.queue.index + 1,
+                                            },
+                                        },
+                                    },
+                                ];
+                                appHistory.publish(next, true);
+                                setStack(next);
+                                return;
+                            }
                             const detail: Entry[] = [
                                 ...stack.slice(0, -2),
                                 { route: { kind: "detail", id: item.Id } },

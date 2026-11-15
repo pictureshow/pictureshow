@@ -669,3 +669,144 @@
     margin: 0.75rem 0 0;
     font-size: 1rem;
 }
+/* BROWSE-01/05/06: library Filters, removable chips, letter rail, Play and Shuffle. */
+.catalog-filter-on {
+    border-color: var(--color-app-accent);
+    background: #35425d;
+}
+.catalog-queue-actions {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.catalog-detail-actions .catalog-queue-actions {
+    display: contents;
+}
+.catalog-queue-error {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--color-app-warning);
+}
+.catalog-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+}
+.catalog-filter-chips button {
+    min-height: 40px;
+    padding: 0.45rem 0.9rem;
+    border-color: var(--color-app-accent);
+    background: #35425d;
+}
+.catalog-filter-chips .catalog-filter-clear {
+    border-color: var(--border);
+    background: transparent;
+}
+.catalog-letter-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem;
+    margin: 1rem 0 0;
+}
+.catalog-letter-rail button {
+    min-width: 1.9rem;
+    min-height: 2.4rem;
+    padding: 0.2rem 0.2rem;
+    border-radius: 0.6rem;
+    border-color: transparent;
+    background: transparent;
+    font-weight: 600;
+}
+.catalog-letter-rail button:disabled {
+    opacity: 0.35;
+}
+.catalog-letter-rail button[aria-current="true"] {
+    border-color: var(--color-app-accent);
+    background: #35425d;
+}
+.library-filters {
+    width: min(560px, calc(100vw - 32px));
+}
+.library-filters form {
+    display: grid;
+    gap: 1.2rem;
+}
+.library-filter-switches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.6rem;
+}
+.library-filter-switches label,
+.library-filter-person-list label {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    min-height: 44px;
+    cursor: pointer;
+}
+/* Beats the app-wide text-field rule for these two native controls. */
+.library-filters .library-filter-switches input,
+.library-filters .library-filter-person-list input {
+    flex: none;
+    width: 1.3rem;
+    height: 1.3rem;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    accent-color: var(--color-app-accent);
+}
+/* The checked choice stays visible while the list scrolls. */
+.library-filter-person-list label:has(input:checked) {
+    color: var(--color-app-accent);
+    font-weight: 600;
+}
+.library-filter-fields {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.8rem 1rem;
+    align-items: center;
+}
+.library-filter-fields select {
+    width: 100%;
+}
+.library-filter-people {
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 0.8rem 1rem 1rem;
+    margin: 0;
+    display: grid;
+    gap: 0.6rem;
+}
+.library-filter-people legend {
+    padding: 0 0.4rem;
+}
+.library-filter-person-list {
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.2rem 0.4rem;
+}
+.library-filters h2 {
+    margin: 0;
+}
+/* Apply stays in reach while the dialog scrolls (short windows, 200% zoom). */
+.library-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    position: sticky;
+    bottom: -32px;
+    margin-bottom: -32px;
+    padding: 1rem 0 32px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+@media (max-width: 650px) {
+    .library-filter-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

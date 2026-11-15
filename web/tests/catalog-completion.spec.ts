@@ -313,3 +313,88 @@ test("a film that plays to its end returns to a visible Finished line with Play 
     await expect(play).toBeFocused();
     await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
 });
+
+test("BROWSE-06 with PLAY-17: a queue's last title ends the queue, even on an episode with a next one, and its page says Finished", async ({
+    page,
+}) => {
+    await fixture(page);
+    const headers = {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json",
+    };
+    const set = {
+            Id: "boxset",
+            Name: "Shorts Collection",
+            Type: "BoxSet",
+            IsFolder: true,
+            ChildCount: 1,
+        },
+        last = {
+            ...movie,
+            Id: "queue-last",
+            Name: "Queue Finale",
+            Type: "Episode",
+            SeriesId: "series",
+        },
+        following = { ...last, Id: "after-queue", Name: "Not In Queue" };
+    const seriesLookups: string[] = [];
+    await page.route("https://jellyfin.example/**", async (route) => {
+        const url = new URL(route.request().url()),
+            json = (body: unknown) =>
+                route.fulfill({ headers, body: JSON.stringify(body) });
+        if (url.pathname === "/Items/Latest") return json([set]);
+        if (url.pathname === "/Items/boxset") return json(set);
+        if (url.pathname === "/Items/queue-last") return json(last);
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "boxset"
+        )
+            return json({ Items: [set] });
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "queue-last"
+        )
+            return json({ Items: [last] });
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("parentId") === "boxset"
+        )
+            return json({ Items: [last], TotalRecordCount: 1 });
+        if (url.pathname === "/Shows/series/Episodes") {
+            seriesLookups.push(url.search);
+            return json({ Items: [last, following] });
+        }
+        return route.fallback();
+    });
+    await signIn(page);
+    await page.locator('[data-focus="latest:library:boxset"]').click();
+    await expect(
+        page.getByRole("heading", { name: "Shorts Collection", exact: true }),
+    ).toBeVisible();
+    await page.locator('[data-focus="queue-play"]').click();
+    const video = page.locator("video");
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), {
+            timeout: 20000,
+        })
+        .toBeGreaterThanOrEqual(2);
+    if (
+        await page.getByRole("status").filter({ hasText: "Press Play" }).count()
+    )
+        await page.getByRole("button", { name: "Play", exact: true }).click();
+    await video.evaluate((v: HTMLVideoElement) => {
+        v.currentTime = v.duration - 0.25;
+        void v.play();
+    });
+    // The queue ends here: no "Next episode" from the series, no "Next title".
+    await expect(page.locator(".catalog-finished")).toHaveText(
+        "Finished. You watched Queue Finale to the end.",
+        { timeout: 20000 },
+    );
+    await expect(
+        page.getByRole("heading", { name: "Shorts Collection", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-focus="queue-play"]')).toBeVisible();
+    await expect(page.locator("aside.next-episode")).toHaveCount(0);
+    expect(seriesLookups).toEqual([]);
+});

@@ -261,6 +261,7 @@ export function Player({
     onExpired,
     onNext,
     onLeaving,
+    queueNext,
     preferences = {},
 }: {
     client: Jellyfin;
@@ -269,6 +270,10 @@ export function Player({
     onBack: (reportError?: string) => void;
     onExpired: (e: unknown) => void;
     onNext?: (next: Item) => void;
+    /** The next title's ID when this item plays from a Play or Shuffle queue
+     * (BROWSE-06); it replaces the episode lookup. `null` is a queue's last
+     * title: the queue ends there, even on an episode with a next one. */
+    queueNext?: string | null;
     /** `outcome` is "finished" when the viewing ended at the end of the media
      * (no next episode): the returning detail page focuses its primary action
      * and announces "Finished". */
@@ -283,6 +288,32 @@ export function Player({
     // Settings' "Ask before playing the next episode" (key screenReader) alone
     // decides manual continuation; the player has no control of its own for it.
     const reader = !!preferences.screenReader;
+    // A Play or Shuffle queue continues with its next title; an episode with
+    // the series' following episode.
+    const hasNext =
+            queueNext !== undefined
+                ? !!queueNext
+                : item.Type === "Episode" && !!item.SeriesId,
+        nextNoun = queueNext ? "title" : "episode",
+        nextHeading = queueNext ? "Next title" : "Next episode";
+    async function findNext(): Promise<Item | null> {
+        if (queueNext) {
+            const page = await client.catalog<{ Items: Item[] }>(
+                `Items?ids=${encode(queueNext)}&enableUserData=true&fields=Overview`,
+            );
+            return page.Items.find((v) => v.Id === queueNext) ?? null;
+        }
+        const page = await client.catalog<{ Items: Item[] }>(
+            `Shows/${encode(item.SeriesId!)}/Episodes?adjacentTo=${encode(item.Id)}&isMissing=false&enableUserData=true&fields=Overview`,
+        );
+        const index = page.Items.findIndex((v) => v.Id === item.Id),
+            following = index < 0 ? undefined : page.Items[index + 1];
+        return following &&
+            following.Type === "Episode" &&
+            following.Id !== item.Id
+            ? following
+            : null;
+    }
     const initialPosition = plausibleDuration(itemDuration)
         ? Math.min(Math.max(0, start), itemDuration)
         : Math.max(0, start);
@@ -1310,7 +1341,7 @@ export function Player({
             })
             .catch(() => {});
         const lookup = async () => {
-            if (item.Type !== "Episode" || !item.SeriesId) {
+            if (!hasNext) {
                 if (live) {
                     setNext(null);
                     setNextState("ready");
@@ -1318,17 +1349,7 @@ export function Player({
                 return null;
             }
             try {
-                const page = await client.catalog<{ Items: Item[] }>(
-                    `Shows/${encode(item.SeriesId)}/Episodes?adjacentTo=${encode(item.Id)}&isMissing=false&enableUserData=true&fields=Overview`,
-                );
-                const index = page.Items.findIndex((v) => v.Id === item.Id),
-                    following = index < 0 ? undefined : page.Items[index + 1];
-                const found =
-                    following &&
-                    following.Type === "Episode" &&
-                    following.Id !== item.Id
-                        ? following
-                        : null;
+                const found = await findNext();
                 if (live) {
                     setNext(found);
                     setNextState("ready");
@@ -1400,7 +1421,9 @@ export function Player({
         sample();
         pauseDecoder();
         setNotice(
-            nextItem ? "Opening next episode…" : "Saving completed playback…",
+            nextItem
+                ? `Opening next ${nextNoun}…`
+                : "Saving completed playback…",
         );
         const barrier = saveCompleted(retry);
         if (!nextItem && onLeaving) {
@@ -1453,27 +1476,15 @@ export function Player({
         setControls(true);
 
         let found: Item | null = null;
-        if (!cancelNext && item.Type === "Episode") {
-            setNotice("Finding next episode…");
+        if (!cancelNext && hasNext) {
+            setNotice(`Finding next ${nextNoun}…`);
             try {
                 found = (await nextPromise.current) ?? null;
             } catch {
                 if (!nextRetry.current) {
                     nextRetry.current = true;
                     try {
-                        const page = await client.catalog<{ Items: Item[] }>(
-                            `Shows/${encode(item.SeriesId!)}/Episodes?adjacentTo=${encode(item.Id)}&isMissing=false&enableUserData=true&fields=Overview`,
-                        );
-                        const index = page.Items.findIndex(
-                            (v) => v.Id === item.Id,
-                        );
-                        const candidate = page.Items[index + 1];
-                        found =
-                            index >= 0 &&
-                            candidate?.Type === "Episode" &&
-                            candidate.Id !== item.Id
-                                ? candidate
-                                : null;
+                        found = await findNext();
                         setNext(found);
                         setNextState("ready");
                     } catch {
@@ -1494,7 +1505,7 @@ export function Player({
         if (reader && found && !cancelNext) {
             setNext(found);
             setNotice(
-                "Playback finished. Choose Play now for the next episode.",
+                `Playback finished. Choose Play now for the next ${nextNoun}.`,
             );
             return;
         }
@@ -1563,8 +1574,7 @@ export function Player({
                     position: el.currentTime,
                     duration: fullDuration(),
                     bufferedEnd: last >= 0 ? el.buffered.end(last) : undefined,
-                    finalBuffered:
-                        finalFragmentBuffered || !!hls.bufferedToEnd,
+                    finalBuffered: finalFragmentBuffered || !!hls.bufferedToEnd,
                 })
             )
                 return false;
@@ -3218,9 +3228,9 @@ export function Player({
                 </div>
             )}
             {nextEligible && !panel && (
-                <aside className="next-episode" aria-label="Next episode">
+                <aside className="next-episode" aria-label={nextHeading}>
                     <h2>
-                        Next episode
+                        {nextHeading}
                         {!reader ? (
                             <span aria-hidden="true">
                                 {" "}
@@ -3253,7 +3263,7 @@ export function Player({
                             video.current?.focus();
                         }}
                     >
-                        Cancel next episode
+                        Cancel next {nextNoun}
                     </button>
                 </aside>
             )}
@@ -3846,7 +3856,8 @@ export function Player({
             </dialog>
             {nextState === "failed" && ended.current && (
                 <p role="status">
-                    Next episode lookup failed. Return to details and try again.
+                    {nextHeading} lookup failed. Return to details and try
+                    again.
                 </p>
             )}
         </section>

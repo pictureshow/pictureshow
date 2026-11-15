@@ -2367,6 +2367,228 @@
         "saving": true
       },
       "expected": false
+    },
+    {
+      "id": "browse-scope-movies",
+      "operation": "library-browse-scope",
+      "input": {
+        "collectionType": "movies"
+      },
+      "expected": {
+        "recursive": true,
+        "includeItemTypes": "Movie"
+      }
+    },
+    {
+      "id": "browse-scope-tvshows",
+      "operation": "library-browse-scope",
+      "input": {
+        "collectionType": "tvshows"
+      },
+      "expected": {
+        "recursive": true,
+        "includeItemTypes": "Series"
+      }
+    },
+    {
+      "id": "browse-scope-boxsets",
+      "operation": "library-browse-scope",
+      "input": {
+        "collectionType": "boxsets"
+      },
+      "expected": {
+        "recursive": true,
+        "includeItemTypes": "BoxSet"
+      }
+    },
+    {
+      "id": "browse-scope-homevideos-keeps-folders",
+      "operation": "library-browse-scope",
+      "input": {
+        "collectionType": "homevideos"
+      },
+      "expected": {
+        "recursive": false
+      }
+    },
+    {
+      "id": "browse-scope-mixed-keeps-folders",
+      "operation": "library-browse-scope",
+      "input": {},
+      "expected": {
+        "recursive": false
+      }
+    },
+    {
+      "id": "letter-jump-ascending",
+      "operation": "letter-jump",
+      "input": {
+        "sortNames": [
+          "10 cloverfield lane",
+          "2001 a space odyssey",
+          "big buck bunny",
+          "\u00e9clair",
+          "elephants dream",
+          "sintel",
+          "the zebra"
+        ],
+        "letter": "E"
+      },
+      "expected": {
+        "index": 3,
+        "available": [
+          "#",
+          "B",
+          "E",
+          "S",
+          "T"
+        ]
+      }
+    },
+    {
+      "id": "letter-jump-number-sign",
+      "operation": "letter-jump",
+      "input": {
+        "sortNames": [
+          "10 cloverfield lane",
+          "2001 a space odyssey",
+          "big buck bunny",
+          "\u00e9clair",
+          "elephants dream",
+          "sintel",
+          "the zebra"
+        ],
+        "letter": "#"
+      },
+      "expected": {
+        "index": 0,
+        "available": [
+          "#",
+          "B",
+          "E",
+          "S",
+          "T"
+        ]
+      }
+    },
+    {
+      "id": "letter-jump-absent-letter",
+      "operation": "letter-jump",
+      "input": {
+        "sortNames": [
+          "10 cloverfield lane",
+          "2001 a space odyssey",
+          "big buck bunny",
+          "\u00e9clair",
+          "elephants dream",
+          "sintel",
+          "the zebra"
+        ],
+        "letter": "Q"
+      },
+      "expected": {
+        "index": -1,
+        "available": [
+          "#",
+          "B",
+          "E",
+          "S",
+          "T"
+        ]
+      }
+    },
+    {
+      "id": "letter-jump-descending-reads-given-order",
+      "operation": "letter-jump",
+      "input": {
+        "sortNames": [
+          "the zebra",
+          "sintel",
+          "elephants dream",
+          "\u00e9clair",
+          "big buck bunny",
+          "2001 a space odyssey",
+          "10 cloverfield lane"
+        ],
+        "letter": "E"
+      },
+      "expected": {
+        "index": 2,
+        "available": [
+          "#",
+          "B",
+          "E",
+          "S",
+          "T"
+        ]
+      }
+    },
+    {
+      "id": "letter-jump-symbol-and-blank",
+      "operation": "letter-jump",
+      "input": {
+        "sortNames": [
+          "!exclaim",
+          "",
+          "  \u00e5ngstr\u00f6m"
+        ],
+        "letter": "A"
+      },
+      "expected": {
+        "index": 2,
+        "available": [
+          "#",
+          "A"
+        ]
+      }
+    },
+    {
+      "id": "play-scope-box-set",
+      "operation": "collection-play-scope",
+      "input": {
+        "type": "BoxSet"
+      },
+      "expected": {
+        "includeItemTypes": "Movie,Episode,Video",
+        "recursive": true,
+        "filtered": false
+      }
+    },
+    {
+      "id": "play-scope-movies-library",
+      "operation": "collection-play-scope",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "movies"
+      },
+      "expected": {
+        "includeItemTypes": "Movie",
+        "recursive": true,
+        "filtered": true
+      }
+    },
+    {
+      "id": "play-scope-shows-library-not-offered",
+      "operation": "collection-play-scope",
+      "input": {
+        "type": "CollectionFolder",
+        "collectionType": "tvshows"
+      },
+      "expected": null
+    },
+    {
+      "id": "play-scope-folder-not-offered",
+      "operation": "collection-play-scope",
+      "input": {
+        "type": "Folder"
+      },
+      "expected": null
+    },
+    {
+      "id": "play-queue-limit",
+      "operation": "queue-limit",
+      "input": {},
+      "expected": 300
     }
   ]
 }
