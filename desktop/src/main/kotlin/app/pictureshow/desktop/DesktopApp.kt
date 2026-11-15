@@ -166,11 +166,16 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     var remove by remember { mutableStateOf<Account?>(null) }
     var modalReturnFocus by remember { mutableStateOf<String?>(null) }
     DesktopPageEntryFocus(state, pageKey, blocked = help || remove != null)
-    DesktopModalFocusEffect(when {
-        help -> "help-close"
-        remove != null -> "remove-cancel"
-        else -> null
-    }, modalReturnFocus, androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused) { modalReturnFocus = null }
+    LaunchedEffect(help, remove) {
+        delay(100)
+        val modal = when {
+            help -> "help-close"
+            remove != null -> "remove-cancel"
+            else -> null
+        }
+        if (modal != null) DesktopUiProbe.requestFocus[modal]?.requestFocus()
+        else modalReturnFocus?.let { DesktopUiProbe.requestFocus[it]?.requestFocus(); modalReturnFocus = null }
+    }
     PictureshowTheme {
         val density = LocalDensity.current
         CompositionLocalProvider(
@@ -337,7 +342,7 @@ internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<Shortc
 
 /** Arrow keys never leave this group (D-7); Tab and Shift+Tab still do. */
 internal fun Modifier.directionalFence(): Modifier = focusProperties {
-    onExit = { if (requestedFocusDirection != FocusDirection.Next && requestedFocusDirection != FocusDirection.Previous) cancelFocusChange() }
+    onExit = { if (requestedFocusDirection in listOf(FocusDirection.Left, FocusDirection.Right, FocusDirection.Up, FocusDirection.Down)) cancelFocusChange() }
 }.focusGroup()
 
 internal const val SIDEBAR_WIDTH_DP = 208
@@ -446,22 +451,6 @@ internal fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, e
 
 internal fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream): String =
     trackLanguage(stream.language) ?: trackLabel(stream).substringBefore(" · ").ifBlank { "Track ${stream.index + 1}" }
-
-/** A native dialog may return window focus after its composition has disappeared. Restore its
- * opener only once the host owns focus, so native restoration cannot overwrite an early request. */
-@Composable
-internal fun DesktopModalFocusEffect(modal: String?, opener: String?, windowFocused: Boolean, restored: () -> Unit) {
-    LaunchedEffect(modal, opener, windowFocused) {
-        if (modal != null) {
-            delay(100)
-            DesktopUiProbe.requestFocus[modal]?.requestFocus()
-        } else if (opener != null && windowFocused) {
-            withFrameNanos { }
-            delay(100)
-            DesktopUiProbe.requestFocus[opener]?.let { it.requestFocus(); restored() }
-        }
-    }
-}
 
 /** Entry focus applies after loading and after pointer navigation, without stealing focus during an edit. */
 @Composable

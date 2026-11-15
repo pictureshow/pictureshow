@@ -117,7 +117,7 @@ class DesktopShellTest {
         onAllNodesWithText("Settings", useUnmergedTree = true).assertCountEquals(2) // the menu item and the pinned item
     }
 
-    @Test fun arrowsDoNotWalkOutOfTheBodyIntoTheTitleBar() = runDesktopComposeUiTest(800, 400) {
+    @Test fun arrowsStayInsideTheBodyButExplicitRestorationCanReachTheTitleBar() = runDesktopComposeUiTest(800, 400) {
         lateinit var focus: FocusManager
         setContent {
             focus = LocalFocusManager.current
@@ -139,6 +139,11 @@ class DesktopShellTest {
         onNodeWithTag("a").assertIsFocused()
         // Tab still leaves the body.
         runOnIdle { focus.moveFocus(FocusDirection.Previous) }
+        onNodeWithTag("fullscreen").assertIsFocused()
+        // A dialog/menu restores its opener with an explicit FocusRequester (Enter), not Tab.
+        // Trapping every direction except Next/Previous silently cancelled that restoration.
+        onNodeWithTag("a").requestFocus()
+        onNodeWithTag("fullscreen").requestFocus()
         onNodeWithTag("fullscreen").assertIsFocused()
     }
 
