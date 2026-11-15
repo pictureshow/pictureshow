@@ -9,22 +9,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -227,17 +225,22 @@ class HomeSettingsAndBackTest {
     }
 
     @Test
-    fun atLargeTypeTheChipShowsOnlyTheNameAndStillSpeaksTheServer() {
+    fun atLargeTypeTheChipStaysNarrowAndTheHeaderKeepsOneLine() {
         // At 1.3x type on 960x540 "user · server" pushed the header's last button onto two lines.
+        // The scale is process-wide under Robolectric, so later test classes would inherit it without the reset.
         RuntimeEnvironment.setFontScale(1.3f)
-        compose.setContent { Harness() }
-        compose.onNodeWithTag("home:account")
-            .assert(hasContentDescription("Account: Jamie · Screen room"))
-            .assert(hasText("Jamie"))
-        compose.onAllNodesWithText("Jamie · Screen room").assertCountEquals(0)
-        val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
-        val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
-        assertEquals(search.bottom - search.top, settings.bottom - settings.top, "header buttons keep one line")
+        try {
+            compose.setContent { Harness() }
+            compose.onNodeWithTag("home:account")
+                .assert(hasContentDescription("Account: Jamie · Screen room"))
+            val chip = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
+            assertTrue(chip.right - chip.left <= 200.dp, "the chip ellipsizes sooner at large type")
+            val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
+            val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
+            assertEquals(search.bottom - search.top, settings.bottom - settings.top, "header buttons keep one line")
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+        }
     }
 
     @Test

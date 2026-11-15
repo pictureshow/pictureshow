@@ -739,12 +739,12 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
             ) {
                 Text(user.trim().take(1).uppercase().ifEmpty { "?" }, color = Color.White, style = MaterialTheme.typography.labelMedium)
             }
-            // Large type keeps only the name, so the header's last button doesn't wrap at 960x540 (the server is still spoken).
+            // Large type ellipsizes sooner, so the header's last button doesn't wrap at 960x540 (the whole label is spoken).
             Text(
-                if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) user else accountChipLabel(user, server),
+                accountChipLabel(user, server),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 180.dp)
+                modifier = Modifier.widthIn(max = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) 110.dp else 180.dp)
             )
             Text("▾", modifier = Modifier.clearAndSetSemantics {})
         }
