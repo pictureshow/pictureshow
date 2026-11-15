@@ -10,6 +10,17 @@ import kotlin.test.*
 
 @OptIn(ExperimentalTestApi::class)
 class DesktopPlaybackInfoDialogTest {
+    @Test fun displayAnswerComesBeforeTheEvidenceNote() = runComposeUiTest {
+        setContent { PictureshowTheme {
+            DesktopPlaybackInfoDialog(listOf(PlaybackInfoSection("Display output", listOf("SDR display · mapped to SDR"),
+                note = "Reported by the operating system and mpv, not measured from the screen."))) {}
+        } }
+        val answer = onNodeWithText("SDR display · mapped to SDR").fetchSemanticsNode().boundsInRoot
+        val note = onNodeWithText("Reported by the operating system and mpv, not measured from the screen.").fetchSemanticsNode().boundsInRoot
+        assertTrue(answer.bottom <= note.top, "The answer must appear above the note that qualifies it")
+        onNodeWithText("Close").assertIsFocused()
+    }
+
     @Test fun keyboardScrollReachesOverflowAndCloseRemainsReachable() = runComposeUiTest {
         var closed = false
         setContent { PictureshowTheme {

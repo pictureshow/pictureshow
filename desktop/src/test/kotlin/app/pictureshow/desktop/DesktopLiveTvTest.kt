@@ -119,6 +119,28 @@ class DesktopLiveTvTest {
         withTimeout(10_000) { c.liveTv.state.first { !it.loading } }
         return c
     }
+    @Test fun channelActionsAlignAndDesktopTabsStayCompact() = runDesktopComposeUiTest(1280, 800) {
+        Fixture().use { f ->
+            val c = runBlocking { controller(f) }
+            c.use {
+                setContent { MaterialTheme { DesktopLiveTvPage(c) } }
+                waitForIdle()
+                val watch = onNodeWithTag("live:channel:channel").fetchSemanticsNode().boundsInRoot
+                val details = onNodeWithTag("live:details:program").fetchSemanticsNode().boundsInRoot
+                val favorite = onNodeWithTag("live:favorite:channel").fetchSemanticsNode().boundsInRoot
+                assertTrue(kotlin.math.abs(watch.center.y - favorite.center.y) <= 1f, "Watch and favorite share the row center")
+                assertTrue(kotlin.math.abs(details.center.y - favorite.center.y) <= 1f, "Details is inline with favorite")
+                for (tab in DesktopLiveTab.entries) {
+                    assertTrue(onNodeWithTag("live:tab:${tab.name}").fetchSemanticsNode().boundsInRoot.width < 240f,
+                        "Desktop tabs must fit their labels instead of stretching across the page")
+                }
+                onNodeWithContentDescription("Program details").assertExists()
+                onAllNodesWithText("★").assertCountEquals(0)
+                onAllNodesWithText("☆").assertCountEquals(0)
+            }
+        }
+    }
+
     @Test fun channelsGuideAndTypedRouteUseLiveApiAndNoLibraryBrowse(): Unit = runBlocking {
         Fixture().use { f -> controller(f).use { c ->
             assertEquals(DesktopRoute.LiveTv, c.state.value.route)
