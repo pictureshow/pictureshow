@@ -29,12 +29,17 @@ fun desktopMain(args: Array<String>) {
     val discoveryPort=if(smoke) System.getenv("PICTURESHOW_SMOKE_DISCOVERY_PORT")?.toInt() else null
     val discovery=if(discoveryPort!=null) app.pictureshow.core.JvmServerDiscovery(port=discoveryPort,targets={setOf(java.net.InetAddress.getByName("127.0.0.1"))}) else app.pictureshow.core.JvmServerDiscovery()
     val controller = DesktopController(discovery=discovery)
+    val mac = com.sun.jna.Platform.isMac()
+    // macOS puts a window's menu bar in the screen menu bar, the platform's place for it.
+    if(mac) System.setProperty("apple.laf.useScreenMenuBar", "true")
     application {
         val state = rememberWindowState(width=1280.dp,height=800.dp,position=if(smoke && System.getenv("PICTURESHOW_SMOKE_WINDOW_X")!=null) WindowPosition.Absolute(System.getenv("PICTURESHOW_SMOKE_WINDOW_X").toInt().dp,(System.getenv("PICTURESHOW_SMOKE_WINDOW_Y") ?: "0").toInt().dp) else WindowPosition.PlatformDefault)
         var closing by remember { mutableStateOf(false) }
         var full by remember { mutableStateOf(false) }
         var macChrome by remember { mutableStateOf(false) }
         val keys = remember { java.util.concurrent.atomic.AtomicReference<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
+        val fallbackKeys = remember { java.util.concurrent.atomic.AtomicReference<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>({ false }) }
+        val viewer by controller.state.collectAsState()
         var restore by remember { mutableStateOf<java.awt.Rectangle?>(null) }
         fun close(source: String = "window") {
             if(closing) return
@@ -47,7 +52,26 @@ fun desktopMain(args: Array<String>) {
                 SwingUtilities.invokeLater { exitApplication() }
             }.start()
         }
-        Window(onCloseRequest={ close("window") },state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys.get().invoke(it)}) {
+        Window(onCloseRequest={ close("window") },state=state,title="Pictureshow",undecorated=true,transparent=true,resizable=true,onPreviewKeyEvent={keys.get().invoke(it)},onKeyEvent={fallbackKeys.get().invoke(it)}) {
+            val signedIn = viewer.account != null && viewer.route in DESKTOP_SIDEBAR_ROUTES
+            if(mac) {
+                // The app menu's Settings… item (⌘,) is the macOS convention; AppKit adds it once a handler exists.
+                DisposableEffect(Unit) {
+                    val desktop = java.awt.Desktop.getDesktop()
+                    val supported = desktop.isSupported(java.awt.Desktop.Action.APP_PREFERENCES)
+                    if(supported) desktop.setPreferencesHandler {
+                        val s = controller.state.value
+                        if(s.account != null && s.route in DESKTOP_SIDEBAR_ROUTES && s.route != DesktopRoute.Settings) controller.settings()
+                    }
+                    onDispose { if(supported) desktop.setPreferencesHandler(null) }
+                }
+                MenuBar {
+                    Menu("Account") {
+                        Item("Switch Account…", enabled = signedIn, onClick = controller::accounts)
+                        Item("Sign Out", enabled = signedIn, onClick = controller::signOut)
+                    }
+                }
+            }
             fun fullscreen() {
                 val bounds=if(!full) { restore=java.awt.Rectangle(window.bounds);window.graphicsConfiguration.bounds } else restore ?: window.bounds
                 state.placement=WindowPlacement.Floating
@@ -78,7 +102,7 @@ fun desktopMain(args: Array<String>) {
                 onDispose { window.removeWindowListener(listener);controller.detachWindow() }
             }
             PictureshowTheme {
-                DesktopApp(controller, ::fullscreen, full, { keys.set(it) }, macChrome,
+                DesktopApp(controller, ::fullscreen, full, { keys.set(it) }, macChrome, windowFallbackKeys = { fallbackKeys.set(it) }, macShortcuts = mac,
                     chrome = { content -> WindowDraggableArea(Modifier.fillMaxWidth()) { content() } },
                     windowControls = {
                         if (!macChrome) {
