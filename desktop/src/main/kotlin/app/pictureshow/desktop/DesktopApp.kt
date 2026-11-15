@@ -174,9 +174,9 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
         }
     }
     LaunchedEffect(state.returnFocus, pageKey) {
-        state.returnFocus?.let { tag ->
+        if (state.route == DesktopRoute.Search && state.returnFocus == "search-field") {
             delay(100)
-            DesktopUiProbe.requestFocus[tag]?.requestFocus()
+            runCatching { DesktopUiProbe.requestFocus["search-field"]?.requestFocus() }
             controller.returnFocusDone()
         }
     }

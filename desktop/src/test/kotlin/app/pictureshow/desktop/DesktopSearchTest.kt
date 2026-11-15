@@ -31,8 +31,12 @@ class DesktopSearchTest {
         val executor = Executors.newFixedThreadPool(4)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val searches = CopyOnWriteArrayList<String>()
+        lateinit var store: AccountStore
         @Volatile var failAll = false
         @Volatile var failShows = false
+        @Volatile var unauthorized = false
+        @Volatile var failAncestors = false
+        @Volatile var noAncestors = false
         val movie = """{"Id":"a","Name":"Cloud","Type":"Movie","ProductionYear":2026}"""
         init {
             server.executor = executor
@@ -47,7 +51,8 @@ class DesktopSearchTest {
                     term != null -> {
                         searches += term
                         if (term == "slow") Thread.sleep(600)
-                        if (failAll || failShows && q["includeItemTypes"] == "Series") { status = 503; "{}" }
+                        if (unauthorized) { status = 401; "{}" }
+                        else if (failAll || failShows && q["includeItemTypes"] == "Series") { status = 503; "{}" }
                         else if (term != "Cloud" && term != "slow") """{"Items":[],"TotalRecordCount":0}"""
                         else when (q["includeItemTypes"]) {
                             "Movie" -> """{"Items":[$movie,${movie.replace("\"a\"", "\"b\"")}],"TotalRecordCount":2}"""
@@ -55,6 +60,8 @@ class DesktopSearchTest {
                             else -> """{"Items":[],"TotalRecordCount":0}"""
                         }
                     }
+                    path.endsWith("/Ancestors") && failAncestors -> { status = 503; "{}" }
+                    path.endsWith("/Ancestors") && noAncestors -> "[]"
                     path.endsWith("/Ancestors") -> """[{"Id":"${if (path.contains("/a/")) "one" else "two"}","Name":"${if (path.contains("/a/")) "Movies" else "Open Movies"}","Type":"CollectionFolder"}]"""
                     path == "/Users/Me" -> """{"Id":"viewer","Name":"Viewer"}"""
                     path == "/Items/a" -> movie
@@ -69,7 +76,7 @@ class DesktopSearchTest {
         }
         suspend fun controller(): DesktopController {
             val account = Account(Server("demo", "Demo", "http://127.0.0.1:${server.address.port}", "12.0"), User("viewer", "Viewer"), "token")
-            val store = AccountStore(Memory()); store.load(); store.remember(account)
+            store = AccountStore(Memory()); store.load(); store.remember(account)
             return DesktopController(Files.createTempDirectory("pictureshow-search-").toFile(), store = store).also {
                 it.start(); withTimeout(5000) { it.state.first { s -> s.route == DesktopRoute.Home && !s.busy } }
                 it.search(); withTimeout(5000) { it.state.first { s -> s.route == DesktopRoute.Search && !s.busy } }
@@ -79,19 +86,18 @@ class DesktopSearchTest {
     }
     private suspend fun DesktopController.completed() = withTimeout(8000) { state.first { it.route == DesktopRoute.Search && it.search.completed && !it.busy } }
 
-    @Test fun queryBoundsGroupingDuplicatesFailuresRetryAndHistoryUseTheCurrentAccount() = runBlocking {
+    @Test fun queryBoundsGroupingDuplicatesFailuresRetryAndHistoryUseTheCurrentAccount(): Unit = runBlocking {
         Fixture().use { f -> f.controller().use { c ->
             c.searchQuery("x"); delay(400); assertTrue(f.searches.isEmpty(), "one character sends no requests")
             c.searchQuery("Cloud", immediate = true)
             val found = c.completed().search
             assertEquals(listOf("Movies", "Episodes"), found.rows.map { it.title })
             assertEquals(mapOf("a" to "Movies", "b" to "Open Movies"), found.libraries)
-            c.rememberSearch()
-            withTimeout(5000) { c.state.first { "Cloud" in it.search.recent } }
             c.openSearchResult(found.rows.first().items.first())
             withTimeout(5000) { c.state.first { it.route == DesktopRoute.Detail && !it.busy } }
             c.back(); assertEquals("Cloud", c.state.value.search.query)
             assertEquals(2, c.state.value.search.rows.size)
+            withTimeout(5000) { c.state.first { "Cloud" in it.search.recent } }
             f.failShows = true; c.searchQuery("Cloud", immediate = true)
             val partial = c.completed().search
             assertTrue(partial.someFailed); assertFalse(partial.allFailed); assertEquals(2, partial.rows.size)
@@ -118,6 +124,56 @@ class DesktopSearchTest {
             assertFalse(c.state.value.search.completed)
             assertTrue(c.state.value.search.rows.isEmpty())
             assertFalse(c.state.value.search.loading)
+        } }
+    }
+
+    @Test fun backRestartsAnInterruptedQueryAndRecentSearchesSurviveTheOpenerSnapshot(): Unit = runBlocking {
+        Fixture().use { f -> f.controller().use { c ->
+            c.searchQuery("Cloud")
+            c.settings()
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Settings && !it.busy } }
+            c.back()
+            assertEquals("Cloud", c.completed().search.query)
+            c.openSearchResult(c.state.value.search.rows.first().items.first())
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Detail && !it.busy && "Cloud" in it.search.recent } }
+            c.search()
+            assertEquals("Cloud", c.state.value.search.query)
+            assertEquals(listOf("Cloud"), c.state.value.search.recent)
+            assertEquals(DesktopRoute.Search, c.state.value.route)
+        } }
+    }
+
+    @Test fun expiredSearchUsesSignInAndLibraryReadFailureDiffersFromMissingMetadata(): Unit = runBlocking {
+        Fixture().use { f -> f.controller().use { c ->
+            f.noAncestors = true; c.searchQuery("Cloud", immediate = true)
+            val absent = c.completed().search
+            assertFalse(absent.libraryError)
+            assertEquals(setOf("Library not provided"), absent.libraries.values.toSet())
+            f.noAncestors = false; f.failAncestors = true; c.retry()
+            assertTrue(c.completed().search.libraryError)
+            f.unauthorized = true; c.retry()
+            val expired = withTimeout(5000) { c.state.first { it.route == DesktopRoute.SignIn && !it.busy } }
+            assertNull(expired.account)
+            assertEquals(ErrorKind.EXPIRED, expired.errorKind)
+        } }
+    }
+
+    @Test fun switchingAccountsClearsTheQueryAndKeepsRecentHistoryPrivate(): Unit = runBlocking {
+        Fixture().use { f -> f.controller().use { c ->
+            val first = requireNotNull(c.state.value.account)
+            c.searchQuery("Cloud", immediate = true); c.completed(); c.rememberSearch()
+            withTimeout(5000) { c.state.first { "Cloud" in it.search.recent } }
+            val second = first.copy(user = User("second", "Second viewer"), accessToken = "other-token")
+            f.store.remember(second); c.selectAccount(second.key)
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Home && !it.busy && it.account?.key == second.key } }
+            c.search()
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Search && !it.busy } }
+            assertEquals("", c.state.value.search.query); assertTrue(c.state.value.search.recent.isEmpty())
+            c.selectAccount(first.key)
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Home && !it.busy && it.account?.key == first.key } }
+            c.search()
+            withTimeout(5000) { c.state.first { it.route == DesktopRoute.Search && !it.busy } }
+            assertEquals(listOf("Cloud"), c.state.value.search.recent)
         } }
     }
 
