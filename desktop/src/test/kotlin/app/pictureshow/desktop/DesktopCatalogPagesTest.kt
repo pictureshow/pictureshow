@@ -126,7 +126,7 @@ class DesktopCatalogPagesTest {
             onNodeWithText("Recordings").assertExists()
             onNodeWithText("Schedules").assertExists()
             onNodeWithText("Live TV is coming to the desktop app").assertDoesNotExist()
-            onNodeWithText("Pictureshow app for Android TV", substring = true).assertExists()
+            onNodeWithText("Loading Live TV…").assertExists()
             onNodeWithText("This library is empty.").assertDoesNotExist()
             onNodeWithText("0 items").assertDoesNotExist()
             onNodeWithTag("sort-direction").assertDoesNotExist()

@@ -692,6 +692,7 @@ class DesktopController(
     }
     fun stopPlayback() {
         if (mutable.value.playback?.let { it.liveChannel != null || it.decision.isLive } == true) {
+            synchronized(history) { if (history.lastOrNull()?.route == DesktopRoute.LiveTv) history.removeAt(history.lastIndex) }
             page(DesktopRoute.LiveTv) { g ->
                 finishViewing()
                 publish(g) { it.copy(playback = null, detail = null) }

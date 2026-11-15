@@ -51,8 +51,9 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
     LaunchedEffect(s.loading, s.tab, s.selected == null, s.draft == null) {
         if (!s.loading && s.selected == null && s.draft == null) {
             withFrameNanos { }
-            val key = s.focusKey ?: when (s.tab) {
+            val key = s.focusKey?.takeIf { it in DesktopUiProbe.requestFocus } ?: when (s.tab) {
                 DesktopLiveTab.Channels -> channels.firstOrNull()?.let { "live:channel:${it.id}" }
+                DesktopLiveTab.Guide -> s.programs.firstOrNull { canTune(it, now) }?.let { "live:program:${it.id}" }
                 else -> null
             }
             key?.let { DesktopUiProbe.requestFocus[it]?.let { target -> runCatching { target.requestFocus() } } }
