@@ -62,6 +62,21 @@ class ApplicationParityVectorsTest {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
                     "catalog-announcement" -> JsonPrimitive(catalogAnnouncement(Json.decodeFromJsonElement(input.getValue("item"))))
+                    "media-badges" -> JsonArray(
+                        mediaBadges(
+                            input.getValue("source").takeUnless { it is JsonNull }?.let {
+                                app.pictureshow.core.playback.PlaybackJson.decodeFromJsonElement<
+                                    app.pictureshow.core.playback.MediaSourceInfo
+                                    >(it)
+                            }
+                        ).map(::JsonPrimitive)
+                    )
+                    "detail-play-label" -> JsonPrimitive(
+                        detailPlayLabel(
+                            Json.decodeFromJsonElement(input.getValue("item")),
+                            input.getValue("playItem").takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<MediaItem>(it) }
+                        )
+                    )
                     "detail-play-item" -> detailPlayItem(
                         Json.decodeFromJsonElement(input.getValue("item")),
                         Json.decodeFromJsonElement(input.getValue("nextUp")),

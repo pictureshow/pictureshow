@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -46,6 +49,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -77,6 +81,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -141,7 +146,6 @@ import app.pictureshow.core.imageUrl
 import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
-import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.sortDirectionLabel
 import coil3.compose.AsyncImage
@@ -194,7 +198,7 @@ fun CatalogHome(
             android.util.Log.d(
                 "CatalogFocus",
                 "home-entry saved=${selectedRow.isNotEmpty()} " +
-                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "live-tv", "customize", "profile") } ?: "card"} " +
+                    "header=${selectedRow.takeIf { it in listOf("account", "search", "settings", "live-tv", "customize", "profile") } ?: "card"} " +
                     "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
             )
         }
@@ -208,8 +212,8 @@ fun CatalogHome(
             ?: items[(rowPositions[restoreRow.key] ?: 0).coerceIn(0, items.lastIndex)]
     }
     val restoreAction = when {
-        state.busy && selectedRow in listOf("settings", "profile") -> "search"
-        selectedRow in listOf("search", "settings", "live-tv", "customize", "profile") -> selectedRow
+        state.busy && selectedRow in listOf("account", "settings", "profile") -> "search"
+        selectedRow in listOf("account", "search", "settings", "live-tv", "customize", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
@@ -219,6 +223,7 @@ fun CatalogHome(
         "live-tv" -> "Live TV"
         "customize" -> "Customize home"
         "profile" -> "Switch user"
+        "account" -> accountChipLabel(account.user.name, serverLabel)
         "retry" -> if (onWatchDownloads != null) "Watch downloads" else "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
     }
@@ -246,6 +251,8 @@ fun CatalogHome(
         rowPositions = rowPositions + (row.key to itemIndex)
     }
     val profile = remember { FocusRequester() }
+    val accountFocus = remember { FocusRequester() }
+    var accountMenu by rememberSaveable { mutableStateOf(false) }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
     val customizeFocus = remember { FocusRequester() }
@@ -342,7 +349,7 @@ fun CatalogHome(
     val belowTop =
         rows.isNotEmpty() &&
             selectedRow.isNotEmpty() &&
-            selectedRow !in listOf("search", "settings", "live-tv", "customize", rows.first().key)
+            selectedRow !in listOf("account", "search", "settings", "live-tv", "customize", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -394,16 +401,30 @@ fun CatalogHome(
         ) {
             item(key = "header") {
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Settings sits beside Search, one Up from where home opens. Sign out stays alone with
-                    // Switch user at the bottom, away from the buttons viewers press often.
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Up from the first shelf lands on Search; Settings is beside it. The account chip leads the row
+                    // (Switch user · Sign out · Settings), and the same two buttons stay below every shelf.
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).
+                        AccountChip(
+                            account.user.name,
+                            serverLabel,
+                            enabled = !state.busy,
+                            onClick = {
+                                selectedRow = "account"
+                                accountMenu = true
+                            },
+                            modifier = target(Modifier, restoreAction == "account").focusRequester(accountFocus).testTag("home:account")
+                                .staysInRow(first = true, last = false)
+                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "account" }
+                                .onPreviewKeyEvent { headerDown(it) }
+                        )
                         Button(
                             onClick = {
                                 selectedRow = "search"
                                 onSearch()
                             },
                             modifier = target(Modifier, restoreAction == "search").focusRequester(search).testTag("home:search")
-                                .staysInRow(first = true, last = false)
+                                .staysInRow(first = false, last = false)
                                 .onFocusChanged {
                                     // The first attached target during the first load, like the profile actions below.
                                     if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
@@ -457,7 +478,6 @@ fun CatalogHome(
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
-                        Text("${account.user.name} · $serverLabel", color = CatalogMuted)
                     }
                     if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(
@@ -505,6 +525,9 @@ fun CatalogHome(
                                                 item = item,
                                                 account = account,
                                                 wide = row.wide || row.library || item.type == "Episode",
+                                                // A library's name sits inside its tile's top edge, so a row peeking at the
+                                                // bottom of the first screen still says what it is (T-15).
+                                                nameInArtwork = row.library,
                                                 onClick = {
                                                     select(rowIndex, itemIndex)
                                                     onOpen(item)
@@ -593,10 +616,33 @@ fun CatalogHome(
             }
         }
     }
+    if (accountMenu) {
+        AccountMenu(
+            user = account.user.name,
+            server = serverLabel,
+            busy = state.busy,
+            onDismiss = {
+                accountMenu = false
+                scope.launch { focusAction("header", 0, accountFocus) }
+            },
+            onSwitchUser = {
+                accountMenu = false
+                onSwitchUser()
+            },
+            onSignOut = {
+                accountMenu = false
+                onSignOut()
+            },
+            onSettings = {
+                accountMenu = false
+                onSettings()
+            }
+        )
+    }
     // The offer comes and goes with each load. Each return puts the remote on it, unless the viewer went to another action.
     val offered = onWatchDownloads != null
     LaunchedEffect(offered) {
-        if (offered && homeLifecycle == Lifecycle.State.RESUMED && selectedRow !in listOf("search", "settings", "profile")) {
+        if (offered && homeLifecycle == Lifecycle.State.RESUMED && selectedRow !in listOf("account", "search", "settings", "profile")) {
             focusAction("header", 0, retry)
         }
     }
@@ -615,11 +661,12 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction in listOf("search", "settings", "customize", "live-tv") -> {
+                restoreAction in listOf("account", "search", "settings", "customize", "live-tv") -> {
                     focusAction(
                         "header",
                         0,
                         when (restoreAction) {
+                            "account" -> accountFocus
                             "settings" -> settingsFocus
                             "live-tv" -> liveFocus
                             "customize" -> customizeFocus
@@ -654,7 +701,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("profile", "search", "settings", "live-tv", "customize") &&
+            savedRow !in listOf("account", "profile", "search", "settings", "live-tv", "customize") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -665,6 +712,78 @@ fun CatalogHome(
             } else {
                 focusAction("profile", rows.size + 1, profile)
             }
+        }
+    }
+}
+
+internal fun accountChipLabel(user: String, server: String) = "$user · $server"
+
+/** The header's account chip: an initial, who is signed in and where, and a mark that it opens a menu. */
+@Composable
+private fun AccountChip(user: String, server: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        // A long server name ellipsizes here and shows in full in the menu; the header row scrolls rather than clip at 1.3x type.
+        modifier = modifier.semantics {
+            contentDescription = "Account: ${accountChipLabel(user, server)}"
+            onClick(label = "Account options", action = null)
+        },
+        contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier.size(26.dp).background(Color(0xFF5B6AA8), androidx.compose.foundation.shape.CircleShape)
+                    .clearAndSetSemantics {},
+                contentAlignment = Alignment.Center
+            ) {
+                Text(user.trim().take(1).uppercase().ifEmpty { "?" }, color = Color.White, style = MaterialTheme.typography.labelMedium)
+            }
+            Text(accountChipLabel(user, server), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
+            Text("▾", modifier = Modifier.clearAndSetSemantics {})
+        }
+    }
+}
+
+/** Switch user · Sign out · Settings, opened from the account chip. Back closes it and returns to the chip. */
+@Composable
+private fun AccountMenu(
+    user: String,
+    server: String,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSwitchUser: () -> Unit,
+    onSignOut: () -> Unit,
+    onSettings: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.width(420.dp).background(Color(0xFF1B2130), RoundedCornerShape(16.dp)).padding(24.dp)
+                .testTag("home:account-menu"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(user, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+            Text("Signed in on $server", color = CatalogMuted)
+            Spacer(Modifier.height(4.dp))
+            Button(
+                onClick = onSwitchUser,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().focusRequester(first).testTag("home:account:switch-user")
+            ) { Text("Switch user") }
+            Button(
+                onClick = onSignOut,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().testTag("home:account:sign-out")
+            ) { Text(if (busy) "Please wait…" else "Sign out") }
+            Button(
+                onClick = onSettings,
+                modifier = Modifier.fillMaxWidth().testTag("home:account:settings")
+            ) { Text("Settings") }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            first.requestFocus()
         }
     }
 }
@@ -1323,6 +1442,8 @@ fun CatalogDetail(
     val retry = remember { FocusRequester() }
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
+    // Sticky for this page: once the actions have wrapped, the hero stays short, so the page never jumps back.
+    var actionsWrapped by rememberSaveable { mutableStateOf(false) }
     var restored by remember { mutableStateOf(false) }
     var arrivalPending by remember { mutableStateOf(true) }
     var playbackReturn by remember { mutableStateOf(state.playbackPending) }
@@ -2216,7 +2337,9 @@ fun CatalogDetail(
                                         backdrop,
                                         state.account,
                                         wide = true,
-                                        modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
+                                        // Actions that wrap get the room back from the hero, so the second line stays on screen (T-8).
+                                        modifier = Modifier.fillMaxWidth().height(if (actionsWrapped) 140.dp else 220.dp)
+                                            .testTag("detail:hero"),
                                         alignment = BiasAlignment(0f, -.5f)
                                     )
                                 }
@@ -2232,12 +2355,14 @@ fun CatalogDetail(
                                         modifier = arrivalMetadataSemantics
                                     )
                                 }
+                                // Format badges (4K, HDR10, Dolby Vision, 5.1, Atmos) follow the runtime, from the item's
+                                // default version as the server reported it (T-11).
                                 val metadata = listOfNotNull(
                                     headerItem.productionYear?.toString(),
                                     headerItem.officialRating,
                                     headerItem.communityRating?.let(::communityRatingLabel),
                                     headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
-                                )
+                                ) + app.pictureshow.core.mediaBadges(headerItem).ifEmpty { app.pictureshow.core.mediaBadges(item) }
                                 if (metadata.isNotEmpty()) {
                                     Text(
                                         metadata.joinToString(" · "),
@@ -2286,7 +2411,8 @@ fun CatalogDetail(
                                                 )
                                             }
                                         },
-                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null),
+                                        onWrapped = { if (it) actionsWrapped = true }
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -2348,7 +2474,8 @@ fun CatalogDetail(
                                                 )
                                             }
                                         },
-                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null),
+                                        onWrapped = { if (it) actionsWrapped = true }
                                     ) {
                                         if (trackSelection) selectedSection = "header"
                                     }
@@ -2910,16 +3037,20 @@ private fun DetailActions(
     fromStartFocus: FocusRequester? = null,
     blocked: Boolean = false,
     onDownload: (() -> Unit)? = null,
+    onWrapped: (Boolean) -> Unit = {},
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
+    // A series names its episode, so its primary action needs more room than "Play" when sizes are fixed.
+    val primaryStable = if (item.type in listOf("Series", "Season")) "primary-wide" else "primary"
+    var primaryHeight by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val feedbackHost = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     var focusedTarget by remember { mutableStateOf<String?>(null) }
     val position = playItem?.userData?.playbackPositionTicks ?: 0
     val labels = mapOf(
-        "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
+        "primary" to (pending?.playLabel ?: app.pictureshow.core.detailPlayLabel(item, playItem)),
         "from-start" to (pending?.fromStartLabel ?: "Play from start"),
         "played" to (
             pending?.playedLabel ?: if (blocked) {
@@ -3008,6 +3139,8 @@ private fun DetailActions(
             // not scroll an already-visible primary upward. Child checks also cover later errors
             // or label wrapping that move the focused button without another focus event.
             if (!stableLayout && focused) revealFocusedBounds(coordinates, bringIntoView)
+            // More than one line of actions: the caller gives the room back by shrinking the hero (T-8).
+            onWrapped(primaryHeight > 0 && coordinates.size.height > primaryHeight * 3 / 2)
         }.focusProperties {
             // Let the parent route a shelf exit to its remembered card, after spatial navigation
             // has exhausted the wrapped action rows. Programmatic requests remain unrestricted.
@@ -3039,7 +3172,8 @@ private fun DetailActions(
                                     min = 48.dp
                                 )
                             } else {
-                                Modifier.width(detailStableWidth(target)).heightIn(min = DETAIL_STABLE_HEIGHT)
+                                Modifier.width(detailStableWidth(if (target == "primary") primaryStable else target))
+                                    .heightIn(min = DETAIL_STABLE_HEIGHT)
                             }
                         )
                     } else {
@@ -3190,7 +3324,7 @@ private fun DetailActions(
             // TV Material raises the focused surface. Stable parents keep native traversal order
             // and node identities unchanged as pending labels become authoritative actions.
             key("primary") {
-                Box {
+                Box(Modifier.onSizeChanged { primaryHeight = it.height }) {
                     val click: () -> Unit = pending?.onPlay ?: {
                         playItem?.let { onPlay(it, position > 0) }
                         Unit
@@ -3210,10 +3344,33 @@ private fun DetailActions(
                     ) {
                         DetailActionLabel(
                             labels.getValue("primary"),
-                            if (stableLayout || compact) "primary" else null,
+                            if (stableLayout || compact) primaryStable else null,
                             Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary")),
                             compact = compact
                         )
+                    }
+                }
+            }
+            if (stableLayout) {
+                key("from-start") {
+                    Box {
+                        val click = pending?.onFromStart ?: {
+                            playItem?.let { onPlay(it, false) }
+                            Unit
+                        }
+                        Button(
+                            onClick = { if (!blocked) click() },
+                            enabled = !blocked && (pending != null || playItem != null),
+                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                .then(actionModifier("from-start", "from-start", click))
+                        ) {
+                            DetailActionLabel(
+                                labels.getValue("from-start"),
+                                if (stableLayout || compact) "from-start" else null,
+                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
+                                compact = compact
+                            )
+                        }
                     }
                 }
             }
@@ -3302,41 +3459,24 @@ private fun DetailActions(
                             if (!blocked) onDownload()
                         },
                         enabled = !blocked,
-                        modifier = Modifier.testTag("detail:download")
-                            .then(if (compact) Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp) else Modifier)
+                        modifier = Modifier.testTag("detail:download").then(
+                            when {
+                                compact -> Modifier.width(detailActionWidth("download", true)).heightIn(min = 48.dp)
+                                // The same fixed pill as its siblings, so it neither shrinks nor rides higher (T-8).
+                                stableLayout -> Modifier.width(detailStableWidth("download")).heightIn(min = DETAIL_STABLE_HEIGHT)
+                                else -> Modifier
+                            }
+                        )
                     ) {
-                        if (compact) {
+                        if (compact || stableLayout) {
                             DetailActionLabel(
                                 "Download",
                                 "download",
                                 Modifier.testTag("detail:download-label"),
-                                compact = true
+                                compact = compact
                             )
                         } else {
                             Text("Download")
-                        }
-                    }
-                }
-            }
-            if (stableLayout) {
-                key("from-start") {
-                    Box {
-                        val click = pending?.onFromStart ?: {
-                            playItem?.let { onPlay(it, false) }
-                            Unit
-                        }
-                        Button(
-                            onClick = { if (!blocked) click() },
-                            enabled = !blocked && (pending != null || playItem != null),
-                            modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                                .then(actionModifier("from-start", "from-start", click))
-                        ) {
-                            DetailActionLabel(
-                                labels.getValue("from-start"),
-                                if (stableLayout || compact) "from-start" else null,
-                                Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start")),
-                                compact = compact
-                            )
                         }
                     }
                 }
@@ -3347,7 +3487,11 @@ private fun DetailActions(
 
 private val DETAIL_STABLE_HEIGHT = 72.dp
 
-private fun detailStableWidth(target: String) = if (target == "primary" || target == "from-start") 200.dp else 260.dp
+private fun detailStableWidth(target: String) = when (target) {
+    "primary", "from-start", "download" -> 200.dp
+    "primary-wide" -> 320.dp
+    else -> 260.dp
+}
 
 private fun detailActionWidth(target: String, compact: Boolean) = if (!compact) {
     detailStableWidth(target)
@@ -3494,7 +3638,8 @@ internal fun CatalogCard(
     artworkProgress: Float? = null,
     showProgress: Boolean = true,
     artworkOverlay: (@Composable BoxScope.() -> Unit)? = null,
-    compact: Boolean = false
+    compact: Boolean = false,
+    nameInArtwork: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
@@ -3581,7 +3726,19 @@ internal fun CatalogCard(
                 )
             ) {
                 Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
-                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
+                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize(), placeholderName = !nameInArtwork)
+                    if (nameInArtwork) {
+                        Text(
+                            item.name,
+                            modifier = Modifier.align(Alignment.TopStart).fillMaxWidth()
+                                .background(Brush.verticalGradient(listOf(Color(0xE6101420), Color(0x00101420))))
+                                .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 18.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
                     val badge = when {
                         item.isEmptyContainer -> null
                         item.isWatched -> "✓ Watched"
@@ -3613,7 +3770,7 @@ internal fun CatalogCard(
                 }
                 if (caption != null) {
                     caption()
-                } else {
+                } else if (!nameInArtwork) {
                     Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             item.name,
@@ -3623,10 +3780,21 @@ internal fun CatalogCard(
                         )
                         if (item.type == "Episode") {
                             Text(
-                                listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
+                                // The episode's length rides on the same line, so a series page says how long each one is (T-13).
+                                listOfNotNull(item.seriesName, episodeLabel(item), runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank))
+                                    .joinToString(" · "),
                                 maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = CatalogMuted,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        // The chosen season keeps a visible mark when focus moves on to its episodes (T-13).
+                        if (selected == true) {
+                            Text(
+                                "Now showing",
+                                modifier = Modifier.testTag("card:selected-mark"),
+                                color = SelectedSeasonOutline,
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
@@ -3644,7 +3812,8 @@ internal fun CatalogArtwork(
     wide: Boolean,
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
-    showPlaceholder: Boolean = true
+    showPlaceholder: Boolean = true,
+    placeholderName: Boolean = true
 ) {
     BoxWithConstraints(
         modifier.clearAndSetSemantics {}.then(if (showPlaceholder) Modifier.background(Color(0xFF262D3D)) else Modifier),
@@ -3653,7 +3822,7 @@ internal fun CatalogArtwork(
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         val url = imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
-        if (!loaded && showPlaceholder) {
+        if (!loaded && showPlaceholder && placeholderName) {
             Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
         }
         if (url != null) {

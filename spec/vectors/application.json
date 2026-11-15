@@ -7077,6 +7077,337 @@
           }
         },
         "expected": "A Movie, 2026, Resume from 1:00, Favorite"
-      }
+      },
+    {
+      "id": "media-badges-uhd-hdr10-51",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 3840,
+              "Height": 2160,
+              "VideoRangeType": "HDR10"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 6,
+              "ChannelLayout": "5.1",
+              "Profile": "LC",
+              "AudioSpatialFormat": "None"
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        }
+      },
+      "expected": [
+        "4K",
+        "HDR10",
+        "5.1"
+      ]
+    },
+    {
+      "id": "media-badges-sdr-stereo-empty",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 1920,
+              "Height": 1080,
+              "VideoRangeType": "SDR"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 2,
+              "ChannelLayout": "stereo"
+            }
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "media-badges-scope-4k-dolby-vision-atmos",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 3840,
+              "Height": 1600,
+              "VideoRangeType": "DOVIWithHDR10"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 8,
+              "ChannelLayout": "7.1",
+              "Profile": "Dolby TrueHD + Dolby Atmos",
+              "AudioSpatialFormat": "DolbyAtmos"
+            }
+          ],
+          "DefaultAudioStreamIndex": 1
+        }
+      },
+      "expected": [
+        "4K",
+        "Dolby Vision",
+        "7.1",
+        "Atmos"
+      ]
+    },
+    {
+      "id": "media-badges-hdr10plus",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 1920,
+              "Height": 1080,
+              "VideoRangeType": "HDR10Plus"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "HDR10+"
+      ]
+    },
+    {
+      "id": "media-badges-hlg",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 3840,
+              "Height": 2160,
+              "VideoRangeType": "HLG"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "4K",
+        "HLG"
+      ]
+    },
+    {
+      "id": "media-badges-invalid-dolby-vision-claims-nothing",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 1920,
+              "Height": 1080,
+              "VideoRangeType": "DOVIInvalid"
+            }
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "media-badges-default-audio-track-wins",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Width": 1280,
+              "Height": 720,
+              "VideoRangeType": "SDR"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 2,
+              "ChannelLayout": "stereo"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Channels": 6,
+              "ChannelLayout": "5.1(side)",
+              "Profile": "Dolby Digital Plus + Dolby Atmos"
+            }
+          ],
+          "DefaultAudioStreamIndex": 2
+        }
+      },
+      "expected": [
+        "5.1",
+        "Atmos"
+      ]
+    },
+    {
+      "id": "media-badges-older-server-profile-dtsx",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 8,
+              "Profile": "DTS:X"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "7.1",
+        "DTS:X"
+      ]
+    },
+    {
+      "id": "media-badges-spatial-format-none-overrides-profile",
+      "operation": "media-badges",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Channels": 6,
+              "ChannelLayout": "5.1",
+              "Profile": "Dolby Digital Plus + Dolby Atmos",
+              "AudioSpatialFormat": "None"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "5.1"
+      ]
+    },
+    {
+      "id": "media-badges-no-source",
+      "operation": "media-badges",
+      "input": {
+        "source": null
+      },
+      "expected": []
+    },
+    {
+      "id": "detail-play-label-series-next",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Series"
+        },
+        "playItem": {
+          "Id": "e1",
+          "Name": "A Quiet Morning",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1
+        }
+      },
+      "expected": "Play S1:E1 · A Quiet Morning"
+    },
+    {
+      "id": "detail-play-label-series-resume",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Series"
+        },
+        "playItem": {
+          "Id": "e2",
+          "Name": "Arrivals",
+          "Type": "Episode",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 2,
+          "UserData": {
+            "PlaybackPositionTicks": 7000000000
+          }
+        }
+      },
+      "expected": "Resume S1:E2 · Arrivals"
+    },
+    {
+      "id": "detail-play-label-season-untitled",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Season"
+        },
+        "playItem": {
+          "Id": "e",
+          "Type": "Episode",
+          "ParentIndexNumber": 2,
+          "IndexNumber": 3
+        }
+      },
+      "expected": "Play S2:E3"
+    },
+    {
+      "id": "detail-play-label-movie",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "m",
+          "Type": "Movie"
+        },
+        "playItem": {
+          "Id": "m",
+          "Type": "Movie"
+        }
+      },
+      "expected": "Play"
+    },
+    {
+      "id": "detail-play-label-movie-resume",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "m",
+          "Type": "Movie"
+        },
+        "playItem": {
+          "Id": "m",
+          "Type": "Movie",
+          "UserData": {
+            "PlaybackPositionTicks": 4200000000
+          }
+        }
+      },
+      "expected": "Resume from 7:00"
+    },
+    {
+      "id": "detail-play-label-series-nothing-to-play",
+      "operation": "detail-play-label",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Series"
+        },
+        "playItem": null
+      },
+      "expected": "Play"
+    }
   ]
 }

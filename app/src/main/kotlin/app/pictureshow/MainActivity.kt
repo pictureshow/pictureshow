@@ -972,6 +972,9 @@ internal fun Pictureshow(
             state.snapshot.currentAccount?.let { account ->
                 val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
                 val screen by vm.state.collectAsStateWithLifecycle()
+                // The Account group signs out through the same model as Home's Sign out button.
+                val profile: HomeViewModel = koinViewModel(key = "settings:${account.key}", parameters = { parametersOf(account) })
+                val profileState by profile.state.collectAsStateWithLifecycle()
                 val settingsContext = LocalContext.current
                 var accepted by remember { mutableStateOf("Checking…") }
                 var supportedPassthrough by remember { mutableStateOf(emptySet<PassthroughEncoding>()) }
@@ -996,7 +999,11 @@ internal fun Pictureshow(
                     onAbout = { nav.navigate("about") },
                     onSupport = { nav.navigate("supporter") },
                     onSyncPlay = sync::show,
-                    supportedPassthrough = supportedPassthrough
+                    supportedPassthrough = supportedPassthrough,
+                    account = SettingsAccount(profileState.account.user.name, state.snapshot.serverLabel(account.server)),
+                    onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
+                    onSignOut = profile::signOut,
+                    signingOut = profileState.busy
                 )
             }
         }

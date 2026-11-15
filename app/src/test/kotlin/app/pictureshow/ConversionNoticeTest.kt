@@ -352,7 +352,7 @@ class ConversionNoticeTest {
         assertEquals("On", toggle.config.getOrNull(SemanticsProperties.StateDescription))
         assertEquals(Role.Switch, toggle.config.getOrNull(SemanticsProperties.Role))
         assertEquals(ToggleableState.On, toggle.config.getOrNull(SemanticsProperties.ToggleableState))
-        compose.onNodeWithTag("settings:passthrough").requestFocusNow()
+        compose.onNodeWithTag("settings:advanced:Playback").requestFocusNow()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         compose.waitForIdle()
         compose.onNodeWithTag("settings:conversion-notice").assertIsFocused()

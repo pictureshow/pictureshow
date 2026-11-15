@@ -51,7 +51,7 @@ class EmptyContainersTest {
     fun emptyCollectionGridNamesCollectionRatherThanLibrary() {
         compose.setContent { PictureshowTheme { CatalogGrid(CatalogGridState(account, empty, loading = false), {}, {}, { _, _ -> }, {}) } }
         compose.onNodeWithText("This collection is empty.").assertExists()
-        compose.onNodeWithText("This library is empty.").assertDoesNotExist()
+        compose.onNodeWithText("This library is empty. Items appear here when your server adds them.").assertDoesNotExist()
     }
 
     @Test
@@ -61,8 +61,8 @@ class EmptyContainersTest {
             PictureshowTheme { CatalogGrid(CatalogGridState(account, parent.value, loading = false), {}, {}, { _, _ -> }, {}) }
         }
         for ((type, message) in listOf(
-            "CollectionFolder" to "This library is empty.",
-            "UserView" to "This library is empty.",
+            "CollectionFolder" to "This library is empty. Items appear here when your server adds them.",
+            "UserView" to "This library is empty. Items appear here when your server adds them.",
             "Playlist" to "This playlist is empty.",
             "Folder" to "This folder is empty.",
             "Genre" to "Nothing here yet.",

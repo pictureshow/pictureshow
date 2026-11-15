@@ -92,6 +92,9 @@ data class MediaStream(
     @SerialName("Level") val level: Double? = null,
     @SerialName("BitDepth") val bitDepth: Int? = null,
     @SerialName("Channels") val channels: Int? = null,
+    @SerialName("ChannelLayout") val channelLayout: String? = null,
+    /** Jellyfin 10.11+: None, DolbyAtmos or DTSX, derived by the server from the audio Profile. */
+    @SerialName("AudioSpatialFormat") val audioSpatialFormat: String? = null,
     @SerialName("BitRate") val bitRate: Int? = null,
     @SerialName("Width") val width: Int? = null,
     @SerialName("Height") val height: Int? = null,

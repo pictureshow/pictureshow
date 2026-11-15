@@ -324,7 +324,7 @@ class CatalogFocusTest {
             listOf(
                 compose.onNodeWithTag("home:search"),
                 compose.onNodeWithText("Pictureshow"),
-                compose.onNodeWithText("Jamie · Screen room")
+                compose.onNodeWithTag("home:account")
             ).forEach { node ->
                 // Unclipped layout bounds catch a sliver that assertIsDisplayed would accept.
                 val bounds = node.getUnclippedBoundsInRoot()
@@ -615,7 +615,7 @@ class CatalogFocusTest {
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:settings").assertIsFocused()
         key(Key.DirectionCenter)
-        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
         key(Key.Back)
         compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
     }

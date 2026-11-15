@@ -71,7 +71,7 @@ class SupporterScreenTest {
                     }
                 }
             }
-            compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+            compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
             compose.walkSettingsFromHomeTo("settings:syncplay")
             compose.onNodeWithTag("settings:syncplay").assertIsFocused()
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
