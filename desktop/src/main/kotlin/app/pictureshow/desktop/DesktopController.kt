@@ -497,19 +497,28 @@ class DesktopController(
         val decision = outcome.decision
         // A subtitle retry may allocate a different owned live source. Release superseded
         // ownership before adoption, while preserving identities shared with the final decision.
+        var supersededClean = true
         try {
             withContext(NonCancellable) {
                 rejectedDecisions.mapNotNull { it.ownedLiveStreamId }.distinct()
                     .filter { it != decision.ownedLiveStreamId }
-                    .forEach { id -> runCatching { playbackClient.closeLiveStream(a, id) } }
+                    .forEach { id -> if (runCatching { playbackClient.closeLiveStream(a, id) }.getOrNull() !is ClientResult.Success) supersededClean = false }
                 rejectedDecisions.distinctBy { it.playSessionId }
                     .filter { it.method == PlayMethod.Transcode && it.playSessionId != null && it.playSessionId != decision.playSessionId }
-                    .forEach { old -> runCatching { playbackClient.stopEncoding(a, requireNotNull(old.playSessionId)) } }
-                rejectedDecisions.clear()
-                rejectedDecisions += decision
+                    .forEach { old -> if (runCatching { playbackClient.stopEncoding(a, requireNotNull(old.playSessionId)) }.getOrNull() !is ClientResult.Success) supersededClean = false }
+                if (supersededClean) {
+                    rejectedDecisions.clear()
+                    rejectedDecisions += decision
+                }
             }
             currentCoroutineContext().ensureActive()
         } catch (e: Throwable) { discardPreparedPlayer(); throw e }
+        if (!supersededClean) {
+            discardPreparedPlayer()
+            events.log("playback superseded-source cleanup=failed")
+            publish(g) { it.copy(error = "The previous live source could not be released. Playback did not start. Check the server connection before tuning again.") }
+            return
+        }
         val streams = decision.mediaSource.mediaStreams
         val ai = negotiatedAudio ?: StreamDefaults.choose(streams, MediaStreamType.Audio, decision.mediaSource.defaultAudioStreamIndex, java.util.Locale.getDefault().language)
         val si = negotiatedSubtitle ?: StreamDefaults.choose(streams, MediaStreamType.Subtitle, decision.mediaSource.defaultSubtitleStreamIndex, java.util.Locale.getDefault().language)

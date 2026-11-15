@@ -30,6 +30,7 @@ class DesktopLiveTvTest {
         var denyPolicy = false
         var holdFirstPlayback = false
         var subtitleRetry = false
+        var failClose = false
         val negotiations = java.util.concurrent.atomic.AtomicInteger()
         val playbackEntered = java.util.concurrent.CountDownLatch(1)
         val playbackRelease = java.util.concurrent.CountDownLatch(1)
@@ -62,7 +63,7 @@ class DesktopLiveTvTest {
                         val captions = if (!subtitleRetry) "" else "," + """{"Index":1,"Type":"Subtitle","Codec":"srt","IsExternal":true,"IsForced":true${if (count > 1) ",\"DeliveryUrl\":\"/subtitles/ready.srt\"" else ""}}"""
                         """{"PlaySessionId":"session-$count","MediaSources":[{"Id":"source","IsInfiniteStream":true,"LiveStreamId":"$liveId","RequiresClosing":true,"SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":1,"Container":"ts","MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"}$captions]}]}"""
                     }
-                    path == "/LiveStreams/Close" -> ""
+                    path == "/LiveStreams/Close" -> { if (failClose) status = 500; "" }
                     path.startsWith("/Sessions/") || path.startsWith("/Videos/ActiveEncodings") -> ""
                     else -> """{"Items":[],"TotalRecordCount":0}"""
                 }
@@ -194,6 +195,20 @@ class DesktopLiveTvTest {
                 withTimeout(10_000) { c.state.first { it.route == DesktopRoute.LiveTv && !it.busy } }
                 assertEquals(2, f.closedLive.size)
                 assertTrue(f.closedLive.last().contains("owned-2"))
+            }
+        }
+    }
+    @Test fun failedSupersededSourceCleanupIsVisibleAndDoesNotStartPlayback(): Unit = runBlocking {
+        Fixture().use { f ->
+            f.subtitleRetry = true; f.failClose = true
+            val engine = Engine()
+            controller(f, engine).use { c ->
+                c.tuneChannel(c.liveTv.state.value.channels.single())
+                withTimeout(10_000) { c.state.first { it.error != null && !it.busy } }
+                assertTrue(c.state.value.error.orEmpty().contains("previous live source"))
+                assertFalse(engine.opened)
+                assertTrue(engine.closed)
+                assertTrue(f.closedLive.any { it.contains("owned-2") }, "Final source is also released on failed adoption")
             }
         }
     }
