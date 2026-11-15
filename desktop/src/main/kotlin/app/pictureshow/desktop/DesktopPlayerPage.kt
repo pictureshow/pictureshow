@@ -57,7 +57,7 @@ import kotlin.math.roundToInt
 import java.util.concurrent.ConcurrentHashMap
 
 /** PLAY-29 on desktop: what a key press in the player means. Pure, so the rules are unit-tested. */
-internal enum class PlayerKey { Toggle, Back, Forward, Fullscreen, Mute, VolumeUp, VolumeDown, Help }
+internal enum class PlayerKey { Toggle, Back, Forward, Fullscreen, Mute, VolumeUp, VolumeDown, Help, Info }
 
 /**
  * Space/K play or pause, Left/Right and J/L seek 10 s, Up/Down change volume, F full screen, M mute, ? the
@@ -79,6 +79,7 @@ internal fun playerKeyAction(key: Key, codePoint: Int, shift: Boolean, ctrl: Boo
         Key.L -> PlayerKey.Forward
         Key.F -> PlayerKey.Fullscreen
         Key.M -> PlayerKey.Mute
+        Key.I -> PlayerKey.Info
         else -> null
     }
 }
@@ -89,6 +90,7 @@ internal val PLAYER_SHORTCUT_ROWS: List<Pair<String, String>> = listOf(
     "← → / J L" to "Back or forward 10 seconds",
     "↑ ↓" to "Volume up or down",
     "M" to "Mute or unmute",
+    "I" to "Playback info",
     "F" to "Full screen",
     "Esc" to "Close a menu, leave full screen, then leave the player",
     "?" to "Keyboard shortcuts"
@@ -114,13 +116,25 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
     }
     val surfaceFocus = remember { FocusRequester() }
     var menu by remember { mutableStateOf<String?>(null) }
+    var infoOpener by remember { mutableStateOf("playback-info") }
+    var restoreInfoFocus by remember { mutableStateOf(false) }
+    fun closeInfo() { menu = null; restoreInfoFocus = true }
+    LaunchedEffect(menu, restoreInfoFocus) {
+        if (menu == null && restoreInfoFocus) {
+            withFrameNanos { }
+            runCatching { if (infoOpener == "surface") surfaceFocus.requestFocus() else DesktopUiProbe.requestFocus[infoOpener]?.requestFocus() }
+            restoreInfoFocus = false
+        }
+    }
     var seekTop by remember { mutableStateOf(0) }
     var flash by remember { mutableStateOf<String?>(null) }
     var flashSerial by remember { mutableStateOf(0) }
     LaunchedEffect(flashSerial) { if (flash != null) { delay(1500); flash = null } }
     // PLAY-29: the playback surface holds focus when a viewing opens, so every key works before anything is clicked.
     LaunchedEffect(p.decision) { withFrameNanos { }; runCatching { surfaceFocus.requestFocus() } }
-    LaunchedEffect(p.end != null) { if (p.end != null) menu = null }
+    LaunchedEffect(p.end != null) { if (p.end != null && menu != "info") menu = null }
+    LaunchedEffect(menu == "info") { c.playbackInformationOpen(menu == "info") }
+    DisposableEffect(c) { onDispose { c.playbackInformationOpen(false) } }
     val current by rememberUpdatedState(p)
     val currentMenu by rememberUpdatedState(menu)
     val currentFullscreen by rememberUpdatedState(fullscreen)
@@ -129,7 +143,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
             val open = currentMenu
             if (e.key == Key.Escape) {
                 if (open == null) return@handler false
-                menu = null; DesktopUiProbe.requestFocus[open]?.let { runCatching { it.requestFocus() } }
+                if (open == "info") closeInfo() else { menu = null; DesktopUiProbe.requestFocus[open]?.let { runCatching { it.requestFocus() } } }
                 return@handler true
             }
             if (open != null) return@handler false
@@ -144,6 +158,11 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                 PlayerKey.Forward -> c.seekBy(10.0)
                 PlayerKey.Fullscreen -> currentFullscreen()
                 PlayerKey.Help -> openHelp()
+                PlayerKey.Info -> {
+                    if (!current.ready) return@handler true
+                    infoOpener = DesktopUiProbe.focus.entries.firstOrNull { it.value }?.key ?: "surface"
+                    menu = "info"
+                }
                 PlayerKey.Mute -> { c.toggleMute(); flash = if (c.state.value.playback?.muted == true) "Muted" else "Volume ${c.state.value.settings.volume}%"; flashSerial++ }
                 PlayerKey.VolumeUp, PlayerKey.VolumeDown -> {
                     c.changeVolume(if (action == PlayerKey.VolumeUp) 5 else -5)
@@ -154,6 +173,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         }
         onDispose { PlayerKeyboard.handler = null }
     }
+    if (menu == "info") DesktopPlaybackInfoDialog(playbackInfoSections(p, state.settings.bitrateMbps), ::closeInfo)
     Column(Modifier.fillMaxSize().onGloballyPositioned { playerBottom = (it.positionInWindow().y + it.size.height).toDouble() }) {
         Box(Modifier.weight(1f).fillMaxWidth()
             .onGloballyPositioned { videoTop = it.positionInWindow().y.toDouble(); videoBottom = videoTop + it.size.height }
@@ -163,7 +183,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
         Surface(color=MaterialTheme.colorScheme.surface.copy(alpha=.96f)) {
             val end = p.end
             if (end != null) EndCard(p, end, c) else Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(if (p.notice != null) 12.dp else 10.dp)) {
-                p.notice?.let { notice ->
+                p.notice?.takeIf { menu != "info" }?.let { notice ->
                     Column(
                         Modifier.widthIn(max = 720.dp).semantics { liveRegion = LiveRegionMode.Polite },
                         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -173,7 +193,15 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (p.isLiveChannel) livePlayerProgram(p.liveChannel, System.currentTimeMillis())?.name ?: p.item.name else p.item.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (p.isLiveChannel) livePlayerProgram(p.liveChannel, System.currentTimeMillis())?.name ?: p.item.name else p.item.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val video = p.decision.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
+                    val sourceRange = PlaybackFormatInformation.range(video?.videoRangeType, video?.dvProfile)
+                    DesktopTooltip("$sourceRange source · ${PlaybackFormatInformation.display(p.received.transfer, p.received.output)} · Playback info", above = true) {
+                    AssistChip(onClick = { infoOpener = "format-badge"; menu = "info" }, border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        label = { Text(if (sourceRange == "Not reported") PlaybackInformation.codec(video?.codec) else sourceRange, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 240.dp).controlFocus().probe("format-badge").semantics { contentDescription = "Source format: $sourceRange. Open Playback info" })
+                    }
                     flash?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                 }
                 if (p.isLiveChannel) {
@@ -201,6 +229,8 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                             chipValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off",
                             note = if (p.subtitleTracks.isEmpty()) "No subtitles in this file" else null,
                             open = menu == "subtitles", onOpen = { menu = "subtitles" }, onDismiss = { menu = null }, ceiling = seekTop, onChoose = c::selectSubtitle)
+                        OutlinedButton(onClick = { infoOpener = "playback-info"; menu = "info" }, enabled = p.ready,
+                            shape = RoundedCornerShape(50), modifier = Modifier.heightIn(min = 40.dp).controlFocus().probe("playback-info")) { Text("Playback info") }
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
                         if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
                         DesktopTooltip("Stop playback", above = true) { IconButton(onClick=c::stopPlayback,modifier = Modifier.controlFocus().probe("stop")) { Icon(DesktopGlyph.Stop,contentDescription="Stop playback") } }

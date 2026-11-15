@@ -5,8 +5,15 @@
 package app.pictureshow.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import app.pictureshow.core.Account
 import app.pictureshow.core.playback.*
 import kotlinx.serialization.json.*
@@ -40,6 +47,7 @@ interface DesktopPlaybackEngine : AutoCloseable {
     fun volume(value: Int)
     /** PLAY-29's M key. Engines without a mute control ignore it. */
     fun mute(muted: Boolean) {}
+    fun informationQuality(mbps: Int?) {}
     fun fullscreen(enabled: Boolean)
     fun viewport(topRatio: Double, bottomRatio: Double) {}
     fun viewportReceipt(): String? = null
@@ -73,7 +81,8 @@ internal fun nativeSubtitleOrdinal(streams: List<MediaStream>, index: Int): Int?
 
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
     val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false,
-    val liveWindow: app.pictureshow.core.playback.ObservedLiveWindow? = null)
+    val liveWindow: app.pictureshow.core.playback.ObservedLiveWindow? = null,
+    val received: DesktopReceivedFormats = DesktopReceivedFormats(), val informationOpen: Boolean = false)
 
 /** A per-viewing loopback capability. Every redirect and HLS reference is checked before credentials leave the process. */
 internal class DesktopMediaProxy(private val account: Account, private val decision: PlayDecision) : AutoCloseable {
@@ -154,6 +163,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var proxy: DesktopMediaProxy? = null
     private var layer: NativeLayer? = null
     @Volatile private var surface: Pointer? = null
+    private val receiptAccess = DesktopNativeReceiptAccess()
     private var nativeOwner: DesktopNativeOwner<Pointer>? = null
     private val playerRelease = DesktopPlayerRelease { mpv?.close(); mpv = null }
     private val stopped = AtomicBoolean(false)
@@ -169,6 +179,13 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     private var sourceDecision: PlayDecision? = null
     private var sourceAccount: Account? = null
     private var initialSubtitleIndex: Int? = null
+    @Volatile private var selectedAudioIndex = -1
+    @Volatile private var selectedSubtitleIndex = -1
+    @Volatile private var informationQualityMbps: Int? = null
+    override fun informationQuality(mbps: Int?) { informationQualityMbps = mbps }
+    internal fun informationSections(decision: PlayDecision, received: DesktopReceivedFormats): List<PlaybackInfoSection> =
+        playbackInfoSections(DesktopPlaybackState(app.pictureshow.core.MediaItem(decision.itemId), decision,
+            audioIndex = selectedAudioIndex, subtitleIndex = selectedSubtitleIndex, received = received), informationQualityMbps)
     @Volatile private var pendingExternalSubtitle: String? = null
     override fun profile(settings: DesktopSettings): DeviceProfile {
         // decoder-list is a documented read-only native property; query the loaded bytes,
@@ -191,6 +208,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
     override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) {
         check(mpv == null)
         sourceDecision = decision; sourceAccount = account; initialSubtitleIndex = subtitle
+        selectedAudioIndex = audio; selectedSubtitleIndex = subtitle
         directory.mkdirs()
         val player = Mpv(directory, probe = false); mpv = player
         player.option("vo", "libmpv")
@@ -206,7 +224,9 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             if (hdr) { player.option("target-trc", "pq"); player.option("target-prim", "bt.2020"); player.option("target-peak", "10000"); player.option("fbo-format", "rgba16f"); player.option("dither-depth", "10") }
             player.option("video-timing-offset", "0")
             player.initialize()
-            linux = LinuxPlayerWindow(player, directory, hdr, ::togglePause, { seek(snapshot().positionSeconds + it) }, playerRelease::release)
+            linux = LinuxPlayerWindow(player, directory, hdr, ::togglePause, { seek(snapshot().positionSeconds + it) }, playerRelease::release, info = {
+                informationSections(decision, receivedFormats(player::get, linux?.hdrOutput() ?: HdrOutput.Unknown))
+            })
             linux!!.start()
         } else {
             val w = requireNotNull(window) { "The player needs a desktop window" }
@@ -252,14 +272,14 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
                     }
                 },
                 finish = { target -> check(bridge.ps_finish(target) >= 0) { "Native GPU drain failed" } },
-                destroy = { target -> bridge.ps_destroy(target); surface = null },
+                destroy = { target -> receiptAccess.close { surface = null; bridge.ps_destroy(target) } },
                 player = playerRelease,
                 failed = { if (!stopped.get()) failure.set("The video surface stopped. Return to the title and try again.") }
             )
             nativeOwner = owner
             render.submit(owner)
-            val createdSurface = owner.created.get(40, TimeUnit.SECONDS)
-            if (Platform.isMac()) File(directory, "native-surface.json").writeText(bridge.ps_receipt(createdSurface))
+            owner.created.get(40, TimeUnit.SECONDS)
+            if (Platform.isMac()) nativeReceipt()?.let { File(directory, "native-surface.json").writeText(it) }
             fun sync() { if (stopped.get()) return; val t = w.graphicsConfiguration.defaultTransform; pixels.set(Dimension((w.width * t.scaleX).toInt(), (w.height * t.scaleY).toInt())); surface?.let(bridge::ps_sync) }
             onEdt {
                 listener = object : ComponentAdapter() { override fun componentMoved(e: ComponentEvent) = sync(); override fun componentResized(e: ComponentEvent) = sync() }
@@ -296,21 +316,29 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             durationSeconds = (p.get("duration")?.toDoubleOrNull() ?: 0.0) + offset,
             paused = p.get("pause") == "yes", ready = ready,
             ended = p.get("eof-reached") == "yes", error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true,
-            liveWindow = if (sourceDecision?.isLive == true) desktopLiveWindow(p.get("demuxer-cache-state"), p.get("seekable") == "yes") else null
+            liveWindow = if (sourceDecision?.isLive == true) desktopLiveWindow(p.get("demuxer-cache-state"), p.get("seekable") == "yes") else null,
+            received = if (ready) receivedFormats(p::get, currentHdrOutput()) else DesktopReceivedFormats(),
+            informationOpen = linux?.informationOpen() == true
         )
     }
+    private fun currentHdrOutput(): HdrOutput {
+        linux?.let { return it.hdrOutput() }
+        val receipt = runCatching { nativeReceipt() }.getOrNull()
+        return nativeHdrOutput(if (Platform.isMac()) "mac" else "windows", receipt)
+    }
+    private fun nativeReceipt(): String? = receiptAccess.read { surface?.let { layer?.ps_receipt(it) } }
     @Synchronized override fun selectAudio(index: Int): Boolean {
         val d = sourceDecision ?: return false
         if (d.method == PlayMethod.Transcode) return false
         val ordinal = d.mediaSource.mediaStreams.filter { it.type == MediaStreamType.Audio && !it.isExternal }.indexOfFirst { it.index == index }
         if (ordinal < 0) return false
-        mpv?.set("aid", (ordinal + 1).toString()); return true
+        mpv?.set("aid", (ordinal + 1).toString()); selectedAudioIndex = index; return true
     }
     @Synchronized override fun selectSubtitle(index: Int): Boolean {
         val d = sourceDecision ?: return false
         if (d.method == PlayMethod.Transcode) return false
         pendingExternalSubtitle = null
-        if (index == -1) { mpv?.set("sid", "no"); return true }
+        if (index == -1) { mpv?.set("sid", "no"); selectedSubtitleIndex = index; return true }
         val stream = d.mediaSource.mediaStreams.firstOrNull { it.type == MediaStreamType.Subtitle && it.index == index } ?: return false
         if (stream.requiresExternalSubtitleDelivery()) {
             val account = sourceAccount ?: return false
@@ -324,6 +352,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             if (ordinal < 0) return false
             mpv?.set("sid", (ordinal + 1).toString())
         }
+        selectedSubtitleIndex = index
         return true
     }
     override fun togglePause() {
@@ -361,7 +390,7 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (Platform.isLinux() || stopped.get() || !viewportReady.get()) return null
         val dimensions=mpv?.get("osd-dimensions")?.let { Json.parseToJsonElement(it) } ?: return null
         val (top,bottom)=viewportMargins.get()
-        val submitted = surface?.let { target -> layer?.ps_receipt(target) }?.let { Json.parseToJsonElement(it).jsonObject["submittedFrames"] }
+        val submitted = nativeReceipt()?.let { Json.parseToJsonElement(it).jsonObject["submittedFrames"] }
         return buildJsonObject { put("topRatio",top);put("bottomRatio",bottom);put("dimensions",dimensions);put("submittedFrames",submitted ?: JsonNull) }.toString()
     }
     private fun applyViewport() {
@@ -393,6 +422,17 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         if (errors.isNotEmpty()) throw IllegalStateException("The player could not complete every native cleanup step", errors.first())
     }
     private fun onEdt(block: () -> Unit) { if (SwingUtilities.isEventDispatchThread()) block() else SwingUtilities.invokeAndWait(block) }
+}
+
+/** Native receipts borrow mutable bridge storage. Copy under one lock, and drain readers before destruction. */
+internal class DesktopNativeReceiptAccess {
+    private var closed = false
+    @Synchronized fun <T> read(copy: () -> T): T? = if (closed) null else copy()
+    @Synchronized fun close(destroy: () -> Unit) {
+        if (closed) return
+        closed = true
+        destroy()
+    }
 }
 /** A handle has one release action even if caller and owning native thread finish together. */
 internal class DesktopPlayerRelease(private val releaseHandle: () -> Unit) {
@@ -468,8 +508,11 @@ private interface DesktopWaylandApi : Library {
 /** A native Wayland video window. Its changing controls use the qualified SDR shm overlay; video stays on the GPU. */
 private class LinuxPlayerWindow(
     private val mpv: Mpv, private val out: File, private val hdr: Boolean,
-    private val pause: () -> Unit, private val skip: (Double) -> Unit, private val releasePlayer: () -> Unit
+    private val pause: () -> Unit, private val skip: (Double) -> Unit, private val releasePlayer: () -> Unit,
+    private val info: () -> List<PlaybackInfoSection>
 ) : AutoCloseable {
+    private val showingInfo = androidx.compose.runtime.mutableStateOf(false)
+    fun informationOpen() = showingInfo.value
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "pictureshow-wayland-ui").apply { isDaemon = true } }
     private val running = AtomicBoolean(true)
     private val failure = AtomicReference<String?>(null)
@@ -478,6 +521,7 @@ private class LinuxPlayerWindow(
     private val initialized = CompletableFuture<Unit>()
     @Volatile var exitRequested = false
         private set
+    fun hdrOutput(): HdrOutput = waylandHdrOutput(hdr, runCatching { File(out, "native-wayland.txt").readText() }.getOrDefault(""))
     fun start() {
         job = executor.submit {
             var context: Pointer? = null
@@ -491,6 +535,10 @@ private class LinuxPlayerWindow(
                 initialized.complete(Unit)
                 var width = 0; var height = 0
                 val paused = androidx.compose.runtime.mutableStateOf(false)
+                val infoScroll = androidx.compose.foundation.ScrollState(0)
+                var sections by androidx.compose.runtime.mutableStateOf(emptyList<PlaybackInfoSection>())
+                var focusedControl: Int? = null
+                var infoReturnFocus: Int? = null
                 var dirty = true
                 var lastUpdate = System.nanoTime()
                 val fakeComponent = java.awt.Canvas()
@@ -504,16 +552,42 @@ private class LinuxPlayerWindow(
                     if (width != w || height != h) {
                         scene?.close(); width = w; height = h
                         scene = androidx.compose.ui.ImageComposeScene(width = w, height = h) {
+                            val focus = androidx.compose.runtime.remember { List(7) { androidx.compose.ui.focus.FocusRequester() } }
+                            androidx.compose.runtime.LaunchedEffect(showingInfo.value) {
+                                androidx.compose.runtime.withFrameNanos { }
+                                val index = if (showingInfo.value) 6 else infoReturnFocus
+                                index?.let { runCatching { focus[it].requestFocus() } }
+                            }
                             androidx.compose.material.MaterialTheme(colors = androidx.compose.material.darkColors()) {
                                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                                    if (showingInfo.value) {
+                                        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF141820)).padding(24.dp)) {
+                                            androidx.compose.material.Text("Playback info", style = androidx.compose.material.MaterialTheme.typography.h6)
+                                            androidx.compose.material.OutlinedButton(onClick = { showingInfo.value = false }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[6])) { androidx.compose.material.Text("Close") }
+                                            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f).verticalScroll(infoScroll), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                                                sections.forEach { section ->
+                                                    androidx.compose.material.Text(section.title, style = androidx.compose.material.MaterialTheme.typography.subtitle1)
+                                                    section.lines.forEach { androidx.compose.material.Text(it) }
+                                                    section.note?.let { androidx.compose.material.Text(it, color = androidx.compose.ui.graphics.Color.LightGray) }
+                                                    section.fields.forEach { (label, value) ->
+                                                        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                                                            androidx.compose.material.Text(label, androidx.compose.ui.Modifier.width(140.dp), color = androidx.compose.ui.graphics.Color.LightGray)
+                                                            androidx.compose.material.Text(value, androidx.compose.ui.Modifier.weight(1f))
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else
                                     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth().background(androidx.compose.ui.graphics.Color(0xEE141820)).padding(12.dp)) {
                                         androidx.compose.material.Text("Playback controls · Space pause · ←/→ seek · F fullscreen · Esc return", color = androidx.compose.ui.graphics.Color.White)
                                         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-                                            androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }) { androidx.compose.material.Text("Back to title") }
-                                            androidx.compose.material.Button(onClick = pause) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
-                                            androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }) { androidx.compose.material.Text("Back 10s") }
-                                            androidx.compose.material.OutlinedButton(onClick = { skip(10.0) }) { androidx.compose.material.Text("Forward 10s") }
-                                            androidx.compose.material.OutlinedButton(onClick = { fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0) }) { androidx.compose.material.Text("Fullscreen") }
+                                            androidx.compose.material.OutlinedButton(onClick = { infoReturnFocus = 0; sections = info(); showingInfo.value = true }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[0]).onFocusChanged { if (it.isFocused) focusedControl = 0 }) { androidx.compose.material.Text("Playback info (I)") }
+                                            androidx.compose.material.OutlinedButton(onClick = { exitRequested = true }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[1]).onFocusChanged { if (it.isFocused) focusedControl = 1 }) { androidx.compose.material.Text("Back to title") }
+                                            androidx.compose.material.Button(onClick = pause, modifier = androidx.compose.ui.Modifier.focusRequester(focus[2]).onFocusChanged { if (it.isFocused) focusedControl = 2 }) { androidx.compose.material.Text(if (paused.value) "Play" else "Pause") }
+                                            androidx.compose.material.OutlinedButton(onClick = { skip(-10.0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[3]).onFocusChanged { if (it.isFocused) focusedControl = 3 }) { androidx.compose.material.Text("Back 10s") }
+                                            androidx.compose.material.OutlinedButton(onClick = { skip(10.0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[4]).onFocusChanged { if (it.isFocused) focusedControl = 4 }) { androidx.compose.material.Text("Forward 10s") }
+                                            androidx.compose.material.OutlinedButton(onClick = { fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0) }, modifier = androidx.compose.ui.Modifier.focusRequester(focus[5]).onFocusChanged { if (it.isFocused) focusedControl = 5 }) { androidx.compose.material.Text("Fullscreen") }
                                         }
                                         androidx.compose.material.Text("Choose audio, subtitles or the next episode in the main Pictureshow window.")
                                     }
@@ -526,13 +600,16 @@ private class LinuxPlayerWindow(
                         if (event[0] in 1..2) scene!!.sendPointerEvent(if (event[0] == 1) androidx.compose.ui.input.pointer.PointerEventType.Press else androidx.compose.ui.input.pointer.PointerEventType.Release,
                             androidx.compose.ui.geometry.Offset(event[1].toFloat(), event[2].toFloat()))
                         else {
-                            val code = when (event[1]) { 1 -> java.awt.event.KeyEvent.VK_ESCAPE; 15 -> java.awt.event.KeyEvent.VK_TAB; 28 -> java.awt.event.KeyEvent.VK_ENTER; 33 -> java.awt.event.KeyEvent.VK_F; 57 -> java.awt.event.KeyEvent.VK_SPACE; 103 -> java.awt.event.KeyEvent.VK_UP; 105 -> java.awt.event.KeyEvent.VK_LEFT; 106 -> java.awt.event.KeyEvent.VK_RIGHT; 108 -> java.awt.event.KeyEvent.VK_DOWN; else -> 0 }
+                            val code = when (event[1]) { 1 -> java.awt.event.KeyEvent.VK_ESCAPE; 15 -> java.awt.event.KeyEvent.VK_TAB; 28 -> java.awt.event.KeyEvent.VK_ENTER; 23 -> java.awt.event.KeyEvent.VK_I; 33 -> java.awt.event.KeyEvent.VK_F; 57 -> java.awt.event.KeyEvent.VK_SPACE; 102 -> java.awt.event.KeyEvent.VK_HOME; 107 -> java.awt.event.KeyEvent.VK_END; 104 -> java.awt.event.KeyEvent.VK_PAGE_UP; 109 -> java.awt.event.KeyEvent.VK_PAGE_DOWN; 103 -> java.awt.event.KeyEvent.VK_UP; 105 -> java.awt.event.KeyEvent.VK_LEFT; 106 -> java.awt.event.KeyEvent.VK_RIGHT; 108 -> java.awt.event.KeyEvent.VK_DOWN; else -> 0 }
                             if (code != 0) {
                                 val pressed = event[0] == 3
                                 val awt = java.awt.event.KeyEvent(fakeComponent, if (pressed) java.awt.event.KeyEvent.KEY_PRESSED else java.awt.event.KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0, code, java.awt.event.KeyEvent.CHAR_UNDEFINED)
-                                val consumed = scene!!.sendKeyEvent(androidx.compose.ui.input.key.KeyEvent(awt))
-                                if (pressed && !consumed) when (code) {
-                                    java.awt.event.KeyEvent.VK_ESCAPE -> exitRequested = true
+                                val keyEvent = androidx.compose.ui.input.key.KeyEvent(awt)
+                                val scrollTarget = if (showingInfo.value && pressed) playbackInfoScrollTarget(keyEvent.key, infoScroll.value, infoScroll.maxValue) else null
+                                val consumed = if (scrollTarget != null) { kotlinx.coroutines.runBlocking { infoScroll.scrollTo(scrollTarget) }; true } else scene!!.sendKeyEvent(keyEvent)
+                                if (pressed && !consumed && (!showingInfo.value || code == java.awt.event.KeyEvent.VK_ESCAPE)) when (code) {
+                                    java.awt.event.KeyEvent.VK_ESCAPE -> if (showingInfo.value) showingInfo.value = false else exitRequested = true
+                                    java.awt.event.KeyEvent.VK_I -> { infoReturnFocus = focusedControl; sections = info(); showingInfo.value = true }
                                     java.awt.event.KeyEvent.VK_SPACE -> pause()
                                     java.awt.event.KeyEvent.VK_F -> fullscreenRequest.set(native.ps_wayland_fullscreen(context) == 0)
                                     java.awt.event.KeyEvent.VK_LEFT -> skip(-10.0)
@@ -542,7 +619,7 @@ private class LinuxPlayerWindow(
                         }
                         dirty = true
                     }
-                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); paused.value = mpv.get("pause") == "yes"; dirty = true }
+                    if (System.nanoTime() - lastUpdate > 500_000_000) { lastUpdate = System.nanoTime(); paused.value = mpv.get("pause") == "yes"; if (showingInfo.value) sections = info(); dirty = true }
                     val sc = scene!!
                     if (dirty || sc.hasInvalidations()) {
                         sc.render(System.nanoTime()).use { image ->

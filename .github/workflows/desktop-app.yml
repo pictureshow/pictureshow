@@ -54,6 +54,13 @@ jobs:
       - name: Desktop build and complete JVM vector contract
         shell: bash
         run: ./gradlew --no-daemon :desktop:test :desktop:vectorTest :desktop:spikeRuntime
+      - name: Retain macOS runtime for native verification without a local Gradle build
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-runtime-macOS
+          retention-days: 2
+          path: desktop/build/spike-runtime/lib/*.jar
       - name: Smoke harness negative controls
         run: python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
       - name: Linux build prerequisites

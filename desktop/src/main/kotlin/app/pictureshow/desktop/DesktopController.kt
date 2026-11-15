@@ -55,6 +55,8 @@ class DesktopController(
     /** A report error from a viewing that has closed; shown by whatever opens next instead of being wiped (D-4). */
     @Volatile private var carriedReportError: String? = null
     private var endJob: Job? = null
+    @Volatile private var informationOpen = false
+    fun playbackInformationOpen(open: Boolean) { informationOpen = open }
     @Volatile private var seekTarget: Double? = null
     @Volatile private var seekTargetAt = 0L
     private data class Viewing(
@@ -596,6 +598,7 @@ class DesktopController(
             if (outcome is PlayOutcome.Unplayable) publish(g) { it.copy(error = outcome.message) }
             return
         }
+        informationOpen = false
         val decision = outcome.decision
         // A subtitle retry may allocate a different owned live source. Release superseded
         // ownership before adoption, while preserving identities shared with the final decision.
@@ -635,6 +638,7 @@ class DesktopController(
             viewingMutex.withLock {
                 currentCoroutineContext().ensureActive()
                 if (viewing !== v) return
+                player.informationQuality(mutable.value.settings.bitrateMbps)
                 player.open(a, decision, start, ai, si, mutable.value.settings.volume)
             }
             currentCoroutineContext().ensureActive()
@@ -662,7 +666,7 @@ class DesktopController(
                     if (v.closing || viewing !== v) break
                     val snap = player.snapshot()
                     mutable.update { s -> if (viewing === v) s.copy(playback = s.playback?.copy(positionSeconds = snap.positionSeconds, durationSeconds = snap.durationSeconds.takeIf { it > 0 } ?: s.playback.durationSeconds,
-                        paused = snap.paused, ready = snap.ready, liveWindow = snap.liveWindow, bufferExpired = snap.liveWindow?.pausedPositionExpired(pausedLivePosition) == true)) else s }
+                        paused = snap.paused, ready = snap.ready, liveWindow = snap.liveWindow, bufferExpired = snap.liveWindow?.pausedPositionExpired(pausedLivePosition) == true, received = snap.received)) else s }
                     if (snap.error != null && !snap.ended) { v.playbackFailed = true; events.log("playback error item=${v.item.id}"); mutable.update { it.copy(error = snap.error) }; break }
                     if (!snap.ready && elapsed >= 60) { mutable.update { it.copy(error = "The video did not start. Return to the title and try again.") }; break }
                     if (snap.ready && !v.startAttempted) v.reports.withLock {
@@ -683,7 +687,7 @@ class DesktopController(
                     elapsed++
                     if (v.startAttempted && elapsed % 10 == 0) sendProgress(v)
                     if (snap.exitRequested) { stopPlayback(); break }
-                    if (snap.ended) {
+                    if (snap.ended && !informationOpen && !snap.informationOpen) {
                         if (liveChannel != null || v.decision.isLive) {
                             mutable.update { it.copy(error = "The live stream ended. Return to Live TV and tune again.") }
                             scope.launch { finishViewing() }

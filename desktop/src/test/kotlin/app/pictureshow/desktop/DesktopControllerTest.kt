@@ -24,12 +24,13 @@ class DesktopControllerTest {
     private class Engine : DesktopPlaybackEngine {
         var opened = false; var closed = false; var position = 12.0; var paused = false; var ready = true
         var openedAudio: Int? = null; var openedSubtitle: Int? = null
+        var formats = DesktopReceivedFormats()
         var failSubtitleSelection = false
         var throwOpen = false; var throwSnapshot = false; var throwClose = false
         @Volatile var ended = false; @Volatile var error: String? = null; var muted = false
         override fun attach(window: java.awt.Window) {}
         override fun open(account: Account, decision: PlayDecision, position: Double, audio: Int, subtitle: Int, volume: Int) { opened = true; openedAudio = audio; openedSubtitle = subtitle; this.position = position; if (throwOpen) error("startup failed after media opened") }
-        override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready, ended = ended, error = error) }
+        override fun snapshot(): EngineSnapshot { if (throwSnapshot) error("native property unavailable"); return EngineSnapshot(position, 180.0, paused, opened && !closed && ready, ended = ended, error = error, received = formats) }
         override fun mute(muted: Boolean) { this.muted = muted }
         override fun togglePause() { paused = !paused }
         override fun seek(seconds: Double) { position = seconds }
@@ -737,4 +738,36 @@ class DesktopControllerTest {
             }
         }
     }
+    @Test fun receivedFormatsFollowEngineSnapshotsInsteadOfNegotiationMetadata(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine().apply { formats = DesktopReceivedFormats(videoCodec = "hevc", hwdec = "no", transfer = "pq", output = HdrOutput.HdrEdR) }
+            DesktopController(directory(), playbackFactory = { engine }).use { c ->
+                c.login(f); c.play(MediaItem("movie", "Film", "Movie"))
+                c.await { it.playback?.received?.videoCodec == "hevc" }
+                assertEquals("no", c.state.value.playback?.received?.hwdec)
+                engine.formats = engine.formats.copy(hwdec = "videotoolbox", output = HdrOutput.Sdr)
+                c.await { it.playback?.received?.hwdec == "videotoolbox" }
+                assertEquals(HdrOutput.Sdr, c.state.value.playback?.received?.output)
+            }
+        }
+    }
+
+    @Test fun playbackInfoDefersEndCardAndAutoplayUntilClosed(): Unit = runBlocking {
+        Fixture().use { f ->
+            val engine = Engine()
+            DesktopController(directory(), playbackFactory = { engine }, endCountdownSeconds = 0).use { c ->
+                c.login(f); c.play(MediaItem("movie", "Film", "Movie"))
+                c.await { it.playback?.ready == true }
+                c.playbackInformationOpen(true)
+                engine.ended = true
+                delay(1200)
+                assertNull(c.state.value.playback?.end)
+                assertFalse(engine.closed)
+                c.playbackInformationOpen(false)
+                c.await { it.playback?.end != null }
+                poll { engine.closed }
+            }
+        }
+    }
+
 }

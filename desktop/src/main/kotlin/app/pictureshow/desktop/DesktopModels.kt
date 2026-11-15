@@ -36,7 +36,8 @@ data class DesktopPlaybackState(
     val end: DesktopEndCard? = null,
     val liveChannel: app.pictureshow.core.livetv.LiveChannel? = null,
     val liveWindow: ObservedLiveWindow? = null,
-    val bufferExpired: Boolean = false
+    val bufferExpired: Boolean = false,
+    val received: DesktopReceivedFormats = DesktopReceivedFormats()
 )
 
 /**
