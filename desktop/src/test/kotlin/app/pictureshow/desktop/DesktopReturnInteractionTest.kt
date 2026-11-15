@@ -25,10 +25,11 @@ class DesktopReturnInteractionTest {
             MaterialTheme {
                 CompositionLocalProvider(LocalDesktopMenus provides owner) {
                     val opener = remember { FocusRequester() }
+                    val initialFocus = remember { FocusRequester() }
                     Box(Modifier.onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.Escape && owner.escape() }
                         .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { back++; true } else false }) {
                         Button({ open = true }, Modifier.focusRequester(opener).testTag("opener")) { Text(label) }
-                        DesktopDropdownMenu(open, { open = false }, opener) { DropdownMenuItem(text = { Text("Option") }, onClick = {}) }
+                        DesktopDropdownMenu(open, { open = false }, opener, initialFocus) { DropdownMenuItem(text = { Text("Option") }, onClick = {}, modifier = Modifier.focusRequester(initialFocus)) }
                     }
                 }
             }
@@ -76,7 +77,7 @@ class DesktopReturnInteractionTest {
     @Test fun mouseEntryStartsInsideEverySidebarDestination() = runComposeUiTest {
         val account = Account(Server("s", "Demo", "https://example.invalid", "12"), User("u", "Viewer"), "token")
         var state by mutableStateOf(DesktopState())
-        val destinations = listOf(DesktopRoute.Settings to "sign-out", DesktopRoute.Library to "grid:film", DesktopRoute.LiveTv to "live:tab:Channels",
+        val destinations = listOf(DesktopRoute.Settings to "quality", DesktopRoute.Library to "grid:film", DesktopRoute.LiveTv to "live:tab:Channels",
             DesktopRoute.Detail to "play", DesktopRoute.Search to "search-field", DesktopRoute.Home to "card:latest:film")
         setContent {
             MaterialTheme {

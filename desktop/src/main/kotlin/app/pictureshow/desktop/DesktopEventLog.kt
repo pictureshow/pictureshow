@@ -32,3 +32,21 @@ internal fun rotateDesktopLog(file: File, keep: Int) {
     for (n in keep - 1 downTo 1) numbered(n).takeIf { it.exists() }?.renameTo(numbered(n + 1))
     file.renameTo(numbered(1))
 }
+
+/** Counts only: no key codes, pointer positions, control names, text or device identifiers. */
+internal class DesktopInputDiagnostics(private val write: (String) -> Unit) {
+    private var keys = 0L
+    private var pointers = 0L
+    private var route: DesktopRoute? = null
+    @Synchronized fun route(next: DesktopRoute) {
+        val before = route
+        if (before != null && before != next) write("route ${before.name}→${next.name}")
+        route = next
+    }
+    @Synchronized fun key() { keys++ }
+    @Synchronized fun pointer() { pointers++ }
+    @Synchronized fun heartbeat() {
+        if (keys != 0L || pointers != 0L) write("input keys=$keys pointers=$pointers")
+        keys = 0; pointers = 0
+    }
+}

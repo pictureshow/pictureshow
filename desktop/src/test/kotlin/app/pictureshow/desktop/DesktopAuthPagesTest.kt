@@ -173,15 +173,15 @@ class DesktopAuthPagesTest {
         onNodeWithText("Sign in another user on Home Media").assertExists()
     }
 
-    @Test fun removeShowsItsWordOnFocusAndHover() = runComposeUiTest {
+    @Test fun removeWordIsVisibleAtRestAndWithRowOrButtonFocus() = runComposeUiTest {
         val r = Recorder()
         val mei = account(home, "m", "ux-mei")
         setContent { PictureshowTheme { AccountsList(DesktopState(route = DesktopRoute.Accounts, accounts = listOf(mei), rememberedServers = listOf(home)), r) { r.calls += "remove:${it.key}" } } }
-        onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertDoesNotExist()
+        onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertTextEquals("Remove")
         onNodeWithTag("remove:${mei.key}").requestFocus()
         onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertTextEquals("Remove")
         onNodeWithTag("account:${mei.key}").requestFocus()
-        onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertDoesNotExist()
+        onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertTextEquals("Remove")
         onNodeWithTag("account:${mei.key}").performMouseInput { moveTo(center) }
         onNodeWithTag("remove-label:${mei.key}", useUnmergedTree = true).assertExists()
         onNodeWithTag("remove:${mei.key}").performClick()

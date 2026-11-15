@@ -353,7 +353,7 @@ private fun AccountRow(a: Account, current: Boolean, select: () -> Unit, remove:
                 .probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (rowHovered || removeHovered || removeFocused) { Text("Remove", modifier = Modifier.probe("remove-label:${a.key}")); Spacer(Modifier.width(8.dp)) }
+                Text("Remove", modifier = Modifier.probe("remove-label:${a.key}")); Spacer(Modifier.width(8.dp))
                 Icon(DesktopGlyph.Remove, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }

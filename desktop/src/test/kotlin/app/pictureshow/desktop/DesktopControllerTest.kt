@@ -457,6 +457,21 @@ class DesktopControllerTest {
             }
         }
     }
+    @Test fun routeDiagnosticsIncludeBackAndRestoredSearch(): Unit = runBlocking {
+        Fixture().use { f ->
+            val dir = directory()
+            DesktopController(dir).use { c ->
+                c.login(f)
+                c.search(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                c.settings(); c.await { it.route == DesktopRoute.Settings && !it.busy }
+                c.search(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                c.settings(); c.await { it.route == DesktopRoute.Settings && !it.busy }
+                c.back(); c.await { it.route == DesktopRoute.Search && !it.busy }
+                assertEquals(2, File(dir, "app.log").readLines().count { it.endsWith("route Settings→Search") })
+            }
+        }
+    }
+
     @Test fun signingOutKeepsPublicServerButDeletesToken(): Unit = runBlocking {
         Fixture().use { f ->
             val dir = directory()
@@ -464,6 +479,10 @@ class DesktopControllerTest {
                 c.login(f); c.signOut(); c.await { it.account == null && !it.busy }
                 val persisted = File(dir, "accounts.json").readText()
                 assertFalse(persisted.contains("test-token")); assertTrue(persisted.contains("Demo cinema"))
+                assertEquals(DesktopRoute.Accounts, c.state.value.route)
+                assertEquals(1, c.state.value.accounts.size)
+                assertTrue(c.state.value.accounts.single().expired)
+                assertEquals("", c.state.value.accounts.single().accessToken)
             }
         }
     }

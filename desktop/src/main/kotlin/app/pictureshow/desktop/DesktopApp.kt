@@ -88,13 +88,13 @@ internal fun Modifier.focusOutline(): Modifier {
 
 /** A focus ring outside the control fill stays visible on primary and tonal controls. */
 @Composable
-internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50), allowInModal: Boolean = false): Modifier {
+internal fun Modifier.controlFocus(shape: Shape = RoundedCornerShape(50), allowInModal: Boolean = false, enabled: Boolean = true): Modifier {
     var focused by remember { mutableStateOf(false) }
     val color = MaterialTheme.colorScheme.primary
     val modalOpen = LocalModalOpen.current
     return onFocusChanged { focused = it.isFocused }.drawWithContent {
         drawContent()
-        if (focused && (!modalOpen || allowInModal)) {
+        if (focused && enabled && (!modalOpen || allowInModal)) {
             val gap = 4.dp.toPx()
             inset(-gap, -gap, -gap, -gap) {
                 drawOutline(shape.createOutline(size, layoutDirection, this), color, style = Stroke(2.dp.toPx()))
@@ -164,13 +164,15 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
     val focus = LocalFocusManager.current
     var help by remember { mutableStateOf(false) }
     var remove by remember { mutableStateOf<Account?>(null) }
+    var signOut by remember { mutableStateOf<Account?>(null) }
     var modalReturnFocus by remember { mutableStateOf<String?>(null) }
-    DesktopPageEntryFocus(state, pageKey, blocked = help || remove != null)
-    LaunchedEffect(help, remove) {
+    DesktopPageEntryFocus(state, pageKey, blocked = help || remove != null || signOut != null)
+    LaunchedEffect(help, remove, signOut) {
         delay(100)
         val modal = when {
             help -> "help-close"
             remove != null -> "remove-cancel"
+            signOut != null -> "sign-out-cancel"
             else -> null
         }
         if (modal != null) DesktopUiProbe.requestFocus[modal]?.requestFocus()
@@ -199,16 +201,17 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                         e.key == Key.Escape && menus.escape() -> true
                         e.key == Key.Escape && help -> { help = false; true }
                         e.key == Key.Escape && remove != null -> { remove = null; true }
-                        (help || remove != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
+                        e.key == Key.Escape && signOut != null -> { signOut = null; true }
+                        (help || remove != null || signOut != null) && e.key in listOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) -> true
                         // PLAY-29: the player page owns its keys (DesktopPlayerPage.kt, playerKeyAction), including a menu's Escape.
-                        state.route == DesktopRoute.Player && !help && remove == null && PlayerKeyboard.handle(e) { modalReturnFocus = null; help = true } -> true
+                        state.route == DesktopRoute.Player && !help && remove == null && signOut == null && PlayerKeyboard.handle(e) { modalReturnFocus = null; help = true } -> true
                         else -> false
                     }
             } }
             // Bubble phase (D-7, D-12): keys reach the window only after the focused control and
             // its groups declined them, so a focused button keeps Space and a row keeps its arrows.
             SideEffect { windowFallbackKeys { e ->
-                if (help || remove != null) return@windowFallbackKeys false
+                if (help || remove != null || signOut != null) return@windowFallbackKeys false
                 val typed = (e.nativeKeyEvent as? java.awt.event.KeyEvent)?.takeIf { it.id == java.awt.event.KeyEvent.KEY_TYPED }?.keyChar
                 if (e.type != KeyEventType.KeyDown && typed == null) return@windowFallbackKeys false
                 val press = ShellKeyPress(e.key, e.isCtrlPressed, e.isMetaPressed, e.isAltPressed, e.isShiftPressed, typed)
@@ -232,7 +235,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 }
                 true
             } }
-            CompositionLocalProvider(LocalDesktopMenus provides menus, LocalModalOpen provides (help || remove != null)) {
+            CompositionLocalProvider(LocalDesktopMenus provides menus, LocalModalOpen provides (help || remove != null || signOut != null)) {
             Column(Modifier.fillMaxSize().background(if (state.route == DesktopRoute.Player) Color.Transparent else MaterialTheme.colorScheme.background)) {
                 chrome {
                 Row(Modifier.fillMaxWidth().height(52.dp).background(MaterialTheme.colorScheme.surface).padding(start = if(macChrome) 80.dp else 28.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -258,7 +261,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             onLibrary = controller::browseRoot,
                             onSettings = { if (state.route != DesktopRoute.Settings) controller.settings() },
                             onAccounts = controller::accounts,
-                            onSignOut = controller::signOut
+                            onSignOut = { modalReturnFocus = "nav:account"; signOut = state.account }
                         )
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -287,7 +290,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                                 DesktopRoute.Library -> LibraryPage(state, controller)
                                 DesktopRoute.Detail -> DetailPage(state, controller)
                                 DesktopRoute.Player -> PlayerPage(state, controller, onFullscreen)
-                                DesktopRoute.Settings -> SettingsPage(state, controller)
+                                DesktopRoute.Settings -> SettingsPage(state, controller) { modalReturnFocus = "sign-out"; signOut = state.account }
                             }
                             }
                             }
@@ -309,6 +312,11 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                 VerticalScrollbar(rememberScrollbarAdapter(sheet), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
                 }
             }, confirmButton = { TextButton(onClick = { help = false }, modifier = Modifier.controlFocus(allowInModal = true).probe("help-close")) { Text("Close") } })
+            signOut?.let { a ->
+                SignOutConfirmation(a.user.name, onCancel = { signOut = null }, onConfirm = {
+                    modalReturnFocus = null; signOut = null; controller.signOut()
+                })
+            }
             remove?.let { a ->
                 AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${a.user.name}?") }, text = { Text("${a.user.name} will be removed from this computer. You can sign in again any time.") }, dismissButton = { TextButton(onClick = { remove = null }, modifier = Modifier.controlFocus(allowInModal = true).probe("remove-cancel")) { Text("Cancel") } }, confirmButton = { TextButton(onClick = { modalReturnFocus = null; remove = null; controller.removeAccount(a.key) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), modifier = Modifier.controlFocus(allowInModal = true).probe("remove-confirm")) { Text("Remove account") } }) }
             }
@@ -321,8 +329,8 @@ internal data class ShortcutSection(val title: String, val rows: List<Pair<Strin
 /** The ? sheet. The playback rows are the PLAY-29 set; the player page owns M and the volume keys. */
 internal fun desktopShortcutSheet(mac: Boolean, macChrome: Boolean): List<ShortcutSection> = listOf(
     ShortcutSection("Anywhere", listOf(
-        (if (mac) "Tab / ⇧Tab" else "Tab / Shift+Tab") to "Move between controls",
-        "↑ ↓ ← →" to "Browse cards and menus",
+        (if (mac) "Tab / ⇧Tab" else "Tab / Shift+Tab") to "Move between controls and rows",
+        "↑ ↓ ← →" to "Move within a row; browse menus",
         "Enter / Space" to "Activate focused control",
         "Esc" to "Close a dialog, exit fullscreen, or go back",
         (if (mac) "⌘," else "Ctrl+,") to "Settings",
@@ -376,7 +384,7 @@ internal fun DesktopSidebar(
                     SidebarItem(library.name, root == desktopLibraryRoot(library.id), "nav:library:${library.id}") { onLibrary(library) }
                 }
             }
-            if (scroll.canScrollForward) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp)
+            if (scroll.canScrollForward) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(48.dp)
                 .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surfaceContainer)))
                 .testTag("sidebar-more-below"))
             VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 2.dp))
@@ -411,13 +419,14 @@ private fun SidebarItem(label: String, selected: Boolean, tag: String, onClick: 
 
 /** The name and server as one button with a chevron; its menu holds Switch account, Settings and Sign out (D-6, CAT-01a). */
 @Composable
-private fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccounts: () -> Unit, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
+internal fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccounts: () -> Unit, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val opener = remember { FocusRequester() }
+    val initialFocus = remember { FocusRequester() }
     Box(modifier) {
         DesktopTooltip("${account.user.name} on ${account.server.name}") {
             Surface(onClick = { open = true }, shape = RoundedCornerShape(12.dp), color = Color.Transparent,
-                modifier = Modifier.fillMaxWidth().focusRequester(opener).controlFocus(RoundedCornerShape(12.dp)).probe("nav:account")
+                modifier = Modifier.fillMaxWidth().focusRequester(opener).controlFocus(RoundedCornerShape(12.dp), enabled = !open).probe("nav:account")
                     .semantics { contentDescription = "${account.user.name} on ${account.server.name}. Account menu"; role = Role.DropdownList }) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -428,11 +437,11 @@ private fun DesktopAccountMenu(account: Account, onSettings: () -> Unit, onAccou
                 }
             }
         }
-        DesktopDropdownMenu(expanded = open, onDismissRequest = { open = false }, opener = opener, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
-            DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.probe("account-menu:switch"))
-            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.probe("account-menu:settings"))
+        DesktopDropdownMenu(expanded = open, onDismissRequest = { open = false }, opener = opener, initialFocus = initialFocus, modifier = Modifier.width((SIDEBAR_WIDTH_DP - 24).dp)) {
+            DropdownMenuItem(text = { Text("Switch account") }, onClick = { open = false; onAccounts() }, modifier = Modifier.focusRequester(initialFocus).controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:switch"))
+            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; onSettings() }, modifier = Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:settings"))
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; onSignOut() }, modifier = Modifier.probe("account-menu:sign-out"))
+            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; onSignOut() }, modifier = Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("account-menu:sign-out"))
         }
     }
 }
@@ -476,20 +485,39 @@ internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String, blocked
                 // PLAY-29: the player opens with focus on its playback surface (tag `player-surface`,
                 // when the player page provides one) or on nothing, so Space and arrows reach playback.
                 val target = if (state.route == DesktopRoute.Player) "player-surface".takeIf { DesktopUiProbe.requestFocus.containsKey(it) }
-                else DesktopUiProbe.lastFocus[pageKey]?.takeIf { DesktopUiProbe.requestFocus.containsKey(it) } ?: when(state.route) {
-                    DesktopRoute.Servers -> "server-address"
-                    DesktopRoute.SignIn -> "username"
-                    DesktopRoute.Settings -> "sign-out"
-                    DesktopRoute.LiveTv -> "live:tab:Channels"
-                    DesktopRoute.Detail -> "play"
-                    DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
-                    DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" } ?: "sort"
-                    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
-                    DesktopRoute.Search -> "search-field"
-                    else -> null
-                }
+                else DesktopUiProbe.lastFocus[pageKey]?.takeIf { DesktopUiProbe.requestFocus.containsKey(it) && !destructiveEntryTarget(it) }
+                    ?: desktopEntryTarget(state)
                 target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
             }
         }
     }
+}
+
+/** Route defaults and remembered focus may never select an account/session destructive action. */
+internal fun destructiveEntryTarget(tag: String): Boolean = tag == "sign-out" || tag == "accounts-sign-out" ||
+    tag.startsWith("remove:") || tag == "remove-confirm" || tag == "sign-out-confirm" || tag.endsWith(":sign-out")
+
+internal fun desktopEntryTarget(state: DesktopState): String? = when(state.route) {
+    DesktopRoute.Servers -> "server-address"
+    DesktopRoute.SignIn -> "username"
+    DesktopRoute.Settings -> "quality"
+    DesktopRoute.LiveTv -> "live:tab:Channels"
+    DesktopRoute.Detail -> "play"
+    DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
+    DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" } ?: "sort"
+    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
+    DesktopRoute.Search -> "search-field"
+    DesktopRoute.Player -> "player-surface"
+    DesktopRoute.Accounts -> state.accounts.firstOrNull()?.let { "account:${it.key}" }
+    else -> null
+}
+
+@Composable
+internal fun SignOutConfirmation(name: String, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    val cancelFocus = remember { FocusRequester() }
+    AlertDialog(onDismissRequest = onCancel, title = { Text("Sign out of $name?") },
+        text = { Text("Sign out of $name? You'll need the password to sign in again.") },
+        dismissButton = { TextButton(onCancel, Modifier.focusRequester(cancelFocus).controlFocus(allowInModal = true).probe("sign-out-cancel")) { Text("Cancel") } },
+        confirmButton = { TextButton(onConfirm, Modifier.controlFocus(allowInModal = true).probe("sign-out-confirm")) { Text("Sign out") } })
+    LaunchedEffect(Unit) { withFrameNanos { }; cancelFocus.requestFocus() }
 }
