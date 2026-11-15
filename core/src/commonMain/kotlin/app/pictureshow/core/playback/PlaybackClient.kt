@@ -190,8 +190,11 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 // Live streams may only publish their audio list after Open. Reuse that live source;
                 // do not open a second tuner or retain its silent transcode URL.
                 val live = response.mediaSources.firstOrNull { boundSourceId == null || it.id == boundSourceId }
-                if (response.errorCode == null && live != null && !live.liveStreamId.isNullOrBlank() &&
-                    (live.defaultAudioStreamIndex ?: 0) < 0 && body.audioStreamIndex == null
+                if (response.errorCode == null &&
+                    live != null &&
+                    !live.liveStreamId.isNullOrBlank() &&
+                    (live.defaultAudioStreamIndex ?: 0) < 0 &&
+                    body.audioStreamIndex == null
                 ) {
                     val audio = TrackSelection.audioIndex(live.mediaStreams, null, live.defaultAudioStreamIndex)
                     if (audio >= 0) {
