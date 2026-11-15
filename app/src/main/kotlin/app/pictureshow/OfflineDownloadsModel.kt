@@ -61,7 +61,7 @@ internal const val OFFLINE_PASSWORD_REASON =
 internal const val OFFLINE_PASSWORD_FAILED = "Could not confirm your password. Check it and your connection, then try again."
 internal const val OFFLINE_RECOVERABLE_TEXT =
     "This list couldn't be read. Nothing was deleted. If a newer version of Pictureshow saved it, updating the app brings it back."
-internal const val OFFLINE_UNREACHABLE_TEXT = "Could not reach the server. Your downloads still play."
+internal const val OFFLINE_UNREACHABLE_TEXT = app.pictureshow.core.HOME_UNREACHABLE_DOWNLOADS_TEXT
 
 private fun OfflineJob.waitingForPassword() = phase == OfflinePhase.failed && failure == OFFLINE_NEEDS_PASSWORD
 

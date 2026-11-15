@@ -78,6 +78,181 @@
       ]
     },
     {
+      "id": "home-notice-unreachable-keeps-page-and-names-server",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": true,
+        "error": "Could not reach the server. Check your connection and try again.",
+        "hasContent": true,
+        "hasDownloads": false,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "ShowingEarlier",
+        "text": "Can't reach Pictureshow Demo. Showing what was loaded earlier.",
+        "watchDownloads": false,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-unreachable-keeps-page-offers-downloads",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": true,
+        "error": "Could not reach the server. Check your connection and try again.",
+        "hasContent": true,
+        "hasDownloads": true,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "ShowingEarlier",
+        "text": "Can't reach Pictureshow Demo. Showing what was loaded earlier.",
+        "watchDownloads": true,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-unnamed-server",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": true,
+        "error": "Could not reach the server. Check your connection and try again.",
+        "hasContent": true,
+        "hasDownloads": false,
+        "serverName": "  "
+      },
+      "expected": {
+        "kind": "ShowingEarlier",
+        "text": "Can't reach the server. Showing what was loaded earlier.",
+        "watchDownloads": false,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-empty-page-downloads-first",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": true,
+        "error": "Could not reach the server. Check your connection and try again.",
+        "hasContent": false,
+        "hasDownloads": true,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "DownloadsFirst",
+        "text": "Could not reach the server. Your downloads still play.",
+        "watchDownloads": true,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-empty-page-no-downloads-is-the-error",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": true,
+        "error": "Could not reach the server. Check your connection and try again.",
+        "hasContent": false,
+        "hasDownloads": false,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "Error",
+        "text": "Could not reach the server. Check your connection and try again.",
+        "watchDownloads": false,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-refusal-is-not-out-of-reach",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": false,
+        "error": "You don't have access to this library.",
+        "hasContent": true,
+        "hasDownloads": true,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "Error",
+        "text": "You don't have access to this library.",
+        "watchDownloads": false,
+        "retry": true
+      }
+    },
+    {
+      "id": "home-notice-healthy-says-nothing",
+      "operation": "home-notice",
+      "input": {
+        "unreachable": false,
+        "error": null,
+        "hasContent": true,
+        "hasDownloads": true,
+        "serverName": "Pictureshow Demo"
+      },
+      "expected": {
+        "kind": "None",
+        "text": null,
+        "watchDownloads": false,
+        "retry": false
+      }
+    },
+    {
+      "id": "home-row-destination-libraries",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "libraries"
+      },
+      "expected": "libraries"
+    },
+    {
+      "id": "home-row-destination-latest-movies-1",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "latest:movies-1"
+      },
+      "expected": "library:movies-1"
+    },
+    {
+      "id": "home-row-destination-latest-empty",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "latest:"
+      },
+      "expected": null
+    },
+    {
+      "id": "home-row-destination-resume",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "resume"
+      },
+      "expected": null
+    },
+    {
+      "id": "home-row-destination-nextup",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "nextup"
+      },
+      "expected": null
+    },
+    {
+      "id": "home-row-destination-watching",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "watching"
+      },
+      "expected": null
+    },
+    {
+      "id": "home-row-destination-pin-collection-c1",
+      "operation": "home-row-destination",
+      "input": {
+        "key": "pin:collection:c1"
+      },
+      "expected": null
+    },
+    {
       "id": "home-merge-resume-wins",
       "operation": "home-rows",
       "input": {

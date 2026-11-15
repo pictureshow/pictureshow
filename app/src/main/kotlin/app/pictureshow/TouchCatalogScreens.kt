@@ -7,6 +7,7 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -61,6 +62,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -79,6 +81,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -95,6 +98,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import app.pictureshow.core.Account
+import app.pictureshow.core.HomeNotice
+import app.pictureshow.core.HomeNoticeKind
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaPerson
@@ -102,6 +107,8 @@ import app.pictureshow.core.constraintKeys
 import app.pictureshow.core.detailReadBandText
 import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
+import app.pictureshow.core.homeNotice
+import app.pictureshow.core.homeRowDestination
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
 import app.pictureshow.core.sortDirectionLabel
@@ -120,64 +127,75 @@ internal fun TouchCatalogHome(
     librariesOnly: Boolean = false,
     onLiveTv: () -> Unit = {},
     onCustomize: (() -> Unit)? = null,
-    onWatchDownloads: (() -> Unit)? = null
+    onWatchDownloads: (() -> Unit)? = null,
+    onRefresh: () -> Unit = onRetry,
+    onLibraries: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
+    // HOME-09: a network arriving, leaving or being swapped may change whether the server answers; read again.
+    TouchNetworkChanges(onRetry)
     val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     if (librariesOnly) {
-        TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry, onLiveTv)
+        PullToRefreshBox(state.refreshing, onRefresh, Modifier.fillMaxSize()) {
+            TouchLibrariesGrid(state, state.libraries, account, onOpen, onRetry, onLiveTv, onWatchDownloads)
+        }
         return
     }
-    LazyColumn(
-        state = rememberLazyListState(),
-        modifier = Modifier.fillMaxSize().testTag("touch:home"),
-        contentPadding = PaddingValues(vertical = if (shortWindow) 12.dp else 20.dp),
-        verticalArrangement = Arrangement.spacedBy(if (shortWindow) 16.dp else 24.dp)
-    ) {
-        item(key = "heading") {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                var homeMenu by remember { mutableStateOf(false) }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TouchCatalogHeading("Pictureshow", Modifier.weight(1f))
-                    if (onCustomize != null) {
-                        Box {
-                            IconButton(
-                                enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
-                                onClick = { if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) homeMenu = true },
-                                modifier = Modifier.testTag("touch:home-menu")
-                            ) {
-                                Icon(touchActionIcon("more"), contentDescription = "Home options")
-                            }
-                            DropdownMenu(homeMenu, { homeMenu = false }) {
-                                DropdownMenuItem(
+    val notice = homeNotice(state.unreachable, state.error, rows.isNotEmpty(), onWatchDownloads != null, account.server.name)
+    PullToRefreshBox(state.refreshing, onRefresh, Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = rememberLazyListState(),
+            modifier = Modifier.fillMaxSize().testTag("touch:home"),
+            contentPadding = PaddingValues(vertical = if (shortWindow) 12.dp else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(if (shortWindow) 16.dp else 24.dp)
+        ) {
+            item(key = "heading") {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    var homeMenu by remember { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TouchCatalogHeading("Pictureshow", Modifier.weight(1f))
+                        if (onCustomize != null) {
+                            Box {
+                                IconButton(
                                     enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
-                                    text = { Text("Customize home") },
-                                    onClick = {
-                                        homeMenu = false
-                                        if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) onCustomize()
-                                    },
-                                    modifier = Modifier.testTag("touch:customize")
-                                )
+                                    onClick = { if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) homeMenu = true },
+                                    modifier = Modifier.testTag("touch:home-menu")
+                                ) {
+                                    Icon(touchActionIcon("more"), contentDescription = "Home options")
+                                }
+                                DropdownMenu(homeMenu, { homeMenu = false }) {
+                                    DropdownMenuItem(
+                                        enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
+                                        text = { Text("Customize home") },
+                                        onClick = {
+                                            homeMenu = false
+                                            if (app.pictureshow.core.canOpenHomeEditor(state.preferencesReady)) onCustomize()
+                                        },
+                                        modifier = Modifier.testTag("touch:customize")
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (state.loading) TouchCatalogLoading("Loading your library…")
-                if (onWatchDownloads != null) {
-                    TouchDownloadsOffer(onWatchDownloads, onRetry)
-                } else {
-                    TouchCatalogError(state.error, onRetry)
-                }
-                if (!state.loading && rows.isEmpty() && state.error == null) {
-                    Text("Your library is ready for something new.")
-                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
+                    if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (state.loading) TouchCatalogLoading("Loading your library…")
+                    TouchHomeNotice(notice, onWatchDownloads, onRetry)
+                    if (!state.loading && rows.isEmpty() && state.error == null) {
+                        Text("Your library is ready for something new.")
+                        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
+                    }
                 }
             }
-        }
-        items(rows, key = HomeRow::key) { row ->
-            TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onOpen)
+            items(rows, key = HomeRow::key) { row ->
+                // HOME-10: a heading that leads somewhere is a link with a chevron; the others are plain headings.
+                val onTitle = when (val destination = homeRowDestination(row.key)) {
+                    null -> null
+                    "libraries" -> onLibraries
+                    else -> state.libraries.firstOrNull { "library:${it.id}" == destination }?.let { library -> { onOpen(library) } }
+                }
+                TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onOpen, onTitle)
+            }
         }
     }
 }
@@ -190,9 +208,11 @@ private fun TouchLibrariesGrid(
     account: Account,
     onOpen: (MediaItem) -> Unit,
     onRetry: () -> Unit,
-    onLiveTv: () -> Unit
+    onLiveTv: () -> Unit,
+    onWatchDownloads: (() -> Unit)?
 ) {
     val shortWindow = isShortTouchWindow()
+    val notice = homeNotice(state.unreachable, state.error, libraries.isNotEmpty(), onWatchDownloads != null, account.server.name)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(160.dp),
         state = rememberLazyGridState(),
@@ -205,7 +225,7 @@ private fun TouchLibrariesGrid(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TouchCatalogHeading("Libraries")
                 if (state.loading) TouchCatalogLoading("Loading your library…")
-                TouchCatalogError(state.error, onRetry)
+                TouchHomeNotice(notice, onWatchDownloads, onRetry)
                 if (!state.loading && libraries.isEmpty() && state.error == null) {
                     Text("No libraries are available for this account.")
                     TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
@@ -965,11 +985,26 @@ internal fun TouchCatalogShelf(
     account: Account,
     wide: Boolean,
     reserveLines: Boolean = true,
-    onOpen: (MediaItem) -> Unit
+    onOpen: (MediaItem) -> Unit,
+    onTitle: (() -> Unit)? = null
 ) {
     val shortWindow = isShortTouchWindow()
     Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
-        TouchCatalogHeading(title, Modifier.padding(horizontal = 20.dp), section = true)
+        if (onTitle == null) {
+            TouchCatalogHeading(title, Modifier.padding(horizontal = 20.dp), section = true)
+        } else {
+            // The whole row is the target, 48 dp high, as a list header with an action is.
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:shelf-link:$title")
+                    .clickable(onClickLabel = "Open $title", role = Role.Button, onClick = onTitle)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TouchCatalogHeading(title, Modifier.weight(1f, fill = false), section = true)
+                Icon(touchActionIcon("chevron-right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         LazyRow(
             state = rememberLazyListState(),
             contentPadding = PaddingValues(horizontal = 20.dp),
@@ -1062,10 +1097,10 @@ internal fun TouchCatalogLoading(label: String) {
 
 /** Home's error when the server is out of reach and saved films aren't: the way to them comes first. */
 @Composable
-private fun TouchDownloadsOffer(onWatchDownloads: () -> Unit, onRetry: () -> Unit) {
+private fun TouchDownloadsOffer(text: String, onWatchDownloads: () -> Unit, onRetry: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            OFFLINE_UNREACHABLE_TEXT,
+            text,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
@@ -1073,6 +1108,37 @@ private fun TouchDownloadsOffer(onWatchDownloads: () -> Unit, onRetry: () -> Uni
             Text("Watch downloads")
         }
         TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp).testTag("home:retry")) { Text("Retry") }
+    }
+}
+
+/** HOME-09's one notice: the read's error, ready downloads first, or the page kept from earlier with a way to them. */
+@Composable
+private fun TouchHomeNotice(notice: HomeNotice, onWatchDownloads: (() -> Unit)?, onRetry: () -> Unit) {
+    when (notice.kind) {
+        HomeNoticeKind.None -> Unit
+        HomeNoticeKind.Error -> TouchCatalogError(notice.text, onRetry)
+        HomeNoticeKind.DownloadsFirst -> TouchDownloadsOffer(notice.text.orEmpty(), requireNotNull(onWatchDownloads), onRetry)
+        HomeNoticeKind.ShowingEarlier -> Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.testTag("home:reach")
+        ) {
+            Text(
+                notice.text.orEmpty(),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (notice.watchDownloads && onWatchDownloads != null) {
+                    FilledTonalButton(
+                        onClick = onWatchDownloads,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("home:watch-downloads")
+                    ) {
+                        Text("Watch downloads")
+                    }
+                }
+                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp).testTag("home:retry")) { Text("Retry") }
+            }
+        }
     }
 }
 

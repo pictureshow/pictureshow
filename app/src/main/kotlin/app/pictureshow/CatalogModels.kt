@@ -288,7 +288,9 @@ data class CatalogHomeState(
     val saving: Boolean = false,
     val preferencesReady: Boolean = false,
     /** The load failed because the server couldn't be reached, as opposed to the server saying no. */
-    val unreachable: Boolean = false
+    val unreachable: Boolean = false,
+    /** A read the viewer asked for by pulling the page down is in flight (touch pull-to-refresh). */
+    val refreshing: Boolean = false
 )
 
 internal fun catalogUnreachable(results: List<ClientResult<*>>): Boolean =
@@ -339,10 +341,18 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
         }
     }
 
-    fun reload() {
+    fun reload() = reload(pulled = false)
+
+    /** Pull-to-refresh: the same read, with the page's refresh indicator held until it settles. */
+    fun refresh() = reload(pulled = true)
+
+    private fun reload(pulled: Boolean) {
         job?.cancel()
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false) }
+            // A read that replaces a pulled one still answers that pull.
+            mutableState.update {
+                it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false, refreshing = pulled || it.refreshing)
+            }
             coroutineScope {
                 val preferences = session.homePreferences.read(account)
                 val configuration = (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
@@ -392,18 +402,24 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                     config
                 ) + pins
                 currentCoroutineContext().ensureActive()
+                val unreachable = catalogUnreachable(failures)
                 mutableState.update {
+                    // HOME-09: a server out of reach keeps what the page showed rather than blanking it, so the
+                    // viewer sees it with one line saying it is from earlier. A server that answered replaces it.
+                    val keepRows = unreachable && rows.none { row -> row.items.isNotEmpty() }
+                    val keepLibraries = unreachable && views is ClientResult.Failure
                     it.copy(
                         loading = false,
-                        rows = app.pictureshow.core.customizedHome(rows, preferences.preferences),
-                        availableRows = rows,
-                        libraries = libraries,
+                        refreshing = false,
+                        rows = if (keepRows) it.rows else app.pictureshow.core.customizedHome(rows, preferences.preferences),
+                        availableRows = if (keepRows) it.availableRows else rows,
+                        libraries = if (keepLibraries) it.libraries else libraries,
                         preferences = preferences.preferences,
                         preferencesReady = true,
                         preferenceStatus = preferences.status,
                         preferenceRetryable = preferences.retrySave,
                         error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
-                        unreachable = catalogUnreachable(failures)
+                        unreachable = unreachable
                     )
                 }
             }
