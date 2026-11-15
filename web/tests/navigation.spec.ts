@@ -91,10 +91,10 @@ test("a page opened from Home stays under Home, and pressing Home returns to Hom
     await expect(lit(page)).toHaveText("Home");
     // Home's own Settings button opens Settings, and Settings is lit there.
     await page.locator('[data-focus="home-settings"]').click();
-    await expect(heading(page, "Playback settings")).toBeVisible();
+    await expect(heading(page, "Settings")).toBeVisible();
     await expect(lit(page)).toHaveText("Settings");
     await page.reload();
-    await expect(heading(page, "Playback settings")).toBeVisible();
+    await expect(heading(page, "Settings")).toBeVisible();
     await expect(lit(page)).toHaveText("Settings");
     await page.getByRole("button", { name: "← Back" }).click();
     await expect(page.locator('[data-focus="home-settings"]')).toBeVisible();
