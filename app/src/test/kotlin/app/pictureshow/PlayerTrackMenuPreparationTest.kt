@@ -88,7 +88,7 @@ class PlayerTrackMenuPreparationTest {
             }
             val menus = requireNotNull(preparation?.menus)
             assertEquals(45, menus.subtitles.choices.size)
-            assertEquals(listOf(-1 to "Off", 1 to "English · AAC"), menus.audio.choices)
+            assertEquals(listOf(1 to "English · AAC"), menus.audio.choices)
             assertSame(menus.audio, menus[MediaStreamType.Audio])
             assertSame(menus.subtitles, menus[MediaStreamType.Subtitle])
             compose.waitForIdle()

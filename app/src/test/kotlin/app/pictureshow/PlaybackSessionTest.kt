@@ -125,6 +125,20 @@ class PlaybackSessionTest {
     )
 
     @Test
+    fun legacyAudioOffUsesDefaultAndSubtitleOffSurvives() = runTest {
+        val chosen = decision().let { it.copy(mediaSource = it.mediaSource.copy(defaultAudioStreamIndex = -1)) }
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+        val session = PlaybackSession(gateway, Output(), backgroundScope, "fr")
+        session.start(0, PlaybackStartTracks("source-one", -1, -1))
+        runCurrent()
+        assertEquals(2, session.state.value.audioIndex)
+        assertEquals(-1, session.state.value.subtitleIndex)
+        session.select(MediaStreamType.Audio, -1)
+        runCurrent()
+        assertTrue(session.state.value.audioIndex >= 0)
+    }
+
+    @Test
     fun naturalEndMarksPlayedAfterStopBeforeRefreshAndNextEvenWithBogusRuntime() = runTest {
         val chosen = decision(runtime = 42_949_822_950_000)
         val gateway = Gateway().apply {

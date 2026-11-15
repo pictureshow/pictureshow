@@ -1,5 +1,11 @@
 # Track titles and muxer handler names (PLAY-08)
 
+Audio labels stay on one line as language · codec · channel layout (for example English · E-AC-3 5.1), with the existing title/badge rules and handler-name suppression below.
+
+The Audio menu has no Off entry; Subtitles keeps Off. Off rows are added by platform UI/menu builders, not by the shared label function: Android TV and phone share preparePlayerTrackMenus, web renders its own rows, and desktop builds its own choices. Platform tests cover these entries. Mute remains a separate volume control.
+
+A legacy negative audio choice or negative server audio default falls back to a nonnegative server default, then a track marked IsDefault, then the first audio track. A file with no audio retains the internal -1 sentinel but offers no Audio Off choice. Pin the fallback in PlaybackInfo before opening a server-produced stream so a silent transcode is not retained. When live audio metadata appears only after opening, renegotiate against the same LiveStreamId. The audio-track-index and default-stream vectors freeze this migration.
+
 A muxer's handler name is not a track title. Before composing a label, treat a title equal to one of the
 following names (case-insensitive, whole string) as absent. Do not trim or collapse whitespace for matching,
 remove substrings, or guess from words such as Audio, Video, Text, Stereo, Surround, Commentary or Description.

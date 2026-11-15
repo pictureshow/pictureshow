@@ -494,7 +494,7 @@
       "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
     },
     {
-      "id": "audio.server-minus-one",
+      "id": "audio.server-minus-one-falls-back",
       "operation": "default-stream",
       "input": {
         "type": "Audio",
@@ -520,7 +520,7 @@
           }
         ]
       },
-      "expected": -1,
+      "expected": 2,
       "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
     },
     {
@@ -6911,6 +6911,166 @@
         },
         "expected": null
       },
+    {
+      "id": "audio-track-legacy-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": -1,
+        "serverDefault": 2
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-server-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": null,
+        "serverDefault": -1
+      },
+      "expected": 5,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-both-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": 5,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-first-audio",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          }
+        ],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-silent-file",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": -1,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-zero-is-valid",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 0
+          }
+        ],
+        "selected": 0,
+        "serverDefault": -1
+      },
+      "expected": 0,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-viewer-choice",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": 2,
+        "serverDefault": 5
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-default-off-uses-default-track",
+      "operation": "default-stream",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "type": "Audio",
+        "serverIndex": -1,
+        "preferredLanguage": "en"
+      },
+      "expected": 5,
+      "source": "PLAY-08; StreamDefaults.choose"
+    },
       {
         "id": "track-label-apple-handlers",
         "operation": "track-labels",

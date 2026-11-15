@@ -44,7 +44,7 @@ internal fun preparePlayerTrackMenus(mediaStreams: List<MediaStream>, undownload
         val rows = (local + missing).mapIndexed { i, stream ->
             stream.index to if (stream.index in needed) "${labels[i]} · $NEEDS_CONNECTION" else labels[i]
         }
-        return PlayerTrackMenu(streams, listOf(-1 to "Off") + rows, needed)
+        return PlayerTrackMenu(streams, (if (type == MediaStreamType.Subtitle) listOf(-1 to "Off") else emptyList()) + rows, needed)
     }
     return PlayerTrackMenus(menu(MediaStreamType.Audio), menu(MediaStreamType.Subtitle))
 }

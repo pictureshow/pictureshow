@@ -173,6 +173,8 @@ export function languageKey(
               (captionAliases ? languages[key] : undefined) ??
               key);
 }
+export { audioTrackIndex } from "./audio-track-selection";
+
 export function defaultStream(
     streams: any[],
     type: string,
@@ -180,7 +182,7 @@ export function defaultStream(
     preferredLanguage = "",
 ): number {
     if (type === "Subtitle") return serverIndex ?? -1;
-    if (serverIndex != null) return serverIndex;
+    if (serverIndex != null && serverIndex >= 0) return serverIndex;
     const list = streams.filter((s) => s.Type === type),
         language = languageKey(preferredLanguage, false);
     return (

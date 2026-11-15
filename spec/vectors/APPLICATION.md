@@ -52,7 +52,7 @@ Input: `streams` (an array of Jellyfin `MediaStream` objects), `type` (`Audio` o
 and `preferredLanguage` (string). Expected is an integer server stream index, or `-1` for no track.
 
 For subtitles, the server index wins directly, including `-1`; a null index means off. The client must not enable
-a default/forced/language-matching subtitle when Jellyfin has selected none. For audio, a non-null server index
+a default/forced/language-matching subtitle when Jellyfin has selected none. For audio, a nonnegative server index
 wins, followed by the first matching-type stream marked `IsDefault`, followed by the first matching-type stream
 whose normalized language matches the preference, followed by the first audio stream. An empty list yields `-1`.
 Server indices are authoritative even if absent from the supplied stream list; index validation/mapping to the
@@ -271,3 +271,10 @@ Returns true only for an already revealed/restored Seasons selection whose exact
 An episode-only read (or refresh retaining that card) keeps reader focus. Removing the card for a full
 refresh or another item requires normal focus restoration when loading completes. Native tree publication
 and reader traversal remain platform UI checks.
+
+## `audio-track-index`
+
+Input: `streams`, nullable `selected`, nullable `serverDefault`. Expected: an integer audio index.
+Keep a nonnegative selected index, otherwise a nonnegative server default, otherwise the first audio stream
+marked IsDefault, otherwise the first audio stream. With no audio return -1 as an internal silent-file sentinel.
+Audio menus never offer Off; subtitle Off and subtitle defaults are unchanged.

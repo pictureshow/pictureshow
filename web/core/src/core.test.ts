@@ -405,3 +405,66 @@ describe("PLAY-27 per-file browser video gate", () => {
         expect(canDecodeVideo(undefined, all)).toBe(false);
     });
 });
+
+it("legacy audio Off is omitted and a negative server default is pinned before opening media", async () => {
+    const silent = {
+        ...source,
+        DefaultAudioStreamIndex: -1,
+        MediaStreams: source.MediaStreams!.map((s) => ({
+            ...s,
+            IsDefault: s.Index === 2,
+        })),
+        SupportsDirectPlay: false,
+        TranscodingUrl: "/Videos/movie/master.m3u8?AudioStreamIndex=-1",
+    };
+    const { client, calls } = fake([
+        { MediaSources: [silent], PlaySessionId: "silent" },
+        {
+            MediaSources: [
+                {
+                    ...silent,
+                    TranscodingUrl:
+                        "/Videos/movie/master.m3u8?AudioStreamIndex=2",
+                },
+            ],
+            PlaySessionId: "audible",
+        },
+    ]);
+    const d = await client.prepare(
+        { ...movie, MediaSources: [source] },
+        () => false,
+        30,
+        -1,
+        -1,
+    );
+    const bodies = calls.map((c) => JSON.parse(String(c.init.body)));
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).not.toHaveProperty("AudioStreamIndex");
+    expect(bodies[1]).toMatchObject({
+        MediaSourceId: "file",
+        AudioStreamIndex: 2,
+        SubtitleStreamIndex: -1,
+        StartTimeTicks: 30e7,
+    });
+    expect(d.source.DefaultAudioStreamIndex).toBe(2);
+    expect(d.playSessionId).toBe("audible");
+    expect(d.url).toContain("AudioStreamIndex=2");
+});
+
+it("a stale negative default remains playable directly after fallback negotiation", async () => {
+    const stale = { ...source, DefaultAudioStreamIndex: -1 };
+    const { client, calls } = fake([
+        { MediaSources: [stale] },
+        { MediaSources: [stale] },
+    ]);
+    const d = await client.prepare(
+        { ...movie, MediaSources: [stale] },
+        () => true,
+        0,
+    );
+    expect(d.method).toBe("DirectPlay");
+    expect(d.source.DefaultAudioStreamIndex).toBe(1);
+    expect(JSON.parse(String(calls[1].init.body))).toMatchObject({
+        AudioStreamIndex: 1,
+    });
+});

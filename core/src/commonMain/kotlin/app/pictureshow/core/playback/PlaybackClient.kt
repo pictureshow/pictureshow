@@ -100,9 +100,10 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
     private suspend fun negotiate(
         account: Account,
         itemId: String,
-        body: PlaybackInfoRequest,
+        requestBody: PlaybackInfoRequest,
         playback: PlaybackRequest
     ): ClientResult<PlayOutcome> {
+        var body = requestBody.copy(audioStreamIndex = requestBody.audioStreamIndex?.takeIf { it >= 0 })
         var info = playbackInfo(account, itemId, body)
         var boundSourceId = playback.mediaSourceId
         // Jellyfin 12 applies explicit track indices only to a bound MediaSourceId. The first
@@ -119,7 +120,23 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
             } ?: sources.firstOrNull()
             preferred?.id?.takeIf(String::isNotBlank)?.let { sourceId ->
                 boundSourceId = sourceId
-                info = playbackInfo(account, itemId, body.copy(mediaSourceId = sourceId))
+                body = body.copy(mediaSourceId = sourceId)
+                info = playbackInfo(account, itemId, body)
+            }
+        }
+        // A remembered Audio Off must not produce a silent transcode URL. Pin the fallback before opening media.
+        if (info is ClientResult.Success && info.value.errorCode == null && body.audioStreamIndex == null) {
+            val source = info.value.mediaSources.firstOrNull {
+                (boundSourceId == null || it.id == boundSourceId) &&
+                    (it.requiresOpening || it.supportsDirectPlay || it.supportsDirectStream || !it.transcodingUrl.isNullOrBlank())
+            }
+            if (source != null && (source.defaultAudioStreamIndex ?: 0) < 0) {
+                val audio = TrackSelection.audioIndex(source.mediaStreams, null, source.defaultAudioStreamIndex)
+                if (audio >= 0 && !source.id.isNullOrBlank()) {
+                    boundSourceId = source.id
+                    body = body.copy(mediaSourceId = source.id, audioStreamIndex = audio)
+                    info = playbackInfo(account, itemId, body)
+                }
             }
         }
         return when (val result = info) {
@@ -170,6 +187,33 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                         ownedLiveStream = source.liveStreamId
                     }
                 }
+                // Live streams may only publish their audio list after Open. Reuse that live source;
+                // do not open a second tuner or retain its silent transcode URL.
+                val live = response.mediaSources.firstOrNull { boundSourceId == null || it.id == boundSourceId }
+                if (response.errorCode == null && live != null && !live.liveStreamId.isNullOrBlank() &&
+                    (live.defaultAudioStreamIndex ?: 0) < 0 && body.audioStreamIndex == null
+                ) {
+                    val audio = TrackSelection.audioIndex(live.mediaStreams, null, live.defaultAudioStreamIndex)
+                    if (audio >= 0) {
+                        body = body.copy(mediaSourceId = live.id, liveStreamId = live.liveStreamId, audioStreamIndex = audio)
+                        when (val repaired = playbackInfo(account, itemId, body)) {
+                            is ClientResult.Failure -> {
+                                ownedLiveStream?.let { closeLiveStream(account, it) }
+                                return repaired
+                            }
+                            is ClientResult.Success -> response = repaired.value
+                        }
+                    }
+                }
+                response = response.copy(
+                    mediaSources = response.mediaSources.map { source ->
+                        if (source.id == boundSourceId && (source.defaultAudioStreamIndex ?: 0) < 0 && body.audioStreamIndex != null) {
+                            source.copy(defaultAudioStreamIndex = body.audioStreamIndex)
+                        } else {
+                            source
+                        }
+                    }
+                )
                 val outcome = PlayDecisions.decide(
                     account.server,
                     itemId,

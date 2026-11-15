@@ -59,7 +59,7 @@ class OfflineReconnectMenuTest {
         preparePlayerTrackMenus(offlineSourceInfo(entry, 1) { File("/x/$it") }.mediaStreams, offlineUndownloadedStreams(entry))
 
     @Test fun `undownloaded rows say so plainly and follow the rows that play`() {
-        assertEquals(listOf(-1 to "Off", 1 to "English · AAC", 6 to "Japanese · AAC · needs a connection"), menus().audio.choices)
+        assertEquals(listOf(1 to "English · AAC", 6 to "Japanese · AAC · needs a connection"), menus().audio.choices)
         assertEquals(setOf(6), menus().audio.needsConnection)
     }
 
@@ -84,10 +84,10 @@ class OfflineReconnectMenuTest {
         assertEquals(listOf(MediaStreamType.Audio, MediaStreamType.Subtitle, MediaStreamType.Subtitle), types)
     }
 
-    @Test fun `an online player's menus are exactly what they were`() {
+    @Test fun `audio menus omit Off while subtitle menus keep it`() {
         val streams = listOf(MediaStream(type = MediaStreamType.Audio, index = 1, codec = "aac", language = "eng"))
         val menu = preparePlayerTrackMenus(streams).audio
-        assertEquals(listOf(-1 to "Off", 1 to "English · AAC"), menu.choices)
+        assertEquals(listOf(1 to "English · AAC"), menu.choices)
         assertTrue(menu.needsConnection.isEmpty())
     }
 

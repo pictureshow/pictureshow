@@ -66,7 +66,7 @@ async function pause(page: Page) {
     ).toBeVisible();
 }
 
-test("player overlay, panel Back priority, audio Off and one viewing across track changes", async ({
+test("player overlay, panel Back priority, audio choices and one viewing across track changes", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -78,11 +78,12 @@ test("player overlay, panel Back priority, audio Off and one viewing across trac
     await page.getByRole("button", { name: "Audio", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Audio", exact: true });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("radio", { name: "Off", exact: true }).click();
-    expect(
-        await page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
-    ).toBe(true);
-    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await expect(
+        dialog.getByRole("radio", { name: "Off", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        dialog.getByRole("radio", { name: /English.*AAC/ }),
+    ).toBeVisible();
     await page.getByRole("radio", { name: /Spanish/ }).click();
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect(
@@ -91,6 +92,11 @@ test("player overlay, panel Back priority, audio Off and one viewing across trac
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await expect(
         page.getByRole("dialog", { name: "Subtitles", exact: true }),
+    ).toBeVisible();
+    await expect(
+        page
+            .getByRole("dialog", { name: "Subtitles", exact: true })
+            .getByRole("radio", { name: "Off", exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(
@@ -1657,7 +1663,7 @@ test("rc28 automatic captions retain the server text default with source binding
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
-test("rc26 text-codec Encode transitions renegotiate and Audio Off remains explicit across replacement", async ({
+test("rc26 text-codec Encode transitions renegotiate and the chosen audio remains explicit across replacement", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -1696,8 +1702,13 @@ test("rc26 text-codec Encode transitions renegotiate and Audio Off remains expli
     await openMovie(page);
     await pause(page);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: "Off", exact: true }).click();
-    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(-1);
+    await expect(
+        page
+            .getByRole("dialog", { name: "Audio", exact: true })
+            .getByRole("radio", { name: "Off", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(2);
     const before = f.negotiations.length;
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await page.getByRole("radio", { name: /English captions/ }).click();
@@ -1706,10 +1717,10 @@ test("rc26 text-codec Encode transitions renegotiate and Audio Off remains expli
     await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
         "",
     );
-    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(-1);
+    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(2);
     expect(
         await page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
-    ).toBe(true);
+    ).toBe(false);
     expect(f.mediaRequests.filter((p) => p === "subtitle")).toHaveLength(0);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await page.getByRole("radio", { name: "Off", exact: true }).click();

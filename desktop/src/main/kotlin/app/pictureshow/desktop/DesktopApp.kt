@@ -530,7 +530,7 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                         DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seek(p.positionSeconds+10)},modifier = Modifier.controlFocus().probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Choice("Audio",p.audioTracks.zip(trackLabels(p.audioTracks)).map{(track,label)->track.index to label},p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, fixedWidth = true, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
+                        Choice("Audio",desktopAudioChoices(p.audioTracks),p.audioIndex,"audio",buttonValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let { trackLabel(it, showDefault = false) } ?: "No audio", buttonWidth = 240.dp, fixedWidth = true, onChoose = c::selectAudio, icon = DesktopGlyph.Audio)
                         Choice("Subtitles",listOf(-1 to "Off")+p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map{(track,label)->track.index to label},p.subtitleIndex,"subtitles",buttonValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off", buttonWidth = 156.dp, fixedWidth = true, onChoose = c::selectSubtitle, icon = DesktopGlyph.Subtitles)
                         DesktopTooltip("Fullscreen", above = true) { IconButton(onClick=fullscreen,modifier = Modifier.controlFocus().probe("player-fullscreen")) { Icon(DesktopGlyph.Fullscreen,contentDescription="Fullscreen") } }
                         if(p.nextEpisode!=null) OutlinedButton(onClick=c::nextEpisode,modifier = Modifier.controlFocus().heightIn(min=40.dp).probe("next-episode")) { Text("Next episode") }
@@ -626,3 +626,6 @@ private fun InlineTextAction(label: String, tag: String, onClick: () -> Unit, en
 
 private fun shortTrackLabel(stream: app.pictureshow.core.playback.MediaStream): String =
     trackLanguage(stream.language) ?: trackLabel(stream).substringBefore(" · ").ifBlank { "Track ${stream.index + 1}" }
+
+internal fun desktopAudioChoices(streams: List<MediaStream>): List<Pair<Int, String>> =
+    streams.zip(trackLabels(streams)).map { (track, label) -> track.index to label }

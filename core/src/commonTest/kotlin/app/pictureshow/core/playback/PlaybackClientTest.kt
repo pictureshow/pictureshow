@@ -103,6 +103,33 @@ class PlaybackClientTest {
     }
 
     @Test
+    fun legacyAudioOffAndNegativeServerDefaultPinAudioBeforeOpeningMedia() = runTest {
+        val silent = """
+            {"MediaSources":[{"Id":"src-1","DefaultAudioStreamIndex":-1,
+            "MediaStreams":[{"Type":"Audio","Index":1},{"Type":"Audio","Index":2,"IsDefault":true}],
+            "SupportsTranscoding":true,"TranscodingUrl":"/videos/item-1/master.m3u8?AudioStreamIndex=-1"}],
+            "PlaySessionId":"silent"}
+        """.trimIndent()
+        val playback = client {
+            json(if (requests.size == 1) silent else silent.replace("AudioStreamIndex=-1", "AudioStreamIndex=2"))
+        }
+        val result = playback.prepare(
+            account,
+            "item-1",
+            CapabilityFixtures.projector,
+            PlaybackRequest(mediaSourceId = "src-1", audioStreamIndex = -1, subtitleStreamIndex = -1)
+        )
+        val decision = assertIs<PlayOutcome.Play>(assertIs<ClientResult.Success<PlayOutcome>>(result).value).decision
+        assertEquals(2, requests.size)
+        assertFalse("AudioStreamIndex" in body())
+        assertEquals(2, body(1).getValue("AudioStreamIndex").jsonPrimitive.int)
+        assertEquals(-1, body(1).getValue("SubtitleStreamIndex").jsonPrimitive.int)
+        assertEquals("src-1", body(1).getValue("MediaSourceId").jsonPrimitive.content)
+        assertEquals(2, decision.mediaSource.defaultAudioStreamIndex)
+        assertTrue(decision.url.contains("AudioStreamIndex=2"))
+    }
+
+    @Test
     fun defaultBitrateCapIsSentInRequestAndBothProfileLimits() = runTest {
         val playback = client { json(transcodeResponse) }
         playback.prepare(account, "item-1", CapabilityFixtures.projector)
