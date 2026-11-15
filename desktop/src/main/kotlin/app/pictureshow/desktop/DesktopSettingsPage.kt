@@ -109,6 +109,8 @@ internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:S
     val opener = remember { FocusRequester() }
     val initialFocus = remember { FocusRequester() }
     val initialKey = items.firstOrNull { it.first == selected }?.first ?: items.firstOrNull()?.first
+    // Quality has a label and a supporting line; preserve their room on every desktop font.
+    val popupWidth = if (tag == "quality" && (!menuMinWidth.isSpecified || menuMinWidth < 360.dp)) 360.dp else menuMinWidth
     Box {
         OutlinedButton(onClick={expanded=true},enabled=items.isNotEmpty(),contentPadding = if (icon != null) PaddingValues(horizontal = 12.dp) else ButtonDefaults.ContentPadding,modifier = Modifier.focusRequester(opener).controlFocus(enabled = !expanded).then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
             Row(if (fixedWidth) Modifier.fillMaxWidth() else Modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -117,7 +119,7 @@ internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:S
                 if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
             }
         }
-        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,initialFocus=initialFocus,modifier=Modifier.widthIn(min=menuMinWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Column { Text(text); if (tag == "quality") qualitySupport((key as? Int) ?: 0)?.let { Text(it, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) } }},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().probe("$tag:$key")) } }
+        DesktopDropdownMenu(expanded,onDismissRequest={expanded=false},opener=opener,initialFocus=initialFocus,modifier=Modifier.widthIn(min=popupWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Column { Text(text); if (tag == "quality") qualitySupport((key as? Int) ?: 0)?.let { Text(it, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) } }},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.then(if (key == initialKey) Modifier.focusRequester(initialFocus) else Modifier).menuItemFocus().then(if (tag == "quality") Modifier.heightIn(min=64.dp) else Modifier).probe("$tag:$key")) } }
     }
 }
 
@@ -126,7 +128,7 @@ internal fun qualitySupport(mbps: Int): String? = when (mbps) {
     4 -> "For slow connections; a softer picture"
     10 -> "A smaller cap for everyday streaming"
     20 -> "More detail with a steady connection"
-    40 -> "For higher-bitrate video on fast connections"
-    80 -> "For demanding video on very fast connections"
+    40 -> "Higher bitrate; fast connection"
+    80 -> "Demanding video; very fast connection"
     else -> null
 }

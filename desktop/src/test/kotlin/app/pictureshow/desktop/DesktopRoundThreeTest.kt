@@ -161,14 +161,22 @@ class DesktopRoundThreeTest {
         assertTrue((pixels.height-verticalBand until pixels.height).any { ink(midX, it) }, "bottom side must not be clipped")
     }
 
-    @Test fun originalQualitySupportingLineFitsWithoutAnOrphan() = runComposeUiTest {
-        setContent { MaterialTheme { Choice("Quality", listOf(0 to VIDEO_QUALITY_ORIGINAL, 4 to "4 Mbps"), 0, "quality", menuMinWidth=340.dp) {} } }
+    @Test fun everyQualitySupportingLineFitsAndRowsKeepTheSameHeight() = runComposeUiTest {
+        val caps = listOf(0, 4, 10, 20, 40, 80)
+        setContent { app.pictureshow.ui.PictureshowTheme {
+            Choice("Quality", caps.map { it to if (it == 0) VIDEO_QUALITY_ORIGINAL else "$it Mbps" }, 0, "quality", menuMinWidth=340.dp) {}
+        } }
         onNodeWithTag("quality").performClick()
-        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        onNodeWithText("Keep original quality when supported", useUnmergedTree=true).fetchSemanticsNode()
-            .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
-        assertTrue(layouts.single().lineCount <= 2)
-        assertFalse(layouts.single().hasVisualOverflow)
+        val first = onNodeWithTag("quality:0").getUnclippedBoundsInRoot().let { it.bottom-it.top }
+        for (cap in caps) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            onNodeWithText(qualitySupport(cap)!!, useUnmergedTree=true).fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            assertEquals(1, layouts.single().lineCount, "$cap Mbps supporting line must not orphan a word")
+            assertFalse(layouts.single().hasVisualOverflow, "$cap Mbps text must fit vertically too")
+            val bounds = onNodeWithTag("quality:$cap").getUnclippedBoundsInRoot()
+            assertEquals(first, bounds.bottom-bounds.top, "$cap Mbps row must match Original's height")
+        }
     }
 
     @Test fun shortcutsFrameFitsInsideA600PixelWindowWithCloseVisible() = runDesktopComposeUiTest(800,600) {
