@@ -61,7 +61,7 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController) {
         }
         SettingsSection("Playback") {
             SettingRow("Video quality", VIDEO_QUALITY_CAPTION) {
-                Choice("Video quality",listOf(0 to VIDEO_QUALITY_ORIGINAL,4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+                Choice("Video quality",listOf(0 to VIDEO_QUALITY_ORIGINAL,4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true, menuMinWidth = 340.dp) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
             }
             SettingSwitch("Explain video conversion","Tell me when this computer needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
             SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
@@ -104,7 +104,7 @@ internal fun SettingSwitch(title:String,caption:String,value:Boolean,tag:String,
     SettingRow(title, caption) { Switch(value,onChange,Modifier.controlFocus().probe(tag).semantics { contentDescription=title }) }
 }
 @Composable
-internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,fixedWidth:Boolean=false,onChoose:(T)->Unit) {
+internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:String,buttonValue:String?=null,buttonWidth:Dp=560.dp,icon:ImageVector?=null,trailingIcon:ImageVector?=DesktopGlyph.ChevronDown,fixedWidth:Boolean=false,menuMinWidth:Dp=Dp.Unspecified,onChoose:(T)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick={expanded=true},contentPadding = if (icon != null) PaddingValues(horizontal = 12.dp) else ButtonDefaults.ContentPadding,modifier = Modifier.controlFocus().then(if (fixedWidth) Modifier.width(buttonWidth) else Modifier.widthIn(max=buttonWidth)).probe(tag).semantics { contentDescription = "$label: ${items.firstOrNull{it.first==selected}?.second ?: "Default"}" }) {
@@ -114,6 +114,6 @@ internal fun <T> Choice(label:String,items:List<Pair<T,String>>,selected:T,tag:S
                 if (trailingIcon != null) { Spacer(Modifier.width(8.dp)); Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp)) }
             }
         }
-        DropdownMenu(expanded,onDismissRequest={expanded=false}) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key")) } }
+        DropdownMenu(expanded,onDismissRequest={expanded=false},modifier=Modifier.widthIn(min=menuMinWidth).probe("$tag-menu")) { items.forEach { (key,text) -> DropdownMenuItem(text={Text(text)},onClick={expanded=false;onChoose(key)},leadingIcon={RadioButton(selected==key,null)},modifier=Modifier.controlFocus(RoundedCornerShape(4.dp)).probe("$tag:$key")) } }
     }
 }

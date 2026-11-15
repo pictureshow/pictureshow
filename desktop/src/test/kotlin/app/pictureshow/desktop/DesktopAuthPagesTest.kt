@@ -5,6 +5,9 @@ package app.pictureshow.desktop
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
@@ -50,6 +53,49 @@ class DesktopAuthPagesTest {
         onNodeWithTag("password").performTextInput("hunter2")
         pressReturn("password")
         assertEquals(listOf("signIn:mei:hunter2"), r.actions())
+    }
+
+    @Test fun theButtonSaysSigningInOnlyWhileThisFormsRequestRuns() = runComposeUiTest {
+        // Too quick to screenshot against the demo server, so pinned here.
+        var state by mutableStateOf(DesktopState(route = DesktopRoute.SignIn, server = home))
+        setContent { PictureshowTheme { SignInForm(state, Recorder()) } }
+        state = state.copy(busy = true)
+        waitForIdle()
+        onNodeWithText("Signing in…").assertDoesNotExist()
+        state = state.copy(busy = false)
+        typeInto("username", "mei")
+        typeInto("password", "hunter2")
+        pressReturn("password")
+        state = state.copy(busy = true)
+        waitForIdle()
+        onNodeWithTag("sign-in").assertTextEquals("Signing in…")
+        state = state.copy(busy = false)
+        waitForIdle()
+        onNodeWithText("Signing in…").assertDoesNotExist()
+        onNodeWithTag("sign-in").assertTextEquals("Sign in")
+    }
+
+    @Test fun aBlankSignInStartsInUsernameEvenIfPasswordWasLastFocused() = runComposeUiTest {
+        // The shell restores each page's last focus; after an earlier sign-in that was Password (design review, shots/07).
+        DesktopUiProbe.lastFocus[""] = "password"
+        setContent { PictureshowTheme { SignInForm(DesktopState(route = DesktopRoute.SignIn, server = home), Recorder()) } }
+        onNodeWithTag("username").assertIsFocused()
+        assertNull(DesktopUiProbe.lastFocus[""])
+    }
+
+    @Test fun accountsStartOnAnAccountRowNotOnRemove() = runComposeUiTest {
+        val mei = account(home, "m", "ux-mei")
+        DesktopUiProbe.lastFocus[""] = "remove:${mei.key}"
+        setContent { PictureshowTheme { AccountsList(DesktopState(route = DesktopRoute.Accounts, accounts = listOf(mei), rememberedServers = listOf(home)), Recorder()) {} } }
+        waitForIdle()
+        assertEquals("account:${mei.key}", DesktopUiProbe.lastFocus[""])
+        onNodeWithText("Saved on this computer").assertExists()
+        // The shell focuses lastFocus through the probe's requester; it must land on the row itself, not on Remove inside it.
+        runOnIdle { DesktopUiProbe.requestFocus.getValue("account:${mei.key}").requestFocus() }
+        waitForIdle()
+        onNodeWithTag("remove:${mei.key}").assertIsNotFocused()
+        assertEquals(true, DesktopUiProbe.focus["account:${mei.key}"])
+        assertEquals(false, DesktopUiProbe.focus["remove:${mei.key}"])
     }
 
     @Test fun returnWithoutUsernameSaysWhatIsMissing() = runComposeUiTest {
@@ -109,8 +155,10 @@ class DesktopAuthPagesTest {
         val tom = account(cabin, "t", "ux-tom")
         setContent { PictureshowTheme { AccountsList(DesktopState(route = DesktopRoute.Accounts, account = mei, accounts = listOf(mei, tom), rememberedServers = listOf(home, cabin)), r) { r.calls += "remove:${it.key}" } } }
         onNodeWithText("Signed in as ux-mei on Home Media.").assertExists()
-        onNodeWithText("Add another account on Home Media").performClick()
-        onNodeWithText("Add another account on Cabin").performClick()
+        onNodeWithText("Watching now").assertExists()
+        onNodeWithText("Saved on this computer").assertExists()
+        onNodeWithText("Sign in another user on Home Media").performClick()
+        onNodeWithText("Sign in another user on Cabin").performClick()
         onNodeWithText("Add a server").performClick()
         onNodeWithTag("accounts-sign-out").performClick()
         assertEquals(listOf("addAccountOn:s1", "addAccountOn:s2", "addServer", "signOut"), r.actions())
@@ -122,7 +170,7 @@ class DesktopAuthPagesTest {
         val mei = account(home, "m", "ux-mei")
         setContent { PictureshowTheme { AccountsList(DesktopState(route = DesktopRoute.Accounts, accounts = listOf(mei), rememberedServers = listOf(home)), Recorder()) {} } }
         onNodeWithTag("accounts-sign-out").assertDoesNotExist()
-        onNodeWithText("Add another account on Home Media").assertExists()
+        onNodeWithText("Sign in another user on Home Media").assertExists()
     }
 
     @Test fun removeShowsItsWordOnFocusAndHover() = runComposeUiTest {
@@ -157,5 +205,14 @@ class DesktopAuthPagesTest {
         assertTrue(layout.single().lineCount > 1, "the caption wraps instead of ending in an ellipsis")
         assertFalse(layout.single().hasVisualOverflow)
         assertEquals("Original (no conversion unless needed)", VIDEO_QUALITY_ORIGINAL)
+    }
+
+    @Test fun qualityMenuFitsItsLongestChoiceOnOneLine() = runComposeUiTest {
+        setContent { PictureshowTheme { Choice("Video quality", listOf(0 to VIDEO_QUALITY_ORIGINAL, 4 to "4 Mbps"), 0, "quality", buttonValue = "Original", buttonWidth = 180.dp, fixedWidth = true, menuMinWidth = 340.dp) {} } }
+        onNodeWithTag("quality").performClick()
+        val item = onNodeWithText(VIDEO_QUALITY_ORIGINAL, useUnmergedTree = true).fetchSemanticsNode()
+        val layout = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        item.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layout)
+        assertEquals(1, layout.single().lineCount)
     }
 }

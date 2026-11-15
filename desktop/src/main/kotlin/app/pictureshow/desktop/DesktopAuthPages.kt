@@ -165,6 +165,15 @@ internal fun SignInForm(state: DesktopState, c: AuthActions) {
         }
     }
     LaunchedEffect(state.busy) { if (!state.busy) submitted = false }
+    // A sign-in that opens with no username starts there, whatever this page last had focused (a new account after an
+    // earlier sign-in left Password as the page's remembered focus). Fields are disabled while busy, so wait for idle.
+    val page = LocalDesktopPage.current
+    LaunchedEffect(serverKey, state.busy) {
+        if (!state.busy && username.isBlank() && !credentialsRejected) {
+            DesktopUiProbe.lastFocus.remove(page)
+            runCatching { usernameFocus.requestFocus() }
+        }
+    }
     val submit = {
         if (username.isBlank()) { missing = true; usernameFocus.requestFocus() }
         else if (!state.busy) { submitted = true; c.signIn(username, password.text) }
@@ -208,6 +217,8 @@ internal fun SignInForm(state: DesktopState, c: AuthActions) {
         if (users.isNotEmpty()) {
             HorizontalDivider()
             Text("Or choose your name", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+            // Chips otherwise pad themselves to a 48 dp touch target, which spaces a pointer-and-keyboard list unevenly.
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val shown = if (allUsers || users.size <= PUBLIC_USERS_SHOWN) users else users.take(PUBLIC_USERS_SHOWN)
                 shown.forEachIndexed { i, u ->
@@ -220,8 +231,9 @@ internal fun SignInForm(state: DesktopState, c: AuthActions) {
                     )
                 }
                 if (users.size > PUBLIC_USERS_SHOWN && !allUsers) {
-                    TextButton(onClick = { allUsers = true }, modifier = Modifier.controlFocus().probe("show-all-users")) { Text("Show all ${users.size} users") }
+                    TextButton(onClick = { allUsers = true }, modifier = Modifier.controlFocus().heightIn(min = 32.dp).probe("show-all-users")) { Text("Show all ${users.size} users") }
                 }
+            }
             }
             // The button that was focused goes away: keep focus where the list grew.
             LaunchedEffect(allUsers) { if (allUsers && users.size > PUBLIC_USERS_SHOWN) firstRevealedUser.requestFocus() }
@@ -271,13 +283,26 @@ internal fun AccountsPage(state: DesktopState, controller: DesktopController, on
 @Composable
 internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Account) -> Unit) {
     val servers = (state.rememberedServers + state.accounts.map { it.server }).distinctBy { it.id to it.url }
+    val page = LocalDesktopPage.current
+    LaunchedEffect(state.busy, state.account?.key, state.accounts.map { it.key }) {
+        // The shell restores a page's last focus when it settles. On this page that could be a Remove button (after an
+        // earlier removal dialog) or Sign out, which is gone once used: start on the current or first account instead.
+        val last = DesktopUiProbe.lastFocus[page]
+        if (!state.busy && (last == null || last.startsWith("remove:") || last == "accounts-sign-out" || (last.startsWith("account:") && state.accounts.none { "account:${it.key}" == last }))) {
+            val first = state.accounts.firstOrNull { it.key == state.account?.key } ?: state.accounts.firstOrNull()
+            if (first != null) DesktopUiProbe.lastFocus[page] = "account:${first.key}" else DesktopUiProbe.lastFocus.remove(page)
+        }
+    }
     FormPage("Who's watching?", "Choose an account, or add one. Removing an account only forgets it on this computer.") {
         state.account?.let { current ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 16.dp, vertical = 12.dp).probe("current-account"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Signed in as ${current.user.name} on ${serverLabel(current.server, servers)}.", modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text("Signed in as ${current.user.name} on ${serverLabel(current.server, servers)}.")
+                    Text("Signing out also removes ${current.user.name} from this computer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedButton(onClick = c::signOut, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("accounts-sign-out")) { Text("Sign out") }
             }
         }
@@ -287,12 +312,12 @@ internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Accoun
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                 onServer.forEach { a -> AccountRow(a, current = a.key == state.account?.key, select = { c.selectAccount(a.key) }, remove = { onRemove(a) }) }
-                OutlinedButton(onClick = { c.addAccountOn(s) }, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-account:${s.id}")) {
-                    Text(if (onServer.isEmpty()) "Sign in on $label" else "Add another account on $label", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                OutlinedButton(onClick = { c.addAccountOn(s) }, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("add-account:${s.id}")) {
+                    Text(if (onServer.isEmpty()) "Sign in on $label" else "Sign in another user on $label", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        OutlinedButton(onClick = c::addServer, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-server")) { Text("Add a server") }
+        OutlinedButton(onClick = c::addServer, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("add-server")) { Text("Add a server") }
     }
 }
 
@@ -307,7 +332,8 @@ private fun AccountRow(a: Account, current: Boolean, select: () -> Unit, remove:
         Modifier.controlFocus(RoundedCornerShape(12.dp)).fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
             .hoverable(rowHover)
-            .clickable(role = Role.Button, onClick = select).probe("account:${a.key}")
+            // probe before clickable: its FocusRequester binds the next focus target, which must be the row, not Remove inside it.
+            .probe("account:${a.key}").clickable(role = Role.Button, onClick = select)
             .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -315,7 +341,7 @@ private fun AccountRow(a: Account, current: Boolean, select: () -> Unit, remove:
         AccountAvatar(a)
         Column(Modifier.weight(1f)) {
             Text(a.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (current) "Watching now" else if (a.expired || a.accessToken.isBlank()) "Signed out · Sign in again to continue" else "Signed in",
+            Text(if (current) "Watching now" else if (a.expired || a.accessToken.isBlank()) "Signed out · Sign in again to continue" else "Saved on this computer",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         // The icon alone didn't read as Remove (D-15): the word shows while the row or the button has the pointer or
