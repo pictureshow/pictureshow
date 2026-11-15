@@ -16,7 +16,8 @@ import kotlinx.serialization.json.*
 /** Edit only provider-supplied fields; review is a separate deliberate step before the core submits anything. */
 @Composable
 internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, existing: Boolean, busy: Boolean,
-                                      fresh: Boolean, onDismiss: () -> Unit, onSave: (LiveSchedule) -> Unit) {
+                                      fresh: Boolean, onDismiss: () -> Unit, onSave: (LiveSchedule) -> Unit,
+                                      onRefresh: () -> Unit = {}, refreshing: Boolean = false) {
     var edits by remember(original) { mutableStateOf<Map<String, JsonElement>>(emptyMap()) }
     var review by remember(original) { mutableStateOf(false) }
     var error by remember(original) { mutableStateOf<String?>(null) }
@@ -86,7 +87,12 @@ internal fun DesktopLiveScheduleEditor(original: LiveSchedule, series: Boolean, 
                 }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-            if (!fresh) Text("Refresh Live TV before saving. Your options remain here for review.")
+            if (!fresh && !busy) {
+                Text("Refresh Live TV before saving. Your options remain here for review.")
+                TextButton(onRefresh, enabled = !refreshing, modifier = Modifier.controlFocus().probe("live:editor:refresh")) {
+                    Text(if (refreshing) "Refreshing…" else "Refresh Live TV")
+                }
+            }
             Text("Some options depend on your server. Unchanged provider settings are preserved.", style = MaterialTheme.typography.bodySmall)
         } },
         dismissButton = { TextButton({ if (review) review = false else onDismiss() }, enabled = !busy, modifier = Modifier.controlFocus()) { Text(if (review) "Edit options" else "Cancel") } },

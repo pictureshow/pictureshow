@@ -261,6 +261,20 @@ class DesktopLiveTvTest {
         onNodeWithTag("live:editor:confirm").performClick()
         runOnIdle { assertEquals(1, saves); assertEquals("keep", saved?.string("ProviderOpaque")); assertEquals("30", saved?.string("PrePaddingSeconds")) }
     }
+    @Test fun staleReviewRefreshesWithoutLosingEditedOptions() = runComposeUiTest {
+        val fresh = androidx.compose.runtime.mutableStateOf(false)
+        var saved: LiveSchedule? = null
+        var refreshes = 0
+        val original = LiveSchedule(buildJsonObject { put("Name", "Morning show"); put("PrePaddingSeconds", 0) })
+        setContent { MaterialTheme { DesktopLiveScheduleEditor(original, false, false, false, fresh.value, {}, { saved = it },
+            onRefresh = { refreshes++; fresh.value = true }) } }
+        onNodeWithTag("live:option:PrePaddingSeconds").performTextReplacement("30")
+        onNodeWithTag("live:editor:review").performClick()
+        onNodeWithTag("live:editor:confirm").assertIsNotEnabled()
+        onNodeWithTag("live:editor:refresh").performClick()
+        onNodeWithTag("live:editor:confirm").assertIsEnabled().performClick()
+        runOnIdle { assertEquals(1, refreshes); assertEquals("30", saved?.string("PrePaddingSeconds")) }
+    }
     @Test fun disabledAccessHidesSearchAndShowsRecovery() = runComposeUiTest {
         val scope = CoroutineScope(SupervisorJob())
         val api = LiveTvClient(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp), ClientIdentity("Test", "device"))
