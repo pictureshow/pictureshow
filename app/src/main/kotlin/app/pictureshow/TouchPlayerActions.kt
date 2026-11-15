@@ -98,18 +98,22 @@ internal fun PlayerIconButton(
             IconButtonDefaults.iconButtonColors()
         }
     ) {
-        if (liveSeek) LiveSeekMark(forward = icon == "forward10") else Icon(playerActionIcon(icon), null, Modifier.size(24.dp))
+        if (liveSeek || videoSeekBacking) {
+            LiveSeekMark(forward = icon == "forward10", live = liveSeek)
+        } else {
+            Icon(playerActionIcon(icon), null, Modifier.size(24.dp))
+        }
     }
 }
 
 /** A circular replay/forward mark with an actual numeral; the button owns its speech and disabled tint. */
 @Composable
-private fun LiveSeekMark(forward: Boolean) {
+private fun LiveSeekMark(forward: Boolean, live: Boolean = true) {
     val content = androidx.compose.material3.LocalContentColor.current
     val tint = content.copy(alpha = 1f)
     // Apply the disabled opacity once to the whole mark: overlapping arc/arrow strokes must not brighten it.
     Box(
-        Modifier.size(LIVE_SEEK_MARK_DP.dp).testTag("touch:live-seek-mark").graphicsLayer {
+        Modifier.size(LIVE_SEEK_MARK_DP.dp).testTag(if (live) "touch:live-seek-mark" else "touch:video-seek-mark").graphicsLayer {
             alpha = content.alpha
             compositingStrategy = CompositingStrategy.Offscreen
         }.clearAndSetSemantics {},
