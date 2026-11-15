@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.key
 import app.pictureshow.core.Account
 import app.pictureshow.core.playback.*
 import kotlinx.serialization.json.*
@@ -483,7 +484,7 @@ private class LinuxPlayerWindow(
     private val initialized = CompletableFuture<Unit>()
     @Volatile var exitRequested = false
         private set
-    fun hdrOutput(): HdrOutput = if (hdr && runCatching { File(out, "native-wayland.txt").readText().contains("image_description=ready") }.getOrDefault(false)) HdrOutput.WaylandPq else HdrOutput.Unknown
+    fun hdrOutput(): HdrOutput = waylandHdrOutput(hdr, runCatching { File(out, "native-wayland.txt").readText() }.getOrDefault(""))
     fun start() {
         job = executor.submit {
             var context: Pointer? = null
@@ -497,6 +498,7 @@ private class LinuxPlayerWindow(
                 initialized.complete(Unit)
                 var width = 0; var height = 0
                 val paused = androidx.compose.runtime.mutableStateOf(false)
+                val infoScroll = androidx.compose.foundation.ScrollState(0)
                 var showingInfo by androidx.compose.runtime.mutableStateOf(false)
                 var sections by androidx.compose.runtime.mutableStateOf(emptyList<PlaybackInfoSection>())
                 var dirty = true
@@ -518,7 +520,7 @@ private class LinuxPlayerWindow(
                                         androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF141820)).padding(24.dp)) {
                                             androidx.compose.material.Text("Playback info", style = androidx.compose.material.MaterialTheme.typography.h6)
                                             androidx.compose.material.OutlinedButton(onClick = { showingInfo = false }) { androidx.compose.material.Text("Close") }
-                                            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                                            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f).verticalScroll(infoScroll), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
                                                 sections.forEach { section ->
                                                     androidx.compose.material.Text(section.title, style = androidx.compose.material.MaterialTheme.typography.subtitle1)
                                                     section.lines.forEach { androidx.compose.material.Text(it) }
@@ -547,11 +549,13 @@ private class LinuxPlayerWindow(
                         if (event[0] in 1..2) scene!!.sendPointerEvent(if (event[0] == 1) androidx.compose.ui.input.pointer.PointerEventType.Press else androidx.compose.ui.input.pointer.PointerEventType.Release,
                             androidx.compose.ui.geometry.Offset(event[1].toFloat(), event[2].toFloat()))
                         else {
-                            val code = when (event[1]) { 1 -> java.awt.event.KeyEvent.VK_ESCAPE; 15 -> java.awt.event.KeyEvent.VK_TAB; 28 -> java.awt.event.KeyEvent.VK_ENTER; 23 -> java.awt.event.KeyEvent.VK_I; 33 -> java.awt.event.KeyEvent.VK_F; 57 -> java.awt.event.KeyEvent.VK_SPACE; 103 -> java.awt.event.KeyEvent.VK_UP; 105 -> java.awt.event.KeyEvent.VK_LEFT; 106 -> java.awt.event.KeyEvent.VK_RIGHT; 108 -> java.awt.event.KeyEvent.VK_DOWN; else -> 0 }
+                            val code = when (event[1]) { 1 -> java.awt.event.KeyEvent.VK_ESCAPE; 15 -> java.awt.event.KeyEvent.VK_TAB; 28 -> java.awt.event.KeyEvent.VK_ENTER; 23 -> java.awt.event.KeyEvent.VK_I; 33 -> java.awt.event.KeyEvent.VK_F; 57 -> java.awt.event.KeyEvent.VK_SPACE; 102 -> java.awt.event.KeyEvent.VK_HOME; 107 -> java.awt.event.KeyEvent.VK_END; 104 -> java.awt.event.KeyEvent.VK_PAGE_UP; 109 -> java.awt.event.KeyEvent.VK_PAGE_DOWN; 103 -> java.awt.event.KeyEvent.VK_UP; 105 -> java.awt.event.KeyEvent.VK_LEFT; 106 -> java.awt.event.KeyEvent.VK_RIGHT; 108 -> java.awt.event.KeyEvent.VK_DOWN; else -> 0 }
                             if (code != 0) {
                                 val pressed = event[0] == 3
                                 val awt = java.awt.event.KeyEvent(fakeComponent, if (pressed) java.awt.event.KeyEvent.KEY_PRESSED else java.awt.event.KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0, code, java.awt.event.KeyEvent.CHAR_UNDEFINED)
-                                val consumed = scene!!.sendKeyEvent(androidx.compose.ui.input.key.KeyEvent(awt))
+                                val keyEvent = androidx.compose.ui.input.key.KeyEvent(awt)
+                                val scrollTarget = if (showingInfo && pressed) playbackInfoScrollTarget(keyEvent.key, infoScroll.value, infoScroll.maxValue) else null
+                                val consumed = if (scrollTarget != null) { kotlinx.coroutines.runBlocking { infoScroll.scrollTo(scrollTarget) }; true } else scene!!.sendKeyEvent(keyEvent)
                                 if (pressed && !consumed && (!showingInfo || code == java.awt.event.KeyEvent.VK_ESCAPE)) when (code) {
                                     java.awt.event.KeyEvent.VK_ESCAPE -> if (showingInfo) showingInfo = false else exitRequested = true
                                     java.awt.event.KeyEvent.VK_I -> { sections = info(); showingInfo = true }

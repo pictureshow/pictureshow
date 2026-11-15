@@ -3,9 +3,18 @@
  */
 package app.pictureshow.core
 
-import app.pictureshow.core.playback.*
-import kotlinx.serialization.json.*
-import kotlin.test.*
+import app.pictureshow.core.playback.HdrOutput
+import app.pictureshow.core.playback.PlaybackFormatInformation
+import app.pictureshow.core.playback.VideoRangeType
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class PlaybackFormatsVectorsTest {
     @Test fun sourceDecoderAndDisplayEvidenceVectors() {
@@ -18,7 +27,10 @@ class PlaybackFormatsVectorsTest {
             val input = c.getValue("input").jsonObject
             fun str(k: String) = input[k]?.jsonPrimitive?.contentOrNull
             val actual = when (c.getValue("operation").jsonPrimitive.content) {
-                "range" -> PlaybackFormatInformation.range(str("range")?.let(VideoRangeType::valueOf), input["profile"]?.jsonPrimitive?.intOrNull)
+                "range" -> PlaybackFormatInformation.range(
+                    str("range")?.let(VideoRangeType::valueOf),
+                    input["profile"]?.jsonPrimitive?.intOrNull
+                )
                 "decoder" -> PlaybackFormatInformation.decoder(str("hwdec"))
                 "display" -> PlaybackFormatInformation.display(str("transfer"), HdrOutput.valueOf(requireNotNull(str("output"))))
                 else -> error("Unknown playback format vector")

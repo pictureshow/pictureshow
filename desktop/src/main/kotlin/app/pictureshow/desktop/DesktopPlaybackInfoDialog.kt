@@ -24,13 +24,8 @@ internal fun DesktopPlaybackInfoDialog(sections: List<PlaybackInfoSection>, clos
         if (it.type != KeyEventType.KeyDown) false
         else if (it.key == Key.Escape) { close(); true }
         else {
-            val amount = when (it.key) {
-                Key.DirectionDown -> 64; Key.DirectionUp -> -64
-                Key.PageDown -> 300; Key.PageUp -> -300
-                Key.MoveHome -> -scroll.maxValue; Key.MoveEnd -> scroll.maxValue
-                else -> 0
-            }
-            if (amount != 0) { scope.launch { scroll.scrollTo((scroll.value + amount).coerceIn(0, scroll.maxValue)) }; true } else false
+            val target = playbackInfoScrollTarget(it.key, scroll.value, scroll.maxValue)
+            if (target != null) { scope.launch { scroll.scrollTo(target) }; true } else false
         }
     }, title = { Text("Playback info") }, text = {
         Box(Modifier.heightIn(max = 360.dp)) {
@@ -48,4 +43,14 @@ internal fun DesktopPlaybackInfoDialog(sections: List<PlaybackInfoSection>, clos
     }, confirmButton = {
         TextButton(onClick = close, modifier = Modifier.focusRequester(focus).controlFocus(allowInModal = true).probe("playback-info-close")) { Text("Close") }
     })
+}
+
+/** Both the window dialog and the native Wayland overlay consume scroll keys before transport keys. */
+internal fun playbackInfoScrollTarget(key: Key, value: Int, max: Int): Int? {
+    return when (key) {
+    Key.DirectionDown -> value + 64; Key.DirectionUp -> value - 64
+    Key.PageDown -> value + 300; Key.PageUp -> value - 300
+    Key.MoveHome -> 0; Key.MoveEnd -> max
+    else -> return null
+    }.coerceIn(0, max)
 }

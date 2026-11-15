@@ -78,3 +78,6 @@ internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): L
             "Output state is reported by the player and operating system; it is not a measurement of panel light.")))
     }
 }
+
+internal fun waylandHdrOutput(hdr: Boolean, liveReceipt: String): HdrOutput =
+    if (hdr && liveReceipt.lineSequence().any { it.startsWith("image_description=ready;") } && !liveReceipt.contains("image_description=FAILED")) HdrOutput.WaylandPq else HdrOutput.Unknown

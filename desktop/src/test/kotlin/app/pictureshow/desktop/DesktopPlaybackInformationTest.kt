@@ -9,6 +9,19 @@ import androidx.compose.ui.input.key.Key
 import kotlin.test.*
 
 class DesktopPlaybackInformationTest {
+    @Test fun liveWaylandLogProvesOnlyCompositorAcceptanceAndOverlayScrollKeysStayInThePanel() {
+        assertEquals(HdrOutput.WaylandPq, waylandHdrOutput(true, "image_description=ready; transfer=ST2084_PQ(11); primaries=BT2020(6)\n"))
+        assertEquals(HdrOutput.Unknown, waylandHdrOutput(true, "image_description=FAILED\n"))
+        assertEquals(HdrOutput.Unknown, waylandHdrOutput(false, "image_description=ready; transfer=ST2084_PQ(11)"))
+        assertEquals(HdrOutput.Unknown, waylandHdrOutput(true, "PQ_BT2020_ready=1"))
+        assertEquals(64, playbackInfoScrollTarget(Key.DirectionDown, 0, 1000))
+        assertEquals(300, playbackInfoScrollTarget(Key.PageDown, 0, 1000))
+        assertEquals(0, playbackInfoScrollTarget(Key.MoveHome, 700, 1000))
+        assertEquals(1000, playbackInfoScrollTarget(Key.MoveEnd, 0, 1000))
+        assertEquals(0, playbackInfoScrollTarget(Key.DirectionUp, 0, 1000))
+        assertNull(playbackInfoScrollTarget(Key.DirectionRight, 0, 1000))
+    }
+
     @Test fun readsActualSelectedCodecsAndNeverNegotiationCandidatesOrPrivateStrings() {
         val properties = mapOf("current-tracks/video/codec" to "hevc", "current-tracks/audio/codec" to "aac",
             "video-params/w" to "3840", "video-params/h" to "2160", "video-params/gamma" to "pq",
