@@ -25,7 +25,17 @@ export function spatialKey(e: KeyboardEvent, back: () => void) {
         (n) => n.getClientRects().length && !n.closest("[inert]"),
     );
     if (!active || !nodes.includes(active)) {
-        nodes[0]?.focus();
+        // From a page heading or <main> holding focus, the first control after it,
+        // as Tab would go; from nowhere, the first control on the screen.
+        const after =
+            active && active !== document.body
+                ? nodes.find(
+                      (n) =>
+                          active.compareDocumentPosition(n) &
+                          Node.DOCUMENT_POSITION_FOLLOWING,
+                  )
+                : undefined;
+        (after ?? nodes[0])?.focus();
         return;
     }
     const r = active.getBoundingClientRect(),

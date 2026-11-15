@@ -33,13 +33,22 @@ import {
 import { Information, type InformationRoute } from "./information";
 import "./style.css";
 import "./shell.css";
-import { useAppHistory, validateHistory } from "./history";
+import {
+    useAppHistory,
+    validateHistory,
+    withRoots,
+    rootForPush,
+    rootPress,
+    rootKinds,
+    type RootKind,
+} from "./history";
+import { restorePageFocus } from "./page-focus";
 type Route =
     | CatalogRoute
     | InformationRoute
     | { kind: "settings" | "accounts" }
     | { kind: "player"; item: Item; start: number };
-type Entry = { route: Route; focus?: string; scroll?: number };
+type Entry = { route: Route; focus?: string; scroll?: number; root?: RootKind };
 function boot() {
     try {
         return {
@@ -138,16 +147,9 @@ function App() {
         [server, account],
     );
     const route = stack.at(-1)!.route;
-    const rootEntry = [...stack].reverse().find((e) =>
-        ["home", "libraries", "search", "settings"].includes(e.route.kind),
-    );
-    const navRoot =
-        rootEntry?.route.kind === "home" && route.kind === "detail" &&
-        rootEntry.focus?.startsWith("libraries:")
-            ? "libraries"
-            : rootEntry?.route.kind ?? "home";
-    const player = !!account && route.kind === "player",
-        roots = useRef<Record<string, Entry[]>>({});
+    // The lit navigation item is the root stored on the page showing (TOUCH-02).
+    const navRoot = withRoots(stack).at(-1)!.root;
+    const player = !!account && route.kind === "player";
     const appHistory = useAppHistory(
         account ? accountKey(account) : undefined,
         stack,
@@ -296,7 +298,7 @@ function App() {
                 focus: current?.dataset.focus,
                 scroll: window.scrollY,
             },
-            { route: next },
+            { route: next, root: rootForPush(stack, next) },
         ];
         appHistory.publish(nextStack, false, nextStack.slice(0, -1));
         setStack(nextStack);
@@ -375,38 +377,10 @@ function App() {
     }, [stack, account, chooser, confirmation, busy]);
     useEffect(() => {
         if (player || restoring) return;
-        const entry = stack.at(-1)!;
-        let done = false;
-        let selected: HTMLElement | undefined;
-        const restore = () => {
-            const active = document.activeElement;
-            // Detail may replace its loading action with an authoritative action. Preserve
-            // that action's focus only if its removal left the browser on the document.
-            if (done && (selected?.isConnected ||
-                (active !== document.body && active?.isConnected))) return;
-            const focusKey = done ? selected?.dataset.focus : entry.focus;
-            const targets = focusKey
-                ? [...document.querySelectorAll<HTMLElement>("[data-focus]")]
-                    .filter((e) => e.dataset.focus === focusKey)
-                : [...document.querySelectorAll<HTMLElement>("[data-autofocus]")];
-            const target = targets.find((e) => e.getClientRects().length && !e.closest("[inert]"));
-            if (target) {
-                target.focus({ preventScroll: true });
-                if (!done) {
-                    target.scrollIntoView({ block: "nearest", inline: "nearest" });
-                    if (entry.scroll !== undefined) window.scrollTo(0, entry.scroll);
-                }
-                selected = target;
-                done = true;
-            }
-        };
-        const observer = new MutationObserver(restore);
-        observer.observe(document.getElementById("main")!, {
-            childList: true,
-            subtree: true,
-        });
-        restore();
-        return () => observer.disconnect();
+        return restorePageFocus(
+            document.getElementById("main")!,
+            stack.at(-1)!,
+        );
     }, [stack, account, server, restoring, chooser]);
     // Retain safe catalog entries across reloads; never persist an Item DTO or an active player.
     useEffect(() => {
@@ -531,13 +505,28 @@ function App() {
         setChooser(false);
         setStack([{ route: { kind: "home" } }]);
     }
-    function rootTab(kind: "home" | "libraries" | "search" | "settings") {
-        if (navRoot === kind) return;
-        roots.current[accountKey(account!) + ":" + navRoot] = stack;
-        const next = roots.current[accountKey(account!) + ":" + kind] ?? [
-            { route: { kind } },
-        ];
-        appHistory.publish(next);
+    // A navigation press opens that root's top page, from anywhere, and pushes a
+    // browser history entry so Back returns to the page it was pressed on.
+    function rootTab(kind: RootKind) {
+        setReturnBarrier(undefined);
+        setReturnReportRetry(undefined);
+        const next: Entry[] | undefined = rootPress(stack, kind);
+        if (!next) {
+            window.scrollTo({ top: 0 });
+            return;
+        }
+        const current = document.activeElement as HTMLElement;
+        appHistory.publish(next, false, [
+            ...stack.slice(0, -1),
+            {
+                ...stack.at(-1)!,
+                // A press in the navigation has no place on the page to return to.
+                focus: document.getElementById("main")?.contains(current)
+                    ? current.dataset.focus
+                    : undefined,
+                scroll: window.scrollY,
+            },
+        ]);
         setStack(next);
         setError("");
     }
@@ -594,7 +583,7 @@ function App() {
     }
     if (storageError || !saved)
         return (
-            <main id="main">
+            <main id="main" tabIndex={-1}>
                 <h1>Browser storage unavailable</h1>
                 <p role="alert">{storageError}</p>
                 <button
@@ -652,7 +641,16 @@ function App() {
     );
     return (
         <>
-            <a className="skip" href="#main">
+            <a
+                className="skip"
+                href="#main"
+                onClick={(e) => {
+                    // A fragment navigation fires popstate, which the app history
+                    // would read as leaving for Home. Move focus without navigating.
+                    e.preventDefault();
+                    document.getElementById("main")?.focus();
+                }}
+            >
                 Skip to content
             </a>
             <header className={player ? "theater-hidden" : `app-header ${route.kind === "home" ? "home-header" : ""}`}>
@@ -666,7 +664,7 @@ function App() {
                 </span>
                 {account && (
                     <nav className="header-actions" aria-label="Main navigation">
-                        {(["home", "libraries", "search", "settings"] as const).map((kind) => (
+                        {rootKinds.map((kind) => (
                             <button
                                 key={kind}
                                 data-focus={`header:${kind}`}
@@ -682,6 +680,7 @@ function App() {
             </header>
             <main
                 id="main"
+                tabIndex={-1}
                 onClickCapture={(e) => {
                     if (e.target instanceof Element)
                         e.target
@@ -872,7 +871,7 @@ function App() {
             </main>
             {account && !player && !chooser && (
                 <nav className="root-navigation" aria-label="Main navigation">
-                    {(["home", "libraries", "search", "settings"] as const).map(
+                    {rootKinds.map(
                         (kind) => (
                             <button
                                 key={kind}

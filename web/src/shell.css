@@ -206,6 +206,11 @@ dialog h2 {
 .root-navigation {
     display: none;
 }
+/* <main> takes focus from the skip link only to start Tab inside the page; it is not a control. A focused
+   heading keeps its ring (rc28), so a page heading holding focus while it loads still shows where focus is. */
+#main:focus {
+    outline: none;
+}
 a:focus-visible,
 [tabindex]:focus-visible {
     outline: 3px solid #eaddff;
