@@ -1086,7 +1086,7 @@ internal fun PlayerItemScreen(
                             localPreferences.tuning,
                             host.effectiveSettings.maxStreamingBitrate,
                             host.adaptiveQualityNotice,
-                            host.output.speed.value.encodedAudio
+                            speedState.encodedAudio
                         ) {
                             close(dismiss)
                         }
