@@ -141,11 +141,11 @@ class DesktopSearchTest {
                         DesktopApp(c, {}, false, { preview = it }, windowFallbackKeys = { fallback = it }, macShortcuts = true)
                     }
                 }
-                waitUntil(5000) { DesktopUiProbe.focus["search-field"] == true }
+                waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search-field"] == true }
                 onNodeWithTag("search-field").performTextInput("Cloud")
-                waitUntil(8000) { c.state.value.search.completed }
+                waitUntil(timeoutMillis = 8000) { c.state.value.search.completed }
                 onNodeWithTag("search-field").performKeyInput { pressKey(Key.DirectionDown) }
-                waitUntil(5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
+                waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
                 onNodeWithTag("search:MOVIES:a").performKeyInput { pressKey(Key.DirectionUp) }
                 onNodeWithTag("search-field").assertIsFocused()
                 onNodeWithTag("search-field").performKeyInput { pressKey(Key.DirectionDown) }
@@ -154,10 +154,10 @@ class DesktopSearchTest {
                 onNodeWithTag("search:EPISODES:episode").performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.Tab) } }
                 onNodeWithTag("search:MOVIES:a").assertIsFocused()
                 onNodeWithTag("search:MOVIES:a").performKeyInput { pressKey(Key.Enter) }
-                waitUntil(5000) { c.state.value.route == DesktopRoute.Detail && !c.state.value.busy }
+                waitUntil(timeoutMillis = 5000) { c.state.value.route == DesktopRoute.Detail && !c.state.value.busy }
                 onRoot().performKeyInput { pressKey(Key.Escape) }
-                waitUntil(5000) { c.state.value.route == DesktopRoute.Search }
-                waitUntil(5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
+                waitUntil(timeoutMillis = 5000) { c.state.value.route == DesktopRoute.Search }
+                waitUntil(timeoutMillis = 5000) { DesktopUiProbe.focus["search:MOVIES:a"] == true }
                 onNodeWithTag("search-field").assertTextContains("Cloud")
                 onNodeWithTag("nav:search").assertIsDisplayed()
             }

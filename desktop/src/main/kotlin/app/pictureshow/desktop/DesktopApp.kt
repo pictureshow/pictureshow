@@ -375,11 +375,11 @@ internal fun DesktopSidebar(
     libraries: List<MediaItem>,
     root: String?,
     onHome: () -> Unit,
-    onSearch: () -> Unit = {},
     onLibrary: (MediaItem) -> Unit,
     onSettings: () -> Unit,
     onAccounts: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onSearch: () -> Unit = {}
 ) {
     Column(Modifier.width(SIDEBAR_WIDTH_DP.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 12.dp).testTag("sidebar")) {
         DesktopAccountMenu(account, onSettings, onAccounts, onSignOut, Modifier.padding(horizontal = 12.dp))
