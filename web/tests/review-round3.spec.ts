@@ -446,6 +446,16 @@ for (const [size, width, height] of [
             .toBeLessThanOrEqual(transportBox.y);
         for (const button of await page.locator(".next-episode button").all())
             await expect.soft(button).toBeInViewport({ ratio: 1 });
+        await expect
+            .soft(
+                page
+                    .locator(".next-episode")
+                    .getByRole("button", {
+                        name: "Cancel next title",
+                        exact: true,
+                    }),
+            )
+            .toHaveText("Cancel");
         if (width === 390) {
             const primary = (await page
                 .locator(".next-episode")
@@ -804,6 +814,21 @@ test("R3 follow-up: pointer More has quiet focus and labelled rows, keyboard kee
         (await dialog.boundingBox())!.width * 0.7,
     );
     await shot(page, "more-phone");
+    const labels = await dialog
+        .locator(".more-tools .tool-label")
+        .evaluateAll((es) =>
+            es.map((e) => ({
+                x: e.getBoundingClientRect().x,
+                size: getComputedStyle(e).fontSize,
+                weight: getComputedStyle(e).fontWeight,
+            })),
+        );
+    expect(
+        Math.max(...labels.map((e) => e.x)) -
+            Math.min(...labels.map((e) => e.x)),
+    ).toBeLessThanOrEqual(1);
+    expect(new Set(labels.map((e) => e.size)).size).toBe(1);
+    expect(new Set(labels.map((e) => e.weight)).size).toBe(1);
     await page.keyboard.press("Escape");
     await more.focus();
     await page.keyboard.press("Enter");

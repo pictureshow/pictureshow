@@ -76,7 +76,8 @@ fun homePinPickerSupport(pinned: Boolean, count: Int?): String? =
 fun resetHomeLayout(preferences: HomePreferences, confirmed: Boolean): HomePreferences =
     if (confirmed) HomePreferences(libraries = preferences.libraries) else preferences
 
-fun titleCountLabel(count: Int, exact: Boolean = true): String = if (count == 1 && exact) "1 title" else "$count${if (exact) "" else "+"} titles"
+fun titleCountLabel(count: Int, exact: Boolean = true): String =
+    if (count == 1 && exact) "1 title" else "$count${if (exact) "" else "+"} titles"
 
 fun VideoResolution.summary(): String = when (this) {
     VideoResolution.ANY -> "Any"

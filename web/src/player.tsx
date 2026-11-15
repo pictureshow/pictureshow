@@ -3145,7 +3145,7 @@ export function Player({
             >
                 Playback info
             </button>
-            <div className="volume-control">
+            <div className="volume-control tool-row">
                 <button
                     className="icon-control"
                     aria-label={muted ? "Unmute" : "Mute"}
@@ -3188,7 +3188,7 @@ export function Player({
             </div>
             {fullscreenAvailable && (
                 <button
-                    className="icon-control"
+                    className="icon-control tool-row"
                     aria-label={fullscreen ? "Exit full screen" : "Full screen"}
                     title={fullscreen ? "Exit full screen" : "Full screen"}
                     aria-keyshortcuts="F"
@@ -3217,7 +3217,7 @@ export function Player({
                 </button>
             )}
             <button
-                className="shortcuts-control icon-control"
+                className="shortcuts-control icon-control tool-row"
                 aria-label="Keyboard shortcuts (?)"
                 aria-keyshortcuts="?"
                 title="Keyboard shortcuts (?)"
@@ -3428,6 +3428,7 @@ export function Player({
                                     </button>
                                 )}
                             <button
+                                aria-label={`Cancel next ${nextNoun}`}
                                 onClick={() => {
                                     setCancelNext(true);
                                     completionNext.current = null;
@@ -3441,7 +3442,7 @@ export function Player({
                                     video.current?.focus();
                                 }}
                             >
-                                Cancel next {nextNoun}
+                                Cancel
                             </button>
                         </div>
                     </aside>

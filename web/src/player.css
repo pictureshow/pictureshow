@@ -937,6 +937,7 @@ html[data-input="keyboard"]
 }
 
 .player-overlay .next-actions button {
+    white-space: nowrap;
     margin: 0;
 }
 .player-overlay .tool-label {
@@ -945,15 +946,32 @@ html[data-input="keyboard"]
 .player-overlay .more-tools .tool-label {
     display: inline;
 }
-.player-overlay .more-tools .icon-control {
-    justify-content: flex-start;
+/* The mute control keeps its 48px touch target; every tool label starts after
+   that same icon column instead of following each glyph's intrinsic width. */
+.player-overlay .more-tools .tool-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: center;
     gap: 0.75rem;
+    padding: 0.5rem;
+    font-size: 1rem;
+    font-weight: 400;
+    text-align: left;
+}
+.player-overlay .more-tools .tool-row > :first-child {
+    justify-self: center;
 }
 .player-overlay .more-tools .volume-control {
-    gap: 0.75rem;
+    grid-template-columns: 48px max-content minmax(0, 1fr);
+}
+.player-overlay .more-tools .volume-control button {
+    min-width: 48px;
+    padding: 0;
+    justify-content: center;
 }
 .player-overlay .more-tools .volume-control input {
-    flex: 1;
+    width: 100%;
+    min-width: 0;
     max-width: none;
 }
 .player-overlay .player-panel:has(.more-tools) .player-panel-done {
