@@ -11,7 +11,8 @@ data class DesktopReceivedFormats(
     val videoCodec: String? = null, val width: Int? = null, val height: Int? = null,
     val transfer: String? = null, val primaries: String? = null, val pixelFormat: String? = null,
     val audioCodec: String? = null, val audioChannels: Int? = null, val audioSampleRate: Int? = null,
-    val hwdec: String? = null, val output: HdrOutput = HdrOutput.Unknown
+    val hwdec: String? = null, val output: HdrOutput = HdrOutput.Unknown,
+    val audioDecoder: String? = null
 )
 
 internal fun receivedFormats(get: (String) -> String?, output: HdrOutput): DesktopReceivedFormats {
@@ -20,7 +21,7 @@ internal fun receivedFormats(get: (String) -> String?, output: HdrOutput): Deskt
         token("current-tracks/video/codec"), get("video-params/w")?.toIntOrNull(), get("video-params/h")?.toIntOrNull(),
         token("video-params/gamma"), token("video-params/primaries"), token("video-params/pixelformat"),
         token("current-tracks/audio/codec"), get("audio-params/channel-count")?.toIntOrNull(), get("audio-params/samplerate")?.toIntOrNull(),
-        token("hwdec-current"), output
+        token("hwdec-current"), output, token("current-tracks/audio/decoder")
     )
 }
 
@@ -80,7 +81,7 @@ internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): L
             "Pixel format / surface" to PlaybackInformation.codec(f.pixelFormat),
             "Audio" to if (p.audioIndex < 0) "Off" else "${PlaybackInformation.codec(f.audioCodec)} · ${number(f.audioChannels, "channels")} · ${number(f.audioSampleRate, "Hz")}",
             "Video decoder" to PlaybackFormatInformation.decoder(f.hwdec),
-            "Audio decoder" to if (p.audioIndex < 0) "Off" else if (f.audioCodec != null) "Software (mpv)" else "Not reported"
+            "Audio decoder" to if (p.audioIndex < 0) "Off" else f.audioDecoder?.let { "mpv · ${PlaybackInformation.codec(it)}" } ?: "Not reported"
         )))
     }
 }

@@ -26,11 +26,13 @@ class DesktopPlaybackInformationTest {
         val properties = mapOf("current-tracks/video/codec" to "hevc", "current-tracks/audio/codec" to "aac",
             "video-params/w" to "3840", "video-params/h" to "2160", "video-params/gamma" to "pq",
             "hwdec-current" to "no", "audio-params/channel-count" to "6", "audio-params/samplerate" to "48000",
-            "video-params/primaries" to "https://private.invalid/token")
+            "video-params/primaries" to "https://private.invalid/token", "current-tracks/audio/decoder" to "aac")
         val f = receivedFormats(properties::get, HdrOutput.HdrEdR)
         assertEquals("hevc", f.videoCodec); assertEquals("aac", f.audioCodec)
         assertEquals(3840, f.width); assertEquals(2160, f.height)
         assertEquals(6, f.audioChannels); assertEquals(48000, f.audioSampleRate)
+        assertEquals("aac", f.audioDecoder)
+        assertNull(receivedFormats({ "https://private.invalid/token" }, HdrOutput.Unknown).audioDecoder)
         assertNull(f.primaries); assertEquals("Software (mpv)", PlaybackFormatInformation.decoder(f.hwdec))
         assertEquals(DesktopReceivedFormats(), receivedFormats({ null }, HdrOutput.Unknown))
     }
@@ -62,6 +64,12 @@ class DesktopPlaybackInformationTest {
         assertNotNull(sections.first { it.title == "Source · server metadata" }.note)
         val direct = playbackInfoSections(p.copy(decision = PlayDecision(d.itemId, d.mediaSource, PlayMethod.DirectPlay, d.url, d.headers, null)), null)
         assertNull(direct.first { it.title == "Source · server metadata" }.note)
+        val unreportedDecoder = playbackInfoSections(p.copy(received = DesktopReceivedFormats(audioCodec = "aac")), null)
+            .first { it.title == "Received by this computer" }.fields.toMap()
+        assertEquals("Not reported", unreportedDecoder["Audio decoder"])
+        val observedDecoder = playbackInfoSections(p.copy(received = DesktopReceivedFormats(audioCodec = "aac", audioDecoder = "aac")), null)
+            .first { it.title == "Received by this computer" }.fields.toMap()
+        assertEquals("mpv · AAC", observedDecoder["Audio decoder"])
         assertEquals("Display output", direct[1].title)
         val engine = NativeDesktopPlayback(java.io.File(System.getProperty("java.io.tmpdir"), "playinfo-unit"))
         engine.informationQuality(4)
