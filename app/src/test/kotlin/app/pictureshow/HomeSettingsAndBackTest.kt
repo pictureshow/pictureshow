@@ -237,7 +237,7 @@ class HomeSettingsAndBackTest {
         compose.onAllNodesWithText("Jamie · Screen room").assertCountEquals(0)
         val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
         val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
-        assertEquals(search.height, settings.height, "header buttons keep one line")
+        assertEquals(search.bottom - search.top, settings.bottom - settings.top, "header buttons keep one line")
     }
 
     @Test
