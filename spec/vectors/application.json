@@ -7050,7 +7050,7 @@
         "input": {
           "ticks": 599999999
         },
-        "expected": "59 s"
+        "expected": "1m"
       },
       {
         "id": "runtime-label-one-minute",

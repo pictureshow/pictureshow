@@ -146,8 +146,12 @@ fun runtimeLabel(ticks: Long?): String {
     // A generous 24-hour display ceiling rejects overflow-derived DVD runtimes. Neither chapters
     // (start positions) nor an EOF playhead after a seek establishes a replacement total. Omit it.
     if (ticks == null || ticks !in 1..864_000_000_000L) return ""
-    // A clip under a minute names its seconds; "1m" for 31 s overstated it (CAT-05). Never "0 s" or "60 s".
-    if (ticks < 600_000_000) return "${((ticks + 5_000_000) / 10_000_000).coerceIn(1, 59)} s"
+    // A clip under a minute names its seconds; "1m" for 31 s overstated it (CAT-05). Seconds round to the
+    // nearest, so 59.99 s reads "1m" rather than "59 s", and nothing reads "0 s".
+    if (ticks < 600_000_000) {
+        val seconds = ((ticks + 5_000_000) / 10_000_000).coerceAtLeast(1)
+        return if (seconds < 60) "$seconds s" else "1m"
+    }
     val minutes = ticks / 600_000_000
     val hours = minutes / 60
     return if (hours > 0) "${hours}h ${minutes % 60}m" else "${minutes}m"
