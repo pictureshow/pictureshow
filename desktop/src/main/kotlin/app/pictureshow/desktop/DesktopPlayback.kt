@@ -72,7 +72,8 @@ internal fun nativeSubtitleOrdinal(streams: List<MediaStream>, index: Int): Int?
 }
 
 data class EngineSnapshot(val positionSeconds: Double = 0.0, val durationSeconds: Double = 0.0, val paused: Boolean = false,
-    val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false)
+    val ready: Boolean = false, val ended: Boolean = false, val error: String? = null, val exitRequested: Boolean = false,
+    val liveWindow: app.pictureshow.core.playback.ObservedLiveWindow? = null)
 
 /** A per-viewing loopback capability. Every redirect and HLS reference is checked before credentials leave the process. */
 internal class DesktopMediaProxy(private val account: Account, private val decision: PlayDecision) : AutoCloseable {
@@ -294,7 +295,8 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
             positionSeconds = (p.get("time-pos")?.toDoubleOrNull() ?: 0.0) + offset,
             durationSeconds = (p.get("duration")?.toDoubleOrNull() ?: 0.0) + offset,
             paused = p.get("pause") == "yes", ready = ready,
-            ended = p.get("eof-reached") == "yes", error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true
+            ended = p.get("eof-reached") == "yes", error = failure.get() ?: linux?.error(), exitRequested = linux?.exitRequested == true,
+            liveWindow = if (sourceDecision?.isLive == true) desktopLiveWindow(p.get("demuxer-cache-state"), p.get("seekable") == "yes") else null
         )
     }
     @Synchronized override fun selectAudio(index: Int): Boolean {
@@ -324,8 +326,19 @@ class NativeDesktopPlayback(private val directory: File) : DesktopPlaybackEngine
         }
         return true
     }
-    override fun togglePause() { mpv?.command("cycle", "pause") }
-    override fun seek(seconds: Double) { mpv?.command("seek", (seconds - offset).coerceAtLeast(0.0).toString(), "absolute+exact") }
+    override fun togglePause() {
+        if (sourceDecision?.isLive == true && snapshot().liveWindow?.canTimeShift != true) return
+        mpv?.command("cycle", "pause")
+    }
+    override fun seek(seconds: Double) {
+        var target = seconds
+        if (sourceDecision?.isLive == true) {
+            val w = snapshot().liveWindow ?: return
+            if (!w.canTimeShift) return
+            target = seconds.coerceIn(w.offsetMs / 1000.0, (w.offsetMs + (w.goLivePosition() ?: return)) / 1000.0)
+        }
+        mpv?.command("seek", (target - offset).coerceAtLeast(0.0).toString(), "absolute+exact")
+    }
     override fun volume(value: Int) { mpv?.set("volume", value.coerceIn(0, 100).toString()) }
     override fun mute(muted: Boolean) { if (!stopped.get()) mpv?.set("mute", if (muted) "yes" else "no") }
     override fun viewport(topRatio: Double, bottomRatio: Double) {

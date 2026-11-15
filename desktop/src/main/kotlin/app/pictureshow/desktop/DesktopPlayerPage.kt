@@ -173,10 +173,13 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(p.item.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (p.isLiveChannel) livePlayerProgram(p.liveChannel, System.currentTimeMillis())?.name ?: p.item.name else p.item.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     flash?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                 }
-                Row(Modifier.onGloballyPositioned { seekTop = it.positionInWindow().y.toInt() }, verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                if (p.isLiveChannel) {
+                    p.liveChannel?.let { channel -> Text(listOfNotNull(channel.number, channel.name, livePlayerProgram(channel, System.currentTimeMillis())?.let { liveRange(it.startDate, it.endDate) }).joinToString(" · "), style = MaterialTheme.typography.bodySmall) }
+                    DesktopLiveTimeline(p, c)
+                } else Row(Modifier.onGloballyPositioned { seekTop = it.positionInWindow().y.toInt() }, verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text(clock(p.positionSeconds),Modifier.width(72.dp),textAlign=TextAlign.End,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
                     SeekBar(p, c, Modifier.weight(1f))
                     Text(clock(p.durationSeconds),Modifier.width(72.dp),textAlign=TextAlign.Start,style=MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings="tnum"))
@@ -184,9 +187,9 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
 
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        DesktopTooltip("Back 10 seconds", above = true) { IconButton(onClick={c.seekBy(-10.0)},modifier = Modifier.controlFocus().probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
-                        DesktopTooltip(if (p.paused) "Play" else "Pause", above = true) { FilledIconButton(onClick=c::playerToggle,modifier = Modifier.controlFocus().probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
-                        DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seekBy(10.0)},modifier = Modifier.controlFocus().probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
+                        DesktopTooltip("Back 10 seconds", above = true) { IconButton(onClick={c.seekBy(-10.0)},enabled = !p.isLiveChannel || p.canTimeShift(),modifier = Modifier.controlFocus().probe("seek-back")) { Icon(DesktopGlyph.TransportBack,contentDescription="Back 10 seconds") } }
+                        DesktopTooltip(if (p.paused) "Play" else "Pause", above = true) { FilledIconButton(onClick=c::playerToggle,enabled = !p.isLiveChannel || p.liveWindow?.canTimeShift == true,modifier = Modifier.controlFocus().probe("pause")) { Icon(if (p.paused) DesktopGlyph.Play else DesktopGlyph.Pause, contentDescription = if (p.paused) "Play" else "Pause") } }
+                        DesktopTooltip("Forward 10 seconds", above = true) { IconButton(onClick={c.seekBy(10.0)},enabled = !p.isLiveChannel || p.canTimeShift(),modifier = Modifier.controlFocus().probe("seek-forward")) { Icon(DesktopGlyph.TransportForward,contentDescription="Forward 10 seconds") } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TrackMenu("Audio", "audio", DesktopGlyph.Audio,
