@@ -42,6 +42,7 @@ import {
     ParityCatalogClient,
     playbackRequest,
     serverLabel,
+    searchDuplicateLabels,
 } from "./parity";
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
@@ -790,6 +791,9 @@ for (const file of files) {
                         break;
                     case "server-label":
                         value = serverLabel(i.server, i.all);
+                        break;
+                    case "search-duplicate-labels":
+                        value = searchDuplicateLabels(i.items);
                         break;
                     case "settings":
                         value = decodeSettings(i);

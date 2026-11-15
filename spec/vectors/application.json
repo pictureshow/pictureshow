@@ -7217,6 +7217,191 @@
           }
         },
         "expected": null
+      },
+      {
+        "id": "search-duplicate-labels.same-film-two-libraries",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Movie",
+              "name": "Sintel",
+              "year": 2010
+            },
+            {
+              "id": "b",
+              "type": "Movie",
+              "name": "Sintel",
+              "year": 2010
+            },
+            {
+              "id": "c",
+              "type": "Movie",
+              "name": "Big Buck Bunny",
+              "year": 2008
+            }
+          ]
+        },
+        "expected": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "id": "search-duplicate-labels.different-year-is-distinct",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Movie",
+              "name": "Dune",
+              "year": 1984
+            },
+            {
+              "id": "b",
+              "type": "Movie",
+              "name": "Dune",
+              "year": 2021
+            }
+          ]
+        },
+        "expected": []
+      },
+      {
+        "id": "search-duplicate-labels.case-and-spacing-ignored",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Movie",
+              "name": "Sintel ",
+              "year": 2010
+            },
+            {
+              "id": "b",
+              "type": "Movie",
+              "name": "sintel",
+              "year": 2010
+            }
+          ]
+        },
+        "expected": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "id": "search-duplicate-labels.missing-year-matches-missing-year",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Movie",
+              "name": "Home Video",
+              "year": null
+            },
+            {
+              "id": "b",
+              "type": "Movie",
+              "name": "Home Video",
+              "year": null
+            },
+            {
+              "id": "c",
+              "type": "Movie",
+              "name": "Home Video",
+              "year": 2001
+            }
+          ]
+        },
+        "expected": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "id": "search-duplicate-labels.episodes-need-same-series",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Episode",
+              "name": "Pilot",
+              "year": 2010,
+              "seriesName": "Open Series"
+            },
+            {
+              "id": "b",
+              "type": "Episode",
+              "name": "Pilot",
+              "year": 2010,
+              "seriesName": "Open Series"
+            },
+            {
+              "id": "c",
+              "type": "Episode",
+              "name": "Pilot",
+              "year": 2010,
+              "seriesName": "Other Show"
+            }
+          ]
+        },
+        "expected": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "id": "search-duplicate-labels.kinds-kept-apart",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Movie",
+              "name": "Sintel",
+              "year": 2010
+            },
+            {
+              "id": "b",
+              "type": "Series",
+              "name": "Sintel",
+              "year": 2010
+            }
+          ]
+        },
+        "expected": []
+      },
+      {
+        "id": "search-duplicate-labels.people-never-labelled",
+        "operation": "search-duplicate-labels",
+        "source": "spec/features/catalog.md CAT-14a",
+        "input": {
+          "items": [
+            {
+              "id": "a",
+              "type": "Person",
+              "name": "Alex Smith"
+            },
+            {
+              "id": "b",
+              "type": "Person",
+              "name": "Alex Smith"
+            }
+          ]
+        },
+        "expected": []
       }
   ]
 }

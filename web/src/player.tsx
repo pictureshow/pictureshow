@@ -16,6 +16,7 @@ import {
     type Decision,
     type Stream,
     canDecodeVideo,
+    elementProbe,
 } from "@pictureshow/core";
 import {
     BROWSER_DEVICE,
@@ -25,6 +26,7 @@ import {
     conversionKind,
     conversionNotice,
     conversionRemedies,
+    playableOtherAudioTracks,
     osFamily,
     conversionSummary,
     cueNearTop,
@@ -102,6 +104,7 @@ export type PlayerPreferences = {
     conversionNotice?: boolean;
 };
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+const CONTROLS_HIDDEN = "Controls hidden. Press Enter to show them.";
 const rateLabel = (rate: number) => `${rate}×`;
 /** Friendly name for a codec string the decoder actually received. */
 function codecName(codec: string | undefined) {
@@ -466,6 +469,9 @@ export function Player({
     // The notice's action line follows the viewer's last input, tracked app-wide
     // from the first interaction (so the press that opened the player counts).
     const noticeInput = useLastInput();
+    const lastInput = useRef(noticeInput);
+    lastInput.current = noticeInput;
+    const keyboardHints = useRef(0);
     const speedRef = useRef(1),
         speedNoteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
             undefined,
@@ -726,19 +732,19 @@ export function Player({
         lastActivity.current = Date.now();
         if (focus) requestAnimationFrame(() => playButton.current?.focus());
     }
+    /** PLAY-29: hidden controls say how to bring them back by keyboard. */
+    function hiddenHint(ms: number) {
+        setNotice(CONTROLS_HIDDEN);
+        setTimeout(() => {
+            if (alive.current)
+                setNotice((value) => (value === CONTROLS_HIDDEN ? "" : value));
+        }, ms);
+    }
     function hide() {
         pendingPanel.current = undefined;
         setPanel(undefined);
         setControls(false);
-        setNotice("Controls hidden. Press Enter to show them.");
-        setTimeout(() => {
-            if (alive.current)
-                setNotice((value) =>
-                    value === "Controls hidden. Press Enter to show them."
-                        ? ""
-                        : value,
-                );
-        }, 1800);
+        hiddenHint(1800);
         video.current?.focus();
     }
     function back() {
@@ -1017,6 +1023,15 @@ export function Player({
                 if (active === video.current || active === document.body) {
                     setControls(false);
                     video.current?.focus();
+                    // A pointer brings them back by moving; a keyboard viewer
+                    // is told the key (web-kofi F3), the first few times only.
+                    if (
+                        lastInput.current === "keyboard" &&
+                        keyboardHints.current < 3
+                    ) {
+                        keyboardHints.current++;
+                        hiddenHint(4000);
+                    }
                 }
             }
         }, 500);
@@ -1522,7 +1537,7 @@ export function Player({
         setReceived({});
         setVideoSize("");
         replacing.current = true;
-        const probe = (mime: string) => el.canPlayType(mime) === "probably";
+        const probe = elementProbe(el);
         const clearWaiting = () => {
             clearTimeout(slow);
             clearTimeout(deadline);
@@ -2906,7 +2921,7 @@ export function Player({
             kind,
             viewer.browser,
             viewer.os,
-            sourceStreams.filter((s) => s.Type === "Audio").length,
+            playableOtherAudioTracks({ MediaStreams: sourceStreams }, d.url),
         );
         const browserSteps =
             kind === "video" &&

@@ -21,6 +21,7 @@ import {
     type Row,
 } from "@pictureshow/core";
 import { detailReadyCue } from "@pictureshow/core/rc26";
+import { searchDuplicateLabels } from "@pictureshow/core/parity";
 import "./catalog.css";
 import {
     projectCompletion,
@@ -53,6 +54,8 @@ export type CatalogRoute =
 export type CatalogDestination =
     CatalogRoute | { kind: "player"; item: Item; start: number };
 export type CatalogItem = Item & {
+    /** Set by Search only when another result would show the same card (CAT-14a). */
+    LibraryName?: string;
     Genres?: string[];
     OfficialRating?: string;
     CommunityRating?: number;
@@ -347,7 +350,12 @@ export function Cards({
                             ? `${item.SeriesName ?? ""} ${episodeLabel(item)}`.trim()
                             : item.Type === "Person"
                               ? (item.Role ?? "Person")
-                              : (item.ProductionYear ?? libraryLabel(item));
+                              : [
+                                    item.ProductionYear ?? libraryLabel(item),
+                                    item.LibraryName,
+                                ]
+                                    .filter((part) => part != null && part !== "")
+                                    .join(" · ");
                     return (
                         <li key={item.Id}>
                             <button
@@ -806,11 +814,14 @@ export function Detail({
     reportBarrier,
     retryReport,
     onBack,
+    finished,
 }: Props & {
     id: string;
     reportBarrier?: Promise<void>;
     retryReport?: () => Promise<void>;
     onBack?: () => void;
+    /** Name of the title that just played to its end and returned here. */
+    finished?: string;
 }) {
     useCompletionPresentation(client);
     const cacheKey = `${accountKey(client)}:${id}`,
@@ -1601,14 +1612,17 @@ export function Detail({
                         >
                             {actionLabel("favorite", "Favorite")}
                         </button>
-                        <button
-                            data-focus="restart"
-                            aria-label={queuedActionName("restart")}
-                            {...slotState(false)}
-                            onClick={() => offer({ kind: "restart" })}
-                        >
-                            {actionLabel("restart", "Play from start")}
-                        </button>
+                        {!finished && (
+                            // A finished viewing leaves no resume position (W-20).
+                            <button
+                                data-focus="restart"
+                                aria-label={queuedActionName("restart")}
+                                {...slotState(false)}
+                                onClick={() => offer({ kind: "restart" })}
+                            >
+                                {actionLabel("restart", "Play from start")}
+                            </button>
+                        )}
                     </div>
                 </div>
                 {!readError && !reportError && !writeError && (
@@ -1650,7 +1664,9 @@ export function Detail({
         primary = target
             ? (target.UserData?.PlaybackPositionTicks ?? 0) > 0
                 ? resumeLabel(target.UserData!.PlaybackPositionTicks!)
-                : "▶ Play"
+                : finished && !["Series", "Season"].includes(shown.Type)
+                  ? "▶ Play again"
+                  : "▶ Play"
             : "Play",
         seriesContext =
             shown.SeriesName ??
@@ -1735,6 +1751,13 @@ export function Detail({
                                 {shown.Genres.join(" · ")}
                             </p>
                         ) : null}
+                        {finished && (
+                            // Visible twin of the app's polite "Finished" (PLAY-18 end).
+                            <p className="catalog-finished">
+                                <strong>Finished.</strong> You watched{" "}
+                                {finished} to the end.
+                            </p>
+                        )}
                         {shown.Type !== "Person" && !isLibrary && (
                             <div
                                 className="catalog-detail-actions"
@@ -2309,6 +2332,39 @@ const searchCache = new Map<string, SearchState>();
 function normalizeSearch(value: string) {
     return value.trim().slice(0, 200).trimEnd();
 }
+/**
+ * Two results that would show the same card get their library named (CAT-14a). Only those are looked up, through the
+ * item's ancestors: the library is the CollectionFolder among them. A failed lookup leaves the card as it was.
+ */
+async function nameLibraries(client: Jellyfin, rows: Row[]) {
+    const same = rows.flatMap((row) =>
+        searchDuplicateLabels(
+            (row.items as CatalogItem[]).map((item) => ({
+                id: item.Id,
+                type: item.Type,
+                name: item.Name,
+                year: item.ProductionYear,
+                seriesName: item.SeriesName,
+            })),
+        ).map((id) => (row.items as CatalogItem[]).find((i) => i.Id === id)!),
+    );
+    await Promise.all(
+        same.map(async (item) => {
+            try {
+                const ancestors = await catalog<CatalogItem[]>(
+                    client,
+                    `Items/${encodeURIComponent(item.Id)}/Ancestors`,
+                );
+                const library = ancestors.find(
+                    (a) => a.Type === "CollectionFolder",
+                )?.Name;
+                if (library) item.LibraryName = library;
+            } catch {
+                // The card stays as it was; search itself succeeded.
+            }
+        }),
+    );
+}
 export function Search({ client, navigate, onError }: Props) {
     const key = accountKey(client),
         saved = searchCache.get(key),
@@ -2420,6 +2476,8 @@ export function Search({ client, navigate, onError }: Props) {
                     notifyExpired(client, result.reason, onError);
                 }
             });
+            await nameLibraries(client, rows);
+            if (!live || gen !== generation.current) return;
             const value = { query: queryText, rows, errors };
             searchCache.set(key, value);
             setData(value);

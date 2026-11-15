@@ -10,6 +10,7 @@ import {
     chromiumDecodeSteps,
     conversionKind,
     conversionRemedies,
+    playableOtherAudioTracks,
     conversionSummary,
     conversionNotice,
     cueNearTop,
@@ -502,12 +503,35 @@ describe("PLAY-26 web plain summary and remedies", () => {
             /Chrome or Edge/,
         );
         expect(conversionRemedies("direct", "chrome")).toEqual([]);
-        // A remedy that names another track needs one to exist.
-        expect(conversionRemedies("audio", "chrome", "mac", 1)).toEqual([]);
-        expect(conversionRemedies("audio", "chrome", "mac", 2)).toHaveLength(1);
+        // A remedy that names another track needs one that plays as it is.
+        expect(conversionRemedies("audio", "chrome", "mac", 0)).toEqual([]);
+        expect(conversionRemedies("audio", "chrome", "mac", 1)).toHaveLength(1);
         expect(conversionRemedies("audio-channels", "chrome", "mac", 2)).toEqual(
             [],
         );
+    });
+    it("counts only other audio tracks in a format the stream carries", () => {
+        const source = {
+            MediaStreams: [
+                { Type: "Video", Index: 0, Codec: "h264" },
+                { Type: "Audio", Index: 1, Codec: "truehd" },
+                { Type: "Audio", Index: 2, Codec: "dts" },
+                { Type: "Audio", Index: 3, Codec: "vorbis" },
+            ],
+        };
+        const url = (audio: string, index = 1) =>
+            `https://s.example/v/master.m3u8?VideoCodec=h264&AudioCodec=${audio}&AudioStreamIndex=${index}`;
+        // The web stream carries AAC only: every track is converted, so no advice.
+        expect(playableOtherAudioTracks(source, url("aac"))).toBe(0);
+        // A list that carries DTS (as "dca" or "dts") makes track 2 an answer.
+        expect(playableOtherAudioTracks(source, url("aac,dca"))).toBe(1);
+        expect(playableOtherAudioTracks(source, url("AAC,DTS"))).toBe(1);
+        // The selected track itself never counts.
+        expect(playableOtherAudioTracks(source, url("aac,dts", 2))).toBe(0);
+        // No list: nothing is known, so nothing is advised.
+        expect(
+            playableOtherAudioTracks(source, "https://s.example/v/master.m3u8"),
+        ).toBe(0);
     });
     it("Client Hints brands identify Edge even when the user agent string looks like Chrome", () => {
         const chromeLike =

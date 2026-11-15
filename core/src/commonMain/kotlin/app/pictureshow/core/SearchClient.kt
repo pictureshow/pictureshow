@@ -76,3 +76,24 @@ internal class SearchClient(client: HttpClient, identity: ClientIdentity) : Sear
 
 internal const val MUSIC_TRACK_FIELDS = "SortName,ParentId"
 internal const val SEARCH_CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+
+/** What a search card shows, for [searchDuplicateLabels]. */
+data class SearchLabelItem(
+    val id: String,
+    val type: String? = null,
+    val name: String? = null,
+    val year: Int? = null,
+    val seriesName: String? = null
+)
+
+/**
+ * Which search results need their library named, because another result of the same kind shows the same card text: the
+ * same title, year and (for episodes) series. Two copies of one film in two libraries are otherwise identical cards
+ * (CAT-14a). People are never labelled with a library. Returned in input order.
+ */
+fun searchDuplicateLabels(items: List<SearchLabelItem>): List<String> {
+    fun norm(s: String?) = (s ?: "").trim().replace(Regex("\\s+"), " ").lowercase()
+    fun key(i: SearchLabelItem) = listOf(i.type ?: "", norm(i.name), i.year?.toString() ?: "", norm(i.seriesName)).joinToString("\u0000")
+    val counts = items.filter { it.type != "Person" && norm(it.name).isNotEmpty() }.groupingBy(::key).eachCount()
+    return items.filter { (counts[key(it)] ?: 0) > 1 }.map { it.id }
+}

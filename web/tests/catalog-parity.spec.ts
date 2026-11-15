@@ -1119,3 +1119,53 @@ test("W-20: an unstarted film offers Play without Play from start", async ({
     );
     await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
 });
+
+test("CAT-14a: two search results that would look the same name their libraries; a unique one does not", async ({
+    page,
+}) => {
+    const ancestors: string[] = [];
+    await start(page, (url) => {
+        if (url.searchParams.has("searchTerm"))
+            return {
+                body: {
+                    Items:
+                        url.searchParams.get("includeItemTypes") === "Movie"
+                            ? [
+                                  movie("copy-1", "Sintel"),
+                                  movie("copy-2", "Sintel"),
+                                  movie("other", "Sintel Returns"),
+                              ]
+                            : [],
+                },
+            };
+        const match = url.pathname.match(/^\/Items\/([^/]+)\/Ancestors$/);
+        if (match) {
+            ancestors.push(match[1]);
+            return {
+                body: [
+                    {
+                        Id: "lib-" + match[1],
+                        Name: match[1] === "copy-1" ? "Films" : "Open Movies",
+                        Type: "CollectionFolder",
+                    },
+                    { Id: "root", Name: "Media Folders", Type: "UserRootFolder" },
+                ],
+            };
+        }
+        return {};
+    });
+    await page.locator('[data-focus="home-search"]').click();
+    await page.getByRole("searchbox").fill("sintel");
+    const shelf = page.locator('.catalog-search [data-shelf="search:MOVIES"]');
+    await expect(
+        shelf.getByRole("button", { name: /^Sintel 2026 · Films(,|$)/ }),
+    ).toBeVisible();
+    await expect(
+        shelf.getByRole("button", { name: /^Sintel 2026 · Open Movies(,|$)/ }),
+    ).toBeVisible();
+    await expect(
+        shelf.getByRole("button", { name: /^Sintel Returns 2026(,|$)/ }),
+    ).toBeVisible();
+    await expect(shelf).toContainText("2026 · Open Movies");
+    expect(ancestors.sort()).toEqual(["copy-1", "copy-2"]);
+});
