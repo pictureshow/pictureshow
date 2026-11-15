@@ -33,4 +33,48 @@ class TrackLabelPolicyTest {
             trackLabelPolicy(subtitle.copy(language = "en"), languageName = languageName, names = names)
         )
     }
+
+    @Test fun muxerHandlersFallBackExactlyAsMissingTitles() {
+        val stream = MediaStream(
+            type = MediaStreamType.Audio,
+            index = 8,
+            codec = "eac3",
+            channels = 6,
+            isDefault = true,
+            isForced = true,
+            isHearingImpaired = true,
+            isExternal = true
+        )
+        for (title in listOf("Core Media Audio", "cOrE mEdIa TeXt", "SoundHandler", "GPAC ISO Audio Handler", "Lavf61.7.100")) {
+            for (language in listOf(null, "en")) {
+                val bare = stream.copy(language = language)
+                assertEquals(
+                    trackLabelPolicy(bare, 3, languageName = languageName, names = names),
+                    trackLabelPolicy(bare.copy(title = title), 3, languageName = languageName, names = names),
+                    "$title / $language"
+                )
+            }
+        }
+    }
+
+    @Test fun realTitlesContainingHandlerWordsKeepTheirExistingLabels() {
+        val stream = MediaStream(type = MediaStreamType.Audio, index = 8, codec = "aac", channels = 2)
+        val titles = listOf(
+            "Audio description",
+            "Director's commentary",
+            "Core Media Audio commentary",
+            "The SoundHandler",
+            "Lavf documentary",
+            "Lavf61.7.100 commentary",
+            "Stereo",
+            "Surround"
+        )
+        for (title in titles) {
+            assertEquals(
+                "$title · AAC stereo · Track 1",
+                trackLabelsPolicy(listOf(stream.copy(title = title)), languageName, names).single(),
+                title
+            )
+        }
+    }
 }
