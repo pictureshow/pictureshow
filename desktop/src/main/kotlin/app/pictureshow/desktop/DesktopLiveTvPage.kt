@@ -198,7 +198,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
             } }, confirmButton = { TextButton(owner::dismissProgram, modifier = Modifier.controlFocus()) { Text("Close") } })
     }
     s.draft?.let { draft -> DesktopLiveScheduleEditor(draft, s.draftSeries, s.draftExisting, s.writing, fresh,
-        onDismiss = owner::dismissDraft, onSave = { owner.save(it, s.draftSeries, s.draftExisting) }) }
+        onDismiss = owner::dismissDraft, onSave = { owner.save(it, s.draftSeries, s.draftExisting) }, onRefresh = { owner.refresh() }, refreshing = s.loading) }
     confirmation?.let { confirm ->
         val title = if (confirm.item != null) "Delete recorded file?" else if (confirm.series) "Cancel series rule?" else "Cancel this airing?"
         val cancelFocus = remember { FocusRequester() }
