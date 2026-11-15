@@ -38,7 +38,7 @@ test("130 percent layout budget keeps phone, desktop and TV keyboard targets rea
         expect(overflow).toBe(false);
         await page.keyboard.press("Escape");
         await expect(
-            page.getByRole("heading", { name: "Viewer", exact: true }),
+            page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
         ).toBeVisible();
     }
 });

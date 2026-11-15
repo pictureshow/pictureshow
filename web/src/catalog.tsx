@@ -133,6 +133,11 @@ function notifyExpired(
 function unique(items: CatalogItem[]) {
     return [...new Map(items.map((item) => [item.Id, item])).values()];
 }
+const isLibraryView = (item: Item) =>
+    ["CollectionFolder", "UserView"].includes(item.Type);
+/** W-5 interim: Live TV is not on the web yet (spec/features/live-tv.md is its own port). */
+export const isLiveTvView = (item: Item) =>
+    isLibraryView(item) && item.CollectionType === "livetv";
 export function libraryLabel(item: Item) {
     if (["CollectionFolder", "UserView"].includes(item.Type))
         return (
@@ -144,6 +149,7 @@ export function libraryLabel(item: Item) {
                     playlists: "Playlists",
                     homevideos: "Videos",
                     mixed: "Library",
+                    livetv: "Live TV",
                 } as Record<string, string>
             )[item.CollectionType ?? ""] ?? "Library"
         );
@@ -321,7 +327,7 @@ export function Cards({
     useCompletionPresentation(client);
     return (
         <section
-            className={`catalog-shelf${["resume", "next"].includes(row.key) ? " catalog-resume-shelf" : ""}`}
+            className={`catalog-shelf${["resume", "next"].includes(row.key) ? " catalog-resume-shelf" : ""}${row.key === "libraries" ? " catalog-library-shelf" : ""}`}
             aria-labelledby={`catalog-${row.key}`}
         >
             <h2 id={`catalog-${row.key}`}>{row.title}</h2>
@@ -331,10 +337,13 @@ export function Cards({
             >
                 {(row.items as CatalogItem[]).map((raw, index) => {
                     const item = projectCompletion(client, raw);
+                    // A library's own art is wide; its name says what it holds.
+                    const view = isLibraryView(item);
                     const art = imagePath(item, 480, item.Type === "Episode"),
                         state = itemState(item);
-                    const subtitle =
-                        item.Type === "Episode"
+                    const subtitle = view
+                        ? undefined
+                        : item.Type === "Episode"
                             ? `${item.SeriesName ?? ""} ${episodeLabel(item)}`.trim()
                             : item.Type === "Person"
                               ? (item.Role ?? "Person")
@@ -375,7 +384,7 @@ export function Cards({
                                 }}
                             >
                                 <span
-                                    className={`catalog-art ${item.Type === "Episode" ? "catalog-wide" : ""}`}
+                                    className={`catalog-art ${item.Type === "Episode" ? "catalog-wide" : view ? "catalog-library-art" : ""}`}
                                 >
                                     {art ? (
                                         <PrivateImage
@@ -384,11 +393,11 @@ export function Cards({
                                         />
                                     ) : (
                                         <span aria-hidden="true">
-                                            {containers.has(item.Type)
-                                                ? "▤"
-                                                : item.Type === "Person"
-                                                  ? "♙"
-                                                  : "▶"}
+                                            {item.Type === "Person"
+                                                ? "♙"
+                                                : playable(item)
+                                                  ? "▶"
+                                                  : "▤"}
                                         </span>
                                     )}
                                     {progress(item) > 0 && (
@@ -414,9 +423,11 @@ export function Cards({
                                 <span className="catalog-card-title">
                                     {item.Name}
                                 </span>{" "}
-                                <span className="catalog-muted">
-                                    {subtitle}
-                                </span>
+                                {subtitle != null && subtitle !== "" && (
+                                    <span className="catalog-muted">
+                                        {subtitle}
+                                    </span>
+                                )}
                                 {state.length > 0 && (
                                     <span
                                         className="catalog-card-state"
@@ -574,8 +585,10 @@ export function Home({
         <div className="catalog-page" ref={ref}>
             <div className="catalog-home-heading">
                 <div>
-                    <p className="catalog-eyebrow">{label}</p>
-                    <h1>{client.account!.user.Name}</h1>
+                    <p className="catalog-eyebrow">
+                        {label} · {client.account!.user.Name}
+                    </p>
+                    <h1>Home</h1>
                 </div>
                 <nav aria-label="Home actions">
                     <button
@@ -1609,6 +1622,21 @@ export function Detail({
                 )}
             </div>
         );
+    if (isLiveTvView(shown))
+        return (
+            <div className="catalog-page catalog-livetv-page" ref={root}>
+                <h1>{shown.Name}</h1>
+                <section className="catalog-coming" aria-label="Live TV">
+                    <h2>Live TV is coming to the web app</h2>
+                    <p>
+                        This web app can't show your server's channels and
+                        guide yet. You can watch Live TV today in the
+                        Pictureshow app for Android TV, Google TV, Fire TV and
+                        Android phones.
+                    </p>
+                </section>
+            </div>
+        );
     const current = projectCompletion(client, data?.item ?? shown),
         target = data ? detailPlay(data) : undefined,
         isContainer = ["Series", "Season"].includes(shown.Type),
@@ -1805,7 +1833,9 @@ export function Detail({
                                           : actionLabel("favorite", "Favorite")}
                                 </button>
                                 {(playable(shown) || isContainer) &&
-                                    initial && (
+                                    initial &&
+                                    (target?.UserData?.PlaybackPositionTicks ??
+                                        0) > 0 && (
                                         <button
                                             data-focus="restart"
                                             aria-label={queuedActionName(
@@ -1906,18 +1936,6 @@ export function Detail({
                             ))}
                         </div>
                     </section>
-                )}
-                {!!data?.seasons.length && (
-                    <Cards
-                        row={{
-                            key: `seasons:${id}`,
-                            title: "Browse seasons",
-                            items: data.seasons,
-                        }}
-                        client={client}
-                        navigate={navigate}
-                        onError={onError}
-                    />
                 )}
                 {!!data?.episodes.length && (
                     <Cards
@@ -2223,7 +2241,7 @@ function BrowseGrid({
                         key: `grid:${parent.Id}`,
                         title: person
                             ? "Movies and shows"
-                            : `${state.total ?? state.items.length}${state.total === undefined && !state.done ? "+" : ""} items`,
+                            : `${state.total ?? state.items.length}${state.total === undefined && !state.done ? "+" : ""} ${(state.total ?? state.items.length) === 1 && (state.total !== undefined || state.done) ? "item" : "items"}`,
                         items: state.items,
                     }}
                     grid
@@ -2440,6 +2458,8 @@ export function Search({ client, navigate, onError }: Props) {
                         autoComplete="off"
                         maxLength={200}
                         value={text}
+                        // Typing replaces the last query instead of appending to it.
+                        onFocus={(event) => event.currentTarget.select()}
                         onChange={(event) => setText(event.target.value)}
                         onKeyDown={(event) => {
                             if (event.key === "ArrowDown") {

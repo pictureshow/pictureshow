@@ -147,13 +147,19 @@ test("Quick Connect and D-pad series → season → episode with focus return", 
     await page.keyboard.press("ArrowRight");
     await expect(seriesCard).toBeFocused();
     await page.keyboard.press("Enter");
-    const season = page.getByRole("button", { name: /^Season 1/ });
+    // Seasons are picked with the chips on the series page (W-16 removed the
+    // duplicate row of season posters); the chosen season's episodes list there.
+    const season = page.getByRole("button", {
+        name: "Show episodes from Season 1",
+    });
     await expect(season).toBeVisible();
     await season.focus();
     await page.keyboard.press("Enter");
-    const ep = page.getByRole("button", { name: /A Quiet Morning/ });
+    await expect(season).toHaveAttribute("aria-pressed", "true");
+    const ep = page
+        .getByRole("region", { name: "Episodes" })
+        .getByRole("button", { name: /A Quiet Morning/ });
     await expect(ep).toBeVisible();
-    await expect(page.locator(".catalog-eyebrow")).toContainText("Open Frames");
     await ep.focus();
     await page.keyboard.press("Enter");
     await expect(
@@ -169,8 +175,6 @@ test("Quick Connect and D-pad series → season → episode with focus return", 
         .toBeGreaterThan(1);
     await page.keyboard.press("Escape");
     await expect(ep).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(season).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(seriesCard).toBeFocused();
 });

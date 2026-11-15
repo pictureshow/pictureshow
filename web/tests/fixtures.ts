@@ -264,6 +264,7 @@ export async function signIn(page: Page, quick = false) {
         await page.keyboard.press("Enter");
     }
     await expect(
-        page.getByRole("heading", { name: "Viewer", exact: true }),
+        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
     ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
 }

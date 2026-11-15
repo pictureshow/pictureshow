@@ -43,7 +43,7 @@ test("saved accounts isolate device identities, Cancel restores opener, and loca
     await page.getByLabel("Password", { exact: true }).fill("password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(
-        page.getByRole("heading", { name: "Guest", exact: true }),
+        page.locator(".catalog-eyebrow", { hasText: "· Guest" }),
     ).toBeVisible();
     const state = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("pictureshow.accounts.v1")!),
@@ -490,7 +490,7 @@ test("a transient saved-account read failure keeps the sign-in and retries hydra
     ).toBeVisible();
     await page.getByRole("button", { name: "Retry saved sign-ins" }).click();
     await expect(
-        page.getByRole("heading", { name: "Viewer", exact: true }),
+        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
     ).toBeVisible();
     expect(
         await page.evaluate(
@@ -520,7 +520,7 @@ test("an upgraded session sign-in commits persistently before a fresh browser ta
     });
     await page.reload();
     await expect(
-        page.getByRole("heading", { name: "Viewer", exact: true }),
+        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
     ).toBeVisible();
     expect(
         await page.evaluate(() =>
@@ -531,7 +531,7 @@ test("an upgraded session sign-in commits persistently before a fresh browser ta
     await fixture(reopened);
     await reopened.goto("/");
     await expect(
-        reopened.getByRole("heading", { name: "Viewer", exact: true }),
+        reopened.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
     ).toBeVisible();
     expect(
         await reopened.evaluate(

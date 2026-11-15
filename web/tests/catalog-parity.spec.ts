@@ -129,8 +129,11 @@ async function start(
     });
     await page.goto("/");
     await expect(
-        page.getByRole("heading", { name: "Catalog Viewer", exact: true }),
+        page.getByRole("heading", { name: "Home", exact: true, level: 1 }),
     ).toBeVisible();
+    await expect(page.locator(".catalog-eyebrow").first()).toContainText(
+        "Catalog Viewer",
+    );
     await expect(
         page.locator('[data-focus="libraries:library"]'),
     ).toBeVisible();
@@ -219,7 +222,7 @@ test("catalog partial rows survive, library labels are friendly, paging deduplic
     );
     await expect(
         page.locator('[data-focus="libraries:library"]'),
-    ).toHaveAccessibleName("Films Movies");
+    ).toHaveAccessibleName("Films");
     await expect(
         page.getByText("CollectionFolder", { exact: true }),
     ).toHaveCount(0);
@@ -317,7 +320,7 @@ test("desired-state favorite retry never inverts intent and authoritative metada
     ).toHaveAttribute("aria-pressed", "true");
     expect(writes).toEqual(["POST", "POST"]);
     await expect(
-        page.getByText("2026 · PG · 2h 30m · ★ 8.1", { exact: true }),
+        page.getByText("2026 · PG · 2 hr 30 min · ★ 8.1", { exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Drama", { exact: true })).toBeVisible();
     await scan(page);
@@ -495,10 +498,10 @@ test("empty containers suppress vacuous watched state but a positive count wins 
     );
     await expect(
         page.locator('[data-focus="libraries:library"]'),
-    ).toHaveAccessibleName("Empty library Library");
+    ).toHaveAccessibleName("Empty library");
     await expect(
         page.locator('[data-focus="libraries:nonempty"]'),
-    ).toHaveAccessibleName("Nonempty library Library, Watched");
+    ).toHaveAccessibleName("Nonempty library, Watched");
 });
 
 test("fresh unresolved detail accepts one pending Play and negotiates only after authoritative release", async ({
@@ -718,6 +721,8 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
         exact: true,
     });
     await expect(selectedSeason).toHaveAttribute("aria-pressed", "true");
+    // W-16: the season chips are the only season picker.
+    await expect(page.getByRole("heading", { name: "Browse seasons" })).toHaveCount(0);
     await page.keyboard.press("Escape");
     fail = true;
     await opener.click();
@@ -1006,4 +1011,96 @@ test("leaving the item while a save is in flight drops its queued presses", asyn
     await page.waitForTimeout(1500);
     // The in-flight write completes on the server; the queued press never runs.
     expect(state.writes).toEqual(["favorite POST"]);
+});
+
+test("W-5/W-15: library tiles are wide with no repeated type, and Live TV says where to watch it", async ({
+    page,
+}) => {
+    await start(page, (url) => {
+        if (url.pathname === "/UserViews")
+            return {
+                body: {
+                    Items: [
+                        {
+                            Id: "library",
+                            Name: "Films",
+                            Type: "CollectionFolder",
+                            CollectionType: "movies",
+                        },
+                        {
+                            Id: "live",
+                            Name: "Live TV",
+                            Type: "UserView",
+                            CollectionType: "livetv",
+                        },
+                    ],
+                },
+            };
+        if (url.pathname === "/Items/live")
+            return {
+                body: {
+                    Id: "live",
+                    Name: "Live TV",
+                    Type: "UserView",
+                    CollectionType: "livetv",
+                },
+            };
+        if (url.pathname === "/Items" && url.searchParams.get("ids") === "live")
+            return {
+                body: {
+                    Items: [
+                        {
+                            Id: "live",
+                            Name: "Live TV",
+                            Type: "UserView",
+                            CollectionType: "livetv",
+                        },
+                    ],
+                },
+            };
+        return {};
+    });
+    const tile = page.locator('[data-focus="libraries:library"]');
+    await expect(tile).toBeVisible();
+    await expect(tile.locator(".catalog-muted")).toHaveCount(0);
+    const art = await tile
+        .locator(".catalog-art")
+        .evaluate((e) => e.getBoundingClientRect());
+    expect(art.width / art.height).toBeCloseTo(16 / 9, 1);
+    await page.locator('[data-focus="libraries:live"]').click();
+    await expect(
+        page.getByRole("heading", { name: "Live TV is coming to the web app" }),
+    ).toBeVisible();
+    await expect(page.getByText("This library is empty.")).toHaveCount(0);
+    await expect(page.getByText(/Pictureshow app for Android/)).toBeVisible();
+    // One way back: the shell's Back, not a second button on the page.
+    await expect(page.getByRole("button", { name: /Back/ })).toHaveCount(1);
+    await page.getByRole("button", { name: /Back/ }).click();
+    await expect(tile).toBeVisible();
+});
+
+test("W-20: an unstarted film offers Play without Play from start", async ({
+    page,
+}) => {
+    const film = movie("film", "Unstarted");
+    await start(page, (url) => {
+        if (url.pathname === "/Items/Latest") return { body: [film] };
+        if (url.pathname === "/Items/film") return { body: film };
+        if (url.pathname === "/Items" && url.searchParams.get("ids") === "film")
+            return { body: { Items: [film] } };
+        return {};
+    });
+    const opener = page.locator('[data-focus="latest:library:film"]');
+    await opener.click();
+    await expect(page.getByRole("heading", { name: "Unstarted" })).toBeVisible();
+    await expect(page.locator('[data-focus="play"]')).toBeEnabled();
+    await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
+    // A second visit renders from the cached detail; it still offers no restart.
+    await page.keyboard.press("Escape");
+    await opener.click();
+    await expect(page.getByRole("heading", { name: "Unstarted" })).toBeVisible();
+    await expect(page.locator('[data-focus="watched"]')).toHaveText(
+        "Mark watched",
+    );
+    await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
 });

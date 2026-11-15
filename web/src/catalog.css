@@ -616,3 +616,27 @@
         padding-bottom: calc(96px + env(safe-area-inset-bottom));
     }
 }
+/* Library art is wide (W-15): show it whole at 16:9 instead of cropping it to a poster. */
+.catalog-art.catalog-library-art {
+    aspect-ratio: 16/9;
+}
+.catalog-library-shelf .catalog-cards > li {
+    flex-basis: clamp(240px, 22vw, 340px);
+}
+.catalog-library-shelf .catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+/* W-5 interim: Live TV is not on the web yet. */
+.catalog-coming {
+    max-width: 40rem;
+    display: grid;
+    gap: 1rem;
+    justify-items: start;
+}
+.catalog-coming h2 {
+    margin: 0;
+}
+.catalog-coming p {
+    margin: 0;
+    line-height: 1.5;
+}
