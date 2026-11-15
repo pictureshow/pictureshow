@@ -44,7 +44,10 @@ fun DesktopLiveTvPage(c: DesktopController) {
 internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLiveTv,
                         tune: (LiveChannel) -> Unit, play: (MediaItem) -> Unit, back: () -> Unit, detail: (MediaItem) -> Unit = {}) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
+    LaunchedEffect(s.fetchedAt) {
+        now = System.currentTimeMillis()
+        while (true) { delay(15_000); now = System.currentTimeMillis() }
+    }
     val fresh = s.actionsAvailable(now) && !s.writing
     val channels = s.channels.filter { (!s.favorites || it.userData.isFavorite) &&
         (s.search.isBlank() || it.name.contains(s.search, true) || it.number?.contains(s.search, true) == true) }

@@ -275,6 +275,18 @@ class DesktopLiveTvTest {
         onNodeWithTag("live:editor:confirm").assertIsEnabled().performClick()
         runOnIdle { assertEquals(1, refreshes); assertEquals("30", saved?.string("PrePaddingSeconds")) }
     }
+    @Test fun newlyRefreshedGuideEnablesActionsWithoutWaitingForClockTick() = runComposeUiTest {
+        val scope = CoroutineScope(SupervisorJob())
+        val api = LiveTvClient(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp), ClientIdentity("Test", "device"))
+        val owner = DesktopLiveTv(api, scope, { null })
+        val state = androidx.compose.runtime.mutableStateOf(DesktopLiveState(loading = false, policy = LivePolicy(access = true),
+            channels = listOf(LiveChannel("one", "One")), fetchedAt = System.currentTimeMillis() - 400_000))
+        setContent { MaterialTheme { LiveTvPage(state.value, null, owner, {}, {}, {}) } }
+        onNodeWithTag("live:channel:one").assertIsNotEnabled()
+        runOnIdle { state.value = state.value.copy(fetchedAt = System.currentTimeMillis()) }
+        onNodeWithTag("live:channel:one").assertIsEnabled()
+        scope.cancel()
+    }
     @Test fun disabledAccessHidesSearchAndShowsRecovery() = runComposeUiTest {
         val scope = CoroutineScope(SupervisorJob())
         val api = LiveTvClient(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp), ClientIdentity("Test", "device"))
