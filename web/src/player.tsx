@@ -2701,9 +2701,15 @@ export function Player({
         const summary = conversionSummary(kind, codes, {
             videoFormat: format === "Not reported" ? undefined : format,
             qualityMbps: preferences.bitrateMbps ?? undefined,
+            url: d.url,
         });
         const viewer = viewerBrowser();
-        const remedies = conversionRemedies(kind, viewer.browser, viewer.os);
+        const remedies = conversionRemedies(
+            kind,
+            viewer.browser,
+            viewer.os,
+            sourceStreams.filter((s) => s.Type === "Audio").length,
+        );
         const browserSteps =
             kind === "video" &&
             (viewer.browser === "chrome" || viewer.browser === "edge")

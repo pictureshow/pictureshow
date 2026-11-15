@@ -163,8 +163,10 @@ it("runtime, resume and progress match catalog formatting boundaries", () => {
     expect(resumeLabel(0)).toBe("Resume from 0:00");
     expect(resumeLabel(3661e7)).toBe("Resume from 1:01:01");
     expect(runtimeLabel(864e9 + 1)).toBe("");
-    expect(runtimeLabel(1)).toBe("1m");
-    expect(runtimeLabel(90 * 6e8)).toBe("1h 30m");
+    expect(runtimeLabel(1)).toBe("1 min");
+    expect(runtimeLabel(9 * 6e8)).toBe("9 min");
+    expect(runtimeLabel(90 * 6e8)).toBe("1 hr 30 min");
+    expect(runtimeLabel(120 * 6e8)).toBe("2 hr");
     expect(progress(movie)).toBe(0.5);
     expect(progress({ ...movie, UserData: { PlayedPercentage: 200 } })).toBe(1);
     expect(
@@ -263,6 +265,27 @@ it("playback negotiation advertises no unsupported direct stream and binds repor
     await client.stopEncoding(d);
     expect(new URL(calls[3].url).searchParams.get("deviceId")).toBe("web");
     expect(calls[3].init.method).toBe("DELETE");
+});
+it("negotiation accepts 5.1 so the server copies a 5.1 track instead of converting it to stereo", async () => {
+    // Demo Jellyfin 12, Big Buck Bunny (MKV, H.264, AAC 5.1): a cap of 2 made the server
+    // re-encode the sound (AudioChannelsNotSupported); at 6 it copies both streams.
+    const { client, calls } = fake([
+        {
+            MediaSources: [
+                {
+                    ...source,
+                    TranscodingUrl: "/Videos/movie/master.m3u8?VideoCodec=h264",
+                },
+            ],
+            PlaySessionId: "session",
+        },
+    ]);
+    await client.prepare({ ...movie, MediaSources: [source] }, () => false, 0);
+    const request = JSON.parse(String(calls[0].init.body));
+    expect(request.MaxAudioChannels).toBe(6);
+    expect(request.DeviceProfile.TranscodingProfiles[0].MaxAudioChannels).toBe(
+        "6",
+    );
 });
 it("unsafe transcode origin cannot receive viewer auth", async () => {
     const { client } = fake([

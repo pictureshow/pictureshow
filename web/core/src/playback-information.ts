@@ -52,7 +52,7 @@ const reasons: Record<string, string> = {
     unknownaudiostreaminfo:
         "The server could not identify the audio's properties. Refresh this item's metadata on the server and try again.",
     directplayerror:
-        "Direct playback failed. The server is providing a converted stream. Try another version or check the device's codec support.",
+        "This device can't play the file as it is, so the server provides a stream it can play.",
 };
 
 const unknownReason =
@@ -322,9 +322,14 @@ const nonEmptyString = (v: unknown): v is string =>
     typeof v === "string" && v.trim() !== "";
 
 /** Why a conversion-notice vector input is malformed, or undefined when it is well formed. */
-export function conversionNoticeInputProblem(input: unknown) {
+export function conversionNoticeInputProblem(
+    input: unknown,
+    extraKeys: readonly string[] = [],
+) {
     if (!plainObject(input)) return "input is not an object";
-    const unknownKey = Object.keys(input).find((k) => !noticeInputKeys.has(k));
+    const unknownKey = Object.keys(input).find(
+        (k) => !noticeInputKeys.has(k) && !extraKeys.includes(k),
+    );
     if (unknownKey) return `unknown input key ${unknownKey}`;
     if (!noticeMethods.has(input.method as string))
         return "method is not DirectPlay, DirectStream or Transcode";
@@ -466,6 +471,8 @@ export function runVector(c: {
             return String(speedSupported(i.speed, i.encoded));
         case "conversion-notice":
             return conversionNoticeVector(i);
+        case "conversion-explanation":
+            return conversionExplanationVector(i);
         default:
             throw new Error(
                 "Unknown playback-information operation: " +
@@ -525,13 +532,22 @@ const bitrateCodes = [
     "videobitratenotsupported",
     "audiobitratenotsupported",
 ];
-const audioCodes = [
+const audioFormatCodes = [
     "audiocodecnotsupported",
-    "audiochannelsnotsupported",
     "audioprofilenotsupported",
     "audiosampleratenotsupported",
     "audiobitdepthnotsupported",
     "secondaryaudionotsupported",
+];
+/**
+ * Reasons that only change the package: the server re-encodes a stream only when a reason
+ * says that stream must change. Jellyfin 12 sends DirectPlayError whenever no direct-play
+ * profile matched the file (an MKV on the web), with both streams copied.
+ */
+const repackageCodes = [
+    "directplayerror",
+    "containernotsupported",
+    "videocodectagnotsupported",
 ];
 
 /** What the viewer can act on, most useful first. */
@@ -542,6 +558,7 @@ export type ConversionKind =
     | "burn-in"
     | "bitrate"
     | "audio"
+    | "audio-channels"
     | "unexplained";
 
 export function conversionKind(
@@ -560,9 +577,15 @@ export function conversionKind(
         videoWhat.some(([c]) => c.some((code) => set.has(code)))
     )
         return "video";
-    if (burnedIn && set.has("subtitlecodecnotsupported")) return "burn-in";
+    // Burning subtitles in always re-encodes the picture. Jellyfin often sends no
+    // SubtitleCodecNotSupported for it (an image subtitle on the web), so the
+    // subtitle's delivery method alone decides.
+    if (burnedIn) return "burn-in";
     if (bitrateCodes.some((c) => set.has(c))) return "bitrate";
-    if (audioCodes.some((c) => set.has(c))) return "audio";
+    if (audioFormatCodes.some((c) => set.has(c))) return "audio";
+    if (set.has("audiochannelsnotsupported")) return "audio-channels";
+    if (set.size && [...set].every((c) => repackageCodes.includes(c)))
+        return "remux";
     return "unexplained";
 }
 
@@ -574,6 +597,8 @@ export function conversionSummary(
         device?: string;
         videoFormat?: string;
         qualityMbps?: number;
+        /** The stream URL, whose TranscodingMaxAudioChannels names the mix-down target. */
+        url?: unknown;
     } = {},
 ) {
     const device = options.device ?? BROWSER_DEVICE;
@@ -602,7 +627,18 @@ export function conversionSummary(
                 ? `The server is converting this video to keep it under your ${options.qualityMbps} Mbps quality limit.`
                 : "The server is converting this video to keep it under a bitrate limit.";
         case "audio":
-            return `The server is converting this video's sound because ${device} can't play its audio format.`;
+            return `The server is converting this video's sound into a format ${device} can play.`;
+        case "audio-channels": {
+            const target =
+                {
+                    "1": "mono",
+                    "2": "stereo",
+                    "6": "5.1",
+                    "8": "7.1",
+                }[urlParameter(options.url, "TranscodingMaxAudioChannels") ?? ""] ??
+                "fewer channels";
+            return `The server is mixing this video's sound down to ${target} for ${device}, and nothing needs fixing.`;
+        }
         case "unexplained":
             return "The server is converting this video and did not say why.";
     }
@@ -648,6 +684,7 @@ export function conversionRemedies(
     kind: ConversionKind,
     browser: BrowserFamily,
     os: OsFamily = "other",
+    audioTracks = 0,
 ): string[] {
     switch (kind) {
         case "video":
@@ -688,6 +725,21 @@ export function conversionRemedies(
                         appRemedy,
                     ];
             }
+        default:
+            return sharedRemedies(kind, audioTracks, BROWSER_DEVICE);
+    }
+}
+
+/**
+ * PLAY-26 remedies every platform shares. A video limit has none here: its fixes depend on
+ * the platform (web adds browser steps). A remedy that names another track needs one to exist.
+ */
+export function sharedRemedies(
+    kind: ConversionKind,
+    audioTracks: number,
+    device = CONVERSION_DEVICE,
+): string[] {
+    switch (kind) {
         case "burn-in":
             return [
                 "Turn subtitles off, or choose a text subtitle track, so they don't need to be burned in.",
@@ -697,10 +749,98 @@ export function conversionRemedies(
                 "Raise Max streaming bitrate in Settings to try the original quality.",
             ];
         case "audio":
-            return [
-                "Choose another audio track in Audio, if one is available.",
-            ];
+            return audioTracks >= 2
+                ? [
+                      `Choose another audio track in Audio; one that ${device} can play needs no conversion.`,
+                  ]
+                : [];
         default:
             return [];
     }
+}
+
+export type ConversionExplanation = {
+    kind: ConversionKind;
+    summary: string;
+    /** Shared remedies; a platform may add its own for a video limit. */
+    remedies: string[];
+};
+
+/** PLAY-26: what Playback info leads with, from the decision and the selected subtitle. */
+export function conversionExplanation(
+    decision: {
+        method: unknown;
+        url: unknown;
+        reasons: readonly unknown[];
+        source?: { MediaStreams?: Array<Record<string, unknown>> } | null;
+    },
+    subtitleIndex: unknown,
+    device = CONVERSION_DEVICE,
+    options: { qualityMbps?: number; videoFormat?: string } = {},
+): ConversionExplanation {
+    const codes = decision.reasons.filter(
+        (r): r is string => typeof r === "string",
+    );
+    const kind = conversionKind(
+        decision.method,
+        decision.url,
+        codes,
+        subtitleDelivery(decision.source, subtitleIndex) === "Burned in",
+    );
+    const audioTracks = (decision.source?.MediaStreams ?? []).filter(
+        (s) => s.Type === "Audio",
+    ).length;
+    return {
+        kind,
+        summary: conversionSummary(kind, codes, {
+            ...options,
+            device,
+            url: decision.url,
+        }),
+        remedies: sharedRemedies(kind, audioTracks, device),
+    };
+}
+
+/** Vector form: kind, summary, then each shared remedy, one per line. */
+export function conversionExplanationVector(input: unknown): string {
+    const problem = conversionNoticeInputProblem(input, [
+        "qualityMbps",
+        "videoFormat",
+    ]);
+    if (problem)
+        throw new Error(
+            `Malformed conversion-explanation vector input: ${problem}`,
+        );
+    const i = input as Record<string, unknown> & {
+        device: string;
+        reasons: string[];
+    };
+    if (
+        i.qualityMbps !== undefined &&
+        !(Number.isInteger(i.qualityMbps) && (i.qualityMbps as number) > 0)
+    )
+        throw new Error(
+            "Malformed conversion-explanation vector input: qualityMbps is not a positive integer",
+        );
+    if (i.videoFormat !== undefined && !nonEmptyString(i.videoFormat))
+        throw new Error(
+            "Malformed conversion-explanation vector input: videoFormat is not a non-empty string",
+        );
+    const e = conversionExplanation(
+        {
+            method: i.method,
+            url: i.url,
+            reasons: i.reasons,
+            source: i.source as {
+                MediaStreams?: Array<Record<string, unknown>>;
+            },
+        },
+        i.subtitleIndex ?? -1,
+        i.device,
+        {
+            qualityMbps: i.qualityMbps as number | undefined,
+            videoFormat: i.videoFormat as string | undefined,
+        },
+    );
+    return [e.kind, e.summary, ...e.remedies].join("\n");
 }

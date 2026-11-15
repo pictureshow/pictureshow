@@ -377,6 +377,32 @@ describe("PLAY-26 web plain summary and remedies", () => {
             "bitrate",
         ],
         ["Transcode", transcode("AudioCodecNotSupported"), false, "audio"],
+        // W-3: Jellyfin 12 burns in a PGS track without SubtitleCodecNotSupported.
+        [
+            "Transcode",
+            transcode("AudioChannelsNotSupported,DirectPlayError"),
+            true,
+            "burn-in",
+        ],
+        [
+            "Transcode",
+            transcode("AudioChannelsNotSupported,DirectPlayError"),
+            false,
+            "audio-channels",
+        ],
+        [
+            "Transcode",
+            transcode("AudioChannelsNotSupported,AudioCodecNotSupported"),
+            false,
+            "audio",
+        ],
+        ["Transcode", transcode("DirectPlayError"), false, "remux"],
+        [
+            "Transcode",
+            transcode("DirectPlayError,SomethingNew"),
+            false,
+            "unexplained",
+        ],
         ["Transcode", transcode("SomethingNew"), false, "unexplained"],
         [
             "Transcode",
@@ -406,6 +432,7 @@ describe("PLAY-26 web plain summary and remedies", () => {
             "burn-in",
             "bitrate",
             "audio",
+            "audio-channels",
             "unexplained",
         ] as const;
         for (const kind of kinds) {
@@ -474,6 +501,12 @@ describe("PLAY-26 web plain summary and remedies", () => {
             /Chrome or Edge/,
         );
         expect(conversionRemedies("direct", "chrome")).toEqual([]);
+        // A remedy that names another track needs one to exist.
+        expect(conversionRemedies("audio", "chrome", "mac", 1)).toEqual([]);
+        expect(conversionRemedies("audio", "chrome", "mac", 2)).toHaveLength(1);
+        expect(conversionRemedies("audio-channels", "chrome", "mac", 2)).toEqual(
+            [],
+        );
     });
     it("Client Hints brands identify Edge even when the user agent string looks like Chrome", () => {
         const chromeLike =

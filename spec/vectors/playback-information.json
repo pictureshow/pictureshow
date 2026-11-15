@@ -208,7 +208,7 @@
       "input": {
         "reason": "directplayerror"
       },
-      "expected": "Direct playback failed. The server is providing a converted stream. Try another version or check the device's codec support."
+      "expected": "This device can't play the file as it is, so the server provides a stream it can play."
     },
     {
       "id": "playback-information.reason.quality4",
@@ -1201,6 +1201,450 @@
         "device": "this phone"
       },
       "expected": "Converting this video for this phone\nIts video format won't play on this phone.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
+    },
+    {
+      "id": "playback-information.conversion-explanation.channels-only-single-track",
+      "operation": "conversion-explanation",
+      "description": "A 5.1 track mixed down to stereo (Jellyfin 12 with a 2-channel cap): the summary names the channels, not the format, and offers no track remedy.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodingMaxAudioChannels=2&TranscodeReasons=AudioChannelsNotSupported,DirectPlayError",
+        "reasons": [
+          "AudioChannelsNotSupported",
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "audio-channels\nThe server is mixing this video's sound down to stereo for this browser, and nothing needs fixing."
+    },
+    {
+      "id": "playback-information.conversion-explanation.channels-target-not-reported",
+      "operation": "conversion-explanation",
+      "description": "Without TranscodingMaxAudioChannels the summary still says what happens.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioChannelsNotSupported",
+        "reasons": [
+          "AudioChannelsNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "flac"
+            }
+          ]
+        }
+      },
+      "expected": "audio-channels\nThe server is mixing this video's sound down to fewer channels for this TV, and nothing needs fixing."
+    },
+    {
+      "id": "playback-information.conversion-explanation.burn-in-without-subtitle-code",
+      "operation": "conversion-explanation",
+      "description": "Jellyfin 12 burns in a PGS track with no SubtitleCodecNotSupported; the delivery method alone identifies burn-in, ahead of audio reasons.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioChannelsNotSupported,DirectPlayError",
+        "reasons": [
+          "AudioChannelsNotSupported",
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+    },
+    {
+      "id": "playback-information.conversion-explanation.burn-in-with-subtitle-code",
+      "operation": "conversion-explanation",
+      "description": "The classic report still reads as burn-in.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=SubtitleCodecNotSupported",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+    },
+    {
+      "id": "playback-information.conversion-explanation.subtitle-code-without-burn-in",
+      "operation": "conversion-explanation",
+      "description": "A subtitle code with an external text track is not burn-in.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=SubtitleCodecNotSupported",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "subrip",
+              "DeliveryMethod": "External",
+              "IsExternal": true
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "unexplained\nThe server is converting this video and did not say why."
+    },
+    {
+      "id": "playback-information.conversion-explanation.burn-in-over-copied-video",
+      "operation": "conversion-explanation",
+      "description": "Burning in re-encodes the picture even when the URL asks to copy the video.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac&TranscodeReasons=DirectPlayError",
+        "reasons": [
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+    },
+    {
+      "id": "playback-information.conversion-explanation.video-limit-outranks-burn-in",
+      "operation": "conversion-explanation",
+      "description": "A video limit is named first; its remedies are the platform's own, so none are shared.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=VideoCodecNotSupported,AudioCodecNotSupported",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "AudioCodecNotSupported"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3,
+        "videoFormat": "HEVC"
+      },
+      "expected": "video\nThe server is converting this video because this browser can't play its video format (HEVC)."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-format-single-track",
+      "operation": "conversion-explanation",
+      "description": "Another track can't be chosen when the file has one.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioCodecNotSupported,DirectPlayError",
+        "reasons": [
+          "AudioCodecNotSupported",
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "flac"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nThe server is converting this video's sound into a format this browser can play."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-format-two-tracks",
+      "operation": "conversion-explanation",
+      "description": "With a second track the remedy names it.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioCodecNotSupported",
+        "reasons": [
+          "AudioCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "flac"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nThe server is converting this video's sound into a format this TV can play.\nChoose another audio track in Audio; one that this TV can play needs no conversion."
+    },
+    {
+      "id": "playback-information.conversion-explanation.audio-format-outranks-channels",
+      "operation": "conversion-explanation",
+      "description": "A track whose format changes is converted, so the format is named.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=AudioChannelsNotSupported,AudioCodecNotSupported",
+        "reasons": [
+          "AudioChannelsNotSupported",
+          "AudioCodecNotSupported"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "flac"
+            }
+          ]
+        }
+      },
+      "expected": "audio\nThe server is converting this video's sound into a format this browser can play."
+    },
+    {
+      "id": "playback-information.conversion-explanation.container-only-is-repackaging",
+      "operation": "conversion-explanation",
+      "description": "An MKV on the web: Jellyfin 12 reports only DirectPlayError and copies both streams.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=DirectPlayError",
+        "reasons": [
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "remux\nThe server is repackaging this video for this browser without converting it, so the quality is unchanged."
+    },
+    {
+      "id": "playback-information.conversion-explanation.unknown-code-is-not-repackaging",
+      "operation": "conversion-explanation",
+      "description": "An unrecognised code may change a stream, so the summary claims nothing.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=DirectPlayError,SomethingNew",
+        "reasons": [
+          "DirectPlayError",
+          "SomethingNew"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "unexplained\nThe server is converting this video and did not say why."
+    },
+    {
+      "id": "playback-information.conversion-explanation.quality-cap",
+      "operation": "conversion-explanation",
+      "description": "A configured cap states its value and the remedy.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=ContainerBitrateExceedsLimit",
+        "reasons": [
+          "ContainerBitrateExceedsLimit"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        },
+        "qualityMbps": 8
+      },
+      "expected": "bitrate\nThe server is converting this video to keep it under your 8 Mbps quality limit.\nRaise Max streaming bitrate in Settings to try the original quality."
+    },
+    {
+      "id": "playback-information.conversion-explanation.direct-play",
+      "operation": "conversion-explanation",
+      "description": "Direct play needs no remedy.",
+      "input": {
+        "method": "DirectPlay",
+        "url": "https://server.example/Videos/item/stream?static=true",
+        "reasons": [],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "direct\nThis TV is playing the file directly, with no conversion."
     }
   ],
   "sources": [

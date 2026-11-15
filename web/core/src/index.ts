@@ -299,7 +299,11 @@ export function resumeLabel(t: number) {
 export function runtimeLabel(t?: number) {
     if (!t || t < 1 || t > 864e9) return "";
     const m = Math.max(1, Math.floor(t / 6e8));
-    return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+    // Written out ("9 min", "1 hr 30 min"): "9m" read as a code to keyboard and reader users.
+    if (m < 60) return `${m} min`;
+    return m % 60
+        ? `${Math.floor(m / 60)} hr ${m % 60} min`
+        : `${Math.floor(m / 60)} hr`;
 }
 export function episodeLabel(i: Item) {
     const s = i.ParentIndexNumber,
@@ -440,6 +444,12 @@ export function canDecodeVideo(source: Source | undefined, probe: Probe) {
         return false;
     return probe(`video/mp4; codecs="${videoCodecs[v.Codec]}"`);
 }
+/**
+ * The most audio channels the web app accepts in a stream. Chrome, Edge, Firefox and Safari
+ * decode 5.1 AAC and mix it down to the speakers they have; a lower cap made the server
+ * re-encode every 5.1 track to stereo (SET-19: no downmix by default).
+ */
+export const BROWSER_AUDIO_CHANNELS = 6;
 export function browserProfile(probe: Probe, bitrate = 200_000_000) {
     const video = Object.entries(videoCodecs)
         .filter(([, v]) => probe(`video/mp4; codecs="${v}"`))
@@ -463,7 +473,9 @@ export function browserProfile(probe: Probe, bitrate = 200_000_000) {
                 AudioCodec: audio.includes("aac") ? "aac" : "mp3",
                 Protocol: "hls",
                 Context: "Streaming",
-                MaxAudioChannels: "2",
+                // Browsers decode 5.1 and mix it down themselves, so a 5.1 AAC
+                // track is copied, not converted to stereo by the server.
+                MaxAudioChannels: String(BROWSER_AUDIO_CHANNELS),
                 MinSegments: 2,
                 BreakOnNonKeyFrames: true,
             },
@@ -738,7 +750,7 @@ export class Jellyfin {
             AudioStreamIndex: audio,
             SubtitleStreamIndex: subtitle,
             MaxStreamingBitrate: bitrate,
-            MaxAudioChannels: 2,
+            MaxAudioChannels: BROWSER_AUDIO_CHANNELS,
             EnableDirectPlay: direct,
             EnableDirectStream: false,
             EnableTranscoding: true,

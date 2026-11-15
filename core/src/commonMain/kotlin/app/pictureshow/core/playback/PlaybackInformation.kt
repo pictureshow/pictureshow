@@ -128,11 +128,103 @@ object PlaybackInformation {
             "unknownaudiostreaminfo" ->
                 "The server could not identify the audio's properties. Refresh this item's metadata on " +
                     "the server and try again."
-            "directplayerror" ->
-                "Direct playback failed. The server is providing a converted stream. Try another " +
-                    "version or check the device's codec support."
+            // Jellyfin 12 sends this whenever no direct-play profile matched, not only after a failure.
+            "directplayerror" -> "This device can't play the file as it is, so the server provides a stream it can play."
             else -> "The server reported an additional conversion requirement that this client does not recognize."
         }
+    }
+
+    /** PLAY-26: what Playback info leads with. [remedies] are shared; a platform adds its own for a video limit. */
+    data class Explanation(val kind: String, val summary: String, val remedies: List<String>)
+
+    private val videoWhat: List<Pair<Set<String>, String>> = listOf(
+        setOf("videocodecnotsupported") to "video format",
+        setOf("videorangetypenotsupported") to "HDR format",
+        setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported") to
+            "video encoding",
+        setOf("videoresolutionnotsupported") to "resolution",
+        setOf("videoframeratenotsupported") to "frame rate",
+        setOf("interlacedvideonotsupported") to "interlaced video",
+        setOf("anamorphicvideonotsupported") to "non-square pixels",
+        setOf("videorotationnotsupported") to "rotation"
+    )
+    private val bitrateCodes = setOf("containerbitrateexceedslimit", "videobitratenotsupported", "audiobitratenotsupported")
+    private val audioFormatCodes = setOf(
+        "audiocodecnotsupported",
+        "audioprofilenotsupported",
+        "audiosampleratenotsupported",
+        "audiobitdepthnotsupported",
+        "secondaryaudionotsupported"
+    )
+
+    /**
+     * Reasons that only change the package. The server re-encodes a stream only when a reason says that stream must
+     * change; Jellyfin 12 sends DirectPlayError alone for a file no direct-play profile matched, with both streams copied.
+     */
+    private val repackageCodes = setOf("directplayerror", "containernotsupported", "videocodectagnotsupported")
+
+    fun explanation(
+        decision: PlayDecision,
+        subtitleIndex: Int,
+        device: String = ConversionNotice.DEVICE,
+        qualityMbps: Int? = null,
+        videoFormat: String? = null
+    ): Explanation {
+        val codes = decision.transcodeReasons.map { it.lowercase() }.toSet()
+        val label = method(decision)
+        val video = videoWhat.firstOrNull { (set) -> set.any(codes::contains) }?.second
+        val kind = when {
+            label == "Direct play" -> "direct"
+            label != "Transcode" -> "remux"
+            !videoCopied(decision) && video != null -> "video"
+            // Burning subtitles in always re-encodes the picture, and Jellyfin often reports it without
+            // SubtitleCodecNotSupported (an image subtitle on the web), so the delivery method alone decides.
+            subtitle(decision.mediaSource, subtitleIndex) == "Burned in" -> "burn-in"
+            codes.any(bitrateCodes::contains) -> "bitrate"
+            codes.any(audioFormatCodes::contains) -> "audio"
+            "audiochannelsnotsupported" in codes -> "audio-channels"
+            codes.isNotEmpty() && codes.all(repackageCodes::contains) -> "remux"
+            else -> "unexplained"
+        }
+        val summary = when (kind) {
+            "direct" -> "${device.replaceFirstChar { it.uppercase() }} is playing the file directly, with no conversion."
+            "remux" -> "The server is repackaging this video for $device without converting it, so the quality is unchanged."
+            "video" -> {
+                val format = if (video == "video format" && videoFormat != null) " ($videoFormat)" else ""
+                "The server is converting this video because $device can't play its $video$format."
+            }
+            "burn-in" -> "The server is converting this video to burn the selected subtitles into the picture."
+            "bitrate" -> if (qualityMbps != null && qualityMbps > 0) {
+                "The server is converting this video to keep it under your $qualityMbps Mbps quality limit."
+            } else {
+                "The server is converting this video to keep it under a bitrate limit."
+            }
+            "audio" -> "The server is converting this video's sound into a format $device can play."
+            "audio-channels" -> {
+                val target = when (parameter(decision, "TranscodingMaxAudioChannels")) {
+                    "1" -> "mono"
+                    "2" -> "stereo"
+                    "6" -> "5.1"
+                    "8" -> "7.1"
+                    else -> "fewer channels"
+                }
+                "The server is mixing this video's sound down to $target for $device, and nothing needs fixing."
+            }
+            else -> "The server is converting this video and did not say why."
+        }
+        val audioTracks = decision.mediaSource.mediaStreams.count { it.type == MediaStreamType.Audio }
+        val remedies = when (kind) {
+            "burn-in" -> listOf("Turn subtitles off, or choose a text subtitle track, so they don't need to be burned in.")
+            "bitrate" -> listOf("Raise Max streaming bitrate in Settings to try the original quality.")
+            // A remedy that names another track needs one to exist.
+            "audio" -> if (audioTracks >= 2) {
+                listOf("Choose another audio track in Audio; one that $device can play needs no conversion.")
+            } else {
+                emptyList()
+            }
+            else -> emptyList()
+        }
+        return Explanation(kind, summary, remedies)
     }
 
     /** An explicit `VideoCodec=copy` means the server repackages the video without re-encoding it. */

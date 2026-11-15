@@ -89,6 +89,22 @@ class PlaybackInformationVectorsTest {
                 input["subtitleIndex"]?.jsonPrimitive?.intOrNull ?: -1,
                 text("device")
             )?.let { "${it.title}\n${it.reason}\n${it.fix}" } ?: "none"
+            // Expected is kind, summary, then each shared remedy, one per line.
+            "conversion-explanation" -> PlaybackInformation.explanation(
+                PlayDecision(
+                    "item",
+                    input["source"]?.let { PlaybackJson.decodeFromJsonElement<MediaSourceInfo>(it) } ?: MediaSourceInfo(),
+                    PlayMethod.valueOf(text("method")),
+                    text("url"),
+                    emptyMap(),
+                    null,
+                    input.getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
+                ),
+                input["subtitleIndex"]?.jsonPrimitive?.intOrNull ?: -1,
+                text("device"),
+                input["qualityMbps"]?.jsonPrimitive?.intOrNull,
+                input["videoFormat"]?.jsonPrimitive?.content
+            ).let { listOf(it.kind, it.summary) + it.remedies }.joinToString("\n")
             else -> error("Unknown operation")
         }
     }
