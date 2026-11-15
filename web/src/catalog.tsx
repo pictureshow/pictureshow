@@ -393,11 +393,8 @@ export function Cards({
                                         />
                                     ) : (
                                         <span aria-hidden="true">
-                                            {item.Type === "Person"
-                                                ? "♙"
-                                                : playable(item)
-                                                  ? "▶"
-                                                  : "▤"}
+                                            {/* A neutral glyph: ▶ on a card reads as a Play button. */}
+                                            {item.Type === "Person" ? "♙" : "▤"}
                                         </span>
                                     )}
                                     {progress(item) > 0 && (
@@ -585,8 +582,10 @@ export function Home({
         <div className="catalog-page" ref={ref}>
             <div className="catalog-home-heading">
                 <div>
-                    <p className="catalog-eyebrow">
-                        {label} · {client.account!.user.Name}
+                    {/* The header names the user and server; this line stands in
+                        for it only on narrow screens, where the header hides it. */}
+                    <p className="catalog-eyebrow catalog-home-account">
+                        {client.account!.user.Name} · {label}
                     </p>
                     <h1>Home</h1>
                 </div>
@@ -1877,7 +1876,7 @@ export function Detail({
                                 className="catalog-detail-art catalog-placeholder"
                                 aria-hidden="true"
                             >
-                                {shown.Type === "Person" ? "♙" : "▶"}
+                                {shown.Type === "Person" ? "♙" : "▤"}
                             </div>
                         ))}
                 </section>
@@ -1927,11 +1926,12 @@ export function Detail({
                                     }
                                     aria-disabled={!ready}
                                     onKeyDown={actionKey}
+                                    aria-label={`Show episodes from ${s.Name}`}
                                     onClick={() => {
                                         if (readyRef.current) setSeason(s.Id);
                                     }}
                                 >
-                                    Show episodes from {s.Name}
+                                    {s.Name}
                                 </button>
                             ))}
                         </div>
@@ -1941,7 +1941,14 @@ export function Detail({
                     <Cards
                         row={{
                             key: `episodes:${id}:${season ?? "all"}`,
-                            title: "Episodes",
+                            title: (() => {
+                                const chosen = data.seasons.find(
+                                    (s) => s.Id === season,
+                                )?.Name;
+                                return chosen
+                                    ? `${chosen} episodes`
+                                    : "Episodes";
+                            })(),
                             items: episodes,
                         }}
                         client={client}
@@ -2210,13 +2217,13 @@ function BrowseGrid({
     return (
         <section className="catalog-browser">
             <div className="catalog-browse-heading">
-                {!person && <h2>Browse library</h2>}
                 {!person && (
                     <div className="catalog-sort">
                         <label htmlFor={`sort-${parent.Id}`}>Sort by</label>
                         <select
                             id={`sort-${parent.Id}`}
-                            data-autofocus
+                            // Not the landing focus: Down on a closed select changes its
+                            // value in Chrome on Windows and Linux. The first poster lands.
                             data-focus="library-sort"
                             value={sort}
                             onChange={(event) => updateSort(event.target.value)}

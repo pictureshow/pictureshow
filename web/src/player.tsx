@@ -26,7 +26,7 @@ import {
     conversionSummary,
     cueNearTop,
     formatBitrate,
-    playbackMethod,
+    explainedMethod,
     speedSupported,
     subtitleDelivery,
     transcodeReason,
@@ -2655,7 +2655,6 @@ export function Player({
                     </p>
                 </div>
             );
-        const method = playbackMethod(d.method, d.url);
         const source = d.source;
         const sourceStreams = source.MediaStreams ?? [];
         const codes = d.method === "Transcode" ? transcodeReasons(d.url) : [];
@@ -2696,6 +2695,8 @@ export function Player({
             codes,
             subtitles === "Burned in",
         );
+        // Method row and reasons heading come from the same kind as the summary.
+        const { method, heading } = explainedMethod(kind, d.method, d.url);
         // Plain name only ("HEVC"), without the raw codec id codecName appends.
         const format = codecName(videoStream?.Codec).replace(/ \(.*\)$/, "");
         const summary = conversionSummary(kind, codes, {
@@ -2745,9 +2746,9 @@ export function Player({
                 <details className="technical-details">
                     <summary>Technical details</summary>
                     {rows([["Method", method]])}
-                    {method !== "Direct play" && method !== "Not reported" && (
-                        <section aria-label="Why the server converts">
-                            <h3>Why the server converts</h3>
+                    {heading && (
+                        <section aria-label={heading}>
+                            <h3>{heading}</h3>
                             {reasons.length ? (
                                 <ul>
                                     {reasons.map((r) => (

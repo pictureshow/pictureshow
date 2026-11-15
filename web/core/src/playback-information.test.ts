@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+    explainedMethod,
     BROWSER_DEVICE,
     BROWSER_NOTICE_ACTIONS,
     browserFamily,
@@ -581,5 +582,30 @@ describe("PLAY-26 web plain summary and remedies", () => {
         expect(edge.join(" ")).not.toMatch(/chrome:\/\//);
         for (const steps of [chrome, edge])
             expect(steps.join(" ")).not.toMatch(/Try Microsoft Edge|Try Edge/i);
+    });
+});
+
+describe("explainedMethod", () => {
+    const named =
+        "https://s.example/master.m3u8?VideoCodec=h264&AudioCodec=aac";
+    it("reports a repackage-only Transcode as a direct stream, like its summary", () => {
+        expect(explainedMethod("remux", "Transcode", named)).toEqual({
+            method: "Direct stream (repackaged)",
+            heading: "Why the server repackages",
+        });
+    });
+    it("keeps Transcode and the converts heading for a real conversion", () => {
+        expect(explainedMethod("audio", "Transcode", named)).toEqual({
+            method: "Transcode",
+            heading: "Why the server converts",
+        });
+    });
+    it("has no heading when nothing is converted or the method is unknown", () => {
+        expect(explainedMethod("direct", "DirectPlay", "")).toEqual({
+            method: "Direct play",
+        });
+        expect(explainedMethod("unexplained", undefined, "")).toEqual({
+            method: "Not reported",
+        });
     });
 });

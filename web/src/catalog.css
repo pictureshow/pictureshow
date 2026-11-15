@@ -620,11 +620,24 @@
 .catalog-art.catalog-library-art {
     aspect-ratio: 16/9;
 }
+/* The wide-card token sets the floor; there is no token for the 340px ceiling. */
 .catalog-library-shelf .catalog-cards > li {
-    flex-basis: clamp(240px, 22vw, 340px);
+    flex-basis: clamp(var(--size-tv-wideCardWidth), 22vw, 340px);
 }
 .catalog-library-shelf .catalog-grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(
+        auto-fill,
+        minmax(min(var(--size-tv-wideCardWidth), 100%), 1fr)
+    );
+}
+/* On a phone, two wide tiles per row instead of one screen-wide tile. */
+@media (max-width: 650px) {
+    .catalog-library-shelf .catalog-grid {
+        grid-template-columns: repeat(
+            auto-fill,
+            minmax(var(--size-touch-gridCellMinimum), 1fr)
+        );
+    }
 }
 /* W-5 interim: Live TV is not on the web yet. */
 .catalog-coming {
@@ -639,4 +652,14 @@
 .catalog-coming p {
     margin: 0;
     line-height: 1.5;
+}
+
+/* Home's account line duplicates the header's, so it shows only where the header hides it. */
+.catalog-home-account {
+    display: none;
+}
+@media (max-width: 650px) {
+    .catalog-home-account {
+        display: block;
+    }
 }

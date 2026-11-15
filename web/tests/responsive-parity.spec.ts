@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { test, expect } from "@playwright/test";
-import { fixture, signIn } from "./fixtures";
+import { fixture, signIn, signedInAs } from "./fixtures";
 
 test("130 percent layout budget keeps phone, desktop and TV keyboard targets reachable", async ({
     page,
@@ -38,7 +38,7 @@ test("130 percent layout budget keeps phone, desktop and TV keyboard targets rea
         expect(overflow).toBe(false);
         await page.keyboard.press("Escape");
         await expect(
-            page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
+            page.locator(signedInAs, { hasText: /^Viewer · / }),
         ).toBeVisible();
     }
 });

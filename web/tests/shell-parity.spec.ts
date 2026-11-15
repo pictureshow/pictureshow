@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { test, expect } from "@playwright/test";
 import axe from "axe-core";
-import { fixture, signIn, movie } from "./fixtures";
+import { fixture, signIn, movie, signedInAs } from "./fixtures";
 async function scan(page: any) {
     await page.addScriptTag({ content: axe.source });
     const violations = await page.evaluate(
@@ -43,7 +43,7 @@ test("saved accounts isolate device identities, Cancel restores opener, and loca
     await page.getByLabel("Password", { exact: true }).fill("password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(
-        page.locator(".catalog-eyebrow", { hasText: "· Guest" }),
+        page.locator(signedInAs, { hasText: /^Guest · / }),
     ).toBeVisible();
     const state = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("pictureshow.accounts.v1")!),
@@ -490,7 +490,7 @@ test("a transient saved-account read failure keeps the sign-in and retries hydra
     ).toBeVisible();
     await page.getByRole("button", { name: "Retry saved sign-ins" }).click();
     await expect(
-        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
+        page.locator(signedInAs, { hasText: /^Viewer · / }),
     ).toBeVisible();
     expect(
         await page.evaluate(
@@ -520,7 +520,7 @@ test("an upgraded session sign-in commits persistently before a fresh browser ta
     });
     await page.reload();
     await expect(
-        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
+        page.locator(signedInAs, { hasText: /^Viewer · / }),
     ).toBeVisible();
     expect(
         await page.evaluate(() =>
@@ -531,7 +531,7 @@ test("an upgraded session sign-in commits persistently before a fresh browser ta
     await fixture(reopened);
     await reopened.goto("/");
     await expect(
-        reopened.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
+        reopened.locator(signedInAs, { hasText: /^Viewer · / }),
     ).toBeVisible();
     expect(
         await reopened.evaluate(

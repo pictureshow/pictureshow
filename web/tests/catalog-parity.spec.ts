@@ -131,9 +131,12 @@ async function start(
     await expect(
         page.getByRole("heading", { name: "Home", exact: true, level: 1 }),
     ).toBeVisible();
-    await expect(page.locator(".catalog-eyebrow").first()).toContainText(
+    // The signed-in user is named once, in the header, not again above "Home".
+    await expect(page.locator("header .connection")).toContainText(
         "Catalog Viewer",
     );
+    // On a wide screen the account line above "Home" stays hidden.
+    await expect(page.locator(".catalog-home-account")).toBeHidden();
     await expect(
         page.locator('[data-focus="libraries:library"]'),
     ).toBeVisible();
@@ -233,6 +236,18 @@ test("catalog partial rows survive, library labels are friendly, paging deduplic
     await expect(
         page.getByRole("heading", { name: "Films", exact: true }),
     ).toBeVisible();
+    // One title for the page, not a second "Browse library" heading.
+    await expect(
+        page.getByRole("heading", { name: "Browse library" }),
+    ).toHaveCount(0);
+    // A library lands on its first poster, never on Sort by: Down on a
+    // closed select changes its value in Chrome on Windows and Linux.
+    await expect(page.getByLabel("Sort by", { exact: true })).not.toHaveAttribute(
+        "data-autofocus",
+    );
+    await expect(
+        page.locator('[data-focus^="grid:library:"]').first(),
+    ).toHaveAttribute("data-autofocus", "true");
     // Page-end scrolling exposes the IntersectionObserver sentinel. It may
     // finish and remove Load more before a browser action can target that node.
     await expect

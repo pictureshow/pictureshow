@@ -104,7 +104,8 @@ class PlaybackInformationVectorsTest {
                 text("device"),
                 input["qualityMbps"]?.jsonPrimitive?.intOrNull,
                 input["videoFormat"]?.jsonPrimitive?.content
-            ).let { listOf(it.kind, it.summary) + it.remedies }.joinToString("\n")
+            ).let { e -> listOfNotNull(e.kind, "method: ${e.method}", e.heading?.let { "heading: $it" }, e.summary) + e.remedies }
+                .joinToString("\n")
             else -> error("Unknown operation")
         }
     }

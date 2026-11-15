@@ -761,10 +761,34 @@ export function sharedRemedies(
 
 export type ConversionExplanation = {
     kind: ConversionKind;
+    /** The Method row, from the same classification as the summary. */
+    method: string;
+    /** Heading over the server's reasons; undefined when nothing is converted. */
+    heading?: string;
     summary: string;
     /** Shared remedies; a platform may add its own for a video limit. */
     remedies: string[];
 };
+
+/**
+ * The Method row and reasons heading follow the kind, not the URL alone: a Transcode whose
+ * reasons only call for repackaging is reported as a direct stream, matching the summary.
+ */
+export function explainedMethod(
+    kind: ConversionKind,
+    method: unknown,
+    url: unknown,
+): { method: string; heading?: string } {
+    if (kind === "direct") return { method: "Direct play" };
+    if (kind === "remux")
+        return {
+            method: "Direct stream (repackaged)",
+            heading: "Why the server repackages",
+        };
+    if (playbackMethod(method, url) === "Not reported")
+        return { method: "Not reported" };
+    return { method: "Transcode", heading: "Why the server converts" };
+}
 
 /** PLAY-26: what Playback info leads with, from the decision and the selected subtitle. */
 export function conversionExplanation(
@@ -792,6 +816,7 @@ export function conversionExplanation(
     ).length;
     return {
         kind,
+        ...explainedMethod(kind, decision.method, decision.url),
         summary: conversionSummary(kind, codes, {
             ...options,
             device,
@@ -801,7 +826,7 @@ export function conversionExplanation(
     };
 }
 
-/** Vector form: kind, summary, then each shared remedy, one per line. */
+/** Vector form: kind, method, heading (when any), summary, then each shared remedy, one per line. */
 export function conversionExplanationVector(input: unknown): string {
     const problem = conversionNoticeInputProblem(input, [
         "qualityMbps",
@@ -842,5 +867,11 @@ export function conversionExplanationVector(input: unknown): string {
             videoFormat: i.videoFormat as string | undefined,
         },
     );
-    return [e.kind, e.summary, ...e.remedies].join("\n");
+    return [
+        e.kind,
+        `method: ${e.method}`,
+        ...(e.heading ? [`heading: ${e.heading}`] : []),
+        e.summary,
+        ...e.remedies,
+    ].join("\n");
 }

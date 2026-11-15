@@ -135,7 +135,14 @@ object PlaybackInformation {
     }
 
     /** PLAY-26: what Playback info leads with. [remedies] are shared; a platform adds its own for a video limit. */
-    data class Explanation(val kind: String, val summary: String, val remedies: List<String>)
+    /** [method] and [heading] follow [kind], so a Transcode that only repackages reads as a direct stream. */
+    data class Explanation(
+        val kind: String,
+        val method: String,
+        val heading: String?,
+        val summary: String,
+        val remedies: List<String>
+    )
 
     private val videoWhat: List<Pair<Set<String>, String>> = listOf(
         setOf("videocodecnotsupported") to "video format",
@@ -224,7 +231,12 @@ object PlaybackInformation {
             }
             else -> emptyList()
         }
-        return Explanation(kind, summary, remedies)
+        val (shownMethod, heading) = when {
+            kind == "direct" -> "Direct play" to null
+            kind == "remux" -> "Direct stream (repackaged)" to "Why the server repackages"
+            else -> "Transcode" to "Why the server converts"
+        }
+        return Explanation(kind, shownMethod, heading, summary, remedies)
     }
 
     /** An explicit `VideoCodec=copy` means the server repackages the video without re-encoding it. */

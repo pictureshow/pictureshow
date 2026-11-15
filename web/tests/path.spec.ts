@@ -153,11 +153,13 @@ test("Quick Connect and D-pad series → season → episode with focus return", 
         name: "Show episodes from Season 1",
     });
     await expect(season).toBeVisible();
+    // Short visible text; the full action is in the accessible name.
+    await expect(season).toHaveText("Season 1");
     await season.focus();
     await page.keyboard.press("Enter");
     await expect(season).toHaveAttribute("aria-pressed", "true");
     const ep = page
-        .getByRole("region", { name: "Episodes" })
+        .getByRole("region", { name: "Season 1 episodes" })
         .getByRole("button", { name: /A Quiet Morning/ });
     await expect(ep).toBeVisible();
     await ep.focus();

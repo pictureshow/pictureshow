@@ -247,6 +247,9 @@ export async function fixture(page: Page) {
     });
     return { reports, negotiations, mediaRequests };
 }
+/** Whichever "user · server" line is on screen: the header's, or Home's on narrow screens. */
+export const signedInAs =
+    "header .connection:visible, .catalog-home-account:visible";
 export async function signIn(page: Page, quick = false) {
     await page.goto("/");
     await page.getByLabel("Server address").fill("https://jellyfin.example");
@@ -264,7 +267,7 @@ export async function signIn(page: Page, quick = false) {
         await page.keyboard.press("Enter");
     }
     await expect(
-        page.locator(".catalog-eyebrow", { hasText: "· Viewer" }),
+        page.locator(signedInAs, { hasText: /^Viewer · / }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
 }

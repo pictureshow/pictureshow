@@ -1229,7 +1229,7 @@
           ]
         }
       },
-      "expected": "audio-channels\nThe server is mixing this video's sound down to stereo for this browser, and nothing needs fixing."
+      "expected": "audio-channels\nmethod: Transcode\nheading: Why the server converts\nThe server is mixing this video's sound down to stereo for this browser, and nothing needs fixing."
     },
     {
       "id": "playback-information.conversion-explanation.channels-target-not-reported",
@@ -1262,7 +1262,7 @@
           ]
         }
       },
-      "expected": "audio-channels\nThe server is mixing this video's sound down to fewer channels for this TV, and nothing needs fixing."
+      "expected": "audio-channels\nmethod: Transcode\nheading: Why the server converts\nThe server is mixing this video's sound down to fewer channels for this TV, and nothing needs fixing."
     },
     {
       "id": "playback-information.conversion-explanation.burn-in-without-subtitle-code",
@@ -1298,7 +1298,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+      "expected": "burn-in\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
     },
     {
       "id": "playback-information.conversion-explanation.burn-in-with-subtitle-code",
@@ -1333,7 +1333,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+      "expected": "burn-in\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
     },
     {
       "id": "playback-information.conversion-explanation.subtitle-code-without-burn-in",
@@ -1369,7 +1369,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "unexplained\nThe server is converting this video and did not say why."
+      "expected": "unexplained\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video and did not say why."
     },
     {
       "id": "playback-information.conversion-explanation.burn-in-over-copied-video",
@@ -1404,7 +1404,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "burn-in\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
+      "expected": "burn-in\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video to burn the selected subtitles into the picture.\nTurn subtitles off, or choose a text subtitle track, so they don't need to be burned in."
     },
     {
       "id": "playback-information.conversion-explanation.video-limit-outranks-burn-in",
@@ -1441,7 +1441,7 @@
         "subtitleIndex": 3,
         "videoFormat": "HEVC"
       },
-      "expected": "video\nThe server is converting this video because this browser can't play its video format (HEVC)."
+      "expected": "video\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video because this browser can't play its video format (HEVC)."
     },
     {
       "id": "playback-information.conversion-explanation.audio-format-single-track",
@@ -1470,7 +1470,7 @@
           ]
         }
       },
-      "expected": "audio\nThe server is converting this video's sound into a format this browser can play."
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this browser can play."
     },
     {
       "id": "playback-information.conversion-explanation.audio-format-two-tracks",
@@ -1503,7 +1503,7 @@
           ]
         }
       },
-      "expected": "audio\nThe server is converting this video's sound into a format this TV can play.\nChoose another audio track in Audio; one that this TV can play needs no conversion."
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this TV can play.\nChoose another audio track in Audio; one that this TV can play needs no conversion."
     },
     {
       "id": "playback-information.conversion-explanation.audio-format-outranks-channels",
@@ -1532,7 +1532,7 @@
           ]
         }
       },
-      "expected": "audio\nThe server is converting this video's sound into a format this browser can play."
+      "expected": "audio\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video's sound into a format this browser can play."
     },
     {
       "id": "playback-information.conversion-explanation.container-only-is-repackaging",
@@ -1560,7 +1560,62 @@
           ]
         }
       },
-      "expected": "remux\nThe server is repackaging this video for this browser without converting it, so the quality is unchanged."
+      "expected": "remux\nmethod: Direct stream (repackaged)\nheading: Why the server repackages\nThe server is repackaging this video for this browser without converting it, so the quality is unchanged."
+    },
+    {
+      "id": "playback-information.conversion-explanation.repackage-reasons-without-copy-say-direct-stream",
+      "operation": "conversion-explanation",
+      "description": "A Transcode whose URL names codecs (no copy) but whose reasons only call for repackaging reports Method 'Direct stream (repackaged)' under 'Why the server repackages', matching its summary.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac&TranscodeReasons=ContainerNotSupported,DirectPlayError",
+        "reasons": [
+          "ContainerNotSupported",
+          "DirectPlayError"
+        ],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "remux\nmethod: Direct stream (repackaged)\nheading: Why the server repackages\nThe server is repackaging this video for this browser without converting it, so the quality is unchanged."
+    },
+    {
+      "id": "playback-information.conversion-explanation.direct-stream-method",
+      "operation": "conversion-explanation",
+      "description": "A DirectStream decision reads as a repackaged direct stream with the repackaging heading.",
+      "input": {
+        "method": "DirectStream",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=copy",
+        "reasons": [],
+        "device": "this browser",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "h264"
+            },
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac"
+            }
+          ]
+        }
+      },
+      "expected": "remux\nmethod: Direct stream (repackaged)\nheading: Why the server repackages\nThe server is repackaging this video for this browser without converting it, so the quality is unchanged."
     },
     {
       "id": "playback-information.conversion-explanation.unknown-code-is-not-repackaging",
@@ -1589,7 +1644,7 @@
           ]
         }
       },
-      "expected": "unexplained\nThe server is converting this video and did not say why."
+      "expected": "unexplained\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video and did not say why."
     },
     {
       "id": "playback-information.conversion-explanation.quality-cap",
@@ -1618,7 +1673,7 @@
         },
         "qualityMbps": 8
       },
-      "expected": "bitrate\nThe server is converting this video to keep it under your 8 Mbps quality limit.\nRaise Max streaming bitrate in Settings to try the original quality."
+      "expected": "bitrate\nmethod: Transcode\nheading: Why the server converts\nThe server is converting this video to keep it under your 8 Mbps quality limit.\nRaise Max streaming bitrate in Settings to try the original quality."
     },
     {
       "id": "playback-information.conversion-explanation.direct-play",
@@ -1644,7 +1699,7 @@
           ]
         }
       },
-      "expected": "direct\nThis TV is playing the file directly, with no conversion."
+      "expected": "direct\nmethod: Direct play\nThis TV is playing the file directly, with no conversion."
     }
   ],
   "sources": [
