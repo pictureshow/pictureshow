@@ -54,6 +54,8 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    // CAT-14 duplicate title/library rule; Kotlin desktop executes the new contract.
+    "search-presentation",
     "home-browse",
     "frame-rate-match",
     "playback-start",

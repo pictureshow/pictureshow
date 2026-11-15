@@ -7,12 +7,12 @@ package app.pictureshow.desktop
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -117,21 +117,16 @@ internal fun SearchPage(state: DesktopState, c: DesktopController) {
 /** Person results open their credit list; ordinary titles keep the existing detail route. */
 @Composable internal fun SearchPersonPage(state: DesktopState, c: DesktopController) {
     val account = state.account ?: return
-    val list = rememberLazyListState()
+    val grid = rememberLazyGridState()
     Box(Modifier.fillMaxSize()) {
-        CatalogTabScope(Modifier.fillMaxSize()) {
-            LazyColumn(state = list, modifier = Modifier.fillMaxSize().padding(end = 20.dp).catalogPage(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                item { CatalogHeading(state.person?.name.orEmpty()) }
-                if (!state.busy && state.items.isEmpty() && state.error == null) item { SearchMessage("No titles to show", "This person has no movies or shows in your libraries.") }
-                items(state.items.chunked(5)) { row ->
-                    CatalogLane("person:${row.first().id}", row.first().id) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            row.forEach { item -> CatalogCard(item, account, false, { c.open(item) }, Modifier.width(156.dp).catalogLaneItem(item.id).focusOutline().probe("person:${item.id}"), announcement = catalogAnnouncement(item), tag = "person:${item.id}") }
-                        }
-                    }
-                }
+        LazyVerticalGrid(columns = GridCells.Adaptive(156.dp), state = grid, modifier = Modifier.fillMaxSize().padding(end = 20.dp).catalogPage(), contentPadding = PaddingValues(24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            item(span = { GridItemSpan(maxLineSpan) }) { CatalogHeading(state.person?.name.orEmpty()) }
+            if (!state.busy && state.items.isEmpty() && state.error == null) item(span = { GridItemSpan(maxLineSpan) }) { SearchMessage("No titles to show", "This person has no movies or shows in your libraries.") }
+            items(state.items, key = { it.id }) { item ->
+                CatalogCard(item, account, false, { c.open(item) }, Modifier.fillMaxWidth().focusOutline().probe("person:${item.id}"), announcement = catalogAnnouncement(item), tag = "person:${item.id}")
             }
+            if (state.items.size < state.total) item(span = { GridItemSpan(maxLineSpan) }) { InlineTextAction("Load more", "person-more", c::morePerson, enabled = !state.busy) }
         }
-        VerticalScrollbar(rememberScrollbarAdapter(list), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+        VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }

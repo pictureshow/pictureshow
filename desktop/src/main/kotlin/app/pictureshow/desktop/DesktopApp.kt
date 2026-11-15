@@ -165,6 +165,8 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                     DesktopRoute.Detail -> "play"
                     DesktopRoute.Home -> state.homeRows.firstOrNull()?.let { row -> row.items.firstOrNull()?.let { "card:${row.key}:${it.id}" } }
                     DesktopRoute.Library -> state.items.firstOrNull()?.let { "grid:${it.id}" }
+                    DesktopRoute.Person -> state.items.firstOrNull()?.let { "person:${it.id}" }
+                    DesktopRoute.Search -> "search-field"
                     else -> null
                 }
                 target?.let { runCatching { DesktopUiProbe.requestFocus[it]?.requestFocus() } }
@@ -281,7 +283,7 @@ fun DesktopApp(controller: DesktopController, onFullscreen: () -> Unit, fullscre
                             Card(Modifier.fillMaxWidth().widthIn(max = 560.dp).align(Alignment.CenterHorizontally).padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.controlFocus().probe("retry")) { Text("Retry") }
+                                    if (state.route == DesktopRoute.Loading || (state.errorKind in setOf(ErrorKind.NETWORK, ErrorKind.SERVER) && state.route in setOf(DesktopRoute.Servers, DesktopRoute.Home, DesktopRoute.Library, DesktopRoute.Detail, DesktopRoute.Person, DesktopRoute.QuickConnect))) TextButton(onClick = controller::retry, enabled = !state.busy, modifier = Modifier.controlFocus().probe("retry")) { Text("Retry") }
                                 }
                             }
                         }

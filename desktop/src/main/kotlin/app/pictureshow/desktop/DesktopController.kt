@@ -238,6 +238,16 @@ class DesktopController(
             return
         }
         val a = mutable.value.account ?: return
+        val previous = synchronized(history) {
+            val index = history.indexOfLast { it.route == DesktopRoute.Search && it.account?.key == a.key }
+            if (index < 0) null else history[index].also { while (history.size > index) history.removeAt(history.lastIndex) }
+        }
+        if (previous != null) {
+            generation.incrementAndGet(); pageJob?.cancel()
+            mutable.value = previous.copy(busy = false, settings = mutable.value.settings, returnFocus = "search-field")
+            if (previous.search.loading) searchQuery(previous.search.query, immediate = true)
+            return
+        }
         page(DesktopRoute.Search, remember = true) { g ->
             publish(g) { it.copy(search = DesktopSearchState(recent = store.snapshots.value.recentSearches[a.key].orEmpty()), returnFocus = "search-field") }
         }
@@ -288,6 +298,16 @@ class DesktopController(
         val a = mutable.value.account ?: return@page
         val p = attempt(g, a) { client.personItems(a, item.id) } ?: return@page
         publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
+    }
+    fun morePerson() {
+        if (mutable.value.busy) return
+        val before = mutable.value
+        val person = before.person ?: return
+        page(DesktopRoute.Person) { g ->
+            val a = mutable.value.account ?: return@page
+            val p = attempt(g, a) { client.personItems(a, person.id, before.items.size) } ?: return@page
+            publish(g) { it.copy(items = (it.items + p.items).distinctBy(MediaItem::id), total = if (p.items.isEmpty()) it.items.size else p.totalRecordCount) }
+        }
     }
     fun home() = page(DesktopRoute.Home) { g -> synchronized(history) { history.clear() }; loadHome(g) }
     private suspend fun loadHome(g: Long) = coroutineScope {
@@ -394,7 +414,11 @@ class DesktopController(
             DesktopRoute.Loading -> start()
             DesktopRoute.Home -> home()
             DesktopRoute.Search -> searchQuery(s.search.query, immediate = true)
-            DesktopRoute.Person -> s.person?.let { person(it) }
+            DesktopRoute.Person -> s.person?.let { item -> page(DesktopRoute.Person) { g ->
+                val a = mutable.value.account ?: return@page
+                val p = attempt(g, a) { client.personItems(a, item.id) } ?: return@page
+                publish(g) { it.copy(items = p.items, total = p.totalRecordCount) }
+            } }
             DesktopRoute.Library -> s.library?.let { browse(it, s.sortBy, s.descending) }
             DesktopRoute.Detail -> s.detail?.let { page(DesktopRoute.Detail) { g -> loadDetail(g, it) } }
             DesktopRoute.QuickConnect -> quickConnect()

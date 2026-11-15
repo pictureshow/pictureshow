@@ -3,7 +3,7 @@
   "suite": "search-presentation",
   "cases": [
     {
-      "id": "same-title-year",
+      "id": "search-presentation.same-title-year",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -27,7 +27,7 @@
       ]
     },
     {
-      "id": "same-title-different-year",
+      "id": "search-presentation.same-title-different-year",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -48,7 +48,7 @@
       "expected": []
     },
     {
-      "id": "normalized-title",
+      "id": "search-presentation.normalized-title",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -72,7 +72,7 @@
       ]
     },
     {
-      "id": "one-item-repeated-is-not-two-copies",
+      "id": "search-presentation.one-item-repeated-is-not-two-copies",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -93,7 +93,7 @@
       "expected": []
     },
     {
-      "id": "different-types",
+      "id": "search-presentation.different-types",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -114,7 +114,7 @@
       "expected": []
     },
     {
-      "id": "missing-years-still-ambiguous",
+      "id": "search-presentation.missing-years-still-ambiguous",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -138,7 +138,7 @@
       ]
     },
     {
-      "id": "unique-titles",
+      "id": "search-presentation.unique-titles",
       "operation": "search-duplicate-ids",
       "input": {
         "items": [
@@ -159,7 +159,7 @@
       "expected": []
     },
     {
-      "id": "empty",
+      "id": "search-presentation.empty",
       "operation": "search-duplicate-ids",
       "input": {
         "items": []
@@ -167,7 +167,7 @@
       "expected": []
     },
     {
-      "id": "library-from-visible-view",
+      "id": "search-presentation.library-from-visible-view",
       "operation": "search-library-name",
       "input": {
         "ancestors": [
@@ -196,7 +196,7 @@
       "expected": "Open films"
     },
     {
-      "id": "ancestor-library-fallback",
+      "id": "search-presentation.ancestor-library-fallback",
       "operation": "search-library-name",
       "input": {
         "ancestors": [
@@ -212,7 +212,7 @@
       "expected": "Open Movies"
     },
     {
-      "id": "no-guessed-folder",
+      "id": "search-presentation.no-guessed-folder",
       "operation": "search-library-name",
       "input": {
         "ancestors": [
