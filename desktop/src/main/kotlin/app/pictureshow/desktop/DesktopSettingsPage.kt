@@ -46,6 +46,10 @@ import app.pictureshow.core.playback.*
 import app.pictureshow.ui.*
 import java.util.concurrent.ConcurrentHashMap
 
+/** D-15: "Original" means the file plays as it is unless this computer can't decode it. */
+internal const val VIDEO_QUALITY_ORIGINAL = "Original (no conversion unless needed)"
+internal const val VIDEO_QUALITY_CAPTION = "Lower it if playback stutters. A cap below the file's bitrate makes the server convert it."
+
 @Composable
 internal fun SettingsPage(state:DesktopState,c:DesktopController) {
     val s=state.settings
@@ -56,8 +60,8 @@ internal fun SettingsPage(state:DesktopState,c:DesktopController) {
             }
         }
         SettingsSection("Playback") {
-            SettingRow("Video quality", "Lower it if playback stutters on a slow connection.") {
-                Choice("Video quality",listOf(0 to "Original / best compatible",4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
+            SettingRow("Video quality", VIDEO_QUALITY_CAPTION) {
+                Choice("Video quality",listOf(0 to VIDEO_QUALITY_ORIGINAL,4 to "4 Mbps",10 to "10 Mbps",20 to "20 Mbps",40 to "40 Mbps",80 to "80 Mbps"),s.bitrateMbps?:0,"quality",buttonValue = if ((s.bitrateMbps ?: 0) == 0) "Original" else "${s.bitrateMbps} Mbps", buttonWidth = 180.dp, trailingIcon = DesktopGlyph.ChevronDown, fixedWidth = true) { c.saveSettings(s.copy(bitrateMbps=it.takeIf{it>0})) }
             }
             SettingSwitch("Explain video conversion","Tell me when this computer needs a different video format.",s.conversionNotice,"conversion") { c.saveSettings(s.copy(conversionNotice=it)) }
             SettingSwitch("Play next episode","Continue to the next episode when this one ends.",s.autoplayNext,"autoplay") { c.saveSettings(s.copy(autoplayNext=it)) }
@@ -90,7 +94,7 @@ internal fun SettingRow(title: String, caption: String, trailing: @Composable ()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.probe("caption:$title"))
         }
         trailing()
     }

@@ -177,6 +177,15 @@ class DesktopController(
     }
     fun accounts() = page(DesktopRoute.Accounts) { _ -> snapshotAccounts() }
     fun addServer() = page(DesktopRoute.Servers) { _ -> }
+    /** AUTH-07: another viewer on a saved server goes straight to its sign-in; Back returns to the chooser. */
+    fun addAccountOn(server: Server) {
+        if (mutable.value.busy && mutable.value.route == DesktopRoute.SignIn) return
+        page(DesktopRoute.SignIn, remember = true) { g ->
+            publish(g) { it.copy(server = server, publicUsers = emptyList(), quickCode = null) }
+            val users = attempt(g) { client.publicUsers(server) }.orEmpty()
+            publish(g) { it.copy(publicUsers = users) }
+        }
+    }
     fun selectAccount(key: String) = page(DesktopRoute.Accounts) { g ->
         val account = store.snapshots.value.accounts.firstOrNull { it.key == key } ?: return@page
         if (account.expired || account.accessToken.isBlank()) { publish(g) { it.copy(server = account.server, route = DesktopRoute.SignIn) }; return@page }
