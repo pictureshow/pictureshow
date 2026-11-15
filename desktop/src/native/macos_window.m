@@ -70,7 +70,9 @@ void *ps_window_find(const char *title) {
 }
 
 void ps_window_activate(void *ptr) {
- onMain(^{[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[(__bridge NSWindow*)ptr makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];});
+ // Probe-only window activation remains cooperative: a background playback or
+ // diagnostic call cannot take the keyboard away from the active application.
+ onMain(^{if(NSApp.active && ptr) [(__bridge NSWindow*)ptr makeKeyAndOrderFront:nil];});
 }
 
 /* AppKit supplies the standard traffic-light buttons on our existing borderless

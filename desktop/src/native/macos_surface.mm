@@ -109,8 +109,9 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     mainCall(^{
         s->overlay = (__bridge NSWindow*)viewPtr;
         s->referenceWhiteNits=referenceWhite(s->overlay);
-        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-        [s->overlay makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
+        // Attaching/replacing video is also used by autoplay while another app
+        // owns the keyboard. The launcher owns activation policy; this child
+        // window can attach beneath the overlay without activating either one.
         s->device = MTLCreateSystemDefaultDevice(); s->queue = [s->device newCommandQueue];
         s->layer = [CAMetalLayer layer]; s->layer.device=s->device;
         s->layer.pixelFormat=MTLPixelFormatRGBA16Float;

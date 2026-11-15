@@ -21,6 +21,7 @@ class CorpusVectorsTest {
             "parity-vectors" to
                 setOf(
                     "application",
+                    "account-sign-out",
                     "catalog",
                     "catalog-return",
                     "compatibility",

@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "suite": "account-sign-out",
+  "source": "AUTH-10; core AccountStore.signOutKeepingAccount/removeAccount; AccountSignOutVectorsTest",
+  "cases": [
+    {
+      "id": "auth10.current-sign-out-keeps-card",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          },
+          {
+            "action": "reload"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "a",
+            "token": "",
+            "expired": true
+          },
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          }
+        ],
+        "current": null,
+        "searches": [
+          "b"
+        ],
+        "preferences": [
+          "b"
+        ],
+        "pending": [
+          "b"
+        ],
+        "retired": [
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.other-sign-out-preserves-current",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "b",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "a",
+            "token": "",
+            "expired": true
+          },
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          }
+        ],
+        "current": "b",
+        "searches": [
+          "b"
+        ],
+        "preferences": [
+          "b"
+        ],
+        "pending": [
+          "b"
+        ],
+        "retired": [
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.repeat-sign-out-is-idempotent",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          },
+          {
+            "action": "reload"
+          },
+          {
+            "action": "sign-out",
+            "account": "a"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "a",
+            "token": "",
+            "expired": true
+          },
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          }
+        ],
+        "current": null,
+        "searches": [
+          "b"
+        ],
+        "preferences": [
+          "b"
+        ],
+        "pending": [
+          "b"
+        ],
+        "retired": [
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.remove-forgets-signed-out-card",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          },
+          {
+            "action": "remove",
+            "account": "a"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          }
+        ],
+        "current": null,
+        "searches": [
+          "b"
+        ],
+        "preferences": [
+          "b"
+        ],
+        "pending": [
+          "b"
+        ],
+        "retired": [
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.sign-in-replaces-kept-card",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          },
+          {
+            "action": "reload"
+          },
+          {
+            "action": "sign-in",
+            "account": "a"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          },
+          {
+            "id": "a",
+            "token": "fresh-a",
+            "expired": false
+          }
+        ],
+        "current": "a",
+        "searches": [
+          "b"
+        ],
+        "preferences": [
+          "b"
+        ],
+        "pending": [
+          "b"
+        ],
+        "retired": [
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.missing-sign-out-keeps-everything",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "b",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "missing"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "a",
+            "token": "token-a",
+            "expired": false
+          },
+          {
+            "id": "b",
+            "token": "token-b",
+            "expired": false
+          }
+        ],
+        "current": "b",
+        "searches": [
+          "a",
+          "b"
+        ],
+        "preferences": [
+          "a",
+          "b"
+        ],
+        "pending": [
+          "a",
+          "b"
+        ],
+        "retired": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "auth10.both-sign-out-retain-both-cards",
+      "input": {
+        "accounts": [
+          "a",
+          "b"
+        ],
+        "current": "b",
+        "steps": [
+          {
+            "action": "sign-out",
+            "account": "a"
+          },
+          {
+            "action": "sign-out",
+            "account": "b"
+          },
+          {
+            "action": "reload"
+          }
+        ]
+      },
+      "expected": {
+        "accounts": [
+          {
+            "id": "a",
+            "token": "",
+            "expired": true
+          },
+          {
+            "id": "b",
+            "token": "",
+            "expired": true
+          }
+        ],
+        "current": null,
+        "searches": [],
+        "preferences": [],
+        "pending": [],
+        "retired": []
+      }
+    }
+  ]
+}
