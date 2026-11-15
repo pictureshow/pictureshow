@@ -45,6 +45,12 @@ import app.pictureshow.core.*
 import app.pictureshow.core.playback.*
 import app.pictureshow.ui.*
 import java.util.concurrent.ConcurrentHashMap
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import io.ktor.http.encodeURLPathPart
 
 @Composable
 internal fun FormPage(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
@@ -60,27 +66,97 @@ internal fun FormPage(title: String, subtitle: String, content: @Composable Colu
         VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
+
+/**
+ * What the sign-in and account pages ask of the app. [DesktopController] provides it through
+ * [authActions]; the UI tests drive the same pages with a recorder.
+ */
+internal interface AuthActions {
+    fun discover()
+    fun connect(address: String)
+    fun signIn(username: String, password: String)
+    fun quickConnect()
+    fun clearError()
+    fun accounts()
+    fun selectAccount(key: String)
+    /** AUTH-07: sign another viewer in on a saved server, without asking for its address again. */
+    fun addAccountOn(server: Server)
+    fun addServer()
+    fun signOut()
+    fun back()
+}
+
+internal fun DesktopController.authActions(): AuthActions {
+    val c = this
+    return object : AuthActions {
+        override fun discover() = c.discover()
+        override fun connect(address: String) = c.connect(address)
+        override fun signIn(username: String, password: String) = c.signIn(username, password)
+        override fun quickConnect() = c.quickConnect()
+        override fun clearError() = c.clearError()
+        override fun accounts() = c.accounts()
+        override fun selectAccount(key: String) = c.selectAccount(key)
+        override fun addAccountOn(server: Server) = c.addAccountOn(server)
+        override fun addServer() = c.addServer()
+        override fun signOut() = c.signOut()
+        override fun back() = c.back()
+    }
+}
+
+/** AUTH-04: the copy for a username and password the server refused at sign-in. */
+internal const val WRONG_CREDENTIALS_COPY = "That username and password didn't work. Check them and try again."
+/** AUTH-04: how many public users the picker shows before "Show all N users". */
+internal const val PUBLIC_USERS_SHOWN = 8
+
 @Composable
-internal fun ServerPage(state: DesktopState, c: DesktopController) {
+internal fun ServerPage(state: DesktopState, c: DesktopController) = ServerForm(state, remember(c) { c.authActions() })
+
+@Composable
+internal fun ServerForm(state: DesktopState, c: AuthActions) {
     LaunchedEffect(Unit) { c.discover() }
     var address by remember { mutableStateOf("") }
+    var missing by remember { mutableStateOf(false) }
+    val addressFocus = remember { FocusRequester() }
+    val submit = {
+        if (address.isBlank()) { missing = true; addressFocus.requestFocus() } else if (!state.busy) c.connect(address)
+    }
     FormPage("Your library, on your desktop", "Connect to your Jellyfin server to start watching.") {
-        OutlinedTextField(address, { address = it }, label = { Text("Server address") }, supportingText = { Text("For example, https://jellyfin.example.org") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("server-address"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if(address.isNotBlank()) c.connect(address) }))
+        OutlinedTextField(
+            address, { address = it; if (it.isNotBlank()) missing = false },
+            label = { Text("Server address") },
+            supportingText = { Text(if (missing) "Enter your server's address." else "For example, https://jellyfin.example.org") },
+            isError = missing, singleLine = true, enabled = !state.busy,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            modifier = Modifier.fillMaxWidth().focusRequester(addressFocus).probe("server-address")
+        )
         Button(onClick = { c.connect(address) }, enabled = address.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("connect")) { Text(if (state.busy) "Connecting…" else "Connect") }
         Text("On your network", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }, modifier = Modifier.controlFocus()) { Text(s.name) } }
+        state.rememberedServers.forEach { s -> OutlinedButton(onClick = { c.connect(s.url) }, modifier = Modifier.controlFocus()) { Text(serverLabel(s, state.rememberedServers)) } }
         state.discovered.forEach { s -> OutlinedButton(onClick = { c.connect(s.address) }, modifier = Modifier.controlFocus()) { Text(s.name) } }
         Text(if (state.discovering) "Looking for Jellyfin servers…" else if(state.discovered.isEmpty()) "No server found yet. You can always enter its address above." else "Select a server to connect.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         InlineTextAction("Search again", "discover", c::discover, enabled = !state.discovering)
         if (state.accounts.isNotEmpty()) InlineTextAction("Remembered accounts", "remembered-accounts", c::accounts)
     }
 }
+
 @Composable
-internal fun SignInPage(state: DesktopState, c: DesktopController) {
-    var username by remember(state.server?.id) { mutableStateOf("") }
-    var password by remember(state.server?.id) { mutableStateOf(TextFieldValue("")) }
+internal fun SignInPage(state: DesktopState, c: DesktopController) = SignInForm(state, remember(c) { c.authActions() })
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SignInForm(state: DesktopState, c: AuthActions) {
+    val serverKey = state.server?.let { it.id to it.url }
+    var username by remember(serverKey) { mutableStateOf("") }
+    var password by remember(serverKey) { mutableStateOf(TextFieldValue("")) }
+    var picked by remember(serverKey) { mutableStateOf<String?>(null) }
+    var missing by remember(serverKey) { mutableStateOf(false) }
+    var allUsers by remember(serverKey) { mutableStateOf(false) }
+    var submitted by remember { mutableStateOf(false) }
     var show by remember { mutableStateOf(false) }
+    val usernameFocus = remember { FocusRequester() }
     val passwordFocus = remember { FocusRequester() }
+    val firstRevealedUser = remember { FocusRequester() }
     val credentialsRejected = state.errorKind == ErrorKind.INVALID_CREDENTIALS
     LaunchedEffect(credentialsRejected, state.busy) {
         if (credentialsRejected && !state.busy) {
@@ -88,19 +164,68 @@ internal fun SignInPage(state: DesktopState, c: DesktopController) {
             password = password.copy(selection = TextRange(0, password.text.length))
         }
     }
-    FormPage("Sign in", state.server?.name ?: "Your Jellyfin server") {
-        if (state.publicUsers.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { state.publicUsers.take(4).forEach { u -> AssistChip(modifier = Modifier.controlFocus(), onClick = { username = u.name; c.clearError() }, label = { Text(u.name) }) } }
-        OutlinedTextField(username, { username = it; c.clearError() }, label = { Text("Username") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().probe("username"))
+    LaunchedEffect(state.busy) { if (!state.busy) submitted = false }
+    val submit = {
+        if (username.isBlank()) { missing = true; usernameFocus.requestFocus() }
+        else if (!state.busy) { submitted = true; c.signIn(username, password.text) }
+    }
+    val confirmedPick = picked?.takeIf { it == username }
+    FormPage("Sign in", state.server?.let { serverLabel(it, state.rememberedServers) } ?: "Your Jellyfin server") {
+        OutlinedTextField(
+            username, { username = it; if (it.isNotBlank()) missing = false; c.clearError() },
+            label = { Text("Username") },
+            supportingText = if (missing) ({ Text("Enter your username.") }) else null,
+            isError = missing, singleLine = true, enabled = !state.busy,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
+            modifier = Modifier.fillMaxWidth().focusRequester(usernameFocus).probe("username")
+        )
+        if (confirmedPick != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.probe("signing-in-as")) {
+            Text("Signing in as ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(confirmedPick, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text(" · ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { picked = null; username = ""; c.clearError(); usernameFocus.requestFocus() }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.controlFocus().probe("not-you")) { Text("Not you?") }
+        }
         OutlinedTextField(password, { value ->
             // Cursor/selection changes are not a corrected credential. Keep the
             // rejection visible until the viewer actually edits the password.
             val edited = value.text != password.text
             password = value
             if (edited) c.clearError()
-        }, label = { Text("Password") }, supportingText = if (credentialsRejected) ({ Text("Wrong username or password") }) else null, isError = credentialsRejected, singleLine = true, visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = { show = !show }, modifier = Modifier.controlFocus()) { Text(if(show) "Hide" else "Show") } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).probe("password"), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { c.signIn(username,password.text) }))
-        Button(onClick = { c.signIn(username, password.text) }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("sign-in")) { Text("Sign in") }
-        HorizontalDivider()
+        }, label = { Text("Password") },
+            supportingText = if (credentialsRejected) ({ Text(WRONG_CREDENTIALS_COPY) }) else null,
+            isError = credentialsRejected, singleLine = true,
+            visualTransformation = if(show) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = { TextButton(onClick = { show = !show }, modifier = Modifier.controlFocus().semantics { contentDescription = if (show) "Hide password" else "Show password" }) { Text(if(show) "Hide" else "Show") } },
+            enabled = !state.busy,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus).probe("password")
+        )
+        Button(onClick = { submit() }, enabled = username.isNotBlank() && !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("sign-in")) { Text(if (state.busy && submitted) "Signing in…" else "Sign in") }
         OutlinedButton(onClick = c::quickConnect, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("quick-connect")) { Text("Use Quick Connect") }
+        val users = state.publicUsers
+        if (users.isNotEmpty()) {
+            HorizontalDivider()
+            Text("Or choose your name", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val shown = if (allUsers || users.size <= PUBLIC_USERS_SHOWN) users else users.take(PUBLIC_USERS_SHOWN)
+                shown.forEachIndexed { i, u ->
+                    FilterChip(
+                        selected = confirmedPick == u.name,
+                        onClick = { username = u.name; picked = u.name; missing = false; c.clearError(); passwordFocus.requestFocus() },
+                        label = { Text(u.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        enabled = !state.busy,
+                        modifier = Modifier.controlFocus(RoundedCornerShape(8.dp)).then(if (i == PUBLIC_USERS_SHOWN) Modifier.focusRequester(firstRevealedUser) else Modifier).probe("user:${u.id}").semantics { contentDescription = u.name }
+                    )
+                }
+                if (users.size > PUBLIC_USERS_SHOWN && !allUsers) {
+                    TextButton(onClick = { allUsers = true }, modifier = Modifier.controlFocus().probe("show-all-users")) { Text("Show all ${users.size} users") }
+                }
+            }
+            // The button that was focused goes away: keep focus where the list grew.
+            LaunchedEffect(allUsers) { if (allUsers && users.size > PUBLIC_USERS_SHOWN) firstRevealedUser.requestFocus() }
+        }
     }
 }
 
@@ -113,34 +238,98 @@ internal fun QuickConnectPage(state: DesktopState, controller: DesktopController
     }
 }
 
+/**
+ * The letters an account's avatar shows when the server has no picture for it: the first letter of the first and the
+ * last word, so "ux-tom" and "ux-mei" read UT and UM rather than both U. Separators are spaces, dots, dashes,
+ * underscores and @.
+ */
+internal fun accountInitials(name: String): String {
+    val words = name.trim().split(Regex("[\\s._@-]+")).filter { w -> w.any(Char::isLetterOrDigit) }
+    if (words.isEmpty()) return "?"
+    fun letter(w: String) = w.first(Char::isLetterOrDigit).uppercase()
+    return if (words.size == 1) letter(words[0]) else letter(words.first()) + letter(words.last())
+}
+
+/** Jellyfin serves a viewer's own picture without sign-in, as its login screen does. A 404 leaves the initials showing. */
+internal fun userImageUrl(server: Server, user: User, size: Int = 96): String =
+    "${server.url.trimEnd('/')}/Users/${user.id.encodeURLPathPart()}/Images/Primary?maxWidth=$size&maxHeight=$size&quality=90"
+
 @Composable
-internal fun AccountsPage(state: DesktopState, controller: DesktopController, onRemove: (Account) -> Unit) {
-    FormPage("Who's watching?", "Choose an account or add one.") {
-        state.accounts.forEach { a ->
+internal fun AccountAvatar(account: Account) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
+        Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+            Text(accountInitials(account.user.name), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.probe("initials:${account.key}"))
+            coil3.compose.AsyncImage(model = userImageUrl(account.server, account.user), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
+@Composable
+internal fun AccountsPage(state: DesktopState, controller: DesktopController, onRemove: (Account) -> Unit) =
+    AccountsList(state, remember(controller) { controller.authActions() }, onRemove)
+
+@Composable
+internal fun AccountsList(state: DesktopState, c: AuthActions, onRemove: (Account) -> Unit) {
+    val servers = (state.rememberedServers + state.accounts.map { it.server }).distinctBy { it.id to it.url }
+    FormPage("Who's watching?", "Choose an account, or add one. Removing an account only forgets it on this computer.") {
+        state.account?.let { current ->
             Row(
-                Modifier.controlFocus(RoundedCornerShape(12.dp)).fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                    .clickable(role = Role.Button) { controller.selectAccount(a.key) }.probe("account:${a.key}")
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 16.dp, vertical = 12.dp).probe("current-account"),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        Text(a.user.name.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(a.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(a.server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                DesktopTooltip("Remove account") {
-                    IconButton(onClick = { onRemove(a) }, modifier = Modifier.controlFocus().probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }) {
-                        Icon(DesktopGlyph.Remove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                Text("Signed in as ${current.user.name} on ${serverLabel(current.server, servers)}.", modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = c::signOut, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 40.dp).probe("accounts-sign-out")) { Text("Sign out") }
+            }
+        }
+        servers.forEach { s ->
+            val label = serverLabel(s, servers)
+            val onServer = state.accounts.filter { it.server.id == s.id && it.server.url == s.url }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+                onServer.forEach { a -> AccountRow(a, current = a.key == state.account?.key, select = { c.selectAccount(a.key) }, remove = { onRemove(a) }) }
+                OutlinedButton(onClick = { c.addAccountOn(s) }, enabled = !state.busy, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-account:${s.id}")) {
+                    Text(if (onServer.isEmpty()) "Sign in on $label" else "Add another account on $label", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        OutlinedButton(onClick = controller::addServer, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-server")) { Text("Add account") }
+        OutlinedButton(onClick = c::addServer, modifier = Modifier.controlFocus().heightIn(min = 48.dp).probe("add-server")) { Text("Add a server") }
+    }
+}
+
+@Composable
+private fun AccountRow(a: Account, current: Boolean, select: () -> Unit, remove: () -> Unit) {
+    val rowHover = remember { MutableInteractionSource() }
+    val rowHovered by rowHover.collectIsHoveredAsState()
+    var removeFocused by remember { mutableStateOf(false) }
+    val removeHover = remember { MutableInteractionSource() }
+    val removeHovered by removeHover.collectIsHoveredAsState()
+    Row(
+        Modifier.controlFocus(RoundedCornerShape(12.dp)).fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .hoverable(rowHover)
+            .clickable(role = Role.Button, onClick = select).probe("account:${a.key}")
+            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AccountAvatar(a)
+        Column(Modifier.weight(1f)) {
+            Text(a.user.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (current) "Watching now" else if (a.expired || a.accessToken.isBlank()) "Signed out · Sign in again to continue" else "Signed in",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        // The icon alone didn't read as Remove (D-15): the word shows while the row or the button has the pointer or
+        // focus. The button keeps its width so nothing shifts when it appears.
+        TextButton(
+            onClick = remove,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            modifier = Modifier.controlFocus().width(112.dp).heightIn(min = 40.dp).hoverable(removeHover).onFocusChanged { removeFocused = it.isFocused }
+                .probe("remove:${a.key}").semantics { contentDescription = "Remove ${a.user.name}" }
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (rowHovered || removeHovered || removeFocused) { Text("Remove", modifier = Modifier.probe("remove-label:${a.key}")); Spacer(Modifier.width(8.dp)) }
+                Icon(DesktopGlyph.Remove, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
