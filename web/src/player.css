@@ -220,7 +220,14 @@
     width: min(640px, 90vw);
     max-height: 85dvh;
     color: #fff;
-    background: var(--color-app-playerPanel);
+    /* The panel token is 96% opaque; layered over black so the player's
+       controls never show through the rows. */
+    background:
+        linear-gradient(
+            var(--color-app-playerPanel),
+            var(--color-app-playerPanel)
+        ),
+        #000;
     border: 1px solid var(--color-app-field);
     border-radius: 1.4rem;
     padding: 2rem;
@@ -310,16 +317,28 @@
     flex-wrap: wrap;
     margin-bottom: 1rem;
 }
-.player-overlay .reader-choice {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    margin: 1.5rem 0 0.5rem;
+/* PLAY-28: the ? sheet lists each key beside what it does. */
+.player-overlay .shortcut-list {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0 0 1rem;
 }
-.player-overlay .reader-choice input {
-    width: 24px !important;
-    min-height: 24px !important;
-    height: 24px;
+.player-overlay .shortcut-list div {
+    display: grid;
+    grid-template-columns: minmax(9rem, 16rem) 1fr;
+    gap: 1rem;
+}
+.player-overlay .shortcut-list dt {
+    font-weight: 700;
+}
+.player-overlay .shortcut-list dd {
+    margin: 0;
+}
+/* Touch screens have no keyboard to describe. */
+@media (pointer: coarse) {
+    .player-overlay .shortcuts-control {
+        display: none;
+    }
 }
 .player-overlay .chapter-list {
     display: flex;
@@ -631,19 +650,50 @@
     font-size: 16px;
     line-height: 1.4;
 }
+/* Playback info scrolls itself (Down walks it with [data-scroll]), so it fills
+   the panel body instead of nesting a second scroller inside it, and carries
+   the same fade above the pinned Done. */
+.player-overlay .player-panel-body:has(> .playback-info) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.player-overlay .player-panel-body:has(> .playback-info)::after {
+    display: none;
+}
 .player-overlay .playback-info {
+    flex: 1 1 auto;
+    min-height: 0;
     max-height: calc(85dvh - 10rem);
     overflow: auto;
-    margin-bottom: 1rem;
+    overscroll-behavior: contain;
     border-radius: 0.7rem;
     padding: 0.25rem 0.5rem;
+}
+.player-overlay .player-panel-body > .playback-info {
+    max-height: none;
+}
+.player-overlay .playback-info::after {
+    content: "";
+    position: sticky;
+    bottom: -0.25rem;
+    display: block;
+    height: 1.5rem;
+    margin-top: -0.5rem;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        var(--color-app-playerPanel)
+    );
 }
 .player-overlay .playback-info:focus-visible {
     outline: 3px solid var(--color-tv-primary);
 }
+/* Relative to the rows (24px on a TV-sized window), never smaller than them. */
 .player-overlay .playback-info h3 {
     margin: 1rem 0 0.5rem;
-    font-size: 1.05rem;
+    font-size: 1.05em;
 }
 .player-overlay .playback-info dl {
     margin: 0;
@@ -677,7 +727,7 @@
     margin-bottom: 0.4rem;
 }
 .player-overlay .playback-info-summary {
-    font-size: 1.1rem;
+    font-size: 1.1em;
     margin-top: 0.25rem !important;
 }
 .player-overlay .playback-info details {

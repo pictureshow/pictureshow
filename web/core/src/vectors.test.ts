@@ -48,6 +48,7 @@ import * as rc26 from "./rc26";
 import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
 import { controlProjection, controlSuites, runControlCase } from "./control";
+import { playerTrackLabels } from "../../src/player-track-labels";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
@@ -137,8 +138,6 @@ const pendingApplicationCases = new Map([
     ["detail-primary-all-played", "detail-play-item"],
     ["detail-primary-empty", "detail-play-item"],
     ["detail-primary-container", "detail-play-item"],
-    ["track-label-forced", "track-labels"],
-    ["track-label-distinct", "track-labels"],
     ["catalog-announcement-episode", "catalog-announcement"],
     ["catalog-announcement-season-count", "catalog-announcement"],
     ["catalog-announcement-empty", "catalog-announcement"],
@@ -243,6 +242,9 @@ for (const file of files) {
                     return;
                 }
                 switch (c.operation) {
+                    case "track-labels":
+                        value = playerTrackLabels(i.streams);
+                        break;
                     case "visibility-play":
                         value = rc28.visibilityPlay(
                             i.requested,

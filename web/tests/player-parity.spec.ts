@@ -795,9 +795,105 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
     );
 });
 
-test("phone rotation preserves viewing, pause intent and selected sheet", async ({
+test("PLAY-28: the keyboard drives the player as soon as it opens", async ({
     page,
 }) => {
+    await fixture(page);
+    await openMovie(page);
+    // Focus is on the picture without any click inside the player.
+    await expect(page.locator("video")).toBeFocused();
+    const paused = () =>
+        page.locator("video").evaluate((v: HTMLVideoElement) => v.paused);
+    await page.keyboard.press("k");
+    await expect.poll(paused).toBe(true);
+    await expect(
+        page.getByRole("button", { name: "Play", exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("k");
+    await expect.poll(paused).toBe(false);
+    // Focus lost to the page body still reaches the player.
+    await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+    await expect
+        .poll(() => page.evaluate(() => document.activeElement?.tagName))
+        .toBe("BODY");
+    await page.keyboard.press(" ");
+    await expect.poll(paused).toBe(true);
+    const at = () =>
+        page.locator("video").evaluate((v: HTMLVideoElement) => v.currentTime);
+    const before = await at();
+    await page.keyboard.press("l");
+    await expect.poll(at).toBeGreaterThan(before + 5);
+    await page.keyboard.press("j");
+    await expect.poll(at).toBeLessThan(before + 5);
+    await page.keyboard.press("m");
+    await expect
+        .poll(() =>
+            page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
+        )
+        .toBe(true);
+    await expect(page.getByRole("status").first()).toHaveText("Muted");
+    await page.keyboard.press("m");
+    await expect
+        .poll(() =>
+            page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
+        )
+        .toBe(false);
+    // Space on a focused button presses that button, never also toggles playback.
+    await page.keyboard.press("k");
+    await expect.poll(paused).toBe(false);
+    await page.getByRole("button", { name: /^Speed/ }).focus();
+    await page.keyboard.press(" ");
+    await expect(page.getByRole("dialog", { name: "Speed" })).toBeVisible();
+    expect(await paused()).toBe(false);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Speed" })).toBeHidden();
+    await page.keyboard.press("?");
+    const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText("Space or K");
+    await expect(sheet).toContainText("Full screen");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(
+        page.getByRole("button", { name: "Keyboard shortcuts", exact: true }),
+    ).toBeVisible();
+    // The screen-reader choice lives in Settings only (W-12).
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    const subtitles = page.getByRole("dialog", { name: "Subtitles" });
+    await expect(subtitles).toBeVisible();
+    await expect(subtitles.getByRole("checkbox")).toHaveCount(0);
+    await expect(subtitles).not.toContainText("screen-reader");
+    await page.keyboard.press("Escape");
+});
+
+test("a narrow desktop window, as at 200% zoom, has no orientation toggle", async ({
+    page,
+}) => {
+    await fixture(page);
+    await openMovie(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(
+        page.getByRole("button", { name: "Pause", exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("button", { name: /^(Landscape|Portrait)$/ }),
+    ).toHaveCount(0);
+});
+
+test("phone rotation preserves viewing, pause intent and selected sheet", async ({
+    browser,
+    browserName,
+}, testInfo) => {
+    // TOUCH-10's toggle belongs to a touch device that can lock orientation.
+    test.skip(
+        browserName !== "chromium",
+        "orientation lock is Chromium's on Android",
+    );
+    const context = await browser.newContext({
+        hasTouch: true,
+        baseURL: testInfo.project.use.baseURL,
+    });
+    const page = await context.newPage();
     const f = await fixture(page);
     await openMovie(page);
     await pause(page);
@@ -844,6 +940,7 @@ test("phone rotation preserves viewing, pause intent and selected sheet", async 
         0,
     );
     await page.getByRole("button", { name: "Stop and go back" }).click();
+    await context.close();
 });
 
 test("native ended event completes once after actual final frames, independently of credits countdown", async ({
@@ -979,7 +1076,7 @@ test("rc26 same active track preserves stream and reports only viewer choices", 
         .locator("video")
         .evaluate((v: HTMLVideoElement) => v.currentSrc);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await page.getByRole("radio", { name: /English · AAC stereo/ }).click();
     await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(1);
     expect(f.reports.at(-1)?.body).not.toHaveProperty("SubtitleStreamIndex");
     expect(f.negotiations).toHaveLength(negotiations);
@@ -1166,7 +1263,7 @@ test("rc26 report diagnostics bind actual status and independent origins without
         )
         .toBe(true);
     await page.getByRole("button", { name: "Audio", exact: true }).click();
-    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await page.getByRole("radio", { name: /English · AAC stereo/ }).click();
     await expect
         .poll(() =>
             lines.some(
@@ -1265,7 +1362,7 @@ test("rc26 pending menu is cancelled by Back and selected entry never pulls late
     // A complete current menu opens only after this new explicit request.
     await page.getByRole("button", { name: "Audio", exact: true }).click();
     await expect(
-        page.getByRole("radio", { name: /English stereo/ }),
+        page.getByRole("radio", { name: /English · AAC stereo/ }),
     ).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(page.getByRole("radio", { name: /Spanish/ })).toBeFocused();
@@ -1437,7 +1534,7 @@ test("rc28 automatic captions retain the server text default with source binding
     expect(start).not.toHaveProperty("SubtitleStreamIndex");
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
     await expect(
-        page.getByRole("radio", { name: /English · SUBRIP/ }),
+        page.getByRole("radio", { name: /English captions · SRT/ }),
     ).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Stop and go back" }).click();

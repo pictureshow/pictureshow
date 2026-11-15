@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { atNaturalEnd, trimSubFrameTail } from "./hls-end";
+import { PLAYER_SHORTCUTS, playerShortcut } from "./player-keys";
 import type Hls from "hls.js";
+import type { HlsConfig } from "hls.js";
 import {
     Jellyfin,
     ClientError,
@@ -185,9 +188,20 @@ type Viewing = {
     stopped: boolean;
     queue: Promise<unknown>;
 };
-type Panel = "Audio" | "Subtitles" | "Chapters" | "Seek" | "Speed" | "Info";
+type Panel =
+    | "Audio"
+    | "Subtitles"
+    | "Chapters"
+    | "Seek"
+    | "Speed"
+    | "Info"
+    | "Shortcuts";
 const panelTitle = (panel: Panel) =>
-    panel === "Info" ? "Playback info" : panel;
+    panel === "Info"
+        ? "Playback info"
+        : panel === "Shortcuts"
+          ? "Keyboard shortcuts"
+          : panel;
 const clock = (s: number) =>
     `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
 const plausibleDuration = (n: number) =>
@@ -252,13 +266,20 @@ export function Player({
     onBack: (reportError?: string) => void;
     onExpired: (e: unknown) => void;
     onNext?: (next: Item) => void;
+    /** `outcome` is "finished" when the viewing ended at the end of the media
+     * (no next episode): the returning detail page focuses its primary action
+     * and announces "Finished". */
     onLeaving?: (
         barrier: Promise<void>,
         retryReport?: () => Promise<void>,
+        outcome?: "finished",
     ) => void;
     preferences?: PlayerPreferences;
 }) {
     const itemDuration = (item.RunTimeTicks ?? 0) / 1e7;
+    // Settings' "Ask before playing the next episode" (key screenReader) alone
+    // decides manual continuation; the player has no control of its own for it.
+    const reader = !!preferences.screenReader;
     const initialPosition = plausibleDuration(itemDuration)
         ? Math.min(Math.max(0, start), itemDuration)
         : Math.max(0, start);
@@ -345,7 +366,6 @@ export function Player({
         ),
         [cancelNext, setCancelNext] = useState(false),
         [countdown, setCountdown] = useState(10),
-        [reader, setReader] = useState(!!preferences.screenReader),
         [orientation, setOrientation] = useState(
             window.innerWidth > window.innerHeight,
         );
@@ -709,11 +729,13 @@ export function Player({
         pendingPanel.current = undefined;
         setPanel(undefined);
         setControls(false);
-        setNotice("Controls hidden");
+        setNotice("Controls hidden. Press Enter to show them.");
         setTimeout(() => {
             if (alive.current)
                 setNotice((value) =>
-                    value === "Controls hidden" ? "" : value,
+                    value === "Controls hidden. Press Enter to show them."
+                        ? ""
+                        : value,
                 );
         }, 1800);
         video.current?.focus();
@@ -999,9 +1021,93 @@ export function Player({
         }, 500);
         return () => clearInterval(t);
     }, [panel, reader, buffering]);
+    const [fullscreen, setFullscreen] = useState(
+        () => !!document.fullscreenElement,
+    );
+    const fullscreenAvailable = document.fullscreenEnabled !== false;
     useEffect(() => {
-        if (preferences.screenReader) setReader(true);
-    }, [preferences.screenReader]);
+        const changed = () => setFullscreen(!!document.fullscreenElement);
+        document.addEventListener("fullscreenchange", changed);
+        return () => document.removeEventListener("fullscreenchange", changed);
+    }, []);
+    function toggleFullscreen() {
+        lastActivity.current = Date.now();
+        if (document.fullscreenElement) {
+            void document.exitFullscreen?.().catch(() => {});
+            return;
+        }
+        if (!fullscreenAvailable || !root.current?.requestFullscreen) {
+            setNotice("This browser does not allow full screen here.");
+            return;
+        }
+        void root.current
+            .requestFullscreen()
+            .catch(() =>
+                setNotice(
+                    "Your browser blocked full screen. Try its own full-screen command.",
+                ),
+            );
+    }
+    function toggleMute() {
+        const el = video.current;
+        if (!el) return;
+        lastActivity.current = Date.now();
+        el.muted = !el.muted;
+        // Unmuting after audio Off brings back the decoded track.
+        const d = viewing.current.decision;
+        if (!el.muted && viewing.current.audio === -1 && d) {
+            const index =
+                d.source.DefaultAudioStreamIndex ??
+                d.source.MediaStreams?.find((s) => s.Type === "Audio")?.Index;
+            if (index !== undefined) {
+                viewing.current.audio = index;
+                desired.current.audio = index;
+            }
+        }
+        setNotice(el.muted ? "Muted" : "Sound on");
+        if (!replacing.current) report("progress");
+    }
+    // Focus the picture when the player opens, so the keyboard works at once.
+    useEffect(() => {
+        video.current?.focus({ preventScroll: true });
+    }, []);
+    const shortcutKey = useRef<(e: KeyboardEvent) => void>(() => {});
+    shortcutKey.current = (e: KeyboardEvent) => {
+        if (e.defaultPrevented || panelElement.current?.open) return;
+        const node = e.target instanceof HTMLElement ? e.target : null;
+        const field = node?.closest(
+            "input, select, textarea, [contenteditable]",
+        );
+        const action = playerShortcut(e, {
+            surface:
+                !node ||
+                node === document.body ||
+                node === video.current ||
+                node === root.current,
+            control: !!node?.closest(
+                "button, a, summary, [role=button], [role=radio]",
+            ),
+            editable: !!field,
+            range: field instanceof HTMLInputElement && field.type === "range",
+        });
+        if (!action) return;
+        e.preventDefault();
+        if (e.repeat && action !== "back" && action !== "forward") return;
+        lastActivity.current = Date.now();
+        const live = !error && !!(decision || viewing.current.decision);
+        if (action === "toggle") {
+            if (live) toggle();
+        } else if (action === "back" || action === "forward") {
+            if (live) seekStep(action === "back" ? -10 : 10);
+        } else if (action === "fullscreen") toggleFullscreen();
+        else if (action === "mute") toggleMute();
+        else openPanel("Shortcuts", node ?? video.current ?? undefined);
+    };
+    useEffect(() => {
+        const key = (e: KeyboardEvent) => shortcutKey.current(e);
+        window.addEventListener("keydown", key);
+        return () => window.removeEventListener("keydown", key);
+    }, []);
     function backgroundPlayAllowed() {
         return visibilityPlay(
             true,
@@ -1276,7 +1382,7 @@ export function Player({
             // The returning detail now owns this barrier and its retry. Ordinary
             // page teardown must not cancel that intentional ownership transfer.
             completionHandedOff.current = true;
-            onLeaving(barrier, () => saveCompleted(true));
+            onLeaving(barrier, () => saveCompleted(true), "finished");
             return;
         }
         try {
@@ -1413,8 +1519,31 @@ export function Player({
             slow = undefined;
             deadline = undefined;
         };
+        // A stall or decoder error on the final buffered frame is the end of the media.
+        function naturalEnd() {
+            if (!current || replacing.current || pauseIntent.current)
+                return false;
+            const last = el.buffered.length - 1;
+            if (
+                !atNaturalEnd({
+                    position: el.currentTime,
+                    duration: fullDuration(),
+                    bufferedEnd: last >= 0 ? el.buffered.end(last) : undefined,
+                    finalBuffered:
+                        finalFragmentBuffered || !!hls?.bufferedToEnd || !hls,
+                })
+            )
+                return false;
+            clearWaiting();
+            setBuffering(false);
+            setNotice("");
+            pauseDecoder(el);
+            void physicalEndRef.current();
+            return true;
+        }
         function waiting() {
             if (disposed || pauseIntent.current || deadline) return;
+            if (naturalEnd()) return;
             setBuffering(true);
             clearWaiting();
             slow = setTimeout(() => {
@@ -1638,6 +1767,7 @@ export function Player({
         }
         function fail(terminal = false) {
             if (disposed || leaving.current) return;
+            if (naturalEnd()) return;
             pendingPanel.current = undefined;
             setPanel(undefined);
             sample();
@@ -1665,6 +1795,9 @@ export function Player({
             setBuffering(false);
             replacing.current = false;
             setControls(true);
+            // Nothing plays after a failure; never label the button Pause.
+            pauseDecoder(el);
+            setPaused(true);
             setError(
                 terminal
                     ? "Playback did not become ready within 45 seconds. Retry or return to details."
@@ -1840,9 +1973,30 @@ export function Player({
                     throw new Error(
                         "This browser has no supported HLS playback engine.",
                     );
+                // Drop a closed playlist's sub-frame final segment (see hls-end.ts).
+                class PlaylistLoader extends FetchLoader {
+                    load(
+                        ...[context, config, callbacks]: Parameters<
+                            InstanceType<typeof FetchLoader>["load"]
+                        >
+                    ) {
+                        const onSuccess = callbacks.onSuccess;
+                        super.load(context, config, {
+                            ...callbacks,
+                            onSuccess(response, stats, ctx, details) {
+                                if (typeof response.data === "string")
+                                    response.data = trimSubFrameTail(
+                                        response.data,
+                                    );
+                                onSuccess(response, stats, ctx, details);
+                            },
+                        });
+                    }
+                }
                 hls = new Hls({
                     startPosition: decoderStart(),
                     loader: FetchLoader,
+                    pLoader: PlaylistLoader as unknown as HlsConfig["pLoader"],
                     fetchSetup(context, init) {
                         return authenticatedMediaRequest(
                             client.account!,
@@ -1894,6 +2048,7 @@ export function Player({
                 replacing.current = false;
                 setBuffering(false);
                 setControls(true);
+                setPaused(true);
                 setError(e instanceof Error ? e.message : "Playback failed.");
                 if (e instanceof ClientError && e.kind === "EXPIRED")
                     onExpired(e);
@@ -2405,6 +2560,13 @@ export function Player({
             if (!e.repeat) back();
         }
     }
+    // A desktop window made narrow by zoom is not a phone; only a touch
+    // device that can lock orientation gets the toggle.
+    const orientationLockable =
+        typeof matchMedia === "function" &&
+        matchMedia("(pointer: coarse)").matches &&
+        typeof (screen.orientation as { lock?: unknown } | undefined)?.lock ===
+            "function";
     const audio = menus?.audio.streams ?? [],
         subtitles = menus?.subtitles.streams ?? [];
     const labels =
@@ -3214,51 +3376,63 @@ export function Player({
                                 }}
                             />
                         </label>
+                        {fullscreenAvailable && (
+                            <button
+                                aria-keyshortcuts="F"
+                                onClick={toggleFullscreen}
+                            >
+                                {fullscreen
+                                    ? "Exit full screen"
+                                    : "Full screen"}
+                            </button>
+                        )}
                         <button
-                            onClick={() => {
-                                void root.current
-                                    ?.requestFullscreen?.()
-                                    .catch(() =>
-                                        setNotice("Fullscreen is unavailable."),
-                                    );
-                            }}
+                            className="shortcuts-control"
+                            aria-keyshortcuts="?"
+                            onClick={(e) =>
+                                openPanel("Shortcuts", e.currentTarget)
+                            }
                         >
-                            Full screen
+                            Keyboard shortcuts
                         </button>
-                        <button
-                            className="orientation-control"
-                            onClick={async () => {
-                                const target = orientation
-                                    ? "portrait"
-                                    : "landscape";
-                                const screenOrientation =
-                                    screen.orientation as ScreenOrientation & {
-                                        lock?: (value: string) => Promise<void>;
-                                    };
-                                if (!screenOrientation?.lock) {
-                                    setNotice(
-                                        "Rotate your device to change orientation.",
-                                    );
-                                    return;
-                                }
-                                try {
-                                    if (
-                                        !document.fullscreenElement &&
-                                        root.current?.requestFullscreen
-                                    )
-                                        await root.current.requestFullscreen();
-                                    await screenOrientation.lock(target);
-                                    orientationOwned.current = true;
-                                    setOrientation(target === "landscape");
-                                } catch {
-                                    setNotice(
-                                        "Rotate your device to change orientation.",
-                                    );
-                                }
-                            }}
-                        >
-                            {orientation ? "Portrait" : "Landscape"}
-                        </button>
+                        {orientationLockable && (
+                            <button
+                                className="orientation-control"
+                                onClick={async () => {
+                                    const target = orientation
+                                        ? "portrait"
+                                        : "landscape";
+                                    const screenOrientation =
+                                        screen.orientation as ScreenOrientation & {
+                                            lock?: (
+                                                value: string,
+                                            ) => Promise<void>;
+                                        };
+                                    if (!screenOrientation?.lock) {
+                                        setNotice(
+                                            "Rotate your device to change orientation.",
+                                        );
+                                        return;
+                                    }
+                                    try {
+                                        if (
+                                            !document.fullscreenElement &&
+                                            root.current?.requestFullscreen
+                                        )
+                                            await root.current.requestFullscreen();
+                                        await screenOrientation.lock(target);
+                                        orientationOwned.current = true;
+                                        setOrientation(target === "landscape");
+                                    } catch {
+                                        setNotice(
+                                            "Rotate your device to change orientation.",
+                                        );
+                                    }
+                                }}
+                            >
+                                {orientation ? "Portrait" : "Landscape"}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -3367,6 +3541,16 @@ export function Player({
                         </div>
                     )}
                     {panel === "Info" && info()}
+                    {panel === "Shortcuts" && (
+                        <dl className="shortcut-list">
+                            {PLAYER_SHORTCUTS.map(([keys, action]) => (
+                                <div key={keys}>
+                                    <dt>{keys}</dt>
+                                    <dd>{action}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    )}
                     {panel === "Seek" ? (
                         <div>
                             {preview}
@@ -3484,22 +3668,6 @@ export function Player({
                                     Later
                                 </button>
                             </div>
-                            <label className="reader-choice">
-                                <input
-                                    type="checkbox"
-                                    checked={reader}
-                                    onChange={(e) =>
-                                        setReader(e.target.checked)
-                                    }
-                                />
-                                Keep controls visible and require Play now for
-                                next episode
-                            </label>
-                            <p className="muted">
-                                Browsers do not expose a reliable screen-reader
-                                or system-caption preference. Enable this for
-                                manual continuation.
-                            </p>
                         </section>
                     )}
                     {panel === "Chapters" && (

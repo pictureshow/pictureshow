@@ -1,73 +1,173 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import type { Stream } from "@pictureshow/core";
+
+/**
+ * PLAY-08 track labels: the shared policy of Kotlin core's TrackLabelPolicy.kt,
+ * checked by the `track-labels` vectors. A track's language names it; without
+ * one, its own title or the short format ("SRT", "PGS", "AAC stereo") does, and
+ * a track number keeps same-looking tracks apart. The server's DisplayTitle is
+ * never used: it repeats codec names and says "Undefined" for a missing
+ * language.
+ */
+type LabelStream = Stream & {
+    Title?: string;
+    IsDefault?: boolean;
+    IsForced?: boolean;
+    IsHearingImpaired?: boolean;
+    IsExternalUrl?: boolean;
+};
+
+const bibliographic: Record<string, string> = {
+    fre: "fr",
+    ger: "de",
+    chi: "zh",
+    dut: "nl",
+    gre: "el",
+    cze: "cs",
+    rum: "ro",
+    slo: "sk",
+    ice: "is",
+    per: "fa",
+    arm: "hy",
+    baq: "eu",
+    geo: "ka",
+    mac: "mk",
+    mao: "mi",
+    may: "ms",
+    alb: "sq",
+    bur: "my",
+    wel: "cy",
+    tib: "bo",
+};
+let displayNames: Intl.DisplayNames | undefined;
+export function trackLanguage(language?: string | null): string | undefined {
+    if (!language || !language.trim() || language === "und") return undefined;
+    const tag = language.replace(/_/g, "-");
+    try {
+        displayNames ??= new Intl.DisplayNames(["en"], { type: "language" });
+        for (const candidate of [tag, bibliographic[tag.toLowerCase()]]) {
+            if (!candidate) continue;
+            const name = displayNames.of(candidate);
+            if (name && name.toLowerCase() !== candidate.toLowerCase())
+                return name;
+        }
+    } catch {}
+    return language;
+}
+
+/** A whole phrase of `title`, case-insensitive, not preceded by "non-". */
+export function trackMetadataNames(title: string, value: string): boolean {
+    const lowerTitle = title.toLowerCase(),
+        lowerValue = value.toLowerCase();
+    const word = /[\p{L}\p{N}]/u;
+    for (
+        let at = lowerTitle.indexOf(lowerValue);
+        at >= 0;
+        at = lowerTitle.indexOf(lowerValue, at + 1)
+    ) {
+        const end = at + lowerValue.length;
+        if (at > 0 && word.test(title[at - 1])) continue;
+        if (end < title.length && word.test(title[end])) continue;
+        if (/\bnon\p{Pd}$/iu.test(title.slice(0, at))) continue;
+        return true;
+    }
+    return false;
+}
+
+function format(s: LabelStream): string {
+    const codec = (() => {
+        switch (s.Codec?.toLowerCase()) {
+            case "eac3":
+                return "E-AC-3";
+            case "ac3":
+                return "AC-3";
+            case "truehd":
+                return "TrueHD";
+            case "dts":
+                return "DTS";
+            case "subrip":
+            case "srt":
+                return "SRT";
+            case "hdmv_pgs_subtitle":
+            case "pgssub":
+            case "pgs":
+                return "PGS";
+            case "dvd_subtitle":
+            case "dvdsub":
+            case "vobsub":
+                return "VobSub";
+            case "mov_text":
+                return "mov_text";
+            case "opus":
+                return "Opus";
+            default:
+                return s.Codec?.toUpperCase() ?? "Unknown format";
+        }
+    })();
+    if (s.Type !== "Audio" || s.Channels == null) return codec;
+    const layout =
+        { 1: "mono", 2: "stereo", 6: "5.1", 8: "7.1" }[s.Channels] ??
+        `${s.Channels} channels`;
+    return `${codec} ${layout}`;
+}
+
+export function playerTrackLabel(
+    s: LabelStream,
+    trackNumber?: number,
+    showDefault = true,
+): string {
+    const parts: string[] = [];
+    const fmt = format(s);
+    const language = trackLanguage(s.Language);
+    const title = s.Title?.trim() ? s.Title : undefined;
+    const name =
+        language && title && trackMetadataNames(title, language)
+            ? title
+            : (language ?? title);
+    if (name) {
+        parts.push(name);
+        const titleCarriesFormat =
+            !!title &&
+            title.toLowerCase() !== name.toLowerCase() &&
+            title.toLowerCase() !== fmt.toLowerCase() &&
+            trackMetadataNames(title, fmt);
+        if (!trackMetadataNames(name, fmt) && !titleCarriesFormat)
+            parts.push(fmt);
+    } else parts.push(fmt);
+    // Keep descriptive titles (audio description, commentary) beside a language.
+    if (
+        language &&
+        title &&
+        title.toLowerCase() !== name?.toLowerCase() &&
+        title.toLowerCase() !== fmt.toLowerCase()
+    )
+        parts.push(title);
+    if (!language && trackNumber !== undefined)
+        parts.push(`Track ${trackNumber}`);
+    const badge = (word: string, enabled: boolean | undefined) => {
+        if (enabled && !(title && trackMetadataNames(title, word)))
+            parts.push(word);
+    };
+    badge("Default", showDefault && s.IsDefault);
+    badge("Forced", s.IsForced);
+    badge("SDH", s.IsHearingImpaired);
+    badge("External", s.IsExternal || s.IsExternalUrl);
+    return parts.join(" · ");
+}
+
 export function playerTrackLabels(streams: Stream[]): string[] {
-    const labels = streams.map((s, i) => {
-        const extra = s as Stream & {
-            Title?: string;
-            IsDefault?: boolean;
-            IsForced?: boolean;
-            IsHearingImpaired?: boolean;
-            IsExternalUrl?: boolean;
-        };
-        const lang =
-            s.Language && s.Language !== "und"
-                ? ({
-                      eng: "English",
-                      spa: "Spanish",
-                      fra: "French",
-                      fre: "French",
-                      deu: "German",
-                      ger: "German",
-                      jpn: "Japanese",
-                      zho: "Chinese",
-                      chi: "Chinese",
-                      kor: "Korean",
-                      por: "Portuguese",
-                      ita: "Italian",
-                      rus: "Russian",
-                      ara: "Arabic",
-                      hin: "Hindi",
-                  }[s.Language] ?? s.Language)
-                : "";
-        const channels =
-            s.Type === "Audio"
-                ? ({ 1: "mono", 2: "stereo", 6: "5.1", 8: "7.1" }[
-                      s.Channels ?? 0
-                  ] ?? (s.Channels ? `${s.Channels} channels` : ""))
-                : "";
-        const title = extra.Title ?? s.DisplayTitle ?? "";
-        const format = [s.Codec?.toUpperCase() ?? "Unknown format", channels]
-            .filter(Boolean)
-            .join(" ");
-        const parts = [lang || title || format];
-        if (!parts[0].toLowerCase().includes(format.toLowerCase()))
-            parts.push(format);
-        if (
-            lang &&
-            title &&
-            !title.toLowerCase().includes(lang.toLowerCase()) &&
-            title.toLowerCase() !== format.toLowerCase()
-        )
-            parts.push(title);
-        if (!lang) parts.push(`Track ${i + 1}`);
-        const named = (word: string) =>
-            new RegExp(`(?<!non[-–—])\\b${word}\\b`, "i").test(title);
-        if (
-            extra.IsDefault &&
-            streams.filter((t) => (t as typeof extra).IsDefault).length === 1 &&
-            streams.length > 1 &&
-            !named("Default")
-        )
-            parts.push("Default");
-        if (extra.IsForced && !named("Forced")) parts.push("Forced");
-        if (extra.IsHearingImpaired && !named("SDH")) parts.push("SDH");
-        if ((s.IsExternal || extra.IsExternalUrl) && !named("External"))
-            parts.push("External");
-        return parts.join(" · ");
-    });
-    return labels.map((label, i) =>
-        labels.filter((v) => v === label).length > 1
-            ? `${label} · Track ${i + 1}`
-            : label,
+    const list = streams as LabelStream[];
+    const defaults = list.filter((s) => s.IsDefault).length;
+    let labels = list.map((s, i) =>
+        playerTrackLabel(s, i + 1, defaults === 1 && list.length > 1),
     );
+    // Menu order only; repeat in case a server title already ends in a number.
+    while (new Set(labels).size !== labels.length) {
+        const seen = new Map<string, number>();
+        for (const l of labels) seen.set(l, (seen.get(l) ?? 0) + 1);
+        labels = labels.map((l, i) =>
+            (seen.get(l) ?? 0) > 1 ? `${l} · Track ${i + 1}` : l,
+        );
+    }
+    return labels;
 }

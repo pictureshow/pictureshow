@@ -6956,6 +6956,59 @@
           "English · AAC stereo · Track 2"
         ]
       },
+      {
+        "id": "track-label-server-display-title-ignored",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "und",
+              "Codec": "PGSSUB",
+              "DisplayTitle": "Undefined - PGSSUB"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "subrip",
+              "DisplayTitle": "Undefined - SUBRIP"
+            }
+          ]
+        },
+        "expected": [
+          "PGS · Track 1",
+          "SRT · Track 2"
+        ]
+      },
+      {
+        "id": "track-label-three-letter-language-channels",
+        "operation": "track-labels",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "aac",
+              "Channels": 6,
+              "IsDefault": true,
+              "DisplayTitle": "English - AAC - 5.1 - Default"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Language": "fre",
+              "Codec": "ac3",
+              "Channels": 2
+            }
+          ]
+        },
+        "expected": [
+          "English · AAC 5.1 · Default",
+          "French · AC-3 stereo"
+        ]
+      },
     {
         "id": "catalog-announcement-episode",
         "operation": "catalog-announcement",

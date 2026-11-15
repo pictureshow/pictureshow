@@ -92,7 +92,7 @@ test("keyboard path: password, resume, real video, reports, tracks, Back restore
     await expect(page.getByLabel("Audio", { exact: true })).toBeEnabled();
     await page.getByLabel("Audio", { exact: true }).focus();
     await page.keyboard.press("Enter");
-    await page.getByRole("radio", { name: /Spanish stereo/ }).focus();
+    await page.getByRole("radio", { name: /Spanish · AAC stereo/ }).focus();
     await page.keyboard.press("Enter");
     await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
     await expect
