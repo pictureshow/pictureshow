@@ -242,9 +242,9 @@ test("catalog partial rows survive, library labels are friendly, paging deduplic
     ).toHaveCount(0);
     // A library lands on its first poster, never on Sort by: Down on a
     // closed select changes its value in Chrome on Windows and Linux.
-    await expect(page.getByLabel("Sort by", { exact: true })).not.toHaveAttribute(
-        "data-autofocus",
-    );
+    await expect(
+        page.getByLabel("Sort by", { exact: true }),
+    ).not.toHaveAttribute("data-autofocus");
     await expect(
         page.locator('[data-focus^="grid:library:"]').first(),
     ).toHaveAttribute("data-autofocus", "true");
@@ -737,7 +737,9 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
     });
     await expect(selectedSeason).toHaveAttribute("aria-pressed", "true");
     // W-16: the season chips are the only season picker.
-    await expect(page.getByRole("heading", { name: "Browse seasons" })).toHaveCount(0);
+    await expect(
+        page.getByRole("heading", { name: "Browse seasons" }),
+    ).toHaveCount(0);
     await page.keyboard.press("Escape");
     fail = true;
     await opener.click();
@@ -1107,15 +1109,202 @@ test("W-20: an unstarted film offers Play without Play from start", async ({
     });
     const opener = page.locator('[data-focus="latest:library:film"]');
     await opener.click();
-    await expect(page.getByRole("heading", { name: "Unstarted" })).toBeVisible();
+    await expect(
+        page.getByRole("heading", { name: "Unstarted" }),
+    ).toBeVisible();
     await expect(page.locator('[data-focus="play"]')).toBeEnabled();
     await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
     // A second visit renders from the cached detail; it still offers no restart.
     await page.keyboard.press("Escape");
     await opener.click();
-    await expect(page.getByRole("heading", { name: "Unstarted" })).toBeVisible();
+    await expect(
+        page.getByRole("heading", { name: "Unstarted" }),
+    ).toBeVisible();
     await expect(page.locator('[data-focus="watched"]')).toHaveText(
         "Mark watched",
     );
     await expect(page.locator('[data-focus="restart"]')).toHaveCount(0);
+});
+
+const films = {
+    Id: "library",
+    Name: "Films",
+    Type: "CollectionFolder",
+    CollectionType: "movies",
+    ChildCount: 70,
+};
+test("BROWSE-01/04/05/06: Movies lists titles by type, filters intersect and clear one at a time, the rail jumps, Play queues", async ({
+    page,
+}) => {
+    const queries: URLSearchParams[] = [];
+    // 70 titles: Apple 0–64 then Zebra 65–69, so Z sits past the first page.
+    const all = Array.from({ length: 70 }, (_, i) => ({
+        ...movie(`i${i}`, `${i < 65 ? "Apple" : "Zebra"} ${i}`),
+        SortName: `${i < 65 ? "apple" : "zebra"} ${String(i).padStart(2, "0")}`,
+    }));
+    await start(page, (url) => {
+        if (url.pathname === "/Items/library") return { body: films };
+        if (url.pathname === "/Items" && url.searchParams.has("ids"))
+            return { body: { Items: [films] } };
+        if (url.pathname === "/Items/Filters")
+            return {
+                body: {
+                    Genres: ["Comedy", "Drama"],
+                    Years: [2026, 2019],
+                    OfficialRatings: ["PG"],
+                },
+            };
+        if (url.pathname === "/Persons")
+            return { body: { Items: [{ Id: "ada", Name: "Ada Lens" }] } };
+        if (url.pathname === "/Items" && url.searchParams.has("parentId")) {
+            queries.push(url.searchParams);
+            const start = Number(url.searchParams.get("startIndex") ?? 0),
+                limit = Number(url.searchParams.get("limit") ?? 60);
+            return {
+                body: {
+                    Items: all.slice(start, start + limit),
+                    TotalRecordCount: all.length,
+                },
+            };
+        }
+        return {};
+    });
+    await page.locator('[data-focus="libraries:library"]').click();
+    await expect(
+        page.getByRole("heading", { name: "70 titles", exact: true }),
+    ).toBeVisible();
+    // BROWSE-04: titles by item type through every folder level.
+    const pages = () =>
+        queries.filter(
+            (q) => q.get("fields") !== "SortName" && q.get("limit") !== "300",
+        );
+    expect(pages()[0].get("recursive")).toBe("true");
+    expect(pages()[0].get("includeItemTypes")).toBe("Movie");
+
+    // BROWSE-01: two facets intersect; the Filters button counts them.
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Filters" });
+    await expect(dialog.getByLabel("Genre")).toBeEnabled();
+    await dialog.getByLabel("Genre").selectOption("Drama");
+    await dialog.getByLabel("Unwatched").check();
+    await dialog.getByRole("radio", { name: "Ada Lens" }).check();
+    await dialog.getByRole("button", { name: "Apply" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+        page.getByRole("button", { name: "Filters, 3 on" }),
+    ).toBeFocused();
+    await expect.poll(() => pages().at(-1)?.get("genres")).toBe("Drama");
+    let last = pages().at(-1)!;
+    expect(last.get("isPlayed")).toBe("false");
+    expect(last.get("personIds")).toBe("ada");
+    expect(last.get("startIndex")).toBe("0");
+    expect(last.get("includeItemTypes")).toBe("Movie");
+    // Removing a chip clears that facet only.
+    await page.getByRole("button", { name: "Remove Drama" }).click();
+    await expect.poll(() => pages().at(-1)?.has("genres")).toBe(false);
+    last = pages().at(-1)!;
+    expect(last.get("isPlayed")).toBe("false");
+    expect(last.get("personIds")).toBe("ada");
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect.poll(() => pages().at(-1)?.has("isPlayed")).toBe(false);
+    expect(pages().at(-1)?.has("personIds")).toBe(false);
+    await expect(page.locator(".catalog-filter-chips")).toHaveCount(0);
+
+    // BROWSE-05: one tab stop; arrows skip empty letters; a jump pages in
+    // through its title and focuses it without filtering the list.
+    const rail = page.getByRole("navigation", { name: "Jump to letter" });
+    await expect(
+        rail.getByRole("button", { name: "Jump to B" }),
+    ).toBeDisabled();
+    await expect(rail.locator('button[tabindex="0"]')).toHaveCount(1);
+    await rail.getByRole("button", { name: "Jump to A" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(rail.getByRole("button", { name: "Jump to Z" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator('[data-focus="grid:library:i65"]')).toBeFocused();
+    await expect(page.locator('[data-focus="grid:library:i0"]')).toHaveCount(1);
+    // The rail is only for title order.
+    await page
+        .getByLabel("Sort by", { exact: true })
+        .selectOption("DateCreated");
+    await expect(rail).toHaveCount(0);
+    await page.getByLabel("Sort by", { exact: true }).selectOption("SortName");
+
+    // BROWSE-06: Play queues this library's movies in its order, up to 300.
+    await page.getByRole("button", { name: "▶ Play" }).click();
+    await expect
+        .poll(() =>
+            queries.find((q) => q.get("limit") === "300")?.get("sortBy"),
+        )
+        .toBe("SortName");
+    const queue = queries.find((q) => q.get("limit") === "300")!;
+    expect(queue.get("includeItemTypes")).toBe("Movie");
+    expect(queue.get("recursive")).toBe("true");
+});
+
+test("BROWSE-06: a box set lands on Play, Shuffle asks for random order, and nothing playable says so", async ({
+    page,
+}) => {
+    const set = {
+            Id: "boxset",
+            Name: "Shorts Collection",
+            Type: "BoxSet",
+            IsFolder: true,
+            ChildCount: 2,
+            ProductionYear: 2006,
+        },
+        queues: URLSearchParams[] = [];
+    let playable = false;
+    await start(page, (url) => {
+        if (url.pathname === "/Items/Latest") return { body: [set] };
+        if (url.pathname === "/Items/boxset") return { body: set };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "boxset"
+        )
+            return { body: { Items: [set] } };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("parentId") === "boxset"
+        ) {
+            if (url.searchParams.get("limit") === "300") {
+                queues.push(url.searchParams);
+                return {
+                    body: {
+                        Items: playable ? [movie("m1", "First short")] : [],
+                    },
+                };
+            }
+            return {
+                body: {
+                    Items: [
+                        movie("m1", "First short"),
+                        movie("m2", "Second short"),
+                    ],
+                    TotalRecordCount: 2,
+                },
+            };
+        }
+        return {};
+    });
+    await page.locator('[data-focus="latest:library:boxset"]').click();
+    await expect(
+        page.getByRole("heading", { name: "Shorts Collection", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-focus="queue-play"]')).toBeFocused();
+    await page.getByRole("button", { name: "Shuffle" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+        "Nothing here can be played.",
+    );
+    const shuffle = queues.at(-1)!;
+    expect(shuffle.get("sortBy")).toBe("Random");
+    expect(shuffle.get("recursive")).toBe("true");
+    expect(shuffle.get("includeItemTypes")).toBe("Movie,Episode,Video");
+    // The page did not move to the player.
+    await expect(page.locator('[data-focus="queue-play"]')).toBeVisible();
+    playable = true;
+    await page.getByRole("button", { name: "▶ Play" }).click();
+    await expect.poll(() => queues.length).toBe(2);
+    expect(queues[1].get("sortBy")).toBe("SortName");
+    await expect(page.locator('[data-focus="queue-play"]')).toHaveCount(0);
 });

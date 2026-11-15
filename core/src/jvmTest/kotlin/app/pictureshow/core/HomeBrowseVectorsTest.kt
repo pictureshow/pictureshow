@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -302,6 +303,32 @@ class HomeBrowseVectorsTest {
                 "sort-direction-label" -> JsonPrimitive(
                     sortDirectionLabel(input.getValue("descending").jsonPrimitive.content.toBooleanStrict())
                 )
+                "library-browse-scope" -> libraryBrowseScope(input["collectionType"]?.jsonPrimitive?.content).let { scope ->
+                    buildJsonObject {
+                        put("recursive", scope.recursive)
+                        scope.includeItemTypes?.let { put("includeItemTypes", it) }
+                    }
+                }
+                "letter-jump" -> letterJump(
+                    input.getValue("sortNames").jsonArray.map { it.jsonPrimitive.content },
+                    input.getValue("letter").jsonPrimitive.content
+                ).let { jump ->
+                    buildJsonObject {
+                        put("index", jump.index)
+                        put("available", Json.encodeToJsonElement(jump.available))
+                    }
+                }
+                "collection-play-scope" -> collectionPlayScope(
+                    input.getValue("type").jsonPrimitive.content,
+                    input["collectionType"]?.jsonPrimitive?.content
+                )?.let { scope ->
+                    buildJsonObject {
+                        put("includeItemTypes", scope.includeItemTypes)
+                        put("recursive", scope.recursive)
+                        put("filtered", scope.filtered)
+                    }
+                } ?: JsonNull
+                "queue-limit" -> JsonPrimitive(QUEUE_LIMIT)
                 else -> error("Unknown operation")
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)

@@ -44,6 +44,23 @@ import {
     catalogAccountRevision,
     invalidateCatalogAccount,
 } from "./detail-reads";
+import {
+    JUMP_LETTERS,
+    QUEUE_LIMIT,
+    collectionPlayScope,
+    constraintKeys,
+    constraintLabel,
+    filterParameters,
+    filteredEmptyLabel,
+    letterJump,
+    libraryBrowseScope,
+    normalizeFilters,
+    sortDirectionLabel,
+    titleCountLabel,
+    withoutConstraint,
+    type LibraryFilters,
+} from "./library-browse";
+import { FilterDialog } from "./library-filters";
 
 export type CatalogRoute =
     | { kind: "home" }
@@ -51,7 +68,13 @@ export type CatalogRoute =
     | { kind: "detail"; id: string }
     | { kind: "search" };
 export type CatalogDestination =
-    CatalogRoute | { kind: "player"; item: Item; start: number };
+    | CatalogRoute
+    | {
+          kind: "player";
+          item: Item;
+          start: number;
+          queue?: { ids: string[]; index: number };
+      };
 export type CatalogItem = Item & {
     Genres?: string[];
     OfficialRating?: string;
@@ -344,10 +367,10 @@ export function Cards({
                     const subtitle = view
                         ? undefined
                         : item.Type === "Episode"
-                            ? `${item.SeriesName ?? ""} ${episodeLabel(item)}`.trim()
-                            : item.Type === "Person"
-                              ? (item.Role ?? "Person")
-                              : (item.ProductionYear ?? libraryLabel(item));
+                          ? `${item.SeriesName ?? ""} ${episodeLabel(item)}`.trim()
+                          : item.Type === "Person"
+                            ? (item.Role ?? "Person")
+                            : (item.ProductionYear ?? libraryLabel(item));
                     return (
                         <li key={item.Id}>
                             <button
@@ -1628,10 +1651,9 @@ export function Detail({
                 <section className="catalog-coming" aria-label="Live TV">
                     <h2>Live TV is coming to the web app</h2>
                     <p>
-                        This web app can't show your server's channels and
-                        guide yet. You can watch Live TV today in the
-                        Pictureshow app for Android TV, Google TV, Fire TV and
-                        Android phones.
+                        This web app can't show your server's channels and guide
+                        yet. You can watch Live TV today in the Pictureshow app
+                        for Android TV, Google TV, Fire TV and Android phones.
                     </p>
                 </section>
             </div>
@@ -1740,6 +1762,14 @@ export function Detail({
                                 className="catalog-detail-actions"
                                 onKeyDown={actionKey}
                             >
+                                {shown.Type === "BoxSet" && !empty && (
+                                    <CollectionQueueButtons
+                                        client={client}
+                                        parent={current}
+                                        navigate={navigate}
+                                        onError={onError}
+                                    />
+                                )}
                                 {(playable(shown) || isContainer) && (
                                     <button
                                         ref={primaryRef}
@@ -2000,6 +2030,7 @@ export function Detail({
 }
 
 const PAGE_SIZE = 60;
+const SORTS = ["SortName", "DateCreated", "PremiereDate"];
 type BrowseState = {
     items: CatalogItem[];
     start: number;
@@ -2007,6 +2038,7 @@ type BrowseState = {
     done: boolean;
     sort: string;
     descending: boolean;
+    filters: LibraryFilters;
 };
 const browseCache = new Map<string, BrowseState>();
 function rememberedBrowse(key: string): BrowseState | undefined {
@@ -2018,7 +2050,7 @@ function rememberedBrowse(key: string): BrowseState | undefined {
         );
         if (
             value &&
-            ["SortName", "DateCreated", "PremiereDate"].includes(value.sort) &&
+            SORTS.includes(value.sort) &&
             typeof value.descending === "boolean" &&
             Number.isSafeInteger(value.start) &&
             value.start >= 0
@@ -2029,9 +2061,160 @@ function rememberedBrowse(key: string): BrowseState | undefined {
                 sort: value.sort,
                 descending: value.descending,
                 start: value.start,
+                filters:
+                    value.filters && typeof value.filters === "object"
+                        ? normalizeFilters(value.filters)
+                        : {},
             };
     } catch {}
     return;
+}
+/** The /Items query a library, collection or folder lists (BROWSE-01, 04). */
+function browseQuery(
+    parent: CatalogItem,
+    sort: string,
+    descending: boolean,
+    filters: LibraryFilters,
+) {
+    const library = isLibraryView(parent);
+    const scope = library
+        ? libraryBrowseScope(parent.CollectionType)
+        : { recursive: false };
+    return {
+        parentId: parent.Id,
+        recursive: scope.recursive,
+        includeItemTypes: scope.includeItemTypes,
+        sortBy: sort,
+        sortOrder: descending ? "Descending" : "Ascending",
+        ...(library ? filterParameters(filters) : {}),
+    };
+}
+/** BROWSE-06: Play or Shuffle queues the page's titles in its order or at random. */
+async function startQueue(
+    client: Jellyfin,
+    parent: CatalogItem,
+    navigate: Props["navigate"],
+    shuffle: boolean,
+    sort: string,
+    descending: boolean,
+    filters: LibraryFilters,
+) {
+    const scope = collectionPlayScope(parent.Type, parent.CollectionType);
+    if (!scope) return false;
+    const page = await catalog<ItemPage>(
+        client,
+        "Items?" +
+            query({
+                parentId: parent.Id,
+                recursive: scope.recursive,
+                includeItemTypes: scope.includeItemTypes,
+                isMissing: false,
+                sortBy: shuffle ? "Random" : sort,
+                sortOrder: descending && !shuffle ? "Descending" : "Ascending",
+                limit: QUEUE_LIMIT,
+                fields: "Overview",
+                ...(scope.filtered ? filterParameters(filters) : {}),
+            }),
+    );
+    const items = page.Items.filter(playable);
+    if (!items.length) return false;
+    navigate({
+        kind: "player",
+        item: items[0],
+        start: 0,
+        queue: { ids: items.map((i) => i.Id), index: 0 },
+    });
+    return true;
+}
+function QueueButtons({
+    client,
+    parent,
+    navigate,
+    onError,
+    sort,
+    descending,
+    filters,
+    autofocus = false,
+}: Props & {
+    parent: CatalogItem;
+    sort: string;
+    descending: boolean;
+    filters: LibraryFilters;
+    autofocus?: boolean;
+}) {
+    const [busy, setBusy] = useState<"play" | "shuffle">(),
+        [error, setError] = useState("");
+    if (!collectionPlayScope(parent.Type, parent.CollectionType)) return null;
+    async function run(kind: "play" | "shuffle") {
+        if (busy) return;
+        setBusy(kind);
+        setError("");
+        try {
+            if (
+                !(await startQueue(
+                    client,
+                    parent,
+                    navigate,
+                    kind === "shuffle",
+                    sort,
+                    descending,
+                    filters,
+                ))
+            )
+                setError("Nothing here can be played.");
+        } catch (e) {
+            setError(errorText(e));
+            notifyExpired(client, e, onError);
+        } finally {
+            setBusy(undefined);
+        }
+    }
+    return (
+        <div className="catalog-queue-actions">
+            <button
+                className="primary"
+                data-focus="queue-play"
+                data-autofocus={autofocus || undefined}
+                aria-busy={busy === "play" || undefined}
+                onClick={() => void run("play")}
+            >
+                {busy === "play" ? "Starting…" : "▶ Play"}
+            </button>
+            <button
+                data-focus="queue-shuffle"
+                aria-busy={busy === "shuffle" || undefined}
+                onClick={() => void run("shuffle")}
+            >
+                {busy === "shuffle" ? "Shuffling…" : "Shuffle"}
+            </button>
+            {error && (
+                <p role="alert" className="catalog-queue-error">
+                    {error}
+                </p>
+            )}
+        </div>
+    );
+}
+/** A box set's own Play and Shuffle, in the order its grid shows. */
+function CollectionQueueButtons({
+    client,
+    parent,
+    navigate,
+    onError,
+}: Props & { parent: CatalogItem }) {
+    const remembered = rememberedBrowse(`${accountKey(client)}:${parent.Id}`);
+    return (
+        <QueueButtons
+            client={client}
+            parent={parent}
+            navigate={navigate}
+            onError={onError}
+            sort={remembered?.sort ?? "SortName"}
+            descending={remembered?.descending ?? false}
+            filters={{}}
+            autofocus
+        />
+    );
 }
 function BrowseGrid({
     client,
@@ -2042,9 +2225,13 @@ function BrowseGrid({
 }: Props & { parent: CatalogItem; person?: boolean }) {
     const key = `${accountKey(client)}:${parent.Id}`,
         remembered = rememberedBrowse(key),
+        library = !person && isLibraryView(parent),
         [sort, setSort] = useState(remembered?.sort ?? "SortName"),
         [descending, setDescending] = useState(
             remembered?.descending ?? person,
+        ),
+        [filters, setFilters] = useState<LibraryFilters>(
+            library ? (remembered?.filters ?? {}) : {},
         ),
         [state, setState] = useState<BrowseState>(
             remembered ?? {
@@ -2053,19 +2240,27 @@ function BrowseGrid({
                 done: false,
                 sort,
                 descending,
+                filters,
             },
         ),
         [busy, setBusy] = useState(false),
         [error, setError] = useState(""),
-        [retry, setRetry] = useState(0);
+        [retry, setRetry] = useState(0),
+        [filtering, setFiltering] = useState(false),
+        [names, setNames] = useState<{ ids: string[]; sortNames: string[] }>(),
+        [letter, setLetter] = useState<string>(),
+        [railFocus, setRailFocus] = useState<string>();
     const generation = useRef(0),
         busyRef = useRef(false),
+        inflight = useRef<Promise<void>>(Promise.resolve()),
         stateRef = useRef(state),
         sentinel = useRef<HTMLDivElement>(null),
+        filterButton = useRef<HTMLButtonElement>(null),
         alive = useRef(true),
         pendingSort = useRef(false),
         firstLoad = useRef(true);
     stateRef.current = state;
+    const keys = constraintKeys(filters);
     useEffect(() => {
         alive.current = true;
         return () => {
@@ -2074,103 +2269,125 @@ function BrowseGrid({
         };
     }, [key]);
     const load = useCallback(
-        async (reset = false, restoreCount = 0) => {
-            if (busyRef.current && !reset) return;
-            const gen = reset ? ++generation.current : generation.current,
-                previous = reset
-                    ? { items: [], start: 0, done: false, sort, descending }
-                    : stateRef.current;
-            if (previous.done && !reset) return;
-            busyRef.current = true;
-            setBusy(true);
-            setError("");
-            const path =
-                "Items?" +
-                query(
-                    person
+        (reset = false, restoreCount = 0, want = 0): Promise<void> => {
+            if (busyRef.current && !reset) return inflight.current;
+            const run = async () => {
+                const gen = reset ? ++generation.current : generation.current,
+                    previous = reset
                         ? {
-                              personIds: parent.Id,
-                              recursive: true,
-                              includeItemTypes: "Movie,Series",
-                              sortBy: "ProductionYear,SortName",
-                              sortOrder: "Descending",
-                              startIndex: previous.start,
-                              limit: PAGE_SIZE,
-                              enableTotalRecordCount: true,
-                              fields: SEARCH_FIELDS,
+                              items: [],
+                              start: 0,
+                              done: false,
+                              sort,
+                              descending,
+                              filters,
                           }
-                        : {
-                              parentId: parent.Id,
-                              recursive: false,
-                              sortBy: sort,
-                              sortOrder: descending
-                                  ? "Descending"
-                                  : "Ascending",
-                              startIndex: previous.start,
-                              limit: PAGE_SIZE,
-                              enableTotalRecordCount: true,
-                              fields: CARD_FIELDS,
-                          },
-                );
-            try {
-                let page = await catalog<ItemPage>(client, path);
-                let received = page.Items.length;
-                const restored = [...page.Items];
-                while (
-                    reset &&
-                    received < restoreCount &&
-                    page.Items.length > 0 &&
-                    (page.TotalRecordCount === undefined ||
-                        received < page.TotalRecordCount)
-                ) {
-                    if (!alive.current || gen !== generation.current) return;
-                    const nextPath = new URLSearchParams(path.slice(6));
-                    nextPath.set("startIndex", String(received));
-                    page = await catalog<ItemPage>(
-                        client,
-                        "Items?" + nextPath.toString(),
+                        : stateRef.current;
+                if (previous.done && !reset) return;
+                busyRef.current = true;
+                setBusy(true);
+                setError("");
+                const path =
+                    "Items?" +
+                    query(
+                        person
+                            ? {
+                                  personIds: parent.Id,
+                                  recursive: true,
+                                  includeItemTypes: "Movie,Series",
+                                  sortBy: "ProductionYear,SortName",
+                                  sortOrder: "Descending",
+                                  startIndex: previous.start,
+                                  limit: PAGE_SIZE,
+                                  enableTotalRecordCount: true,
+                                  fields: SEARCH_FIELDS,
+                              }
+                            : {
+                                  ...browseQuery(
+                                      parent,
+                                      sort,
+                                      descending,
+                                      filters,
+                                  ),
+                                  startIndex: previous.start,
+                                  // A letter jump fetches through its title at once.
+                                  limit: Math.max(PAGE_SIZE, want),
+                                  enableTotalRecordCount: true,
+                                  fields: CARD_FIELDS,
+                              },
                     );
-                    received += page.Items.length;
-                    restored.push(...page.Items);
-                }
-                if (!alive.current || gen !== generation.current) return;
-                const value = {
-                    items: unique([...previous.items, ...restored]),
-                    start: previous.start + received,
-                    total: page.TotalRecordCount,
-                    done:
-                        page.TotalRecordCount !== undefined
-                            ? previous.start + received >= page.TotalRecordCount
-                            : page.Items.length < PAGE_SIZE,
-                    sort,
-                    descending,
-                };
-                browseCache.set(key, value);
                 try {
-                    sessionStorage.setItem(
-                        `pictureshow.browse:${key}`,
-                        JSON.stringify({
-                            sort,
-                            descending,
-                            start: value.start,
-                        }),
-                    );
-                } catch {}
-                stateRef.current = value;
-                setState(value);
-            } catch (error) {
-                if (alive.current && gen === generation.current) {
-                    setError(errorText(error));
-                    notifyExpired(client, error, onError);
+                    let page = await catalog<ItemPage>(client, path);
+                    let received = page.Items.length;
+                    const restored = [...page.Items];
+                    while (
+                        reset &&
+                        received < restoreCount &&
+                        page.Items.length > 0 &&
+                        (page.TotalRecordCount === undefined ||
+                            received < page.TotalRecordCount)
+                    ) {
+                        if (!alive.current || gen !== generation.current)
+                            return;
+                        const nextPath = new URLSearchParams(path.slice(6));
+                        nextPath.set("startIndex", String(received));
+                        page = await catalog<ItemPage>(
+                            client,
+                            "Items?" + nextPath.toString(),
+                        );
+                        received += page.Items.length;
+                        restored.push(...page.Items);
+                    }
+                    if (!alive.current || gen !== generation.current) return;
+                    const value = {
+                        items: unique([...previous.items, ...restored]),
+                        start: previous.start + received,
+                        total: page.TotalRecordCount,
+                        done:
+                            page.TotalRecordCount !== undefined
+                                ? previous.start + received >=
+                                  page.TotalRecordCount
+                                : page.Items.length < Math.max(PAGE_SIZE, want),
+                        sort,
+                        descending,
+                        filters,
+                    };
+                    browseCache.set(key, value);
+                    try {
+                        sessionStorage.setItem(
+                            `pictureshow.browse:${key}`,
+                            JSON.stringify({
+                                sort,
+                                descending,
+                                start: value.start,
+                                filters,
+                            }),
+                        );
+                    } catch {}
+                    stateRef.current = value;
+                    setState(value);
+                } catch (error) {
+                    if (alive.current && gen === generation.current) {
+                        setError(errorText(error));
+                        notifyExpired(client, error, onError);
+                    }
+                } finally {
+                    if (alive.current && gen === generation.current) {
+                        busyRef.current = false;
+                        setBusy(false);
+                    }
                 }
-            } finally {
-                if (alive.current && gen === generation.current) {
-                    busyRef.current = false;
-                    setBusy(false);
-                }
-            }
+            };
+            inflight.current = run();
+            return inflight.current;
         },
-        [key, sort, descending, client.account!.accessToken],
+        [
+            key,
+            sort,
+            descending,
+            JSON.stringify(filters),
+            client.account!.accessToken,
+        ],
     );
     useEffect(() => {
         const count =
@@ -2181,6 +2398,39 @@ function BrowseGrid({
         pendingSort.current = false;
         void load(true, count);
     }, [load]);
+    // BROWSE-05: the rail needs every title's sort name, in the grid's order.
+    const railShown = !person && sort === "SortName";
+    useEffect(() => {
+        setNames(undefined);
+        if (!railShown) return;
+        let live = true;
+        catalog<ItemPage>(
+            client,
+            "Items?" +
+                query({
+                    ...browseQuery(parent, sort, descending, filters),
+                    fields: "SortName",
+                    enableImages: false,
+                    enableUserData: false,
+                    limit: 10000,
+                }),
+        )
+            .then((page) => {
+                if (live)
+                    setNames({
+                        ids: page.Items.map((i) => i.Id),
+                        sortNames: page.Items.map(
+                            (i) =>
+                                (i as CatalogItem & { SortName?: string })
+                                    .SortName ?? i.Name,
+                        ),
+                    });
+            })
+            .catch(() => {});
+        return () => {
+            live = false;
+        };
+    }, [railShown, load]);
     useEffect(() => {
         if (retry) void load();
     }, [retry]);
@@ -2202,22 +2452,90 @@ function BrowseGrid({
         observer.observe(el);
         return () => observer.disconnect();
     }, [load, state.items.length, error]);
-    function updateSort(next: string, direction = descending) {
+    function restart(
+        next: string,
+        direction: boolean,
+        nextFilters: LibraryFilters,
+    ) {
         pendingSort.current = true;
         setSort(next);
         setDescending(direction);
+        setFilters(nextFilters);
+        setLetter(undefined);
         setState({
             items: [],
             start: 0,
             done: false,
             sort: next,
             descending: direction,
+            filters: nextFilters,
         });
     }
+    const updateSort = (next: string, direction = descending) =>
+        restart(next, direction, filters);
+    const updateFilters = (next: LibraryFilters) =>
+        restart(sort, descending, normalizeFilters(next));
+    async function jump(target: string) {
+        if (!names) return;
+        const { index } = letterJump(names.sortNames, target);
+        if (index < 0) return;
+        setLetter(target);
+        await inflight.current;
+        const have = stateRef.current.items.length;
+        if (have <= index && !stateRef.current.done)
+            await load(false, 0, index + 1 - stateRef.current.start + 12);
+        const wanted = `grid:${parent.Id}:${names.ids[index]}`;
+        for (let frame = 0; frame < 30; frame++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            const card = document.querySelector<HTMLElement>(
+                `[data-focus="${CSS.escape(wanted)}"]`,
+            );
+            if (card) {
+                card.focus({ preventScroll: true });
+                card.scrollIntoView({ block: "center" });
+                return;
+            }
+        }
+    }
+    const available = names
+        ? letterJump(names.sortNames, "#").available
+        : undefined;
+    // One tab stop: the letter last focused, else the current one, else the first.
+    const railStop =
+        [railFocus, letter].find((l) => l && available?.includes(l)) ??
+        available?.[0];
+    function railKey(e: React.KeyboardEvent<HTMLElement>) {
+        if (!available) return;
+        const at = available.indexOf(
+            (e.target as HTMLElement).dataset.focus?.slice(7) ?? "",
+        );
+        const to =
+            e.key === "ArrowRight"
+                ? available[Math.min(at + 1, available.length - 1)]
+                : e.key === "ArrowLeft"
+                  ? available[Math.max(at - 1, 0)]
+                  : e.key === "Home"
+                    ? available[0]
+                    : e.key === "End"
+                      ? available.at(-1)
+                      : undefined;
+        if (!to || at < 0) return;
+        // Arrows move between letters that hold titles, not across the page.
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget
+            .querySelector<HTMLElement>(
+                `[data-focus="letter:${CSS.escape(to)}"]`,
+            )
+            ?.focus();
+    }
+    const filtered = keys.length > 0;
+    const count = state.total ?? state.items.length,
+        exact = state.total !== undefined || state.done;
     return (
         <section className="catalog-browser">
-            <div className="catalog-browse-heading">
-                {!person && (
+            {!person && (
+                <div className="catalog-browse-heading">
                     <div className="catalog-sort">
                         <label htmlFor={`sort-${parent.Id}`}>Sort by</label>
                         <select
@@ -2233,22 +2551,118 @@ function BrowseGrid({
                             <option value="PremiereDate">Release date</option>
                         </select>
                         <button
+                            data-focus="library-direction"
                             aria-label={`Sort ${descending ? "descending" : "ascending"}. Change direction`}
                             aria-pressed={descending}
                             onClick={() => updateSort(sort, !descending)}
                         >
-                            {descending ? "Descending ↓" : "Ascending ↑"}
+                            {sortDirectionLabel(descending)}{" "}
+                            <span aria-hidden="true">
+                                {descending ? "↓" : "↑"}
+                            </span>
                         </button>
+                        {library && (
+                            <button
+                                ref={filterButton}
+                                data-focus="library-filters"
+                                className={filtered ? "catalog-filter-on" : ""}
+                                aria-haspopup="dialog"
+                                aria-label={
+                                    filtered
+                                        ? `Filters, ${keys.length} on`
+                                        : "Filters"
+                                }
+                                onClick={() => setFiltering(true)}
+                            >
+                                Filters{filtered ? ` · ${keys.length}` : ""}
+                            </button>
+                        )}
                     </div>
-                )}
-            </div>
+                    {library && (
+                        <QueueButtons
+                            client={client}
+                            parent={parent}
+                            navigate={navigate}
+                            onError={onError}
+                            sort={sort}
+                            descending={descending}
+                            filters={filters}
+                        />
+                    )}
+                </div>
+            )}
+            {filtered && (
+                <ul
+                    className="catalog-filter-chips"
+                    aria-label="Active filters"
+                >
+                    {keys.map((k) => {
+                        const label = constraintLabel(filters, k);
+                        return (
+                            <li key={k}>
+                                <button
+                                    data-focus={`filter-chip:${k}`}
+                                    aria-label={`Remove ${label}`}
+                                    onClick={() =>
+                                        updateFilters(
+                                            withoutConstraint(filters, k),
+                                        )
+                                    }
+                                >
+                                    {label} <span aria-hidden="true">×</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                    <li>
+                        <button
+                            data-focus="filter-clear"
+                            className="catalog-filter-clear"
+                            onClick={() => updateFilters({})}
+                        >
+                            Clear filters
+                        </button>
+                    </li>
+                </ul>
+            )}
+            {railShown && available && available.length > 1 && (
+                <nav
+                    className="catalog-letter-rail"
+                    aria-label="Jump to letter"
+                    onKeyDown={railKey}
+                >
+                    {JUMP_LETTERS.map((l) => {
+                        const on = available.includes(l);
+                        return (
+                            <button
+                                key={l}
+                                data-focus={`letter:${l}`}
+                                disabled={!on}
+                                tabIndex={l === railStop ? 0 : -1}
+                                aria-label={
+                                    l === "#"
+                                        ? "Jump to titles starting with a number or symbol"
+                                        : `Jump to ${l}`
+                                }
+                                aria-current={letter === l || undefined}
+                                onFocus={() => setRailFocus(l)}
+                                onClick={() => void jump(l)}
+                            >
+                                {l}
+                            </button>
+                        );
+                    })}
+                </nav>
+            )}
             {state.items.length > 0 && (
                 <Cards
                     row={{
                         key: `grid:${parent.Id}`,
                         title: person
                             ? "Movies and shows"
-                            : `${state.total ?? state.items.length}${state.total === undefined && !state.done ? "+" : ""} ${(state.total ?? state.items.length) === 1 && (state.total !== undefined || state.done) ? "item" : "items"}`,
+                            : library && exact
+                              ? titleCountLabel(count)
+                              : `${count}${exact ? "" : "+"} ${count === 1 && exact ? "item" : "items"}`,
                         items: state.items,
                     }}
                     grid
@@ -2264,15 +2678,31 @@ function BrowseGrid({
             )}
             {!busy && !error && state.done && !state.items.length && (
                 <div className="catalog-empty">
-                    <p>
-                        {person
-                            ? "No linked movies or shows are available."
-                            : parent.Type === "CollectionFolder" ||
-                                parent.Type === "UserView"
-                              ? "This library is empty."
-                              : `This ${libraryLabel(parent).toLowerCase()} is empty.`}
-                    </p>
-                    <button onClick={() => void load(true)}>Refresh</button>
+                    {filtered ? (
+                        <>
+                            <p>{filteredEmptyLabel(parent.CollectionType)}</p>
+                            <button
+                                data-autofocus
+                                onClick={() => updateFilters({})}
+                            >
+                                Clear filters
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <p>
+                                {person
+                                    ? "No linked movies or shows are available."
+                                    : parent.Type === "CollectionFolder" ||
+                                        parent.Type === "UserView"
+                                      ? "This library is empty."
+                                      : `This ${libraryLabel(parent).toLowerCase()} is empty.`}
+                            </p>
+                            <button onClick={() => void load(true)}>
+                                Refresh
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
             {error && (
@@ -2293,6 +2723,20 @@ function BrowseGrid({
                     </button>
                 )}
             </div>
+            {filtering && (
+                <FilterDialog
+                    client={client}
+                    parentId={parent.Id}
+                    value={filters}
+                    onApply={updateFilters}
+                    onClose={() => {
+                        setFiltering(false);
+                        requestAnimationFrame(() =>
+                            filterButton.current?.focus(),
+                        );
+                    }}
+                />
+            )}
         </section>
     );
 }
