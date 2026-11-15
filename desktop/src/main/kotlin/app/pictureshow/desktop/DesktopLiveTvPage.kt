@@ -53,7 +53,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
     LaunchedEffect(s.loading, s.tab, s.selected == null, s.draft == null) {
         if (!s.loading && s.selected == null && s.draft == null) {
             withFrameNanos { }
-            val key = s.focusKey?.takeIf { it in DesktopUiProbe.requestFocus } ?: when (s.tab) {
+            val key = s.focusKey?.takeIf { DesktopUiProbe.requestFocus.containsKey(it) } ?: when (s.tab) {
                 DesktopLiveTab.Channels -> channels.firstOrNull()?.let { "live:channel:${it.id}" }
                 DesktopLiveTab.Guide -> liveGuideInitialFocus(liveGuideCells(s.programs.filter { it.channelId in channels.map { c -> c.id } }, s.start, s.start + DesktopLiveTv.WINDOW), now)?.let { "live:program:$it" }
                 else -> null
@@ -103,7 +103,7 @@ internal fun LiveTvPage(s: DesktopLiveState, account: Account?, owner: DesktopLi
                     s.offline -> "Check the connection to your server, then retry."
                     filtered -> if (s.favorites) "Star channels to find them here." else "Try another channel name or number."
                     else -> "Your server administrator can add a tuner and channel source in Jellyfin’s Live TV settings."
-                }, if (filtered) "Show all channels" else "Retry", if (filtered) owner::clearFilters else { owner.refresh() })
+                }, if (filtered) "Show all channels" else "Retry", { if (filtered) owner.clearFilters() else owner.refresh() })
             } else when (s.tab) {
                 DesktopLiveTab.Channels -> LiveScroll(scroll) {
                     items(channels, key = { "channel:${it.id}" }) { channel ->

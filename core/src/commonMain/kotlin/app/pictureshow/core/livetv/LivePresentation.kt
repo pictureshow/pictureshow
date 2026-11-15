@@ -15,18 +15,23 @@ fun liveGuideCells(programs: List<LiveProgram>, start: Long, end: Long): List<Li
         val to = liveInstant(program.endDate)?.coerceAtMost(end) ?: return@mapNotNull null
         if (to <= from) return@mapNotNull null
         var lane = lanes.indexOfFirst { it <= from }
-        if (lane < 0) { lane = lanes.size; lanes.add(to) } else lanes[lane] = to
+        if (lane < 0) {
+            lane = lanes.size
+            lanes.add(to)
+        } else {
+            lanes[lane] = to
+        }
         LiveGuideCell(program, (from - start).toFloat() / (end - start), (to - from).toFloat() / (end - start), lane)
     }
 }
-fun liveGuideInitialFocus(cells: List<LiveGuideCell>, now: Long): String? =
-    cells.firstOrNull { canTune(it.program, now) }?.program?.id
-        ?: cells.firstOrNull { liveInstant(it.program.startDate)?.let { start -> start > now } == true }?.program?.id
-        ?: cells.lastOrNull()?.program?.id
+fun liveGuideInitialFocus(cells: List<LiveGuideCell>, now: Long): String? = cells.firstOrNull { canTune(it.program, now) }?.program?.id
+    ?: cells.firstOrNull { liveInstant(it.program.startDate)?.let { start -> start > now } == true }?.program?.id
+    ?: cells.lastOrNull()?.program?.id
 
 /** Invalid intervals or a failed/cancelled current timer never claim a recording is in progress. */
 fun liveScheduleGroup(schedule: LiveSchedule, now: Long): String {
-    val start = liveInstant(schedule.startDate); val end = liveInstant(schedule.endDate)
+    val start = liveInstant(schedule.startDate)
+    val end = liveInstant(schedule.endDate)
     return when {
         start == null || end == null || end <= start -> "Other schedules"
         end <= now -> "Past"
@@ -37,6 +42,7 @@ fun liveScheduleGroup(schedule: LiveSchedule, now: Long): String {
 }
 
 data class LiveGuideTextWindow(val inset: Float, val width: Float)
+
 /** Keep text in the visible interval without moving its time-placed programme cell. */
 fun liveGuideTextWindow(cellX: Float, cellWidth: Float, viewportStart: Float, viewportWidth: Float): LiveGuideTextWindow {
     val width = cellWidth.coerceAtLeast(0f)
