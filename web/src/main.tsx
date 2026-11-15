@@ -105,7 +105,7 @@ function App() {
         }),
         [error, setError] = useState(""),
         // The technical causes behind `error`, shown under "More details".
-        [errorDetail, setErrorDetail] = useState<{ message: string; detail: string }>(),
+        [errorDetail, setErrorDetail] = useState<{ message: string; detail: readonly string[] }>(),
         [busy, setBusy] = useState(false),
         [restoring, setRestoring] = useState(!!initial.saved?.current),
         [verifyAttempt, setVerifyAttempt] = useState(0),
@@ -767,11 +767,16 @@ function App() {
                 </div>
                 {error && (
                     <div role="alert" className="error">
-                        {error}
+                        <span className="error-message">{error}</span>
                         {errorDetail?.message === error && (
                             <details className="error-detail">
                                 <summary>More details</summary>
-                                <p>{errorDetail.detail}</p>
+                                <p>Other possible causes:</p>
+                                <ul>
+                                    {errorDetail.detail.map((d) => (
+                                        <li key={d}>{d}</li>
+                                    ))}
+                                </ul>
                             </details>
                         )}
                         <button onClick={() => setError("")}>Dismiss</button>

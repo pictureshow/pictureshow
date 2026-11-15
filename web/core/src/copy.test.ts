@@ -73,8 +73,8 @@ describe("unreachable server errors", () => {
             expect(e.message).toContain("http://myserver:8096");
             // The technical causes stay available, but out of the headline.
             expect(e.message).not.toMatch(/CORS|certificate/);
-            expect(e.detail).toMatch(/certificate/);
-            expect(e.detail).toMatch(/CORS/);
+            expect(e.detail?.join(" ")).toMatch(/certificate/);
+            expect(e.detail?.join(" ")).toMatch(/CORS/);
         } finally {
             globalThis.fetch = original;
         }

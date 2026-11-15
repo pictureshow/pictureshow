@@ -414,7 +414,7 @@ export function Settings({
                     data-focus="settings:device"
                     onClick={() => navigate({ kind: "device" })}
                 >
-                    Troubleshooting · This browser
+                    Troubleshooting
                 </button>
             </div>
         </section>

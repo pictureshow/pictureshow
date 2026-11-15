@@ -49,6 +49,20 @@ test("an address nobody answers says what to check, with technical causes under 
     await more.locator("summary").click();
     await expect(more).toContainText("certificate");
     await expect(more).toContainText("CORS");
+    // Causes are a bulleted list, not one semicolon sentence.
+    await expect(more.locator("li")).toHaveCount(5);
+    // Dismiss sits top right, on the message's row, and the banner shares
+    // the form column's left edge.
+    const box = (await alert.boundingBox())!;
+    const msg = (await alert.locator(".error-message").boundingBox())!;
+    const dismiss = (await alert
+        .getByRole("button", { name: "Dismiss" })
+        .boundingBox())!;
+    const form = (await page.locator(".welcome").boundingBox())!;
+    expect(dismiss.x).toBeGreaterThan(msg.x + msg.width - 1);
+    expect(dismiss.y).toBeLessThan(msg.y + msg.height);
+    expect(Math.abs(box.x - form.x)).toBeLessThan(2);
+    expect(Math.abs(box.width - form.width)).toBeLessThan(2);
 });
 
 test("a wrong password says so, and the form stays usable", async ({
@@ -106,7 +120,12 @@ test("the form comes before the user list; a picked user is shown with Not you?"
     await expect(picker.getByRole("button", { name: /^viewer/ })).toHaveCount(
         8,
     );
-    await picker.getByRole("button", { name: "Show all 19 users" }).click();
+    await picker.getByRole("button", { name: "Show all 19 users" }).focus();
+    await page.keyboard.press("Enter");
+    // The pressed button goes away; focus lands on the 9th user, not the page.
+    await expect(
+        picker.getByRole("button", { name: "viewer8", exact: true }),
+    ).toBeFocused();
     await expect(picker.getByRole("button", { name: /^viewer/ })).toHaveCount(
         19,
     );
@@ -213,11 +232,14 @@ test("Support and Troubleshooting speak plainly; the technical report sits under
         /configured|provider|Google Play billing/,
     );
     await expect(support).toContainText(
-        "Support is available in the Pictureshow app for Android.",
+        "You can't become a supporter in the web app yet",
     );
+    await expect(support).toContainText("Everything here stays free.");
+    // Play is internal testing only: no pointer to a store nobody can reach.
+    await expect(support).not.toContainText("Android");
     await page.keyboard.press("Escape");
     await page
-        .getByRole("button", { name: "Troubleshooting · This browser" })
+        .getByRole("button", { name: "Troubleshooting", exact: true })
         .click();
     const report = page.locator(".information");
     await expect(report.locator(".verdict")).toHaveText(/^This browser /);

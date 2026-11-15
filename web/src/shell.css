@@ -145,6 +145,8 @@ fieldset {
     min-height: 44px;
 }
 .settings-page .settings-heading {
+    width: fit-content;
+    border-radius: 8px;
     margin: 16px 0 0;
     scroll-margin-top: 24px;
 }
@@ -157,6 +159,11 @@ fieldset {
 .setting-list .setting-readonly {
     display: grid;
     gap: 4px;
+}
+/* Same label style as every other setting (labels are 0.95rem, 600). */
+.setting-list .setting-readonly .switch-text {
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 .settings-links {
     display: flex;

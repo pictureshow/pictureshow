@@ -431,7 +431,7 @@ main.theater {
 /* Real-user review 2026-11-15: inline field errors, the picked-user line,
    and the technical causes under an error. */
 .field-error {
-    color: #ffdad6;
+    color: #ffb4ab;
     font-weight: 600;
     margin: 0;
 }
@@ -444,6 +444,9 @@ input[aria-invalid="true"] {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.25rem 0.4rem;
+}
+.user-picker button.show-all {
+    min-height: 44px;
 }
 button.link {
     background: none;
@@ -459,12 +462,44 @@ button.link {
     border-color: var(--accent);
     color: #29194b;
 }
-.error:has(.error-detail) {
-    flex-wrap: wrap;
+/* Message top left, Dismiss top right, details across the second row. */
+.error {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.5rem 1rem;
+}
+.error .error-message {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+}
+.error > button {
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0;
 }
 .error .error-detail {
-    order: 3;
-    flex-basis: 100%;
+    grid-column: 1 / -1;
+    grid-row: 2;
+}
+.error-detail p,
+.error-detail ul {
+    margin: 0.25rem 0;
+    max-width: 70ch;
+}
+/* Before connecting, the banner lines up with the form column below it. */
+.error:has(+ .welcome),
+.error:has(+ .signin) {
+    box-sizing: border-box;
+    max-width: 720px;
+    margin-inline: auto;
+}
+@media (min-width: 1500px) {
+    .error:has(+ .welcome),
+    .error:has(+ .signin) {
+        max-width: 800px;
+    }
 }
 .error-detail summary {
     cursor: pointer;

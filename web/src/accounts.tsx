@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import React, { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
     Jellyfin,
     ClientError,
@@ -661,10 +662,11 @@ export function SignIn({
                                 {(allUsers || users.length <= 8
                                     ? users
                                     : users.slice(0, 8)
-                                ).map((u) => (
+                                ).map((u, i) => (
                                     <button
                                         key={u.Id}
                                         type="button"
+                                        data-user-index={i}
                                         aria-pressed={
                                             picked === u.Name &&
                                             username === u.Name
@@ -684,7 +686,17 @@ export function SignIn({
                                 {users.length > 8 && !allUsers && (
                                     <button
                                         type="button"
-                                        onClick={() => setAllUsers(true)}
+                                        className="link show-all"
+                                        onClick={() => {
+                                            // This button goes away; keep focus where the
+                                            // list grew, on the first newly shown user.
+                                            flushSync(() => setAllUsers(true));
+                                            document
+                                                .querySelector<HTMLElement>(
+                                                    ".user-picker button[data-user-index='8']",
+                                                )
+                                                ?.focus();
+                                        }}
                                     >
                                         Show all {users.length} users
                                     </button>

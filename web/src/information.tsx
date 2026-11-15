@@ -116,11 +116,8 @@ export function Information({
     if (route.kind === "device")
         return (
             <section className="information">
-                <h1>This browser</h1>
+                <h1>Troubleshooting</h1>
                 <p>What this browser can play, and why.</p>
-                <button data-autofocus onClick={refresh}>
-                    Check again
-                </button>
                 {error && <p role="alert">{error}</p>}
                 {profile && summary && (
                     <>
@@ -177,6 +174,9 @@ export function Information({
                         </details>
                     </>
                 )}
+                <button data-autofocus onClick={refresh}>
+                    Check again
+                </button>
             </section>
         );
     if (route.kind === "about")
@@ -231,10 +231,7 @@ export function Information({
                 <h2 tabIndex={-1} data-autofocus>
                     You can't become a supporter in the web app yet
                 </h2>
-                <p>
-                    Support is available in the Pictureshow app for Android.
-                    Everything here stays free.
-                </p>
+                <p>Everything here stays free.</p>
             </section>
         );
     return (

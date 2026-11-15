@@ -71,7 +71,7 @@ export class ClientError extends Error {
     constructor(
         public kind: string,
         message: string,
-        public detail?: string,
+        public detail?: readonly string[],
     ) {
         super(message);
     }
@@ -81,8 +81,13 @@ export const errorCopy = {
     network: "Couldn't reach your server. Check your connection and try again.",
     unreachableAddress:
         "Pictureshow couldn't reach a server at that address. Check the spelling, and include the port if your server uses one (Jellyfin's usual port is 8096), for example http://myserver:8096.",
-    networkDetail:
-        "Other possible causes: the server is off or on a different network; the address uses https but this browser doesn't trust the server's certificate; this page is on https and the server address is http, which browsers block; the server doesn't allow this website in its network settings (CORS); or the browser asked for local network access and it was refused.",
+    networkDetail: [
+        "The server is off, or on a different network.",
+        "The address uses https, but this browser doesn't trust the server's certificate.",
+        "This page is on https and the server address is http, which browsers block.",
+        "The server doesn't allow this website in its network settings (CORS).",
+        "The browser asked for local network access and it was refused.",
+    ],
     wrongPassword:
         "That username and password didn't work. Check them and try again.",
     expired: "Your sign-in has ended. Sign in again.",

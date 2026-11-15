@@ -45,7 +45,7 @@
     box-shadow: 0 0 0 8px #625071;
 }
 .information .verdict {
-    font-size: 1.15em;
+    font-weight: 600;
 }
 .information details.technical {
     margin-top: 1.5rem;

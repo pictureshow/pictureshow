@@ -200,7 +200,7 @@ test("About, all bundled license text, device JSON and unavailable support are r
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await page
-        .getByRole("button", { name: "Troubleshooting · This browser" })
+        .getByRole("button", { name: "Troubleshooting", exact: true })
         .click();
     await page.getByText("Technical details").click();
     await page
