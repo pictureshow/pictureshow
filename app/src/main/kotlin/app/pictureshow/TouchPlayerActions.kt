@@ -181,50 +181,56 @@ internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsS
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Box(Modifier.weight(1f).height(48.dp)) {
+        Box(Modifier.weight(1f).height(52.dp)) {
             val endpoints = liveBufferEndpointLabels(window, position, host.liveBufferExpired, liveTime()::clock)
             Row(Modifier.fillMaxWidth().align(Alignment.TopCenter), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(endpoints.first, color = Color.White, style = MaterialTheme.typography.labelSmall)
                 Text(endpoints.second, color = Color.White, style = MaterialTheme.typography.labelSmall)
             }
+            if (window != null && touchLiveSliderAvailable(window, host.liveBufferExpired)) {
+                Slider(
+                    value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
+                    valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
+                    enabled = window.canTimeShift && !host.liveBufferExpired,
+                    onValueChange = {
+                        ui.scrubMs = it.toLong()
+                        ui.interact()
+                    },
+                    onValueChangeFinished = {
+                        ui.scrubMs?.let(host::seekTo)
+                        ui.scrubMs = null
+                    },
+                    track = { LivePlayerTrack(window, position, accent, expired = host.liveBufferExpired) },
+                    thumb = {
+                        // Slider measures its interactive layout from the thumb and track, not its outer slot.
+                        Box(Modifier.width(10.dp).height(48.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(10.dp).background(Color.White, CircleShape))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().align(Alignment.Center).height(48.dp).testTag("touch:scrubber").semantics {
+                        contentDescription = "Live playback position"
+                        stateDescription = spoken
+                    }
+                )
+            } else {
+                LivePlayerTrack(window, position, accent, Modifier.fillMaxWidth().align(Alignment.Center), expired = host.liveBufferExpired)
+            }
             Row(
-                Modifier.fillMaxWidth().align(Alignment.Center).testTag("touch:live-position"),
+                Modifier.fillMaxWidth().align(Alignment.BottomCenter).testTag("touch:live-position"),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (readout.status.isNotEmpty()) {
-                    Text(
-                        readout.status,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics {
+                Text(
+                    readout.status,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("touch:live-status").clearAndSetSemantics {
+                        if (readout.status.isNotEmpty()) {
                             contentDescription = "Live playback status"
                             stateDescription = spoken
                         }
-                    )
-                }
-                if (window != null && touchLiveSliderAvailable(window, host.liveBufferExpired)) {
-                    Slider(
-                        value = liveBufferSliderPosition(window, position, host.liveBufferExpired),
-                        valueRange = 0f..liveBufferScrubEnd(window).toFloat(),
-                        enabled = window.canTimeShift && !host.liveBufferExpired,
-                        onValueChange = {
-                            ui.scrubMs = it.toLong()
-                            ui.interact()
-                        },
-                        onValueChangeFinished = {
-                            ui.scrubMs?.let(host::seekTo)
-                            ui.scrubMs = null
-                        },
-                        track = { LivePlayerTrack(window, position, accent, expired = host.liveBufferExpired) },
-                        modifier = Modifier.weight(1f).heightIn(max = 24.dp).testTag("touch:scrubber").semantics {
-                            contentDescription = "Live playback position"
-                            stateDescription = spoken
-                        }
-                    )
-                } else {
-                    LivePlayerTrack(window, position, accent, Modifier.weight(1f), expired = host.liveBufferExpired)
-                }
+                    }
+                )
                 if (readout.clock.isNotEmpty()) {
                     Text(
                         readout.clock,

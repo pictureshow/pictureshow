@@ -98,7 +98,9 @@ Watch together and More playback options, in that order. Audio/Subtitles/Quality
 targets with captions revealed on focus. Captions reserve their layout space; every icon always exposes its
 full action name and current value to accessibility. Focus retains the existing light fill and 1.1 remote scale.
 Down from transport enters Audio; Up from a secondary tool returns to Play/Pause. Left/right traverse their
-row in visual order without sending transport requests. More opens Playback info; its panel returns to More.
+row in visual order without sending transport requests. The existing ten-second arrow-seek hint sits
+between elapsed and remaining clocks, paints only while arrows seek, and stays absent from screen-reader
+semantics; showing or hiding it never moves the clocks. More opens Playback info; its panel returns to More.
 The persistent SyncPlay chip and Watch together action remain reachable. TV Stop is removed; existing Back,
 modal opener restoration and paused lifecycle return (first OK resumes) behavior remains PLAY-05/24.
 A decoder/media pause received while the playback surface owns focus reveals the HUD with Play focused

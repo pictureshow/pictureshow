@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
@@ -148,6 +150,11 @@ internal fun PlayerTimeline(
                             }
                     }
             ) { Text(playerElapsedClock(timelinePosition, durationMs), modifier = Modifier.clearAndSetSemantics {}) }
+            // The hint describes only the current arrow-key target; it never becomes reader text.
+            Text(
+                "← / → seek 10 seconds",
+                modifier = Modifier.alpha(if (arrowsSeek) 1f else 0f).clearAndSetSemantics { testTag = "player:seek-hint" }
+            )
             // Keep the clock and row geometry stable while arrows navigate a focused control.
             playerRemainingClock(timelinePosition, durationMs)?.let { Text(it, modifier = Modifier.clearAndSetSemantics {}) }
         }

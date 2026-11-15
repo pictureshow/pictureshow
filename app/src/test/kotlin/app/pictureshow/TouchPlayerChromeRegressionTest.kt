@@ -299,6 +299,16 @@ class TouchPlayerChromeRegressionTest {
             compose.waitForIdle()
         }
         if (live) {
+            val slider = compose.onNodeWithTag("touch:scrubber").assertIsDisplayed()
+            val sliderBounds = slider.fetchSemanticsNode().boundsInRoot
+            val slot = compose.onNodeWithTag("touch:live-slot").fetchSemanticsNode().boundsInRoot
+            assertEquals(slot.center.y, sliderBounds.center.y, 1f, "Live slider and Go live retain one vertical center at both font scales")
+            val interaction = slider.fetchSemanticsNode().touchBoundsInRoot
+            val density = slider.fetchSemanticsNode().layoutInfo.density.density
+            assertTrue(
+                interaction.width >= 48f * density - 1f && interaction.height >= 48f * density - 1f,
+                "Compact live track retains its48dp interaction target: $interaction"
+            )
             compose.onNodeWithTag("touch:behind-live", useUnmergedTree = true).assertExists()
             compose.onNodeWithTag("touch:live-status").assertExists()
             assertEquals(

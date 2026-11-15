@@ -44,6 +44,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import java.io.InterruptedIOException
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,16 +81,20 @@ class SeekHintFocusTest {
 
     /** Observe actual painted hint pixels; cleared semantics must stay absent for screen readers. */
     private fun hintPixels(): Int {
-        val bounds = compose.onNodeWithContentDescription("Playback position").getUnclippedBoundsInRoot()
+        // Scope the oracle to the hint itself: elapsed and remaining clocks deliberately keep painting.
+        val bounds = compose.onNodeWithTag("player:seek-hint", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val density = compose.activity.resources.displayMetrics.density
-        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
-        compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
-        val left = ((bounds.right.value + 12) * density).toInt()
-        val top = (bounds.top.value * density).toInt()
-        val bottom = (bounds.bottom.value * density).toInt()
+        val decor = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { decor.draw(Canvas(bitmap)) }
+        val left = floor(bounds.left.value * density).toInt().coerceAtLeast(0)
+        val right = ceil(bounds.right.value * density).toInt().coerceAtMost(bitmap.width)
+        val top = floor(bounds.top.value * density).toInt().coerceAtLeast(0)
+        val bottom = ceil(bounds.bottom.value * density).toInt().coerceAtMost(bitmap.height)
+        assertTrue(right > left && bottom > top, "The hint retains real layout bounds even while transparent")
         try {
             return (top until bottom).sumOf { y ->
-                (left until 1700).count { x ->
+                (left until right).count { x ->
                     val pixel = bitmap.getPixel(x, y)
                     Color.red(pixel) > 120 && Color.green(pixel) > 120 && Color.blue(pixel) > 120
                 }
@@ -110,10 +116,13 @@ class SeekHintFocusTest {
         }
         compose.onNodeWithTag("player:surface").assertIsFocused()
         val clock = compose.onNodeWithContentDescription("Playback position").getUnclippedBoundsInRoot()
+        val hint = compose.onNodeWithTag("player:seek-hint", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(hint.left >= clock.right, "The center hint cannot cover the elapsed clock")
         assertTrue(hintPixels() > 20, "Surface Right seeks; the seek hint must be visible")
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
         compose.onNodeWithText("Pause").assertIsFocused()
         assertEquals(0, hintPixels(), "Arrows now navigate buttons; seek hint must not be painted")
+        assertEquals(hint, compose.onNodeWithTag("player:seek-hint", useUnmergedTree = true).getUnclippedBoundsInRoot())
         assertEquals(clock, compose.onNodeWithContentDescription("Playback position").getUnclippedBoundsInRoot())
         // Return to the playback surface while controls remain visible.
         compose.onNodeWithTag("player:surface").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
@@ -132,6 +141,7 @@ class SeekHintFocusTest {
         }
         compose.onNodeWithContentDescription("Playback position").assertIsFocused()
         assertEquals(0, hintPixels())
+        assertTrue(compose.onAllNodesWithText("seek 10 seconds", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     private fun launch(accessible: Boolean) {
