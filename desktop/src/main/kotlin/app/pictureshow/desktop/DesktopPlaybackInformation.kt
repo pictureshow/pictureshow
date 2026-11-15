@@ -15,8 +15,10 @@ data class DesktopReceivedFormats(
     val audioDecoder: String? = null
 )
 
+private fun mpvInfoToken(value: String?): String? = value?.takeIf { it.matches(Regex("[a-zA-Z0-9_.+-]{1,40}")) }
+
 internal fun receivedFormats(get: (String) -> String?, output: HdrOutput): DesktopReceivedFormats {
-    fun token(key: String) = get(key)?.takeIf { it.matches(Regex("[a-zA-Z0-9_.+-]{1,40}")) }
+    fun token(key: String) = mpvInfoToken(get(key))
     return DesktopReceivedFormats(
         token("current-tracks/video/codec"), get("video-params/w")?.toIntOrNull(), get("video-params/h")?.toIntOrNull(),
         token("video-params/gamma"), token("video-params/primaries"), token("video-params/pixelformat"),
@@ -78,10 +80,10 @@ internal fun playbackInfoSections(p: DesktopPlaybackState, qualityMbps: Int?): L
             "Video" to "${PlaybackInformation.codec(f.videoCodec)} · ${PlaybackInformation.resolution(f.width, f.height)}",
             "Range" to PlaybackFormatInformation.transfer(f.transfer),
             "Primaries" to PlaybackInformation.codec(f.primaries),
-            "Pixel format / surface" to PlaybackInformation.codec(f.pixelFormat),
+            "Frame format" to (mpvInfoToken(f.pixelFormat) ?: "Not reported"),
             "Audio" to if (p.audioIndex < 0) "Off" else "${PlaybackInformation.codec(f.audioCodec)} · ${number(f.audioChannels, "channels")} · ${number(f.audioSampleRate, "Hz")}",
             "Video decoder" to PlaybackFormatInformation.decoder(f.hwdec),
-            "Audio decoder" to if (p.audioIndex < 0) "Off" else f.audioDecoder?.let { "mpv · ${PlaybackInformation.codec(it)}" } ?: "Not reported"
+            "Audio decoder" to if (p.audioIndex < 0) "Off" else mpvInfoToken(f.audioDecoder)?.let { "mpv · $it" } ?: "Not reported"
         )))
     }
 }

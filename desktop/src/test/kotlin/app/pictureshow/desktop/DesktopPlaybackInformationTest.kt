@@ -69,7 +69,7 @@ class DesktopPlaybackInformationTest {
         assertEquals("Not reported", unreportedDecoder["Audio decoder"])
         val observedDecoder = playbackInfoSections(p.copy(received = DesktopReceivedFormats(audioCodec = "aac", audioDecoder = "aac")), null)
             .first { it.title == "Received by this computer" }.fields.toMap()
-        assertEquals("mpv · AAC", observedDecoder["Audio decoder"])
+        assertEquals("mpv · aac", observedDecoder["Audio decoder"])
         assertEquals("Display output", direct[1].title)
         val engine = NativeDesktopPlayback(java.io.File(System.getProperty("java.io.tmpdir"), "playinfo-unit"))
         engine.informationQuality(4)
