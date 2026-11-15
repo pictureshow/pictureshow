@@ -77,7 +77,13 @@ internal fun PlayerIconButton(
     IconButton(
         onClick,
         modifier.size(48.dp)
-            .then(if (liveSeek || videoSeekBacking) Modifier.background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape) else Modifier)
+            .then(
+                if (liveSeek || videoSeekBacking) {
+                    Modifier.background(Color.Black.copy(alpha = LIVE_SEEK_SCRIM_ALPHA), CircleShape)
+                } else {
+                    Modifier
+                }
+            )
             .semantics {
                 contentDescription = label
                 state?.let { stateDescription = it }
