@@ -447,6 +447,8 @@ test("rc28 a failed read cues Retry once without moving heading focus; a retry o
     read.release();
     const retry = page.getByRole("button", { name: "Retry", exact: true });
     await expect(retry).toBeVisible();
+    await expect(heading).toHaveCSS("outline-style", "none");
+    await page.keyboard.press("Shift");
     await expect(heading).toHaveCSS("outline-style", "solid");
     expect((await heading.boundingBox())!.width).toBeLessThan(
         (await page.locator("main").boundingBox())!.width * 0.7,
@@ -740,6 +742,9 @@ test("rc28 timed-out held request expires, Retry explains it, and release cannot
     await page.clock.install();
     await openDetail(page);
     await page.keyboard.press("ArrowRight");
+    await expect(page.locator('[data-focus="restart"]')).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator('[data-focus="watched"]')).toBeFocused();
     await page.keyboard.press("Enter");
     await page.clock.runFor(200);
     await expect(page.locator("[data-detail-feedback]")).toContainText(
