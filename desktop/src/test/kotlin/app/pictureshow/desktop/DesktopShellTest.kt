@@ -48,10 +48,12 @@ class DesktopShellTest {
     }
 
     private fun ComposeUiTest.assertInsideWindow(tag: String) {
-        val size = onRoot().fetchSemanticsNode().size
+        // Pointer hover can add a tooltip root. Its presence must not make window geometry ambiguous.
+        val roots = onAllNodes(isRoot()).fetchSemanticsNodes()
+        val width = roots.maxOf { it.size.width }; val height = roots.maxOf { it.size.height }
         val b = unclipped(tag)
-        assertTrue(b.top >= 0f && b.bottom <= size.height && b.left >= 0f && b.right <= size.width && b.height > 0f,
-            "$tag at $b lies outside the ${size.width}x${size.height} window")
+        assertTrue(b.top >= 0f && b.bottom <= height && b.left >= 0f && b.right <= width && b.height > 0f,
+            "$tag at $b lies outside the ${width}x${height} window")
     }
 
     @Test fun everyDestinationStaysInsideTheMinimumWindowWithLivingRoomSize() = runDesktopComposeUiTest(800, 600) {
