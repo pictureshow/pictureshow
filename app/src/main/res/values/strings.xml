@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Pictureshow</string>
     <string name="supporter_title">Support Pictureshow</string>
     <string name="supporter_description">Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.</string>
@@ -66,7 +66,10 @@
     <string name="sync_empty_next_step">Play something from your library for everyone.</string>
     <string name="sync_queue_empty">Play a movie, episode or song while you\'re in this group, and it starts for everyone.</string>
     <string name="login_public_users">Who\'s signing in?</string>
-    <string name="login_show_all_users">Show all %1$d users</string>
+    <plurals name="login_show_all_users">
+        <item quantity="one">Show %1$d user</item>
+        <item quantity="other">Show all %1$d users</item>
+    </plurals>
     <string name="login_signing_in_as">Signing in as %1$s</string>
     <string name="login_not_you">Not you?</string>
     <string name="download_notification_note">Pictureshow will ask to show download progress in notifications.</string>
@@ -191,7 +194,7 @@
     <string name="pin_wait">Too many tries. Try again in %1$d s.</string>
     <string name="pin_wait_minutes">Too many tries. Try again in %1$d min.</string>
     <string name="pin_locked_out">Too many wrong PINs, so the PIN is off. Sign in with the password, then set a new PIN in Settings.</string>
-    <string name="pin_rule">A PIN is %1$d to %2$d digits.</string>
+    <string name="pin_rule" tools:ignore="PluralsCandidate">A PIN is %1$d to %2$d digits.</string>
     <string name="pin_mismatch">Those PINs didn\'t match. Type the new PIN again.</string>
     <string name="pin_entered">%1$d digits entered</string>
     <string name="pin_delete">Delete last digit</string>

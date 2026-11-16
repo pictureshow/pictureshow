@@ -153,7 +153,8 @@ internal fun TouchLogin(
                 }
                 if (!showAllUsers && state.users.size > TOUCH_LOGIN_USER_CHIPS) {
                     TextButton(onClick = { showAllUsers = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("touch:users-all")) {
-                        Text(stringResource(R.string.login_show_all_users, state.users.size))
+                        val count = state.users.size
+                        Text(androidx.compose.ui.res.pluralStringResource(R.plurals.login_show_all_users, count, count))
                     }
                 }
             }
