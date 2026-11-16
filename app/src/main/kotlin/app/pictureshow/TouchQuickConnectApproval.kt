@@ -25,9 +25,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.QuickConnectApprovalResult
@@ -57,7 +59,10 @@ internal fun TouchQuickConnectApproval(
     approve: suspend (Account, String) -> QuickConnectApprovalResult,
     onBack: () -> Unit
 ) {
-    var code by rememberSaveable { mutableStateOf("") }
+    // A TextFieldValue, so the cursor stays after the last character when spaces are dropped; with a plain String the
+    // keyboard's idea of the text and the field's disagree, and Gboard replaced the code mid-typing (OBSERVED, leg 162).
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    val code = field.text
     var busy by rememberSaveable { mutableStateOf(false) }
     var result by rememberSaveable { mutableStateOf<QuickConnectApprovalResult?>(null) }
     val scope = rememberCoroutineScope()
@@ -84,10 +89,11 @@ internal fun TouchQuickConnectApproval(
         )
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(
-            value = code,
+            value = field,
             onValueChange = { typed ->
                 // Pasted codes may carry spaces or a newline; the field keeps at most what a code could be.
-                code = normalizeQuickConnectCode(typed).take(6)
+                val cleaned = normalizeQuickConnectCode(typed.text).take(6)
+                field = if (cleaned == typed.text) typed else TextFieldValue(cleaned, TextRange(cleaned.length))
                 if (result != QuickConnectApprovalResult.APPROVED) result = null
             },
             label = { Text(stringResource(R.string.qc_approve_field)) },
