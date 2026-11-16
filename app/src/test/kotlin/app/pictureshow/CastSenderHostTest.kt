@@ -452,13 +452,25 @@ class CastSenderHostTest {
                 "playing",
                 positionMs = 25,
                 generation = host.generation()
-            ).copy(customData = next.customData, contentUrl = next.url, queue = listOf("0:item-1", "1:next"))
+            ).copy(mediaSession = 8, customData = next.customData, contentUrl = next.url, queue = listOf("0:item-1", "1:next"))
         )
         runCurrent()
         assertEquals(listOf(ITEM, "next"), gateway.items)
         assertEquals(listOf("stopped:50000000", "encoding:play-session", "start:250000"), gateway.reports)
         assertEquals("Next episode", host.state.value.title)
         assertEquals("1:next", host.state.value.cast!!.owner.intent.entry)
+        val first = link.request!!.items[0]
+        link.sink!!.onStatus(
+            status("playing", generation = host.generation()).copy(
+                mediaSession = 7,
+                customData = first.customData,
+                contentUrl = first.url,
+                queue = listOf("1:next", "0:item-1"),
+                repeat = "all"
+            )
+        )
+        assertEquals(listOf("0:item-1", "1:next"), host.state.value.queue.map { it.entry })
+        assertEquals("off", host.state.value.repeat)
         host.playHere()
         link.sink!!.onStatus(CastStatus(idleReason = "cancelled"))
         runCurrent()

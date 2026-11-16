@@ -10877,6 +10877,47 @@
               "ticks": "25"
             }
           }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "nowMs": "100",
+            "observation": {
+              "mediaSession": "6",
+              "generation": "2",
+              "entry": "a",
+              "ticks": "100",
+              "playerState": "playing",
+              "queue": [
+                "b",
+                "a"
+              ],
+              "commands": [
+                "play",
+                "pause",
+                "seek",
+                "stop"
+              ]
+            }
+          },
+          "expected": {
+            "owner": {
+              "intent": {
+                "entry": "b",
+                "ticks": "25",
+                "paused": true,
+                "queue": [
+                  "a",
+                  "b"
+                ]
+              }
+            },
+            "observed": {
+              "entry": "b",
+              "ticks": "25"
+            },
+            "reason": "stale-observation"
+          }
         }
       ]
     }

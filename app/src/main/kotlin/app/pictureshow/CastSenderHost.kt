@@ -881,9 +881,10 @@ internal class CastSenderHost(
 
     private fun entryId(index: Int, itemId: String) = "$index:$itemId"
 
-    private fun dispatch(event: CastEvent) {
+    private fun dispatch(event: CastEvent, status: CastStatus? = null) {
         val current = cast ?: return
         val next = reduceCast(current, event)
+        if (status != null && next.observed === event.observation) lastStatus = status
         mutable.update { ui ->
             ui.copy(cast = next, controls = next.observed?.let(::controlsFor))
         }
@@ -1902,17 +1903,18 @@ internal class CastSenderHost(
             scope.launch { viewing?.let { environment.saveViewing(it) } }
         }
         val oldEntry = cast?.observed?.entry
-        lastStatus = status
         if (cast == null) {
+            lastStatus = status
             if (awaitingReattach) reattach(status)
             return
         }
         val before = cast?.observed?.playerState?.takeIf { cast?.owner?.phase == "active" && cast?.owner?.owner?.kind == "cast" }
-        dispatch(CastEvent("observe", observation = observation(status), nowMs = nowMs()))
+        val incoming = observation(status)
+        dispatch(CastEvent("observe", observation = incoming, nowMs = nowMs()), status)
         val after = cast?.observed?.playerState?.takeIf { cast?.owner?.phase == "active" }
         val nowEntry = cast?.observed?.entry
         val currentItem = viewing?.items?.firstOrNull { it.entry == nowEntry }
-        if (currentItem != null && cast?.owner?.phase == "active") {
+        if (currentItem != null && cast?.owner?.phase == "active" && cast?.observed === incoming) {
             val recordItems = viewing?.items.orEmpty()
             val plan = app.pictureshow.core.control.castQueue(
                 app.pictureshow.core.control.CastQueueInput(
