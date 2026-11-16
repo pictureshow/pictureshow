@@ -33,9 +33,11 @@ extension JellyfinClient {
     }
 
     /// A receipt is transport evidence only. The controller reducer confirms playback from observation.
-    public func sendRemotePlayback(account: Account, target: RemotePlaybackTarget, operation: String, itemID: String? = nil, ticks: Int64? = nil) async throws -> PlaybackHTTPOutcome {
+    public func sendRemotePlayback(account: Account, target: RemotePlaybackTarget, operation: String, itemID: String? = nil, ticks: Int64? = nil, index: Int? = nil, level: Int? = nil) async throws -> PlaybackHTTPOutcome {
         var command: [String: Any] = ["op": operation, "items": itemID.map { [$0] } ?? []]
         if let ticks { command["ticks"] = String(ticks) }
+        if let index { command["index"] = index }
+        if let level { command["level"] = level }
         let wire = try RemoteReducers.request(target: target.reducerValue, command: command)
         guard let requestValue = wire["request"] as? [String: Any], let path = requestValue["path"] as? String, let method = requestValue["method"] as? String, let query = requestValue["query"] as? [String: String] else { throw ClientError.invalidResponse }
         var outcome: PlaybackHTTPOutcome?
@@ -47,6 +49,25 @@ extension JellyfinClient {
         }
         guard let outcome else { throw ClientError.invalidResponse }
         return outcome
+    }
+}
+
+extension JellyfinClient {
+    /// The server's push socket for this sign-in (REM-02, SyncPlay): ws(s)://<server>/socket. The token goes in the
+    /// Authorization header, never the URL: Jellyfin 12 refuses `api_key` there (403, measured), and URLs end up in logs.
+    public func socketRequest(account: Account) -> URLRequest? {
+        guard let reply = try? RemoteReducers.reduce(suite: "remote-wire", operation: "socket-url", state: [:], event: ["server": account.server.url.absoluteString]),
+              let base = reply["url"] as? String, let url = URL(string: base) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue(AuthorizationHeader.build(deviceID: account.deviceID, deviceName: deviceName, version: version, token: account.accessToken), forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    /// Tells the server what this device obeys when another viewer's app sends it commands (REM-02/09). Only commands
+    /// the app really carries out are listed (REM-PD03): no D-pad or text relay on Apple yet.
+    public func postCapabilities(account: Account, remoteEnabled: Bool, commands: [String]) async throws {
+        let body = try RemoteReducers.reduce(suite: "remote-wire", operation: "capabilities", state: [:], event: ["enabled": remoteEnabled, "commands": commands])
+        _ = try await request(account: account, path: "Sessions/Capabilities/Full", method: "POST", body: body, includeUserID: false)
     }
 }
 

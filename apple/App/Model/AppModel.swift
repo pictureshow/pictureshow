@@ -14,6 +14,8 @@ import PictureshowCore
     /// Set while the viewer is adding another account, so the sign-in flow shows over the app.
     @Published var addingAccount = false
     @Published var player: PlayerRequest?
+    /// The viewing on screen, which remote commands (REM-02) act on.
+    weak var activeController: PlaybackController? { didSet { remoteTarget.viewingChanged() } }
     @Published var homeLayouts: [String: HomePreferences] = HomeLayoutCache.load()
     var homeLayoutGeneration = 0
     @Published var homeLayoutPending: Set<String> = HomeLayoutCache.pending()
@@ -24,13 +26,28 @@ import PictureshowCore
     private var clients: [String: JellyfinClient] = [:]
     /// Downloads for offline viewing (iOS and iPadOS; a TV says it can't).
     let downloads: Downloads
+    /// The selected viewer's push socket, shared by remote control and SyncPlay.
+    let socket: ServerSocket
+    /// This device as a remote-control target for the viewer's other apps (REM-02).
+    private(set) var remoteTarget: RemoteTarget!
+    /// This phone or tablet as a remote for one of the viewer's TVs (REM-01).
+    private(set) var remote: RemoteControl!
+
+    deinit {
+        let socket = socket
+        Task { @MainActor in socket.stop() }
+    }
 
     init(store: AccountStore = AccountStore()) {
         self.store = store
         snapshot = store.load()
         preferences = Preferences.load()
         downloads = Downloads(deviceName: DeviceIdentity.name, version: AppInfo.version)
+        socket = ServerSocket(requestFor: { Self.makeClient(deviceID: $0.deviceID).socketRequest(account: $0) })
         downloads.start(accounts: snapshot.accounts)
+        remoteTarget = RemoteTarget(app: self)
+        remote = RemoteControl(app: self)
+        socket.follow(account)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
 
@@ -157,6 +174,9 @@ import PictureshowCore
     private func update(_ next: AccountSnapshot) {
         snapshot = next
         persist()
+        socket.follow(account)
+        remoteTarget.accountChanged()
+        remote.accountChanged()
     }
 
     func persist() {
@@ -171,6 +191,8 @@ struct PlayerRequest: Identifiable {
     let item: MediaItem
     let fromStart: Bool
     var local: LocalMedia? = nil
+    /// Where a remote Play command asked to start (REM-03); nil uses the viewer's resume point.
+    var startTicks: Int64? = nil
 }
 
 enum AppInfo {

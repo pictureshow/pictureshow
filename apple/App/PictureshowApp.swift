@@ -104,6 +104,7 @@ struct MainShell: View {
         }
         #if os(iOS)
         .tabViewStyle(.sidebarAdaptable)
+        .modifier(RemoteSheets(remote: app.remote))
         // With no network at all, a cold start goes straight to what still plays (OFF-04).
         .task {
             try? await Task.sleep(for: .milliseconds(400))
@@ -116,8 +117,16 @@ struct MainShell: View {
 
 /// A navigation stack that knows how to open every route the catalog produces.
 struct RoutedStack<Root: View>: View {
+    @EnvironmentObject private var app: AppModel
     @ViewBuilder var root: () -> Root
     var body: some View {
+        stack
+        #if os(iOS)
+            .safeAreaInset(edge: .bottom, spacing: 0) { if !RemoteBar.usesAccessory { RemoteBar(remote: app.remote) } }
+        #endif
+    }
+
+    private var stack: some View {
         NavigationStack {
             root()
                 .navigationDestination(for: Route.self) { route in
@@ -162,6 +171,27 @@ enum DebugLaunch {
               let item = try? await client.item(account: account, id: id) else { return }
         done = true
         app.play(item, fromStart: ProcessInfo.processInfo.environment["PICTURESHOW_FROM_START"] == "1")
+    }
+}
+#endif
+
+#if os(iOS)
+/// The Play on chooser and the remote, presented over every tab.
+struct RemoteSheets: ViewModifier {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var remote: RemoteControl
+    func body(content: Content) -> some View {
+        accessory(content)
+            .sheet(isPresented: $remote.choosing) { PlayOnSheet(remote: remote).environmentObject(app) }
+            .sheet(isPresented: $remote.showingRemote) { RemoteScreen(remote: remote).presentationDetents([.large]) }
+    }
+
+    @ViewBuilder private func accessory(_ content: Content) -> some View {
+        if #available(iOS 26.1, *) {
+            content.tabViewBottomAccessory(isEnabled: remote.link != .none) { RemoteBar(remote: remote, accessory: true) }
+        } else {
+            content
+        }
     }
 }
 #endif

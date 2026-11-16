@@ -224,6 +224,7 @@ struct DetailPage: View {
     @ViewBuilder private var secondaryButtons: some View {
         #if os(iOS)
         if playable { DownloadControl(item: item) }
+        if let target = playTarget { PlayOnButton(remote: app.remote, item: target) }
         #endif
         Button { Task { await toggleWatched() } } label: {
             Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
@@ -601,3 +602,18 @@ struct PersonView: View {
         .task { await items.load(app: app) { account, client in try await client.personItems(account: account, personID: personID, limit: 200).items } }
     }
 }
+
+#if os(iOS)
+/// Starts this title on a TV (REM-03): the attached one, or one the viewer picks.
+private struct PlayOnButton: View {
+    @ObservedObject var remote: RemoteControl
+    let item: MediaItem
+    var body: some View {
+        Button { remote.playOn(item) } label: {
+            Label(remote.link == .attached ? "Play on \(remote.targetName)" : "Play on TV", systemImage: "tv")
+        }
+        .secondaryAction()
+        .accessibilityIdentifier("play-on")
+    }
+}
+#endif
