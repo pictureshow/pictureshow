@@ -99,6 +99,7 @@ dependencies {
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.okhttp)
     implementation(project(":media3-ffmpeg"))
+    implementation(project(":mpv"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)

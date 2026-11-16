@@ -1,0 +1,3 @@
+# The JNI library constructs MpvEvent through its constructor and calls MpvNative's natives by name.
+-keep class app.pictureshow.mpv.MpvEvent { <init>(...); }
+-keepclasseswithmembernames class app.pictureshow.mpv.MpvNative { native <methods>; }

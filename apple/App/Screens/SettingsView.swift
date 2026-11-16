@@ -6,6 +6,7 @@ import PictureshowCore
 struct SettingsView: View {
     @EnvironmentObject private var app: AppModel
     @State private var signOutAccount: Account?
+    @ObservedObject private var viewing = ViewingSettings.shared
 
     var body: some View {
         Form {
@@ -27,6 +28,9 @@ struct SettingsView: View {
                 await app.retryHomeLayout()
             }
             playback
+            #if os(tvOS)
+            screensaver
+            #endif
             Section("Skip segments") {
                 ForEach([SegmentType.intro, .outro, .recap, .preview, .commercial], id: \.self) { type in
                     Picker(segmentTitle(type), selection: segmentBinding(type)) {
@@ -37,6 +41,7 @@ struct SettingsView: View {
                 }
             }
             LanguageSection()
+            SeerrSettingsSection()
             Section("Subtitles") {
                 Picker("Size", selection: $app.preferences.playback.subtitleSize) {
                     ForEach(SubtitleSize.allCases, id: \.self) { Text(sizeTitle($0)).tag($0) }
@@ -106,8 +111,19 @@ struct SettingsView: View {
                 }
             }
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
+            #if os(iOS)
+            if let account = app.account, account.isSignedIn {
+                // AUTH-15: approve the code a TV shows, so nobody types a password with a remote.
+                NavigationLink { QuickConnectApproveView(account: account) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Approve a TV sign-in", systemImage: "tv.badge.wifi")
+                        Text("Enter the code a TV shows to sign it in as you").font(.caption).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+            #endif
             if let account = app.account {
-                Button(role: .destructive) { signOutAccount = account } label: { Label("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
+                Button(role: .destructive) { signOutAccount = account } label: { DestructiveLabel("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
         } header: {
             Text("Accounts")
@@ -123,7 +139,24 @@ struct SettingsView: View {
                     Text(value.map { "Up to \($0) Mbps" } ?? "Best available").tag(value)
                 }
             }
-            Toggle("Play the next episode automatically", isOn: $app.preferences.autoplayNextEpisode)
+            // PLAY-30: Off is the old "don't play the next episode automatically".
+            VStack(alignment: .leading, spacing: 4) {
+                Picker("Next episode countdown", selection: Binding(
+                    get: { app.preferences.autoplayNextEpisode ? viewing.countdownSeconds : 0 },
+                    set: { seconds in
+                        app.preferences.autoplayNextEpisode = seconds > 0
+                        if seconds > 0 { viewing.countdownSeconds = seconds }
+                    })) {
+                    ForEach(ViewingSettings.countdownChoices, id: \.self) { Text(ViewingSettings.countdownTitle($0)).tag($0) }
+                }
+                Text(ViewingSettings.countdownDetail(app.preferences.autoplayNextEpisode ? viewing.countdownSeconds : 0)).font(.footnote).foregroundStyle(Theme.muted)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Picker("Ask if I'm still watching", selection: $viewing.stillWatching) {
+                    ForEach(StillWatching.allCases, id: \.self) { Text(ViewingSettings.stillWatchingTitle($0)).tag($0) }
+                }
+                Text(ViewingSettings.stillWatchingDetail(viewing.stillWatching)).font(.footnote).foregroundStyle(Theme.muted)
+            }
             // Apple devices offer no app-level passthrough switch, so this is a read-only line rather than
             // a toggle that would do nothing (SET-02).
             VStack(alignment: .leading, spacing: 4) {
@@ -142,6 +175,25 @@ struct SettingsView: View {
             Text("Lower quality only applies when the server has to convert a file. Files this device plays as they are always play at full quality.")
         }
     }
+
+    #if os(tvOS)
+    /// SAVER-01: Apple TV lets no app replace the system screensaver, so this one runs inside Pictureshow.
+    private var screensaver: some View {
+        Section {
+            Picker("Screensaver", selection: $viewing.screensaverMinutes) {
+                ForEach(Discovery.screensaverMinutes, id: \.self) { Text(ViewingSettings.screensaverTitle($0)).tag($0) }
+            }
+            Picker("Screensaver ratings", selection: $viewing.screensaverMaxAge) {
+                ForEach([nil] + Discovery.screensaverAges.map(Optional.some), id: \.self) { Text(ViewingSettings.ageTitle($0)).tag($0) }
+            }
+            .disabled(viewing.screensaverMinutes == 0)
+        } header: {
+            Text("Screensaver")
+        } footer: {
+            Text("Shows backdrops from your libraries and the time when nothing has been pressed for a while in Pictureshow. With a rating limit, only titles rated for those ages appear. Apple TV's own screensaver still follows Settings > General > Screen Saver.")
+        }
+    }
+    #endif
 
     @MainActor private static var passthroughCaption: String {
         #if os(tvOS)

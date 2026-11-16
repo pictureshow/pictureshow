@@ -108,6 +108,13 @@ internal class Media3PlaybackOutput(
     var disabledPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet()
     private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
+
+    /** PLAY-60: the mpv player and its loopback proxy while a decision negotiated for mpv plays. */
+    private var mpv: MpvPlayer? = null
+    private var mpvProxy: MpvHttpProxy? = null
+
+    /** Playback info: mpv's own report of its decoders, or null under Media3. */
+    internal val mpvReport: MpvReport? get() = mpv?.let { MpvReport(it.hwdec, it.videoCodec, it.audioCodec, it.gamma) }
     private var nativeGeneration = 0L
 
     /** Actual decoder facts, read only on its application thread; wrappers can retain different pause intent. */
@@ -212,6 +219,10 @@ internal class Media3PlaybackOutput(
 
     fun setSubtitleDelayMs(milliseconds: Int) {
         if (!subtitleDelay.set(milliseconds)) return
+        mpv?.let { engine ->
+            engine.subtitleDelayMs(milliseconds)
+            return
+        }
         // TextRenderer discards old cue history. Re-read at the current point after offset changes.
         // A one-millisecond nudge avoids ExoPlayer optimizing an exactly identical seek away.
         mutablePlayer.value?.let { active ->
@@ -238,6 +249,10 @@ internal class Media3PlaybackOutput(
         subtitle = subtitleIndex
         saved = PlaybackPosition(positionMs, paused || mutablePauseIntent.value || !mutableForeground.value)
         completedPosition = null
+        if (decision.engine == app.pictureshow.core.playback.PlaybackEngine.Mpv && MpvAvailability.available) {
+            openMpv(decision, positionMs, paused)
+            return
+        }
         val selector = PictureshowTrackSelector(context, decision.method == PlayMethod.Transcode)
         selector.parameters = selector.buildUponParameters()
             .setPreferredAudioLanguage(Locale.getDefault().language)
@@ -660,6 +675,116 @@ internal class Media3PlaybackOutput(
         mediaSession?.onPrimaryAction = { current -> syncPrimaryAction?.invoke(current) == true }
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun openMpv(decision: PlayDecision, positionMs: Long, paused: Boolean) {
+        val proxy = MpvHttpProxy(server, PlaybackMedia.httpClient(server, decision, nativeHlsMedia = false))
+        mpvProxy = proxy
+        val url = requireNotNull(proxy.local(decision.url)) { "The stream is not on the server's origin." }
+        val subtitles = decision.mediaSource.mediaStreams.filter(PlaybackMedia::sideloadedSubtitle).mapNotNull { stream ->
+            val delivery = app.pictureshow.core.playback.PlayDecisions.resolve(server, requireNotNull(stream.deliveryUrl))
+            proxy.local(delivery)?.let { stream to it }
+        }
+        val spdif = if (passthroughEnabled) mpvPassthrough(context, disabledPassthrough) else emptyList()
+        val source = MpvSource(
+            url = url,
+            title = title,
+            itemId = decision.itemId,
+            startMs = if (decision.isLive) 0 else positionMs,
+            durationMs = decision.mediaSource.runTimeTicks?.div(10_000),
+            streams = decision.mediaSource.mediaStreams,
+            externalSubtitles = subtitles,
+            transcoding = decision.method == PlayMethod.Transcode,
+            spdif = spdif,
+            subtitles = mpvSubtitles
+        )
+        val next = try {
+            MpvPlayer(context, source)
+        } catch (failure: IllegalStateException) {
+            proxy.close()
+            mpvProxy = null
+            PlaybackDiagnostics.write(decision, "player-error", "engine=mpv start-failed")
+            onFailure(false, decision)
+            return
+        }
+        mpv = next
+        next.subtitleDelayMs(subtitleDelay.milliseconds)
+        PlaybackDiagnostics.write(
+            decision,
+            "open",
+            "requestedMs=$positionMs method=${decision.method} engine=mpv spdif=${spdif.joinToString(",")}"
+        )
+        next.selectStream(MediaStreamType.Audio, audio)
+        next.selectStream(MediaStreamType.Subtitle, subtitle)
+        val managed = ReopeningPlayer(next, ::playIntent)
+        reopenState = managed
+        val exposed = managed
+        var initialReady = false
+        listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (mpv === next) onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (mpv !== next) return
+                if (playbackState == Player.STATE_READY) {
+                    val ready = position()
+                    if (!initialReady) {
+                        initialReady = true
+                        PlaybackDiagnostics.write(
+                            decision,
+                            "ready",
+                            "requestedMs=$positionMs appliedMs=${ready.milliseconds} paused=${ready.paused} engine=mpv hwdec=${next.hwdec}"
+                        )
+                    }
+                    onReady(decision, ready, positionMs)
+                }
+                if (playbackState == Player.STATE_ENDED && exposed.playWhenReady) {
+                    if (!decision.isLive) captureCompletedPosition(decision)
+                    PlaybackDiagnostics.write(decision, "end", "reason=mpv-eof positionMs=${position().milliseconds}")
+                    onEnded(decision)
+                }
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (mpv === next) onProgress(decision)
+            }
+
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (mpv !== next) return
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) onSeek(newPosition.positionMs, decision)
+                onProgress(decision)
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                if (mpv !== next) return
+                PlaybackDiagnostics.write(
+                    decision,
+                    "player-error",
+                    "engine=mpv code=${error.errorCode} positionMs=${position().milliseconds}"
+                )
+                onFailure(false, decision)
+            }
+        }.also(exposed::addListener)
+        mutablePlayer.value = exposed
+        exposed.playWhenReady =
+            app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(
+                !paused,
+                true,
+                mutableForeground.value,
+                mutablePauseIntent.value
+            )
+        exposed.prepare()
+        val existingSession = mediaSession
+        if (existingSession == null) {
+            mediaSession = PlaybackMediaSession.open(context, exposed) { onStop() }
+        } else {
+            existingSession.replacePlayer(exposed)
+        }
+    }
+
+    /** SET-15's subtitle look, which mpv draws itself (see [mpvSubtitleOptions]). */
+    var mpvSubtitles: SubtitleAppearance = SubtitleAppearance()
+
     override fun reselect(type: MediaStreamType, index: Int) {
         if (type == MediaStreamType.Subtitle) {
             val snapshot = position()
@@ -670,6 +795,11 @@ internal class Media3PlaybackOutput(
     override fun select(type: MediaStreamType, index: Int): Boolean = selectTrack(type, index, true)
 
     private fun selectTrack(type: MediaStreamType, index: Int, choice: Boolean): Boolean {
+        mpv?.let { engine ->
+            if (!engine.selectStream(type, index)) return false
+            if (type == MediaStreamType.Audio) audio = index else subtitle = index
+            return true
+        }
         val active = activePlayer ?: return false
         val trackType = if (type == MediaStreamType.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val parameters = active.trackSelectionParameters.buildUpon()
@@ -742,6 +872,7 @@ internal class Media3PlaybackOutput(
     }
 
     override fun beginSeek() {
+        if (mpv != null) return
         traceNative("begin-seek")
         physicalEnd?.invalidate()
         reopenState?.beginReopen()
@@ -759,6 +890,24 @@ internal class Media3PlaybackOutput(
         loadDiagnostics = null
         physicalEnd?.invalidate()
         physicalEnd = null
+        mpv?.let { engine ->
+            val exposed = mutablePlayer.value
+            saved = position()
+            mutablePlayer.value = null
+            mpv = null
+            listener?.let { exposed?.removeListener(it) }
+            listener = null
+            reopenState = null
+            if (closeSession) {
+                mediaSession?.close()
+                mediaSession = null
+            }
+            // Through the wrapper, so it drops its own listener on the engine too.
+            exposed?.release() ?: engine.release()
+            mpvProxy?.close()
+            mpvProxy = null
+            return
+        }
         val active = activePlayer
         if (active == null) {
             if (closeSession) {
@@ -805,4 +954,23 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
         sent = true
         onEnd(reason)
     }
+}
+
+/** What mpv reports about its own decoding, for Playback info (PLAY-26/60). */
+internal data class MpvReport(val hwdec: String?, val videoCodec: String?, val audioCodec: String?, val gamma: String?)
+
+/** Encoded formats mpv may send to the receiver: what the route accepts, minus what the viewer turned off (SET-16). */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+internal fun mpvPassthrough(context: Context, disabled: Set<app.pictureshow.core.playback.PassthroughEncoding>): List<String> {
+    @Suppress("DEPRECATION")
+    val capabilities = androidx.media3.exoplayer.audio.AudioCapabilities.getCapabilities(context)
+    val pairs = listOf(
+        app.pictureshow.core.playback.PassthroughEncoding.AC3 to (C.ENCODING_AC3 to "ac3"),
+        app.pictureshow.core.playback.PassthroughEncoding.EAC3 to (C.ENCODING_E_AC3 to "eac3"),
+        app.pictureshow.core.playback.PassthroughEncoding.DTS to (C.ENCODING_DTS to "dts"),
+        app.pictureshow.core.playback.PassthroughEncoding.DTS_HD to (C.ENCODING_DTS_HD to "dts-hd"),
+        app.pictureshow.core.playback.PassthroughEncoding.TRUEHD to (C.ENCODING_DOLBY_TRUEHD to "truehd")
+    )
+    return pairs.filter { (encoding, android) -> encoding !in disabled && capabilities.supportsEncoding(android.first) }
+        .map { it.second.second }
 }

@@ -1158,7 +1158,9 @@ internal fun PlayerItemScreen(
                             localPreferences.tuning,
                             host.effectiveSettings.maxStreamingBitrate,
                             host.adaptiveQualityNotice,
-                            speedState.encodedAudio
+                            speedState.encodedAudio,
+                            host.engineChoice.takeIf { host.engineSwitchable },
+                            { choice -> select({ host.chooseEngine(choice) }, dismiss) }
                         ) {
                             close(dismiss)
                         }

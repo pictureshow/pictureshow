@@ -248,3 +248,26 @@ struct HeroScrim: ViewModifier {
 extension View {
     func heroScrim() -> some View { modifier(HeroScrim()) }
 }
+
+/// The label of a destructive list row (Sign out, Disconnect); not for swipe actions or menus, which draw their own. tvOS draws a focused row white, and the system's
+/// light destructive red on it is close to unreadable (measured on the Seerr Disconnect row), so a focused row uses a
+/// deep red instead.
+struct DestructiveLabel: View {
+    let title: String
+    var systemImage: String? = nil
+    @Environment(\.isFocused) private var focused
+    init(_ title: String, systemImage: String? = nil) { self.title = title; self.systemImage = systemImage }
+    var body: some View {
+        Group {
+            if let systemImage { Label(title, systemImage: systemImage) } else { Text(title) }
+        }
+        .foregroundStyle(Self.color(focused: focused))
+    }
+    static func color(focused: Bool) -> Color {
+        #if os(tvOS)
+        focused ? Color(red: 0.62, green: 0.07, blue: 0.09) : Color(red: 1.0, green: 0.45, blue: 0.45)
+        #else
+        .red
+        #endif
+    }
+}

@@ -46,14 +46,26 @@ the old `apple` branch and are skipped when absent.
   genre), remembered per library.
   Movie, series, season, episode, collection and person pages; seasons switch in place on a series. Apple TV opens a season page on selection; touch offers Play below the season picker. Season Play chooses the first unfinished available episode. Virtual episodes show their air date and “Not in your library”, with no playback or restart action.
   Search runs per kind (movies, shows, episodes, collections, people) as you type.
+  Movie and series pages add Trailers (library trailers play in the app; online ones open in YouTube, or the browser
+  on iPhone/iPad), Extras (behind the scenes, featurettes, interviews, deleted scenes…; episodes too) and More like
+  this, without the title itself or a second copy of one film.
+- **Photos.** A photo opens full screen among its folder's photos in the grid's order, with "3 of 40", controls
+  that fade after five seconds and a slideshow (3, 5, 10 or 20 s; it wraps, manual moves stop at the ends). Apple
+  TV: Left/Right move, select or Up/Down show the controls, Play/Pause runs the slideshow, Menu hides the controls
+  and then leaves. Touch: swipe, tap for controls.
 - **Play.** Direct play when AVFoundation can play the file as it is (H.264 or qualified HEVC, SDR,
   in MP4/MOV with AAC, AC-3, E-AC-3, ALAC or MP3); otherwise the server makes an HLS stream that copies
   whatever it can, including surround AAC/AC-3/E-AC-3 up to 5.1. When the server converts video, a
   notice says why and what file would play directly (it can be turned off in Settings). Text
   subtitles (SRT, ASS, WebVTT, mov_text) are fetched as WebVTT and drawn by the app; image subtitles
   (PGS, VobSub) are burned in by the server. Intro, credits and recap segments follow the per-type
-  setting (ask, skip automatically, or ignore). The next episode counts down at the end and plays,
-  unless turned off.
+  setting (ask, skip automatically, or ignore). The next episode counts down at the end (Off, 5, 10,
+  15, 20 or 30 s) and plays. After 3 episodes in a row without a touch or press, or 1½ hours (Settings: never,
+  2, 3, 5 or 8 episodes), the card asks "Are you still watching?" and nothing plays until Keep watching.
+- **Screensaver (Apple TV).** tvOS lets no app provide the system screensaver, so Pictureshow has its own: after
+  5 minutes without a press (Settings: Off, 2–30 minutes), outside the player and the photo viewer, library
+  backdrops crossfade every 12 s with the title, the time and the date, optionally limited to an age rating. The
+  press that wakes it does nothing else. The system screensaver still follows its own setting.
 - **Report.** Start, progress every 10 seconds and on pause/seek, and stop with the final position, so
   resume, Continue watching and Next up stay right on every client. The server's transcode is
   stopped when the player closes or moves to the next episode.
@@ -81,7 +93,7 @@ in server or reverse-proxy access logs. API calls and artwork use the Authorizat
 
 ## Not in this pass
 
-Downloads, SyncPlay, Live TV/DVR, music, photo libraries and casting beyond AirPlay are later passes.
+Downloads, SyncPlay, Live TV/DVR, music and casting beyond AirPlay are later passes.
 HDR and Dolby Vision are not advertised yet (the profile asks for SDR, so the server tone-maps).
 Real-device checks are still needed for Keychain entitlements, Siri Remote gestures, AirPlay to a
 receiver, audio routes and hardware HEVC.

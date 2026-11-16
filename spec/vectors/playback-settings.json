@@ -656,7 +656,8 @@
         "postCredits": "KeepScenes",
         "matchFrameRate": false,
         "nextEpisodeCountdownSeconds": 10,
-        "stillWatching": "ThreeEpisodes"
+        "stillWatching": "ThreeEpisodes",
+        "engine": "Automatic"
       }
     },
     {
@@ -1137,7 +1138,8 @@
         "postCredits": "KeepScenes",
         "matchFrameRate": false,
         "nextEpisodeCountdownSeconds": 10,
-        "stillWatching": "FiveEpisodes"
+        "stillWatching": "FiveEpisodes",
+        "engine": "Automatic"
       }
     },
     {
@@ -1160,7 +1162,8 @@
         "postCredits": "KeepScenes",
         "matchFrameRate": false,
         "nextEpisodeCountdownSeconds": 20,
-        "stillWatching": "ThreeEpisodes"
+        "stillWatching": "ThreeEpisodes",
+        "engine": "Automatic"
       }
     }
   ]

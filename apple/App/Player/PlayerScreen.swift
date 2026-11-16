@@ -62,7 +62,7 @@ struct PlayerOverlays: View {
                     .allowsHitTesting(false)
             }
             if let error = controller.error {
-                PlayerError(message: error, retry: controller.retry, close: controller.close)
+                PlayerError(message: error, retry: controller.retry, close: { controller.close(reason: .ERROR_BACK) })
             }
         }
     }
@@ -148,14 +148,28 @@ struct NextEpisodeCard: View {
                 .frame(width: platformValue(tv: 280, touch: 112), height: platformValue(tv: 158, touch: 63))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
-                Text(countdownText).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent)
-                Text(next.name).font(.headline).foregroundStyle(.white).lineLimit(2)
-                Text(Format.episode(next)).font(.caption).foregroundStyle(.white.opacity(0.75))
+                if controller.askingStillWatching {
+                    // PLAY-30: nothing plays until the viewer answers.
+                    Text("Are you still watching?").font(.headline).foregroundStyle(.white)
+                    Text("Next: \(next.name)").font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
+                } else {
+                    Text(countdownText).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent)
+                    Text(next.name).font(.headline).foregroundStyle(.white).lineLimit(2)
+                    Text(Format.episode(next)).font(.caption).foregroundStyle(.white.opacity(0.75))
+                }
                 HStack(spacing: 12) {
-                    Button { controller.playNext() } label: { Label("Play now", systemImage: "play.fill") }
-                        .primaryAction()
-                    Button("Hide") { controller.dismissNextCard() }
-                        .secondaryAction()
+                    if controller.askingStillWatching {
+                        Button { controller.keepWatching() } label: { Label("Keep watching", systemImage: "play.fill") }
+                            .primaryAction()
+                            .accessibilityIdentifier("still-watching-keep")
+                        Button("Stop") { controller.close() }
+                            .secondaryAction()
+                    } else {
+                        Button { controller.playNext() } label: { Label("Play now", systemImage: "play.fill") }
+                            .primaryAction()
+                        Button("Hide") { controller.dismissNextCard() }
+                            .secondaryAction()
+                    }
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -177,10 +191,12 @@ struct NextEpisodeCard: View {
 /// Audio and subtitle choices are the server's tracks (not the stream's), so they go in custom transport-bar menus.
 struct PlayerContent: View {
     @ObservedObject var controller: PlaybackController
+    @State private var syncRevision = 0
+    @State private var findingSubtitles = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            SystemPlayer(controller: controller)
+            SystemPlayer(controller: controller, syncRevision: syncRevision) { findingSubtitles = true }
             PlayerOverlays(controller: controller, controlsVisible: false)
             VStack(alignment: .trailing, spacing: 20) {
                 if let notice = controller.notice, !controller.noticeDismissed {
@@ -195,11 +211,21 @@ struct PlayerContent: View {
             }
         }
         .ignoresSafeArea()
+        .onReceive(controller.app.syncPlay.$revision) { syncRevision = $0 }
+        .sheet(isPresented: $findingSubtitles) {
+            SubtitleDownloadView(client: controller.client, account: controller.account, target: controller.subtitleDownloadTarget) { adopted, streams in
+                controller.adoptDownloadedSubtitle(adopted, streams: streams)
+            }
+        }
     }
 }
 
 struct SystemPlayer: UIViewControllerRepresentable {
     @ObservedObject var controller: PlaybackController
+    /// Redraws the transport bar's Watch together menu when the group changes.
+    var syncRevision = 0
+    /// SUB-DL-01: opens the subtitle search panel over the player.
+    var findSubtitles: () -> Void = {}
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let vc = AVPlayerViewController()
@@ -221,7 +247,11 @@ struct SystemPlayer: UIViewControllerRepresentable {
             actions.append(UIAction(title: segment.type == .outro ? "Skip Credits" : segment.type == .recap ? "Skip Recap" : "Skip Intro", image: UIImage(systemName: "forward.end")) { [weak controller] _ in controller?.skipSegment() })
         }
         if controller.nextEpisode != nil, controller.nextCountdown != nil {
-            actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
+            if controller.askingStillWatching {
+                actions.append(UIAction(title: "Keep Watching", image: UIImage(systemName: "play.fill")) { [weak controller] _ in controller?.keepWatching() })
+            } else {
+                actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
+            }
         }
         vc.contextualActions = actions
     }
@@ -233,15 +263,36 @@ struct SystemPlayer: UIViewControllerRepresentable {
             menus.append(UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), options: .singleSelection, children: audio.map { stream in
                 UIAction(title: controller.label(stream), state: stream.index == controller.selectedAudio ? .on : .off) { [weak controller] _ in controller?.selectAudio(stream.index) }
             }))
+        } else if controller.decision != nil || controller.local != nil, let notice = TrackMenuNotice.empty(type: "Audio", tracks: audio.count) {
+            // PLAY-08: say there is nothing to pick rather than leave the viewer looking for the menu.
+            menus.append(UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: [UIAction(title: notice, attributes: .disabled) { _ in }]))
         }
         let subtitles = controller.subtitleStreams
-        if !subtitles.isEmpty {
+        let target = controller.subtitleDownloadTarget
+        var subtitleItems: [UIMenuElement] = []
+        if let notice = TrackMenuNotice.empty(type: "Subtitle", tracks: subtitles.count) {
+            subtitleItems.append(UIAction(title: notice, attributes: .disabled) { _ in })
+        } else {
             let off = UIAction(title: "Off", state: controller.selectedSubtitle < 0 ? .on : .off) { [weak controller] _ in controller?.selectSubtitle(-1) }
-            menus.append(UIMenu(title: "Subtitles", image: UIImage(systemName: "captions.bubble"), options: .singleSelection, children: [off] + subtitles.map { stream in
+            subtitleItems.append(UIMenu(options: [.displayInline, .singleSelection], children: [off] + subtitles.map { stream in
                 UIAction(title: controller.label(stream), state: stream.index == controller.selectedSubtitle ? .on : .off) { [weak controller] _ in controller?.selectSubtitle(stream.index) }
             }))
         }
+        if target.playable {
+            subtitleItems.append(UIMenu(options: .displayInline, children: [UIAction(title: "Download subtitles", image: UIImage(systemName: "arrow.down.circle")) { _ in findSubtitles() }]))
+        }
+        if !subtitles.isEmpty || target.playable || controller.local != nil {
+            menus.append(UIMenu(title: "Subtitles", image: UIImage(systemName: "captions.bubble"), children: subtitleItems))
+        }
         menus.append(UIAction(title: controller.methodDescription, image: UIImage(systemName: "info.circle"), attributes: .disabled) { _ in })
+        // Watch together on Apple TV: the group's state and Leave, reachable from the transport bar with the remote.
+        let sync = controller.app.syncPlay!
+        if controller.sync != nil, sync.participating {
+            let status = UIAction(title: "\(sync.groupName ?? "Group") · \(SyncLabels.phase(sync.phase))", subtitle: SyncLabels.quality(sync.quality), attributes: .disabled) { _ in }
+            let wait = UIAction(title: "Wait for me", state: sync.waitForMe ? .on : .off) { _ in sync.setWaitForMe(!sync.waitForMe) }
+            let leave = UIAction(title: "Leave group", image: UIImage(systemName: "rectangle.portrait.and.arrow.right"), attributes: .destructive) { _ in sync.leave() }
+            menus.append(UIMenu(title: "Watch together", image: UIImage(systemName: "person.2"), children: [status, wait, leave]))
+        }
         return menus
     }
 
@@ -262,6 +313,8 @@ struct PlayerContent: View {
     @State private var controlsVisible = true
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubbing: Double?
+    @State private var showingGroup = false
+    @State private var findingSubtitles = false
 
     var body: some View {
         ZStack {
@@ -301,6 +354,20 @@ struct PlayerContent: View {
         }
         .background(Color.black)
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
+        // TOUCH-11: Escape on a keyboard and the VoiceOver escape gesture leave the player whether or not the controls
+        // show; an open sheet or menu takes Escape first, because it is presented above this view.
+        .accessibilityAction(.escape) { controller.close() }
+        .background {
+            Button("Close player") { controller.close() }
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+        .sheet(isPresented: $findingSubtitles) {
+            SubtitleDownloadView(client: controller.client, account: controller.account, target: controller.subtitleDownloadTarget) { adopted, streams in
+                controller.adoptDownloadedSubtitle(adopted, streams: streams)
+            }
+        }
         .onAppear { scheduleHide() }
         .onChange(of: controller.isPlaying) { scheduleHide() }
     }
@@ -339,8 +406,17 @@ struct PlayerContent: View {
                 if let subtitle = controller.subtitle { Text(subtitle).font(.caption).opacity(0.8).lineLimit(1) }
             }
             Spacer()
+            if controller.sync != nil, controller.app.syncPlay.participating {
+                SyncGroupChip(sync: controller.app.syncPlay) { showingGroup = true }
+            }
             trackMenu
-            RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            // SYN-10: AirPlay can't follow a group's timeline at launch; it returns once the viewer leaves.
+            if !(controller.sync != nil && controller.app.syncPlay.participating) {
+                RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            }
+        }
+        .sheet(isPresented: $showingGroup) {
+            WatchTogetherSheet(sync: controller.app.syncPlay, item: nil).environmentObject(controller.app)
         }
     }
 
@@ -352,15 +428,25 @@ struct PlayerContent: View {
                     ForEach(audio) { Text(controller.label($0)).tag($0.index) }
                 }
                 .pickerStyle(.menu)
+            } else if controller.decision != nil || controller.local != nil, let notice = TrackMenuNotice.empty(type: "Audio", tracks: audio.count) {
+                Section("Audio") { Text(notice) }
             }
-            if !controller.subtitleStreams.isEmpty {
+            if let notice = TrackMenuNotice.empty(type: "Subtitle", tracks: controller.subtitleStreams.count) {
+                // PLAY-08: one line instead of a lone Off.
+                Section("Subtitles") { Text(notice) }
+            } else {
                 Picker("Subtitles", selection: Binding(get: { controller.selectedSubtitle }, set: { controller.selectSubtitle($0) })) {
                     Text("Off").tag(-1)
                     ForEach(controller.subtitleStreams) { Text(controller.label($0)).tag($0.index) }
                 }
                 .pickerStyle(.menu)
             }
+            if controller.subtitleDownloadTarget.playable {
+                Button { findingSubtitles = true } label: { Label("Download subtitles…", systemImage: "arrow.down.circle") }
+            }
             Section(controller.methodDescription) {}
+                // An open menu must not vanish with the controls: hiding waits for the next tap on the video.
+                .onAppear { hideTask?.cancel() }
         } label: {
             Image(systemName: "captions.bubble").font(.title3).frame(width: 44, height: 44)
         }
@@ -415,9 +501,10 @@ struct PlayerContent: View {
 
     private func scheduleHide() {
         hideTask?.cancel()
-        guard controlsVisible, controller.isPlaying else { return }
+        // PLAY-04: 10 s idle, never while paused or with VoiceOver on.
+        guard controlsVisible, controller.isPlaying, !UIAccessibility.isVoiceOverRunning else { return }
         hideTask = Task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(10))
             if !Task.isCancelled, scrubbing == nil { controlsVisible = false }
         }
     }

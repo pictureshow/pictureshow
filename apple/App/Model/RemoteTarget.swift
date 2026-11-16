@@ -121,6 +121,8 @@ final class RemoteTarget {
                     // A later Stop or Play, a reconnect, or an account switch while fetching makes this open stale.
                     guard let self, let app, self.openRequest == request, self.state["generation"] as? String == generation,
                           app.account?.key == account.key else { return }
+                    // SYN-10: a remote controlling a device in a group makes a group request; the server opens it everywhere.
+                    if app.syncPlay.participating { app.syncPlay.queue(item, fromStart: ticks == 0, startTicks: ticks); return }
                     app.activeController?.close()
                     app.player = PlayerRequest(account: account, item: item, fromStart: ticks == 0, startTicks: ticks)
                 } catch {
@@ -128,14 +130,15 @@ final class RemoteTarget {
                 }
             }
         // The controller reports the new state when the player's status changes; reporting here would send the old one.
-        case "pause": controller?.player.pause()
-        case "unpause": controller?.player.play()
+        // In a group these are group requests (SYN-03, SYN-10); solo they move this player.
+        case "pause": controller?.userPause(origin: .remote)
+        case "unpause": controller?.userPlay(origin: .remote)
         case "report": controller?.reportNow()
         case "stop": openRequest += 1; controller?.close(); app.player = nil
         case "next": controller?.playNext()
-        case "previous": controller?.seek(to: 0)
+        case "previous": controller?.seek(to: 0, origin: .remote)
         case "seek":
-            if let ticks = (effect["ticks"] as? String).flatMap(Int64.init) { controller?.seek(to: Double(ticks) / 10_000_000) }
+            if let ticks = (effect["ticks"] as? String).flatMap(Int64.init) { controller?.seek(to: Double(ticks) / 10_000_000, origin: .remote) }
         case "audio": if let index = effect["index"] as? Int { controller?.selectAudio(index) }
         case "subtitle": if let index = effect["index"] as? Int { controller?.selectSubtitle(index) }
         case "volume": if let level = effect["level"] as? Int { controller?.player.volume = Float(level) / 100 }

@@ -8,6 +8,8 @@ enum Route: Hashable {
     case item(MediaItem)
     case library(MediaItem)
     case person(id: String, name: String)
+    /// PHOTO-01: a photo opens full screen among its folder's photos, in the grid's order.
+    case photo(MediaItem, sortBy: String, descending: Bool)
 }
 
 extension MediaItem: @retroactive Hashable {
@@ -18,7 +20,15 @@ extension MediaItem {
     var route: Route {
         if type == "CollectionFolder" || type == "UserView" || (collectionType != nil && type != "BoxSet") { return .library(self) }
         if type == "Person" { return .person(id: id, name: name) }
+        if type == "Photo" { return .photo(self, sortBy: "SortName", descending: false) }
+        if type == "Folder" || type == "PhotoAlbum" { return .library(self) }
         return .item(self)
+    }
+
+    /// The route from a library grid: a photo keeps the grid's sort (a random grid falls back to name order).
+    func route(in query: LibraryQuery) -> Route {
+        guard type == "Photo", query.sort != .random else { return route }
+        return .photo(self, sortBy: query.sort == .name ? "SortName" : "\(query.sort.rawValue),SortName", descending: query.descending)
     }
 
     /// Second line under a card title.
@@ -203,17 +213,18 @@ struct ItemCard: View {
     var compactTitle = false
     var homeSubtitle: String?
     var isHome = false
+    var route: Route?
 
     var body: some View {
         #if os(tvOS)
-        CardLink(route: item.route) {
+        CardLink(route: route ?? item.route) {
             if wide { WideArtworkOnly(item: item, width: width ?? Theme.wideWidth) } else { PosterArtworkOnly(item: item, width: width ?? Theme.posterWidth) }
         } below: {
             CardCaption(item: item, wide: wide, width: width ?? (wide ? Theme.wideWidth : Theme.posterWidth), compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome)
         }
         .contextMenu { ItemActions(item: item) }
         #else
-        NavigationLink(value: item.route) {
+        NavigationLink(value: route ?? item.route) {
             if wide { WideCard(item: item, width: width ?? Theme.wideWidth, compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome) } else { PosterCard(item: item, width: width ?? Theme.posterWidth, homeSubtitle: homeSubtitle, isHome: isHome) }
         }
         .buttonStyle(.plain)

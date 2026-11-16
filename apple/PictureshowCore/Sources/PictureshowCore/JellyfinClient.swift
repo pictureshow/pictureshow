@@ -241,6 +241,26 @@ public final class JellyfinClient: @unchecked Sendable {
     public func similar(account: Account, itemID: String, limit: Int = 16) async throws -> [MediaItem] {
         try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/Similar", query: [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "fields", value: fields)])).items
     }
+    /// CAT-30: the library's own trailers for a title.
+    public func localTrailers(account: Account, itemID: String) async throws -> [MediaItem] {
+        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/LocalTrailers"))
+    }
+    /// CAT-31: a title's special features (extras).
+    public func specialFeatures(account: Account, itemID: String) async throws -> [MediaItem] {
+        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/SpecialFeatures"))
+    }
+    /// SAVER-01: random movies and series that have a backdrop, with their rating.
+    public func screensaverItems(account: Account) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "includeItemTypes", value: "Movie,Series"), URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "imageTypes", value: "Backdrop"), URLQueryItem(name: "sortBy", value: "Random"), URLQueryItem(name: "limit", value: "40"), URLQueryItem(name: "fields", value: "OfficialRating")])).items
+    }
+    /// SAVER-01: the server's rating names and the age each stands for.
+    public func parentalRatings(account: Account) async throws -> [ParentalRating] {
+        try decoder.decode([ParentalRating].self, from: await request(account: account, path: "Localization/ParentalRatings"))
+    }
+    /// PHOTO-01: the photos in one folder, in the folder's browse order.
+    public func photos(account: Account, parentID: String, sortBy: String, descending: Bool) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "includeItemTypes", value: "Photo"), URLQueryItem(name: "sortBy", value: sortBy), URLQueryItem(name: "sortOrder", value: descending ? "Descending" : "Ascending"), URLQueryItem(name: "limit", value: "1000")])).items
+    }
     public func search(account: Account, query: String, kind: SearchKind) async throws -> ItemPage {
         let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard term.count >= 2 else { return try decoder.decode(ItemPage.self, from: Data("{}".utf8)) }
@@ -413,10 +433,10 @@ public final class JellyfinClient: @unchecked Sendable {
     public func stopEncoding(account: Account, playSessionID: String) async throws {
         _ = try await request(account: account, path: "Videos/ActiveEncodings", method: "DELETE", query: [URLQueryItem(name: "deviceId", value: account.deviceID), URLQueryItem(name: "playSessionId", value: playSessionID)], includeUserID: false)
     }
-    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+    func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
         try await request(server: account.server, path: path, method: method, query: query + (includeUserID ? [URLQueryItem(name: "userId", value: account.userId)] : []), body: body, token: account.accessToken, identity: account.deviceID, receipt: receipt)
     }
-    private func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+    func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
         let url = try ServerURLs.endpoint(server, path: path, query: query)
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
@@ -443,5 +463,54 @@ public final class JellyfinClient: @unchecked Sendable {
         if http.statusCode == 401 { failure = "http"; throw ClientError.invalidCredentials }
         guard (200..<300).contains(http.statusCode) else { failure = "http"; throw ClientError.server(http.statusCode) }
         return data
+    }
+}
+
+// SyncPlay HTTP (spec/features/syncplay.md). Bodies are sent exactly as SyncRequest renders them, so 64-bit ticks keep
+// their lexemes.
+extension JellyfinClient {
+    /// One viewer-scoped SyncPlay POST. Only a 2xx is `.ok`; a status is reported as `.http`, anything else `.failed`.
+    public func syncPlay(account: Account, _ sync: SyncRequest) async -> SyncPostOutcome {
+        do {
+            var request = URLRequest(url: try ServerURLs.endpoint(account.server, path: sync.path, query: []), timeoutInterval: 15)
+            request.httpMethod = "POST"
+            request.setValue(AuthorizationHeader.build(deviceID: account.deviceID, deviceName: deviceName, version: version, token: account.accessToken), forHTTPHeaderField: "Authorization")
+            if let body = sync.body {
+                request.httpBody = Data(body.rendered.utf8)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            _ = try await responseData(for: request, server: account.server)
+            return .ok
+        } catch ClientError.server(let code) {
+            return .http(code)
+        } catch ClientError.invalidCredentials {
+            return .http(401)
+        } catch {
+            return .failed
+        }
+    }
+
+    /// The groups this viewer may see. Malformed rows are dropped rather than shown half-parsed.
+    public func syncPlayGroups(account: Account) async throws -> [SyncGroup] {
+        let data = try await request(account: account, path: "SyncPlay/List", includeUserID: false)
+        guard let rows = try SyncJSON.parse(data).items else { throw ClientError.invalidResponse }
+        return rows.compactMap { try? SyncPlay.parseGroup($0) }
+    }
+
+    /// One GetUtcTime exchange as UTC milliseconds (reception, transmission).
+    public func serverUtcTime(account: Account) async throws -> (receivedMillis: Int64, transmittedMillis: Int64) {
+        let data = try await request(server: account.server, path: "GetUtcTime", token: account.accessToken, identity: account.deviceID, timeout: 5)
+        let value = try SyncJSON.parse(data)
+        guard let received = value["RequestReceptionTime"]?.content.flatMap(SyncPlay.timestampMillis),
+              let sent = value["ResponseTransmissionTime"]?.content.flatMap(SyncPlay.timestampMillis) else { throw ClientError.invalidResponse }
+        return (received, sent)
+    }
+
+    /// The current viewer's `Policy.SyncPlayAccess` (CreateAndJoinGroups, JoinGroups or None).
+    public func syncPlayAccess(account: Account) async throws -> String {
+        let data = try await request(account: account, path: "Users/Me", includeUserID: false)
+        guard let policy = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["Policy"] as? [String: Any],
+              let access = policy["SyncPlayAccess"] as? String else { throw ClientError.invalidResponse }
+        return access
     }
 }

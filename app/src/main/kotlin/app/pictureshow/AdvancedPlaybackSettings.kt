@@ -55,6 +55,7 @@ import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
 import app.pictureshow.core.playback.CapabilityOverride
 import app.pictureshow.core.playback.PassthroughEncoding
+import app.pictureshow.core.playback.PlaybackEngineChoice
 import app.pictureshow.core.playback.PlaybackSettingsPresentation
 import app.pictureshow.core.playback.PostCredits
 import app.pictureshow.core.playback.SubtitleBurnIn
@@ -496,8 +497,34 @@ private fun PlaybackSettingRows(
             ) {
                 onLocal { it.copy(tuning = it.tuning.copy(preferDolbyVision = !it.tuning.preferDolbyVision)) }
             }
+            EngineRow(tuning.engine, touch) { value -> onLocal { it.copy(tuning = it.tuning.copy(engine = value)) } }
         }
     }
+}
+
+/** PLAY-60: the player engine. Where mpv didn't load, only Automatic is offered and the row says why. */
+@Composable
+private fun EngineRow(value: PlaybackEngineChoice, touch: Boolean, change: (PlaybackEngineChoice) -> Unit) {
+    val available = MpvAvailability.available
+    val automatic = androidx.compose.ui.res.stringResource(R.string.engine_automatic)
+    val mpv = androidx.compose.ui.res.stringResource(R.string.engine_mpv)
+    val automaticHelp = androidx.compose.ui.res.stringResource(R.string.engine_automatic_supporting)
+    val mpvHelp = androidx.compose.ui.res.stringResource(R.string.engine_mpv_supporting)
+    val unavailable = androidx.compose.ui.res.stringResource(R.string.engine_unavailable)
+    ChoiceRow(
+        androidx.compose.ui.res.stringResource(R.string.engine_title),
+        if (available) value else PlaybackEngineChoice.Automatic,
+        if (available) PlaybackEngineChoice.entries else listOf(PlaybackEngineChoice.Automatic),
+        touch,
+        { if (it == PlaybackEngineChoice.Mpv) mpv else automatic },
+        supporting = when {
+            !available -> unavailable
+            value == PlaybackEngineChoice.Mpv -> mpvHelp
+            else -> automaticHelp
+        },
+        optionSupporting = { if (it == PlaybackEngineChoice.Mpv) mpvHelp else automaticHelp },
+        change = change
+    )
 }
 
 internal fun bitrateLabel(value: Int?) = value?.let { "$it Mbps" } ?: "Auto"

@@ -321,6 +321,7 @@ an explicit missing port, not a passing policy test or a claim of launch parity.
 | Explicitly pending suite | Cases | Work owed |
 |---|---:|---|
 | frame-rate-match | 6 | Display-mode policy and native display qualification are not ported to Apple. |
+| playback-engine | 19 | PLAY-60 chooses between two Android engines; Apple has one player. |
 | offline-budget | 40 | The merged offline policy and its Apple runtime integration are not ported. |
 | offline-fmp4 | 43 | The merged offline policy and its Apple runtime integration are not ported. |
 | offline-job | 283 | The merged offline policy and its Apple runtime integration are not ported. |
@@ -431,3 +432,92 @@ shared `remote-*` reducers (196 remote vector cases pass); `RemoteAppTests` and 
 Persistent bar: on iOS 26.1+ the remote bar uses the system tab-bar accessory (`tabViewBottomAccessory`), with status on
 the first line and TV name on the second; iOS 18–26.0 get a 64 pt bar above the tab bar. Android's 64 dp bar is the
 reference; the accessory is the native Apple equivalent.
+
+## Watch together / SyncPlay (leg 155 item 4, 2026-11-16)
+
+Reference: [syncplay](../spec/features/syncplay.md). The shared reducers already ran 12 `sync-*` suites; the new
+`SyncSessionEngine` (PictureshowCore) adds the host engine and runs three more host suites through the real engine
+(`sync-socket-readiness`, `sync-membership-registration`, `sync-application`): 406 SyncPlay vector cases in 15 suites.
+`SyncSessionEngineTests` and `SyncPlayAppTests` (app socket, player routing, stay, sign-out, stale generation) cover the adapters.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| SYN-01 | Implemented | Title pages offer Watch together (not for live channels/programs); `WatchTogetherSheet` lists server groups, Join, Create (optionally "and watch this"), Refresh and Leave, gated by `Users/Me` `SyncPlayAccess` through the shared `SyncAccessPresentation` (unknown/failed fails closed). The sheet says other server users can see a group's name and members. Apple TV reaches the same sheet by focus; in the player, the transport bar's Watch together menu holds status, Wait for me and Leave. | VoiceOver/Siri Remote walk of the sheet not recorded. |
+| SYN-02/03/07 | Implemented | Membership, queue and command events go through the shared reducers; the opened viewing carries the membership generation and PlaylistItemId (`SyncStamp`). Play/pause/seek/next/previous from the iOS controls, the tvOS transport bar (rate/time-jump interception), Now Playing, remote commands and title Play become group requests; server commands apply to this player only and are never echoed. | — |
+| SYN-04/05 | Partial | Ready/Buffering from actual renderer facts; GetUtcTime calibration (5 samples) then Ping; drift is corrected by seeking only (>80 ms outside the cooldown rules of `SyncDrift`). | No 0.97/1.03 temporary rates: AVPlayer's output path for exact temporary rates is not qualified, so the engine advertises none (spec allows seek fallback). |
+| SYN-06 | Not qualified | Player chip and sheet show phase and this device's own estimate only. | No rendered-output timing measurement on Apple hardware. |
+| SYN-08 | Implemented | Closing the player keeps membership (`SetIgnoreWait` once) and shows "Still in {group} · Leave" (Watch when there is an entry) on Home, Libraries and title pages; sign-out sends Leave before the token is revoked; account change terminates the old engine; going to the background while video renders pauses and leaves once. Socket registration requires a valid ForceKeepAlive on the current connection. | — |
+| SYN-09 | Implemented | Auto segment-skip and the next-up countdown are off while grouped; natural end runs the shared completion policy (NextItem/SetPlaylistItem/stay). | `sync-completion-reporting` adapter cases are pending (covered by engine/app tests, not the vector adapter). |
+| SYN-10 | Deviation | AirPlay is disabled for a grouped viewing and the route button is hidden; an external route that still activates leaves the group (`EXTERNAL_ROUTE`). There is no "Leave group to AirPlay?" consent prompt yet (`sync-route-consent` pending). | — |
+| SYN-11 | Implemented | Live channels/programs don't offer Watch together; infinite and offline sources are ineligible renderers. | — |
+
+Pending vector suites on Apple, with reasons in `PendingSpecCaseManifest.swift`: `sync-route-consent` (no consent
+prompt, see SYN-10), `sync-rate-presentation` and `sync-speed-intent-origin` (Apple has no playback-speed selection),
+`sync-completion-reporting` (no adapter runner yet), and the `playback-start` SyncPlay case.
+
+Engine behavior beyond the vector text, each with a `SyncSessionEngineTests` case that fails without it (all found in
+the 2026-11-16 two-viewer live check on the demo server: iPhone simulator plus a scripted second viewer):
+- A seek the engine makes (a server command's position or a drift correction) reports only its landing (Ready), not
+  Buffering, unless it stays unready past 3 s. Reporting Buffering made a Waiting server answer with the same Pause,
+  whose seek reported Buffering again: a loop.
+- A paused player already within 1 ms of a commanded Pause position issues no seek (the spec's "aligned scheduled
+  command that issues no renderer seek"). A Paused server answers each Ready with a Pause at the group position, so
+  seeking for it looped Ready/Pause about four times a second.
+- An Unpause accepted for a prepared, aligned player applies without a seek even when its timer fires late.
+- Correction seeks learn a lead (half the residual lag after each landing, at most 0.5 s) so a renderer with seek-to-
+  output latency converges instead of re-seeking behind; the lead resets with each viewing.
+- The renderer reports buffering only for a real stall (empty buffer or AVPlayer waiting to minimise stalls), not
+  AVPlayer's brief "evaluating buffering rate" wait at every start.
+
+## Discovery, still watching, photos and screensaver (legs 156/158/160 on Apple, 2026-11-16)
+
+Shared vectors now active on Apple: `discovery` (59), the six `catalog.*` discovery HTTP reads in the reference suite,
+`catalog-return` (10), `search-presentation` (11) and the `application` operations `detail-play-item`,
+`catalog-announcement`, `runtime-label`, `catalog-placeholder-kind`, `search-duplicate-labels`, `media-badges` and
+`detail-play-label` (44). Rules: `Discovery.swift`, `CatalogPresentationPolicies.swift` (`CatalogRules`). App tests:
+`UnitTests/DiscoveryAppTests.swift`. Simulator evidence (Apple TV 4K and iPad Air simulators, demo server):
+`legs/155-apple-whole-app/evidence/cat-*`.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| AUTH-10 / AUTH-12 / OFF-09 | Implemented (leg 155) | Sign-out keeps the card behind `SignOutConfirmation` and deletes that viewer's downloads; server expiry keeps them. | Unchanged in this pass. |
+| HOME-12 / HOME-13 | Implemented (leg 155) | Merged Continue watching with "Next · S2:E3" captions (seen on iPad after a still-watching Stop); Settings "Separate Next up row"; library name on duplicates. | — |
+| CAT-06 / CAT-21 | Implemented (leg 155) | Season Play; missing episodes show "Not in your library" without Play/Play from start. | — |
+| CAT-30 | Implemented | `DetailView.reload` → `Discovery.trailerChoices`; `TrailersShelf`. Local trailer plays from the start (OBSERVED: Apple TV session "Sintel Teaser"). Online YouTube trailer: iPhone/iPad hand `https://www.youtube.com/watch?v=…` to the system (OBSERVED: Safari opened at youtube.com on the iPad simulator, which has no YouTube app); Apple TV tries the YouTube app's `youtube://` scheme and otherwise shows the spec's "This trailer is online…" alert (OBSERVED alert; no YouTube app in the simulator). | ASSUMED: the tvOS YouTube app accepts `youtube://watch/<id>`; unproven without a device with YouTube installed. Non-YouTube online trailers have no target on Apple TV (no browser) and show the alert. |
+| CAT-31 | Implemented | `ExtrasShelf` with `Discovery.specialFeatureExtras`; label "Behind the scenes · 43 s" (OBSERVED on both). Episodes read extras too. | Playing an extra uses the normal player (not separately observed). |
+| CAT-32 | Implemented | `Discovery.moreLikeThis` replaces the page's own dedupe (OBSERVED row on both). | — |
+| PLAY-30 | Implemented | Settings "Next episode countdown" (Off/5/10/15/20/30; Off is the old autoplay switch) and "Ask if I'm still watching" (`ViewingSettings`); `ViewerInput` counts automatic starts and the last touch/press (window-level `InputWatcher`); `PlaybackController` asks instead of counting down and holds at the end. OBSERVED on Apple TV and iPad: card "Are you still watching? · Next: A Spring Crossing", playback held at the end, Keep watching started the next episode (server session), Stop closed the player. | The 2-hour path was driven by a debug seam (`PICTURESHOW_INPUT_AGE_MIN`); the episode-count path is unit-tested, not watched through three episodes. Offline (downloaded) next-episode playback doesn't ask. |
+| PHOTO-01 / PHOTO-02 | Implemented | `Route.photo` from grids (keeps the grid's sort; random falls back to name) and Search; `PhotoViewer`. OBSERVED: Apple TV grid → "3 of 12" in the photo's folder, Right moves, OK shows controls with focus on Start slideshow, slideshow advances every 5 s, Menu leaves; iPad swipe, fade after 5 s, tap shows controls. | Play/Pause on the Siri Remote and the slideshow wrap aren't driven in the simulator (wrap is vector-covered). |
+| SAVER-01 | Platform-dependent (in-app) | tvOS gives apps no system-screensaver hook, so `ScreensaverHost` covers the app after the chosen idle time (Settings › Screensaver, ratings) outside the player and photo viewer; backdrops crossfade every 12 s with title, time and date. OBSERVED: saver shown, crossfading; the waking OK started nothing; presses keep it away (window watcher); playback started while it shows dismisses it. | The system Aerial screensaver still runs after its own idle setting. Not shown over Live TV specifically because Apple has no Live TV player yet. |
+## Player extras, Quick Connect approval and subtitle download (legs 161–163 port, 2026-11-16)
+Reference: [player](../spec/features/player.md), [touch](../spec/features/touch.md), [accounts](../spec/features/accounts.md),
+[subtitle download](../spec/features/subtitle-download.md). Core: `QuickConnectApproval.swift`, `RemoteSubtitles.swift`; `PlayerExtrasTests` (10) and the
+41 newly active vector cases (application `track-menu-empty` 4, `controls-restore-last-action` 5, `touch-player-back` 3,
+`quick-connect-code` 5, `quick-connect-approval-result` 6; `subtitle-download` 18). App: `SubtitleDownloadView`,
+`QuickConnectApproveView`, `PlayerScreen` menus, `PlaybackController.adoptDownloadedSubtitle`; `PlayerExtrasAppTests`.
+| PLAY-08 (T-10) | Implemented | `TrackMenuNotice.empty`: a track type with nothing to pick says "This video has no subtitles." / "This video has no audio tracks." instead of a lone Off (tvOS transport-bar Subtitles menu, iOS track menu). OBSERVED iPad and Apple TV on a title with no subtitles. | The zero-audio notice was not seen live (no demo title without audio). AVKit also shows its own stream subtitle/audio menus on tvOS next to ours (pre-existing). |
+| PLAY-03 (T-3) | Platform-dependent | `ControlsLastAction.restores` ported with its vectors. tvOS uses AVPlayerViewController, whose transport-bar focus Apple owns with no API to restore a remembered item; iOS controls are touch with no focus to keep. | Not applicable to Apple's player chrome; unproven on device. |
+| TOUCH-11 | Implemented (iPhone/iPad) | `TouchPlayerBack.action` ported. The player leaves on a hardware-keyboard Escape (hidden `cancelAction` shortcut) and on the VoiceOver escape gesture whether or not the controls show; sheets and menus are presented above the player and take Escape first. The track menu no longer vanishes when the controls auto-hide (OBSERVED: open 7 s while playing). | Escape and the VoiceOver gesture were not exercised live (no hardware keyboard or VoiceOver run). After the menu closes the controls stay until the next tap. Idle hide moved from 4 s to the shared 10 s (PLAY-04) and stays off with VoiceOver; not re-observed after that change. |
+| AUTH-15 | Implemented (iPhone/iPad) | Settings → Approve a TV sign-in (`QuickConnectApproveView`): normalizes the code, refuses non-6-character input without a request, checks `QuickConnect/Enabled`, authorizes with the viewer's own token, and on a 401 re-checks Enabled to tell "turned off" from "sign-in ended" (`PlayerExtrasTests`). OBSERVED: a scripted TV's code approved (server reported Authenticated true); a wrong code showed the expired-code copy; a short code showed the format copy. | Apple TV doesn't offer approval (spec: TV is the one showing a code). Disabled, offline and ended-sign-in copy covered by unit tests only. |
+| AUTH-05 | Implemented | The Quick Connect code screen names where to enter it: Pictureshow → Settings → Approve a TV sign-in first, then another Jellyfin app's Quick Connect (TV and touch wording). | Copy only; code renewal on expiry not re-checked in this leg. |
+| AUTH-04 | Implemented | Wrong-password copy already matched ("That username and password didn't work. Check them and try again."). | — |
+| SUB-DL-01 | Implemented | "Find subtitles" on Movie/Episode/Video/MusicVideo title pages with a file (`SubtitleDownloadOffer`, app test) and "Download subtitles" in the player's subtitle menu for server playback (never downloads or live TV). Access is checked before searching: permission before provider. OBSERVED: the not-allowed copy for a viewer without subtitle management, then results once the permission was turned on. | No-provider and unavailable states are unit/vector-covered only. |
+| SUB-DL-02 | Implemented | First search uses the viewer's subtitle language, then audio, then device language, through the server's cultures; choices list those first. Results ordered hash match, human translation, downloads, rating; rows show title and details (format, provider, downloads, hearing impaired, forced, machine translated). OBSERVED iPad and Apple TV result lists. | Language switching not exercised live. |
+| SUB-DL-03 | Implemented | Download, then poll the item until the server lists the new external stream (30 s), else "hasn't listed it yet". A failed download keeps the results with the reason. | Not-listed timeout covered by unit test only. |
+| SUB-DL-04 | Implemented | `adopt` maps old to new stream indices (Jellyfin lists externals first and renumbers), and the player reopens at the current position with the new subtitle and remapped audio. OBSERVED iPad and Apple TV: after download the server session reported subtitle 0 and audio 2 (audio was 1), and the tvOS Subtitles menu showed "English · SRT · External" checked. | Cue rendering of the downloaded file not visually confirmed (no dialogue at the checked moment). |
+Not ported here: Cast/DMR, Live TV (LIVE-11), Picture in Picture (TOUCH-15 / touch-pip vectors stay pending: Android's
+PiP window rules have no AVKit equivalent worth adding in this leg), Play-store specifics.
+## Requests with Seerr (leg 155 item 6, 2026-11-16)
+Reference: [seerr](../spec/features/seerr.md). PictureshowCore's `Seerr.swift` (rules) and `SeerrClient.swift` (HTTP: no
+redirects, no cookie jar, no Jellyfin token) run all 95 `seerr/*` vector cases (`SeerrVectorRunner`); `SeerrClientTests`
+(15) replays Seerr v3.5.2's answers: sign-in, renewal, the 403 ambiguity, 202 and the fail-closed API-key link.
+`SeerrStoreTests` (8, app unit tests with a fake Keychain) cover the per-account store. Live runs used a test Seerr
+3.5.2 linked to the demo Jellyfin, signed in as the `apple-whole` test viewer, on the iPad Air simulator and the
+Apple TV 4K simulator.
+| SEERR-01 | Implemented | Settings, "Requests (Seerr)" shows "Connected as {user}" or "Not connected" and opens the connect page (address, Sign in with Jellyfin or Use an API key, username prefilled, password or key, Connect/Connecting…, errors by kind; connected: address, Seerr user, mode, a can't-request warning, Disconnect). OBSERVED on iPad and Apple TV: a wrong password shows "Seerr didn't accept that Jellyfin username and password."; the right one connects and the Requests tab appears. | The API-key path is covered by client tests only (ASSUMED live: the test Seerr's API key isn't in the vault). |
+| SEERR-02 | Implemented | `SeerrConnections`: one Keychain item per account (`app.pictureshow.seerr|{account}`, this device only, after first unlock) holds the config and secret; nothing in files or defaults. Any Keychain failure but a missing entitlement fails the connect (`storage`); a corrupt or unreadable item reads as not connected. Disconnect, sign-out and forget drop only that account's item; a sign-in that finishes after sign-out, or a renewal after Disconnect, isn't saved (generation per account). OBSERVED: the connection survived reinstall on both simulators and was gone after Disconnect and relaunch. | Keychain refusal on hardware is covered by the fake-Keychain tests only. |
+| SEERR-03 | Implemented | `SeerrClient`: a 401/403 is checked against `/auth/me`; only an ended session renews once with the saved password (coalesced), retries, and saves the new cookie only if the stored secret still matches. Client and store tests. | A live session expiry wasn't waited out. |
+| SEERR-04 | Implemented | API key: the viewer is looked up by Jellyfin id across all user pages, then `X-API-User` names that user on every call; no match fails closed with "not linked". Vectors `seerr/headers`, `seerr/link`, client tests. OBSERVED server side: every live request (ids 7–10) has `requestedBy` = the viewer's Seerr user, not the admin. | — |
+| SEERR-05 | Implemented | Requests tab while connected (iOS: a hidden tab otherwise, so connecting doesn't reset other tabs; tvOS: added to the top bar). Trending (two pages, movies and series rows), Search (debounced, 2+ characters), My requests (the viewer's 30 latest, each with its title and status). OBSERVED on both platforms. | On Apple TV, connecting or disconnecting rebuilds the top bar, which returns Settings to its top. |
+| SEERR-06 | Implemented | Title page: movie Request; series season picker with episode counts, taken seasons shown with their status and not pickable, All seasons, "Request N seasons" (iPhone/iPad disabled with none chosen; Apple TV stays focusable and does nothing), focus starts on Request (or Back when nothing is left). After a request the page reloads and says "Requested. You'll find it in My requests." OBSERVED: movie, one season, two seasons, then the last season. | Permission, quota and blocklist errors are covered by vectors and client tests, not live. |
+| SEERR-07 | Implemented | Search adds "Not in your library" after the library rows (and under "No results"): Seerr's movies and series for the same words minus what the library matched (`seerr/offers`). OBSERVED: "bunny" leaves out Big Buck Bunny and lists 20 others; "dune" with nothing in the library shows the row under No results. | — |

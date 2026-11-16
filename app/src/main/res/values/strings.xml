@@ -216,4 +216,16 @@
     <string name="pin_ask_on_open_on">On: the PIN is asked every time Pictureshow starts on %1$s.</string>
     <string name="pin_ask_on_open_off">Off: asked only when someone switches to %1$s.</string>
     <string name="pin_note">The PIN stays on this device. Ratings, libraries and viewing hours are set for each user on your Jellyfin server.</string>
+    <!-- PLAY-60: player engine, in Settings > Video output, the player menu and Playback info. -->
+    <string name="engine_title">Player engine</string>
+    <string name="engine_automatic">Automatic</string>
+    <string name="engine_mpv">MPV</string>
+    <string name="engine_automatic_supporting">Uses the built-in player, and MPV when it would stop the server converting the video.</string>
+    <string name="engine_mpv_supporting">Uses MPV for every video. Live TV, downloads, SyncPlay and music stay on the built-in player.</string>
+    <string name="engine_unavailable">MPV isn\'t available on this device, so the built-in player plays everything.</string>
+    <string name="engine_switch_mpv">Play this title with MPV</string>
+    <string name="engine_switch_automatic">Play this title with the built-in player</string>
+    <string name="engine_info_mpv">MPV</string>
+    <string name="engine_info_media3">Built-in (Media3)</string>
+    <string name="engine_mpv_missing">Not with MPV: subtitle styles from your device\'s caption settings, image subtitle opacity, and lowering quality automatically when the network slows.</string>
 </resources>
