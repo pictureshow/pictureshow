@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
@@ -50,10 +51,10 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -693,22 +694,26 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                         modifier = Modifier.semantics { heading() }
                     )
                     ui.queue.forEach { item ->
-                        TextButton(
-                            onClick = { host.jump(item.entry) },
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-                            enabled = ready && !ui.changingTrack,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:queue:${item.entry}")
-                                .semantics { selected = item.entry == observed?.entry }
+                        val enabled = ready && !ui.changingTrack
+                        val alpha = if (enabled) 1f else 0.38f
+                        Column(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .selectable(
+                                    selected = item.entry == observed?.entry,
+                                    enabled = enabled,
+                                    role = Role.Button,
+                                    onClick = { host.jump(item.entry) }
+                                )
+                                .padding(vertical = 8.dp).testTag("cast:queue:${item.entry}"),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(item.title.orEmpty(), color = MaterialTheme.colorScheme.onSurface)
-                                if (item.entry == observed?.entry) {
-                                    Text(
-                                        stringResource(R.string.cast_now_playing),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                            Text(item.title.orEmpty(), color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+                            if (item.entry == observed?.entry) {
+                                Text(
+                                    stringResource(R.string.cast_now_playing),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                                )
                             }
                         }
                     }
