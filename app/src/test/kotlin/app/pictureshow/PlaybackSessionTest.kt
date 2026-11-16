@@ -126,7 +126,9 @@ class PlaybackSessionTest {
 
     @Test
     fun legacyAudioOffUsesDefaultAndSubtitleOffSurvives() = runTest {
-        val chosen = decision().let { it.copy(mediaSource = it.mediaSource.copy(defaultAudioStreamIndex = -1)) }
+        val chosen = decision().let {
+            PlayDecision(it.itemId, it.mediaSource.copy(defaultAudioStreamIndex = -1), it.method, it.url, it.headers, it.playSessionId)
+        }
         val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
         val session = PlaybackSession(gateway, Output(), backgroundScope, "fr")
         session.start(0, PlaybackStartTracks("source-one", -1, -1))
