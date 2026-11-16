@@ -5,6 +5,7 @@ package app.pictureshow
 
 import app.pictureshow.core.Server
 import java.net.HttpURLConnection
+import java.net.Socket
 import java.net.URL
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -62,5 +63,67 @@ class MpvHttpProxyTest {
         assertEquals(404, guessed.responseCode)
         assertEquals(0, upstream.requestCount)
         assertNull(proxy.local("https://elsewhere.example/Videos/1/stream"))
+    }
+
+    private fun port() = URL(requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))).port
+
+    private fun secretPath() = URL(requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))).path
+
+    /** The first response line, or null when the proxy closed the connection without answering. */
+    private fun statusLine(socket: Socket): String? =
+        socket.getInputStream().bufferedReader(Charsets.ISO_8859_1).readLine()
+
+    @Test
+    fun aWrongSecretIsRefusedOnItsRequestLineBeforeAnyHeaderArrives() {
+        Socket("127.0.0.1", port()).use { socket ->
+            socket.soTimeout = 2_000
+            // Headers never finish: an answer can only come from checking the request line alone.
+            socket.getOutputStream().apply { write("GET /Videos/1/stream HTTP/1.1\r\nHost: x\r\n".toByteArray()); flush() }
+            assertEquals("HTTP/1.1 404 Not Found", statusLine(socket))
+        }
+        assertEquals(0, upstream.requestCount)
+    }
+
+    @Test
+    fun endlessHeadersAreCutOffWithoutReachingTheServer() {
+        Socket("127.0.0.1", port()).use { socket ->
+            socket.soTimeout = 3_000
+            val out = socket.getOutputStream()
+            out.write("GET ${secretPath()} HTTP/1.1\r\n".toByteArray())
+            val answer = runCatching {
+                repeat(10_000) { out.write("X-Filler-$it: ${"a".repeat(64)}\r\n".toByteArray()) }
+                out.flush()
+                statusLine(socket)
+            }.getOrNull()
+            assertTrue(answer == null || answer.startsWith("HTTP/1.1 431"), "got $answer")
+        }
+        assertEquals(0, upstream.requestCount)
+    }
+
+    @Test
+    fun aClientThatStopsMidHeadersIsDroppedAtTheDeadline() {
+        Socket("127.0.0.1", port()).use { socket ->
+            socket.soTimeout = 10_000
+            socket.getOutputStream().apply { write("GET ${secretPath()} HTTP/1.1\r\nRange: bytes=0-\r\n".toByteArray()); flush() }
+            val started = System.nanoTime()
+            assertNull(statusLine(socket))
+            val waitedMs = (System.nanoTime() - started) / 1_000_000
+            assertTrue(waitedMs in 3_000..8_000, "dropped after ${waitedMs}ms")
+        }
+        assertEquals(0, upstream.requestCount)
+    }
+
+    @Test
+    fun connectionsBeyondTheWorkerCapAreClosedAtOnce() {
+        val held = (1..8).map { Socket("127.0.0.1", port()).apply { getOutputStream().write("GET ".toByteArray()) } }
+        try {
+            Thread.sleep(300)
+            Socket("127.0.0.1", port()).use { extra ->
+                extra.soTimeout = 2_000
+                assertEquals(-1, extra.getInputStream().read())
+            }
+        } finally {
+            held.forEach(Socket::close)
+        }
     }
 }
