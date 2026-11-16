@@ -117,11 +117,16 @@ struct ConversionNoticeCard: View {
             }
             .foregroundStyle(.white)
             Spacer(minLength: 0)
-            Button(action: dismiss) { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+            Button(action: dismiss) {
+                Image(systemName: "xmark").font(.caption.weight(.bold))
+                    #if !os(tvOS)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                    #endif
+            }
                 #if os(tvOS)
                 .buttonStyle(.bordered)
                 #else
-                .buttonStyle(.plain).foregroundStyle(.white.opacity(0.8)).padding(4)
+                .buttonStyle(.plain).foregroundStyle(.white.opacity(0.8)).padding(-10)
                 #endif
                 .accessibilityLabel("Dismiss")
         }

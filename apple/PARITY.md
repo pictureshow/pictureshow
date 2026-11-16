@@ -1,5 +1,9 @@
 # Apple feature parity
 
+> **Status note (2026-11-16):** this file was written for the earlier `apple` branch app. The app layer was
+> rebuilt on main's core in leg 155 (see `README.md` for what it does now), so entries below that name
+> specific screens, sheets or evidence describe the earlier app until each is re-checked.
+
 The original Apple slice inventory below covers **95 baseline feature IDs**: **66 Implemented**, **29 Platform-dependent**, **0 Gap** at that baseline. Newer main-branch scope and pending Apple integration are recorded in the catch-up ledgers below. It is a source and acceptance inventory for the Apple follow-up, not a claim of complete release acceptance. The reference is [the shared feature contract](../spec/features/README.md), including the main-branch recovery semantics and additive phone/tablet behavior.
 
 - **Implemented** means a production path exists and the row identifies its source plus a specific test or observable check. It does not mean every acceptance clause has passed on every Apple device. The last column records known limits and missing verification explicitly.
