@@ -89,6 +89,9 @@ internal fun ProfilePinPad(
     // During a wait the keys rest too, so nobody types a PIN that would be thrown away.
     val keysOn = !busy && waitSeconds == 0
     LaunchedEffect(clearSignal) { pin = "" }
+    // After each try (a wrong PIN, or the first entry of a new one) the pad starts over, so focus does too: on a
+    // remote it would otherwise stay on OK, which the empty PIN just disabled.
+    LaunchedEffect(clearSignal, keysOn) { if (clearSignal > 0 && keysOn && !lockedOut) runCatching { first.requestFocus() } }
     LaunchedEffect(lockedOut) { runCatching { first.requestFocus() } }
     fun type(digit: Char) {
         if (!busy && waitSeconds == 0 && !lockedOut && pin.length < PROFILE_PIN_MAX) pin += digit

@@ -1339,12 +1339,13 @@ internal fun Page(
     title: String,
     modifier: Modifier = Modifier,
     announceTitle: Boolean = true,
+    scroll: androidx.compose.foundation.ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val restoring = LocalRestoringConfirmationFocus.current
     Box(modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
+            Modifier.fillMaxWidth().verticalScroll(scroll).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(

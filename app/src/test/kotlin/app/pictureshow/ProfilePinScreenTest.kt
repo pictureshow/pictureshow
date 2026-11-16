@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -65,6 +66,39 @@ class ProfilePinScreenTest {
         assertEquals("parent", store.unlocked.value)
         compose.onNodeWithTag("pin:switch").performClick()
         compose.runOnIdle { assertEquals(1, switched) }
+    }
+
+    /** On a remote, focus goes back to "1" after a wrong PIN and on "Type the PIN again" (rc38 finding 1). */
+    @Test
+    fun focusReturnsToTheFirstKeyAfterEachTry() {
+        val store = ProfileLockStore(Memory(), JvmProfilePinHasher(rounds = 1_000))
+        runBlocking {
+            store.set("parent", "2468", askOnStart = true)
+            store.markUnlocked(null)
+        }
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfileLockScreen(store, "parent", "Parent", tv = true, onUnlocked = {}, onSwitch = {}, onPassword = {})
+            }
+        }
+        type("1111")
+        waitUntil { runCatching { compose.onNodeWithTag("pin:note").assertTextContains("didn't match", substring = true) }.isSuccess }
+        waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
+        compose.onNodeWithTag("pin:key:1").assertIsFocused()
+    }
+
+    @Test
+    fun theConfirmStepStartsOnTheFirstKey() {
+        var chosen: String? = null
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfilePinSetup(tv = true, name = "Parent", onDone = { chosen = it }, onCancel = {})
+            }
+        }
+        type("2580")
+        waitUntil { runCatching { compose.onNodeWithTag("pin:key:1").assertIsFocused() }.isSuccess }
+        type("2580")
+        compose.runOnIdle { assertEquals("2580", chosen) }
     }
 
     @Test
