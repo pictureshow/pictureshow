@@ -318,6 +318,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
             val captureConfiguration=window.graphicsConfiguration
             val captureRobot=Robot(captureConfiguration.device)
             val attempts=mutableListOf<JsonObject>()
+            val captureStarted=System.nanoTime()
+            // First paint after a resize is rasterized in software on CI (SKIKO_RENDER_API=SOFTWARE),
+            // so its latency grows with the pixel count. 5 s covers 1920x1080; the optional
+            // 3840x2135 catalog captures took 1-7 attempts (up to ~5 s) on green hosted macOS
+            // runs and failed at the old fixed 5 s on 2026-11-16, always still entirely unpainted.
+            // The budget scales with area; the capture must still show real painted content.
+            val paintBudgetNanos=(5_000_000_000.0*maxOf(1.0,(w.toDouble()*h)/(1920.0*1080.0))).toLong()
             var original=captureRobot.createScreenCapture(bounds)
             var content=fixtureCaptureContent(original)
             fun paintReceipt(verified:Boolean):JsonObject = buildJsonObject {
@@ -328,11 +335,13 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 put("captureX",bounds.x);put("captureY",bounds.y)
                 put("captureScaleX",captureConfiguration.defaultTransform.scaleX);put("captureScaleY",captureConfiguration.defaultTransform.scaleY)
                 put("workAreaX",workArea.x);put("workAreaY",workArea.y);put("workAreaWidth",workArea.width);put("workAreaHeight",workArea.height)
+                put("paintBudgetMillis",paintBudgetNanos/1_000_000)
                 put("attempts",JsonArray(attempts))
             }
             fun recordAttempt() {
                 val observed=window.bounds
                 attempts+=buildJsonObject {
+                    put("elapsedMillis",(System.nanoTime()-captureStarted)/1_000_000)
                     put("windowX",observed.x);put("windowY",observed.y);put("windowWidth",observed.width);put("windowHeight",observed.height)
                     val configuration=window.graphicsConfiguration
                     put("captureDeviceMatchesWindow",configuration.device===captureConfiguration.device)
@@ -345,7 +354,7 @@ fun runDesktopSmoke(c:DesktopController,window:ComposeWindow,windowState:WindowS
                 check(!fullFrame || (window.isAlwaysOnTop && fixtureFullscreenCoverage(window,fullscreenReceipt))) { "Native fullscreen lost frame-edge coverage during capture $name" }
             }
             recordAttempt()
-            val paintDeadline=System.nanoTime()+5_000_000_000L
+            val paintDeadline=captureStarted+paintBudgetNanos
             while(content.first<4.0 || content.second<.002) {
                 if(System.nanoTime()>=paintDeadline) {
                     // Keep the rejected pixels and geometry: the smaller recovery

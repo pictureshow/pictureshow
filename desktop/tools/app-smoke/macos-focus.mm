@@ -48,8 +48,22 @@ int main(int argc, const char **argv) { @autoreleasepool {
         NSDate *launchDeadline=[NSDate dateWithTimeIntervalSinceNow:10];
         while(!helperLaunched && launchDeadline.timeIntervalSinceNow>0) pump(.05);
         require(helper!=nil,@"helper launch failed");
+        // Setup only: hand foreground to the helper. Since macOS 14 activation is
+        // cooperative, so the helper's own -activate is ignored while this host
+        // holds it. The host's launch activation can land after the helper is
+        // opened (OBSERVED on hosted macOS-15 runners: host still frontmost
+        // after 10 s), so yield explicitly and retry until the helper owns it.
+        // The checks below are unchanged: the helper must stay frontmost, with
+        // this host inactive, before and during each real surface attachment.
         NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:10];
-        while(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier!=helper.processIdentifier && deadline.timeIntervalSinceNow>0) pump(.05);
+        int handoffs=0;
+        while(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier!=helper.processIdentifier && deadline.timeIntervalSinceNow>0) {
+            [NSApp yieldActivationToApplication:helper];
+            [helper activateFromApplication:NSRunningApplication.currentApplication options:0];
+            handoffs++;
+            pump(.5);
+        }
+        result[@"foregroundHandoffs"]=@(handoffs);
         pump(.6);
         pid_t expected=helper.processIdentifier;
         result[@"helperPID"]=@(expected);
