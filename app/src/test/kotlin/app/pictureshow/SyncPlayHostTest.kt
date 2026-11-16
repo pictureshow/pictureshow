@@ -2987,25 +2987,25 @@ class SyncPlayHostTest {
         return rig
     }
 
-    @Test fun naturalLastRepeatNoneLeavesOnceWithoutStoppingGroupAndAllowsLocalCompletion() = runTest {
+    @Test fun naturalLastRepeatNoneStaysOnceWithoutStoppingGroupAndAllowsLocalCompletion() = runTest {
         val rig = naturalCompletionRig("RepeatNone", 1)
         val position = rig.renderer.value.positionTicks
         assertFalse(rig.host.transport("ended"), "terminal completion must reach the caller's local cleanup")
         runCurrent()
-        assertEquals(listOf("Leave"), rig.operations(), "natural terminal departure is neither NextItem nor group Stop")
-        assertFalse(rig.host.participating)
+        // SYN-08: the end of the last entry keeps membership and only stops the group waiting for this device.
+        assertEquals(listOf("SetIgnoreWait"), rig.operations(), "natural terminal close is neither Leave, NextItem nor group Stop")
+        assertTrue(rig.host.participating)
+        assertFalse(rig.host.following)
         assertFalse(rig.renderer.value.unpaused)
         assertEquals(position, rig.renderer.value.positionTicks)
-        assertTrue(rig.renderer.applied.none { it.position != null }, "departure must not rewind or seek")
-        val fact = assertNotNull(rig.host.state.value.departure)
-        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, fact.cause)
-        assertEquals("Evening", fact.groupName)
-        assertFalse(rig.host.transport("ended"), "a duplicate decoder completion cannot rejoin or leave twice")
+        assertTrue(rig.renderer.applied.none { it.position != null }, "closing must not rewind or seek")
+        assertEquals(null, rig.host.state.value.departure, "a stay records no departure")
+        assertFalse(rig.host.transport("ended"), "a duplicate decoder completion cannot follow again or send twice")
         runCurrent()
         advanceTimeBy(5_001)
         runCurrent()
-        assertEquals(listOf("Leave"), rig.operations())
-        assertEquals(fact, rig.host.state.value.departure, "hidden completion retains the departure identity")
+        assertEquals(listOf("SetIgnoreWait"), rig.operations())
+        assertTrue(rig.host.participating)
     }
 
     @Test fun naturalQueueContinuationUsesServerWireWhileExplicitNextKeepsItsOwnMeaning() = runTest {
@@ -3112,14 +3112,12 @@ class SyncPlayHostTest {
                 "$scenario rejection must leave the current completion eligible for terminal cleanup"
             )
             runCurrent()
-            assertEquals(listOf("Leave"), rig.operations())
-            assertFalse(rig.host.participating)
+            assertEquals(listOf("SetIgnoreWait"), rig.operations())
+            assertTrue(rig.host.participating, "SYN-08: the current terminal completion stays in the group")
             assertFalse(rig.renderer.value.unpaused)
             assertEquals(before.positionTicks, rig.renderer.value.positionTicks)
             assertTrue(rig.renderer.applied.none { it.position != null }, "current completion must not rewind")
-            val departure = assertNotNull(rig.host.state.value.departure)
-            assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
-            assertEquals("Evening", departure.groupName)
+            assertEquals(null, rig.host.state.value.departure)
         }
     }
 
@@ -3362,5 +3360,139 @@ class SyncPlayHostTest {
         runCurrent()
         assertEquals(null, rig.host.state.value.navigation, "An old account queue cannot publish navigation authority")
         assertTrue(rig.host.state.value.queue.isEmpty())
+    }
+
+    // SYN-08 (operator, 2026-11-15): closing the player keeps membership; only an explicit Leave removes it.
+    private fun stayedRig(scope: TestScope): Rig {
+        val rig = Rig(scope)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.opens.clear()
+        rig.host.closeViewing(app.pictureshow.core.sync.SyncCloseReason.BACK)
+        scope.runCurrent()
+        rig.host.clearRenderer(rig.renderer)
+        scope.runCurrent()
+        return rig
+    }
+
+    @Test fun stayClosingThePlayerKeepsMembershipAndShowsTheReminder() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        assertEquals(null, rig.host.stayReminder, "no reminder while the player renders")
+        rig.host.closeViewing(app.pictureshow.core.sync.SyncCloseReason.BACK)
+        runCurrent()
+        assertEquals(listOf("SetIgnoreWait"), rig.operations(), "a close never sends Leave or a group Stop")
+        assertEquals(JsonPrimitive(true), rig.sent.single().second.body!!["IgnoreWait"])
+        assertTrue(rig.host.participating)
+        assertFalse(rig.host.following)
+        assertEquals(null, rig.host.state.value.departure)
+        rig.host.clearRenderer(rig.renderer)
+        runCurrent()
+        assertEquals(app.pictureshow.core.sync.SyncStayReminder("Evening", rejoin = true, leaveUnconfirmed = false), rig.host.stayReminder)
+        rig.host.closeViewing(app.pictureshow.core.sync.SyncCloseReason.BACK)
+        runCurrent()
+        assertEquals(listOf("SetIgnoreWait"), rig.operations(), "a repeated close is idempotent")
+    }
+
+    @Test fun stayedDeviceDoesNotAutoOpenNewEntriesAndWatchRejoinsWithItsWaitChoice() = runTest {
+        val rig = stayedRig(this)
+        rig.queue(item = "other-item", entry = "entry-b")
+        runCurrent()
+        assertTrue(rig.opens.isEmpty(), "a stayed device must not reopen the player by itself")
+        assertEquals(true, rig.host.stayReminder?.rejoin)
+        rig.sent.clear()
+        rig.host.rejoinPlayback()
+        runCurrent()
+        assertEquals(listOf("entry-b"), rig.opens.map { it.entryId }, "Watch opens the group's current entry")
+        assertEquals("other-item", rig.opens.single().itemId)
+        assertTrue(rig.host.following)
+        assertEquals(listOf("SetIgnoreWait"), rig.operations(), "Watch restores the viewer's Wait for me choice")
+        assertEquals(JsonPrimitive(false), rig.sent.single().second.body!!["IgnoreWait"])
+        rig.host.bindRenderer(rig.renderer, rig.renderer)
+        runCurrent()
+        assertEquals(null, rig.host.stayReminder, "the reminder hides once the player is open again")
+    }
+
+    @Test fun stayedMembershipEndsWithoutLeaveWhenTheServerSaysNotInGroup() = runTest {
+        for (reason in listOf("NotInGroup", "GroupDoesNotExist")) {
+            val rig = stayedRig(this)
+            assertNotNull(rig.host.stayReminder, reason)
+            rig.sent.clear()
+            rig.host.receive(rig.update(reason))
+            runCurrent()
+            assertFalse(rig.host.participating, reason)
+            assertEquals(null, rig.host.stayReminder, reason)
+            assertTrue(rig.operations().none { it == "Leave" }, "$reason: the server already removed this session")
+            assertEquals(
+                app.pictureshow.core.sync.SyncDepartureCause.MEMBERSHIP_LOST,
+                rig.host.state.value.departure?.cause,
+                reason
+            )
+        }
+    }
+
+    @Test fun stayedReminderClearsWhenTheGroupEndsServerSide() = runTest {
+        val rig = stayedRig(this)
+        assertNotNull(rig.host.stayReminder)
+        rig.host.receive(rig.update("GroupLeft"))
+        runCurrent()
+        assertFalse(rig.host.participating)
+        assertEquals(null, rig.host.stayReminder)
+    }
+
+    @Test fun stayedReminderLeaveSendsLeaveOnceAndClears() = runTest {
+        val rig = stayedRig(this)
+        rig.sent.clear()
+        rig.host.leave()
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations())
+        assertFalse(rig.host.participating)
+        assertEquals(null, rig.host.stayReminder)
+        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.MANUAL_LEAVE, rig.host.state.value.departure?.cause)
+    }
+
+    @Test fun stayedLeaveThatTheServerRefusesKeepsAnUnconfirmedReminder() = runTest {
+        val rig = stayedRig(this)
+        rig.httpStatus = 500
+        rig.host.leave()
+        runCurrent()
+        assertEquals(
+            app.pictureshow.core.sync.SyncStayReminder(null, rejoin = false, leaveUnconfirmed = true),
+            rig.host.stayReminder
+        )
+        rig.httpStatus = 204
+        rig.sent.clear()
+        rig.host.leave()
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations(), "Leave on the reminder retries the unconfirmed Leave")
+        assertEquals(null, rig.host.stayReminder)
+    }
+
+    @Test fun stayedHomeInTheBackgroundKeepsMembershipButSignOutLeaves() = runTest {
+        val rig = stayedRig(this)
+        rig.sent.clear()
+        rig.host.background()
+        runCurrent()
+        assertTrue(rig.host.participating, "backgrounding Home has nothing to pause and keeps membership")
+        assertTrue(rig.operations().none { it == "Leave" })
+        rig.host.bind(account.copy(accessToken = "token-b"))
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations(), "an account change leaves the group")
+        assertFalse(rig.host.participating)
+        assertEquals(null, rig.host.stayReminder)
+    }
+
+    @Test fun backgroundWhileRenderingStillLeavesOnce() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.host.background()
+        runCurrent()
+        assertEquals(listOf("Leave"), rig.operations())
+        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.MEMBERSHIP_LOST, rig.host.state.value.departure?.cause)
     }
 }

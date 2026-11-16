@@ -1290,7 +1290,7 @@ class MusicHostTest {
         assertEquals(1, lastPlayer!!.mediaItemCount)
     }
 
-    @Test fun groupedMusicTerminalRepeatNoneEosLeavesAndClosesLocalReportingOnceWithoutGroupStop() {
+    @Test fun groupedMusicTerminalRepeatNoneEosStaysInGroupAndClosesLocalReportingOnceWithoutGroupStop() {
         val music = host()
         ready(music)
         val rig = MusicSyncRig(music)
@@ -1302,17 +1302,20 @@ class MusicHostTest {
         rig.sent.clear()
         music.syncBridge.apply(null, true, 1.0)
         until("the terminal group track to actually start before EOS") { "start a" in log }
-        until("actual audio EOS to leave and close this local viewing") {
-            rig.sent.any { it.operation == "Leave" } && !music.state.value.outputActive && "stop a" in log
+        until("actual audio EOS to stop holding the group and close this local viewing") {
+            rig.sent.any { it.operation == "SetIgnoreWait" } && !music.state.value.outputActive && "stop a" in log
         }
         pump(400)
-        assertEquals(listOf("Leave"), rig.controls().map { it.operation }, "terminal EOS must not send NextItem, restart or group Stop")
-        assertFalse(rig.sent.any { it.operation == "NextItem" || it.operation == "Stop" })
-        assertFalse(rig.sync.participating)
-        val departure = assertNotNull(rig.sync.state.value.departure)
-        assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
-        assertEquals("Music", departure.groupName)
-        assertFalse(music.state.value.outputActive, "Leave is followed by local audio teardown")
+        // SYN-08: the end of the last entry keeps membership; the group no longer waits for this device.
+        assertEquals(
+            listOf("SetIgnoreWait"),
+            rig.controls().map { it.operation },
+            "terminal EOS must not send Leave, NextItem, restart or group Stop"
+        )
+        assertFalse(rig.sent.any { it.operation == "NextItem" || it.operation == "Stop" || it.operation == "Leave" })
+        assertTrue(rig.sync.participating)
+        assertEquals(null, rig.sync.state.value.departure)
+        assertFalse(music.state.value.outputActive, "Terminal completion is followed by local audio teardown")
         assertEquals(null, music.state.value.output)
         assertEquals(listOf("start a", "stop a"), log.toList(), "one actual viewing opens and closes exactly once")
         assertEquals(

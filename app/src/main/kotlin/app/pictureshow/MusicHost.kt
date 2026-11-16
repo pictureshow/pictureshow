@@ -1245,7 +1245,7 @@ internal class MusicHost(
                         ) {
                             return@enqueue
                         }
-                        // Membership has left with PLAYBACK_ENDED; this stop only tears down local audio/reporting.
+                        // SYN-08: membership stays (the group stops waiting for this device); this stop only tears down local audio/reporting.
                         endOutput("stop")
                         return@enqueue
                     }

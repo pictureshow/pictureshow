@@ -388,7 +388,7 @@ class TouchPlaybackHostTest {
         assertEquals(2, exits)
     }
 
-    @Test fun groupedTerminalVideoEosReportsPlayedAfterStoppedAndLeavesWithoutLocalNext() {
+    @Test fun groupedTerminalVideoEosReportsPlayedAfterStoppedAndStaysInGroupWithoutLocalNext() {
         val case = terminalVideoCase("sync-completion-reporting.current-decision")
         val requests = mutableListOf<app.pictureshow.core.sync.SyncRequest>()
         val sync = terminalVideoGroup(requests)
@@ -409,15 +409,16 @@ class TouchPlaybackHostTest {
         }
         compose.waitForIdle()
         compose.runOnIdle {
-            assertEquals(false, sync.participating, "Terminal EOS was held: ${terminalVideoDiagnostic(sync)}")
-            assertEquals(1, requests.count { it.operation == "Leave" }, terminalVideoDiagnostic(sync))
+            // SYN-08: the terminal entry closes the player but keeps membership; the group stops waiting for it.
+            assertEquals(true, sync.participating, "Terminal EOS left the group: ${terminalVideoDiagnostic(sync)}")
+            assertEquals(0, requests.count { it.operation == "Leave" }, terminalVideoDiagnostic(sync))
             assertEquals(1, exits, "Admitted terminal completion must exit before asynchronous reports drain")
         }
         try {
             waitUntil { reports.contains("catalog:played") }
         } catch (error: Throwable) {
             throw AssertionError(
-                "Terminal EOS already Left and exited; Played is missing. reports=${reports.toList()} actions=${catalogApi.actions.toList()}",
+                "Terminal EOS already exited; Played is missing. reports=${reports.toList()} actions=${catalogApi.actions.toList()}",
                 error
             )
         }
@@ -429,11 +430,10 @@ class TouchPlaybackHostTest {
                 "The actual session's Stopped request must precede Played despite immediate navigation cleanup"
             )
             assertEquals(listOf(Triple("played", "episode", true)), catalogApi.actions.toList())
-            assertEquals(listOf("Leave"), requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation })
-            val departure = requireNotNull(sync.state.value.departure)
-            assertEquals(app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED, departure.cause)
-            assertEquals("Evening", departure.groupName)
-            assertEquals(false, sync.participating)
+            val controls = requests.filter { it.operation !in setOf("Ping", "Ready", "Buffering") }.map { it.operation }
+            assertEquals(listOf("SetIgnoreWait"), controls)
+            assertEquals(null, sync.state.value.departure, "A stay records no departure")
+            assertEquals(true, sync.participating)
             assertEquals(1, exits)
             assertTrue(next.isEmpty(), "The local episode lookup cannot advance a terminal grouped viewing")
             assertTerminalVideoVector(case, sync, requests)

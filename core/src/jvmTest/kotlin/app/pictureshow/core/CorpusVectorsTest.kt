@@ -81,6 +81,8 @@ class CorpusVectorsTest {
                     "sync-presentation",
                     // Actual SyncDeparture/LocalDisplay/ChipNameVectorsTest executors.
                     "sync-departure",
+                    // SyncStayVectorsTest executes the SYN-08 stay-in-group policy.
+                    "sync-stay",
                     "sync-local-display",
                     "sync-chip-name",
                     // Actual Android SyncPlayHostTest scope/identity traces.

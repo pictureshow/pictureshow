@@ -280,12 +280,8 @@ internal class PlaybackHostState(
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         if (next != null && sync?.transport("next") == true) return
         if (next == null && sync?.participating == true) {
-            val cause = when (reason) {
-                "stop-button", "remote-stop", "system-stop" -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_STOPPED
-                "natural-end" -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_ENDED
-                else -> app.pictureshow.core.sync.SyncDepartureCause.PLAYBACK_CLOSED
-            }
-            sync?.leave(cause)
+            // SYN-08: closing the player keeps this viewer in its group; only explicit Leave removes it.
+            sync?.closeViewing(syncCloseReason(reason))
         }
         onFinishing()
         if (!exitRequested && !switching) {
@@ -804,4 +800,13 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
             }
         }
     }
+}
+
+/** Actual finish() reason strings; unknown internal exits count as an ordinary close. */
+internal fun syncCloseReason(reason: String): app.pictureshow.core.sync.SyncCloseReason = when (reason) {
+    "stop-button", "remote-stop", "system-stop" -> app.pictureshow.core.sync.SyncCloseReason.STOP_BUTTON
+    "natural-end" -> app.pictureshow.core.sync.SyncCloseReason.NATURAL_END
+    "error-back" -> app.pictureshow.core.sync.SyncCloseReason.ERROR_BACK
+    "cast" -> app.pictureshow.core.sync.SyncCloseReason.EXTERNAL_ROUTE
+    else -> app.pictureshow.core.sync.SyncCloseReason.BACK
 }

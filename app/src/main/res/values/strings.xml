@@ -134,6 +134,14 @@
     <string name="sync_departure_closed">You left %1$s when you closed playback.</string>
     <string name="sync_departure_cast">You left %1$s to cast.</string>
     <string name="sync_departure_lost">You’re no longer in %1$s.</string>
+    <string name="sync_stay_still_in">Still in %1$s</string>
+    <string name="sync_stay_still_in_unnamed">Still in your Watch together group</string>
+    <string name="sync_stay_leave_unconfirmed">Leaving %1$s wasn’t confirmed</string>
+    <string name="sync_stay_leave_unconfirmed_unnamed">Leaving the group wasn’t confirmed</string>
+    <string name="sync_stay_watch">Watch</string>
+    <string name="sync_stay_watch_description">Watch with %1$s</string>
+    <string name="sync_stay_leave">Leave</string>
+    <string name="sync_stay_leave_description">Leave %1$s</string>
     <string name="remote_search_label">Search on the TV</string>
     <string name="remote_search_help">Works when the TV has its search screen open. Passwords can\'t be typed from here.</string>
     <string name="remote_search_error">That can\'t be sent. Use up to %1$s characters on one line.</string>
