@@ -7,6 +7,71 @@ import Foundation
 enum SpecCaseManifest {
     static let contracts: [String: String] = {
         let rows = """
+        detail-reads-movie|discovery/detail-reads
+        detail-reads-series|discovery/detail-reads
+        detail-reads-episode|discovery/detail-reads
+        detail-reads-season|discovery/detail-reads
+        detail-reads-video|discovery/detail-reads
+        detail-reads-boxset|discovery/detail-reads
+        youtube-id-0|discovery/youtube-id
+        youtube-id-1|discovery/youtube-id
+        youtube-id-2|discovery/youtube-id
+        youtube-id-3|discovery/youtube-id
+        youtube-id-4|discovery/youtube-id
+        youtube-id-5|discovery/youtube-id
+        youtube-id-6|discovery/youtube-id
+        youtube-id-7|discovery/youtube-id
+        youtube-id-8|discovery/youtube-id
+        youtube-id-9|discovery/youtube-id
+        youtube-id-10|discovery/youtube-id
+        trailers-local-then-remote|discovery/trailers
+        trailers-none|discovery/trailers
+        extra-label-BehindTheScenes|discovery/extra-label
+        extra-label-Featurette|discovery/extra-label
+        extra-label-Interview|discovery/extra-label
+        extra-label-DeletedScene|discovery/extra-label
+        extra-label-Scene|discovery/extra-label
+        extra-label-Short|discovery/extra-label
+        extra-label-Clip|discovery/extra-label
+        extra-label-Unknown|discovery/extra-label
+        extra-label-absent|discovery/extra-label
+        extra-label-ThemeSong|discovery/extra-label
+        extra-label-ThemeVideo|discovery/extra-label
+        extra-label-Sample|discovery/extra-label
+        extra-label-Trailer|discovery/extra-label
+        extras-grouped|discovery/extras
+        more-like-this|discovery/more-like-this
+        more-like-this-empty|discovery/more-like-this
+        still-watching-Off-99-999|discovery/still-watching
+        still-watching-TwoEpisodes-1-59|discovery/still-watching
+        still-watching-TwoEpisodes-2-0|discovery/still-watching
+        still-watching-TwoEpisodes-1-60|discovery/still-watching
+        still-watching-ThreeEpisodes-2-89|discovery/still-watching
+        still-watching-ThreeEpisodes-3-10|discovery/still-watching
+        still-watching-ThreeEpisodes-1-90|discovery/still-watching
+        still-watching-FiveEpisodes-4-149|discovery/still-watching
+        still-watching-FiveEpisodes-5-0|discovery/still-watching
+        still-watching-EightEpisodes-7-239|discovery/still-watching
+        still-watching-EightEpisodes-1-240|discovery/still-watching
+        photo-step-0|discovery/photo-step
+        photo-step-1|discovery/photo-step
+        photo-step-2|discovery/photo-step
+        photo-step-3|discovery/photo-step
+        photo-step-4|discovery/photo-step
+        photo-step-5|discovery/photo-step
+        photo-step-6|discovery/photo-step
+        photo-step-7|discovery/photo-step
+        photo-step-8|discovery/photo-step
+        screensaver-art-any|discovery/screensaver-art
+        screensaver-art-ceiling|discovery/screensaver-art
+        photo-url|discovery/photo-url
+        photo-url-no-image|discovery/photo-url
+        catalog-local-trailers|reference/http
+        catalog-special-features|reference/http
+        catalog-similar|reference/http
+        catalog-screensaver-items|reference/http
+        catalog-parental-ratings|reference/http
+        catalog-photos|reference/http
         settings.empty.defaults|application/settings
         settings.bitrate.120|application/settings
         settings.bitrate.80|application/settings
@@ -2798,6 +2863,71 @@ enum SpecCaseManifest {
         sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
         sync-stay.open.following-opens-new-entries|sync-stay/case
         sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
+        return-home|catalog-return/refresh
+        return-detail|catalog-return/refresh
+        return-library|catalog-return/refresh
+        return-person|catalog-return/refresh
+        return-search|catalog-return/refresh
+        return-settings|catalog-return/refresh
+        local-eof|catalog-return/progress
+        local-stop|catalog-return/progress
+        local-rewatch|catalog-return/progress
+        local-negative|catalog-return/progress
+        search-presentation.same-title-year|search-presentation/search-duplicate-ids
+        search-presentation.same-title-different-year|search-presentation/search-duplicate-ids
+        search-presentation.normalized-title|search-presentation/search-duplicate-ids
+        search-presentation.one-item-repeated-is-not-two-copies|search-presentation/search-duplicate-ids
+        search-presentation.different-types|search-presentation/search-duplicate-ids
+        search-presentation.missing-years-still-ambiguous|search-presentation/search-duplicate-ids
+        search-presentation.unique-titles|search-presentation/search-duplicate-ids
+        search-presentation.empty|search-presentation/search-duplicate-ids
+        search-presentation.library-from-visible-view|search-presentation/search-library-name
+        search-presentation.ancestor-library-fallback|search-presentation/search-library-name
+        search-presentation.no-guessed-folder|search-presentation/search-library-name
+        detail-primary-next|application/detail-play-item
+        detail-primary-unplayed|application/detail-play-item
+        detail-primary-all-played|application/detail-play-item
+        detail-primary-empty|application/detail-play-item
+        detail-primary-container|application/detail-play-item
+        catalog-announcement-episode|application/catalog-announcement
+        catalog-announcement-season-count|application/catalog-announcement
+        catalog-announcement-empty|application/catalog-announcement
+        catalog-announcement-resume|application/catalog-announcement
+        runtime-label-under-minute|application/runtime-label
+        runtime-label-tiny|application/runtime-label
+        runtime-label-just-under-minute|application/runtime-label
+        runtime-label-one-minute|application/runtime-label
+        runtime-label-hours|application/runtime-label
+        runtime-label-implausible|application/runtime-label
+        placeholder-kind-movies|application/catalog-placeholder-kind
+        placeholder-kind-shows|application/catalog-placeholder-kind
+        placeholder-kind-livetv|application/catalog-placeholder-kind
+        placeholder-kind-unknown-library|application/catalog-placeholder-kind
+        placeholder-kind-boxset|application/catalog-placeholder-kind
+        placeholder-kind-title|application/catalog-placeholder-kind
+        search-duplicate-labels.same-film-two-libraries|application/search-duplicate-labels
+        search-duplicate-labels.different-year-is-distinct|application/search-duplicate-labels
+        search-duplicate-labels.case-and-spacing-ignored|application/search-duplicate-labels
+        search-duplicate-labels.missing-year-matches-missing-year|application/search-duplicate-labels
+        search-duplicate-labels.episodes-need-same-series|application/search-duplicate-labels
+        search-duplicate-labels.kinds-kept-apart|application/search-duplicate-labels
+        search-duplicate-labels.people-never-labelled|application/search-duplicate-labels
+        media-badges-uhd-hdr10-51|application/media-badges
+        media-badges-sdr-stereo-empty|application/media-badges
+        media-badges-scope-4k-dolby-vision-atmos|application/media-badges
+        media-badges-hdr10plus|application/media-badges
+        media-badges-hlg|application/media-badges
+        media-badges-invalid-dolby-vision-claims-nothing|application/media-badges
+        media-badges-default-audio-track-wins|application/media-badges
+        media-badges-older-server-profile-dtsx|application/media-badges
+        media-badges-spatial-format-none-overrides-profile|application/media-badges
+        media-badges-no-source|application/media-badges
+        detail-play-label-series-next|application/detail-play-label
+        detail-play-label-series-resume|application/detail-play-label
+        detail-play-label-season-untitled|application/detail-play-label
+        detail-play-label-movie|application/detail-play-label
+        detail-play-label-movie-resume|application/detail-play-label
+        detail-play-label-series-nothing-to-play|application/detail-play-label
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

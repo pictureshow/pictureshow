@@ -76,7 +76,7 @@ final class CoreTests: XCTestCase {
         item.userData.playedPercentage = 150; XCTAssertEqual(item.progress, 1)
         XCTAssertEqual(Catalog.resumeLabel(36_610_000_000), "Resume from 1:01:01")
         XCTAssertEqual(Catalog.resumeLabel(-1), "Resume from 0:00")
-        XCTAssertEqual(Catalog.runtimeLabel(Int64.max), ""); XCTAssertEqual(Catalog.runtimeLabel(1), "1m")
+        XCTAssertEqual(Catalog.runtimeLabel(Int64.max), ""); XCTAssertEqual(Catalog.runtimeLabel(1), "1 s"); XCTAssertEqual(Catalog.runtimeLabel(310_000_000), "31 s")
         XCTAssertEqual(Catalog.runtimeLabel(54_000_000_000), "1h 30m")
         item.parentIndexNumber = 0; item.indexNumber = 2; XCTAssertEqual(item.episodeLabel, "Special E2")
     }

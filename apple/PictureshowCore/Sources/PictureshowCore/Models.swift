@@ -104,13 +104,19 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
     public var chapters: [Chapter]
     public var trickplay: [String:[String:TrickplayInfo]]
     public var mediaSources: [MediaSource]
+    /// A special feature's kind (CAT-31): BehindTheScenes, Featurette, DeletedScene, …
+    public var extraType: String?
+    /// Trailers the server knows by address only (CAT-30).
+    public var remoteTrailers: [RemoteTrailer] = []
+    /// The folder or album the item sits in; a photo's album (PHOTO-01).
+    public var parentId: String?
     public init(id: String, name: String = "Untitled", type: String = "", userData: ItemUserData = ItemUserData(), runTimeTicks: Int64? = nil) {
         self.id = id; self.name = name; self.type = type; self.userData = userData; self.runTimeTicks = runTimeTicks
         isFolder = false; genres = []; imageTags = [:]; backdropImageTags = []; parentBackdropImageTags = []; mediaSources = []; people = []; chapters = []; trickplay = [:]
     }
     enum CodingKeys: String, CodingKey {
         case locationType = "LocationType", premiereDate = "PremiereDate"
-        case id = "Id", name = "Name", type = "Type", collectionType = "CollectionType", isFolder = "IsFolder", childCount = "ChildCount", recursiveItemCount = "RecursiveItemCount", overview = "Overview", productionYear = "ProductionYear", officialRating = "OfficialRating", communityRating = "CommunityRating", runTimeTicks = "RunTimeTicks", genres = "Genres", seriesName = "SeriesName", seriesId = "SeriesId", seasonId = "SeasonId", indexNumber = "IndexNumber", parentIndexNumber = "ParentIndexNumber", imageTags = "ImageTags", backdropImageTags = "BackdropImageTags", parentBackdropItemId = "ParentBackdropItemId", parentBackdropImageTags = "ParentBackdropImageTags", seriesPrimaryImageTag = "SeriesPrimaryImageTag", parentThumbItemId = "ParentThumbItemId", parentThumbImageTag = "ParentThumbImageTag", userData = "UserData", mediaSources = "MediaSources", people = "People", chapters = "Chapters", trickplay = "Trickplay"
+        case id = "Id", name = "Name", type = "Type", collectionType = "CollectionType", isFolder = "IsFolder", childCount = "ChildCount", recursiveItemCount = "RecursiveItemCount", overview = "Overview", productionYear = "ProductionYear", officialRating = "OfficialRating", communityRating = "CommunityRating", runTimeTicks = "RunTimeTicks", genres = "Genres", seriesName = "SeriesName", seriesId = "SeriesId", seasonId = "SeasonId", indexNumber = "IndexNumber", parentIndexNumber = "ParentIndexNumber", imageTags = "ImageTags", backdropImageTags = "BackdropImageTags", parentBackdropItemId = "ParentBackdropItemId", parentBackdropImageTags = "ParentBackdropImageTags", seriesPrimaryImageTag = "SeriesPrimaryImageTag", parentThumbItemId = "ParentThumbItemId", parentThumbImageTag = "ParentThumbImageTag", userData = "UserData", mediaSources = "MediaSources", people = "People", chapters = "Chapters", trickplay = "Trickplay", extraType = "ExtraType", remoteTrailers = "RemoteTrailers", parentId = "ParentId"
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -146,6 +152,9 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         people = try c.decodeIfPresent([PersonCredit].self, forKey: .people) ?? []
         chapters = try c.decodeIfPresent([Chapter].self, forKey: .chapters) ?? []
         trickplay = try c.decodeIfPresent([String:[String:TrickplayInfo]].self, forKey: .trickplay) ?? [:]
+        extraType = try c.decodeIfPresent(String.self, forKey: .extraType)
+        remoteTrailers = try c.decodeIfPresent([RemoteTrailer].self, forKey: .remoteTrailers) ?? []
+        parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
     }
     public var isEmptyContainer: Bool {
         let container = isFolder || ["BoxSet", "Playlist", "Folder", "CollectionFolder", "Series", "Season"].contains(type)
@@ -211,9 +220,7 @@ public enum Catalog {
         return "Resume from " + (s >= 3600 ? String(format: "%lld:%02lld:%02lld", s / 3600, (s % 3600) / 60, s % 60) : String(format: "%lld:%02lld", s / 60, s % 60))
     }
     public static func runtimeLabel(_ ticks: Int64?) -> String {
-        guard let ticks, ticks > 0, ticks <= 864_000_000_000 else { return "" }
-        let minutes = max(1, ticks / 600_000_000)
-        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        CatalogRules.runtimeLabel(ticks)
     }
 }
 

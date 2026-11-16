@@ -14,6 +14,9 @@ struct DetailContent {
     /// Children of a collection.
     var children: [MediaItem] = []
     var similar: [MediaItem] = []
+    /// CAT-30 and CAT-31: trailers (local first, then online) and extras worth watching.
+    var trailers: [TrailerChoice] = []
+    var extras: [MediaItem] = []
 }
 
 struct DetailView: View {
@@ -38,10 +41,6 @@ struct DetailView: View {
         .task(id: app.catalogRevision) { await reload() }
     }
 
-    private static func titleKey(_ item: MediaItem) -> String {
-        "\(item.name.lowercased())|\(item.productionYear.map(String.init) ?? "")"
-    }
-
     private func reload() async {
         let seed = seed
         await content.load(app: app) { account, client in
@@ -64,12 +63,14 @@ struct DetailView: View {
                 result.children = try await client.browsePage(account: account, parentID: item.id, limit: 200, sortBy: "PremiereDate,SortName").items
             default: break
             }
-            if ["Movie", "Series"].contains(item.type) {
-                let similar = (try? await client.similar(account: account, itemID: item.id)) ?? []
-                // A server with the same film in two libraries returns it (and its neighbours) twice.
-                var seen: Set<String> = [Self.titleKey(item)]
-                result.similar = similar.filter { seen.insert(Self.titleKey($0)).inserted }
-            }
+            // CAT-30..32: each row is optional; a failed read leaves its row out rather than failing the page.
+            let reads = Discovery.detailReads(type: item.type)
+            async let local = reads.trailers ? ((try? await client.localTrailers(account: account, itemID: item.id)) ?? []) : []
+            async let features = reads.extras ? ((try? await client.specialFeatures(account: account, itemID: item.id)) ?? []) : []
+            async let similar = reads.similar ? ((try? await client.similar(account: account, itemID: item.id)) ?? []) : []
+            result.trailers = reads.trailers ? Discovery.trailerChoices(local: await local, remote: item.remoteTrailers) : []
+            result.extras = Discovery.specialFeatureExtras(await features)
+            result.similar = Discovery.moreLikeThis(of: item, similar: await similar)
             return result
         }
     }
@@ -92,6 +93,8 @@ struct DetailPage: View {
                     SeasonBrowser(series: item, seasons: content.seasons, initialSeasonID: item.type == "Season" ? item.id : (content.nextUp?.seasonId))
                 }
                 if !content.children.isEmpty { Shelf(title: "In this collection", items: content.children) }
+                if !content.trailers.isEmpty { TrailersShelf(item: item, trailers: content.trailers) }
+                if !content.extras.isEmpty { ExtrasShelf(extras: content.extras) }
                 if !item.people.isEmpty { CastShelf(people: item.people) }
                 if !content.similar.isEmpty { Shelf(title: "More like this", items: content.similar) }
                 if !item.mediaSources.isEmpty { MediaInfoSection(item: item) }

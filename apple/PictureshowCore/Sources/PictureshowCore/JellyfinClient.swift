@@ -241,6 +241,26 @@ public final class JellyfinClient: @unchecked Sendable {
     public func similar(account: Account, itemID: String, limit: Int = 16) async throws -> [MediaItem] {
         try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/Similar", query: [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "fields", value: fields)])).items
     }
+    /// CAT-30: the library's own trailers for a title.
+    public func localTrailers(account: Account, itemID: String) async throws -> [MediaItem] {
+        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/LocalTrailers"))
+    }
+    /// CAT-31: a title's special features (extras).
+    public func specialFeatures(account: Account, itemID: String) async throws -> [MediaItem] {
+        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/SpecialFeatures"))
+    }
+    /// SAVER-01: random movies and series that have a backdrop, with their rating.
+    public func screensaverItems(account: Account) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "includeItemTypes", value: "Movie,Series"), URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "imageTypes", value: "Backdrop"), URLQueryItem(name: "sortBy", value: "Random"), URLQueryItem(name: "limit", value: "40"), URLQueryItem(name: "fields", value: "OfficialRating")])).items
+    }
+    /// SAVER-01: the server's rating names and the age each stands for.
+    public func parentalRatings(account: Account) async throws -> [ParentalRating] {
+        try decoder.decode([ParentalRating].self, from: await request(account: account, path: "Localization/ParentalRatings"))
+    }
+    /// PHOTO-01: the photos in one folder, in the folder's browse order.
+    public func photos(account: Account, parentID: String, sortBy: String, descending: Bool) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "includeItemTypes", value: "Photo"), URLQueryItem(name: "sortBy", value: sortBy), URLQueryItem(name: "sortOrder", value: descending ? "Descending" : "Ascending"), URLQueryItem(name: "limit", value: "1000")])).items
+    }
     public func search(account: Account, query: String, kind: SearchKind) async throws -> ItemPage {
         let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard term.count >= 2 else { return try decoder.decode(ItemPage.self, from: Data("{}".utf8)) }

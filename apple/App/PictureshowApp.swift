@@ -42,11 +42,14 @@ struct RootView: View {
         Group {
             if let account = app.account {
                 MainShell().id(account.key)
+                    .modifier(ScreensaverHost())
             } else {
                 NavigationStack { SignInFlowView() }
             }
         }
         .pageBackground()
+        // PLAY-30 and SAVER-01 count time from the viewer's last touch or press anywhere in the app.
+        .background(InputWatcherInstaller())
         // SYN-08: video rendering in the background leaves the group once; with no player open the device stays.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .background, let controller = app.activeController, let box = controller.syncRenderer,
@@ -128,6 +131,7 @@ struct MainShell: View {
 struct RoutedStack<Root: View>: View {
     @EnvironmentObject private var app: AppModel
     @ViewBuilder var root: () -> Root
+    @State private var path = NavigationPath()
     var body: some View {
         stack
         #if os(iOS)
@@ -136,13 +140,17 @@ struct RoutedStack<Root: View>: View {
     }
 
     private var stack: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             root()
+                #if DEBUG
+                .task { if let route = await DebugLaunch.routeFromEnvironment(app) { path.append(route) } }
+                #endif
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .item(let item): DetailView(seed: item)
                     case .library(let library): LibraryView(library: library)
                     case .person(let id, let name): PersonView(personID: id, name: name)
+                    case .photo(let photo, let sortBy, let descending): PhotoViewer(photo: photo, sortBy: sortBy, descending: descending)
                     }
                 }
         }
@@ -180,6 +188,15 @@ enum DebugLaunch {
               let item = try? await client.item(account: account, id: id) else { return }
         done = true
         app.play(item, fromStart: ProcessInfo.processInfo.environment["PICTURESHOW_FROM_START"] == "1")
+    }
+
+    private static var opened = false
+    /// PICTURESHOW_OPEN=<item id> opens that item's page (or a photo's viewer) in the first tab that asks.
+    @MainActor static func routeFromEnvironment(_ app: AppModel) async -> Route? {
+        guard !opened, let id = ProcessInfo.processInfo.environment["PICTURESHOW_OPEN"],
+              let account = app.account, let client = app.client else { return nil }
+        opened = true
+        return (try? await client.item(account: account, id: id))?.route
     }
 }
 #endif

@@ -95,7 +95,7 @@ final class SpecVectorTests:XCTestCase {
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         let syncSuites = SyncVectorRunner.suites
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out"]).union(traceSuites).union(pendingSuites).union(syncSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation"]).union(traceSuites).union(pendingSuites).union(syncSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -202,11 +202,13 @@ final class SpecVectorTests:XCTestCase {
                 let id=text(vector,"id")
                 do {
                     let result: Any
-                    if suite == "home-browse" { result = try await executeHome(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
+                    if suite == "discovery" { result = try DiscoveryVectorRunner.execute(operation: text(vector,"operation"), input: vector["input"] as! [String:Any]) }
+                    else if ["catalog-return","search-presentation"].contains(suite) || (suite == "application" && CatalogPresentationVectorRunner.applicationOperations.contains(text(vector,"operation"))) { result = try CatalogPresentationVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any]) }
+                    else if suite == "home-browse" { result = try await executeHome(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
                     else if suite == "account-sign-out" { result = try AccountCatalogState.execute(input: vector["input"] as! [String:Any]) }
                     else if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
                     else { result = try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
-                    let actual=try json(result),expected=try json(suite == "home-browse" && text(vector,"operation") == "reset-home-layout" ? HomeVectorRunner.object(decode(HomePreferences.self, vector["expected"]!)) : vector["expected"]!)
+                    let actual=try json(result),expected=try json(suite == "home-browse" && text(vector,"operation") == "reset-home-layout" ? HomeVectorRunner.object(decode(HomePreferences.self, vector["expected"]!)) : CatalogPresentationVectorRunner.canonicalExpected(suite:suite,operation:text(vector,"operation"),vector["expected"]!))
                     let matches = musicSuites.contains(suite) && vector["exact"] == nil ? MusicVectorTests.projection(vector["expected"]!,matches:result) : actual == expected
                     if !matches { failures.append("\(id)\n expected: \(expected)\n actual: \(actual)") }
                 } catch { failures.append("\(id): \(error)") }
@@ -395,7 +397,7 @@ final class SpecVectorTests:XCTestCase {
     }
     func mockClient(_ i:[String:Any],identity:[String:Any])->JellyfinClient{VectorProtocol.responses=i["responses"] as? [[String:Any]] ?? [];VectorProtocol.requests=[];let config=URLSessionConfiguration.ephemeral;config.protocolClasses=[VectorProtocol.self];return JellyfinClient(deviceID:text(identity,"deviceId","install"),session:URLSession(configuration:config),deviceName:text(identity,"deviceName","Fixture TV"),version:text(identity,"version","0.1.0"))}
     func http(_ i:[String:Any],account:Account,identity:[String:Any])async throws->Any{
-        let action=text(i,"action");guard ["catalog.views","catalog.resume","catalog.nextUp","catalog.latest","catalog.seasons","catalog.episodes","catalog.item","catalog.items","catalog.played","catalog.favorite","search","personItems","prepare","configuration","saveConfiguration","stopEncoding","reportStart","reportProgress","reportStopped"].contains(action) else { throw NSError(domain:"Unknown HTTP action \(action)",code:1) };let client=mockClient(i,identity:identity);var result:[String:Any]=["kind":"success"]
+        let action=text(i,"action");guard ["catalog.views","catalog.resume","catalog.nextUp","catalog.latest","catalog.seasons","catalog.episodes","catalog.item","catalog.items","catalog.played","catalog.favorite","search","personItems","catalog.localTrailers","catalog.specialFeatures","catalog.similar","catalog.screensaverItems","catalog.parentalRatings","catalog.photos","prepare","configuration","saveConfiguration","stopEncoding","reportStart","reportProgress","reportStopped"].contains(action) else { throw NSError(domain:"Unknown HTTP action \(action)",code:1) };let client=mockClient(i,identity:identity);var result:[String:Any]=["kind":"success"]
         do {switch action {
         case "catalog.views":_ = try await client.views(account:account)
         case "catalog.resume":_ = try await client.resume(account:account)
@@ -405,6 +407,12 @@ final class SpecVectorTests:XCTestCase {
         case "catalog.episodes":_ = try await client.episodes(account:account,seriesID:text(i,"seriesId"),seasonID:text(i,"seasonId"))
         case "catalog.item":result["resumeTicks"] = try await client.item(account:account,id:text(i,"itemId")).userData.playbackPositionTicks
         case "catalog.items":_ = try await client.browsePage(account:account,parentID:text(i,"parentId","library"),startIndex:Int(integer(i,"startIndex")),limit:Int(integer(i,"limit",60)),sortBy:text(i,"sortBy","SortName"),descending:bool(i,"descending"),recursive:bool(i,"recursive"),includeItemTypes:i["includeItemTypes"] as? String,ids:i["ids"] as? [String] ?? [])
+        case "catalog.localTrailers":_ = try await client.localTrailers(account:account,itemID:text(i,"itemId"))
+        case "catalog.specialFeatures":_ = try await client.specialFeatures(account:account,itemID:text(i,"itemId"))
+        case "catalog.similar":_ = try await client.similar(account:account,itemID:text(i,"itemId"))
+        case "catalog.screensaverItems":_ = try await client.screensaverItems(account:account)
+        case "catalog.parentalRatings":_ = try await client.parentalRatings(account:account)
+        case "catalog.photos":_ = try await client.photos(account:account,parentID:text(i,"parentId"),sortBy:text(i,"sortBy"),descending:bool(i,"descending"))
         case "catalog.played":_ = try await client.played(account:account,itemID:text(i,"itemId"),value:bool(i,"value"))
         case "catalog.favorite":_ = try await client.favorite(account:account,itemID:text(i,"itemId"),value:bool(i,"value"))
         case "search":let map:[String:SearchKind]=["MOVIES":.movies,"SHOWS":.shows,"EPISODES":.episodes,"COLLECTIONS":.collections,"PEOPLE":.people];_ = try await client.search(account:account,query:text(i,"query"),kind:map[text(i,"kind")]!)

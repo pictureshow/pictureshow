@@ -148,14 +148,28 @@ struct NextEpisodeCard: View {
                 .frame(width: platformValue(tv: 280, touch: 112), height: platformValue(tv: 158, touch: 63))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
-                Text(countdownText).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent)
-                Text(next.name).font(.headline).foregroundStyle(.white).lineLimit(2)
-                Text(Format.episode(next)).font(.caption).foregroundStyle(.white.opacity(0.75))
+                if controller.askingStillWatching {
+                    // PLAY-30: nothing plays until the viewer answers.
+                    Text("Are you still watching?").font(.headline).foregroundStyle(.white)
+                    Text("Next: \(next.name)").font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
+                } else {
+                    Text(countdownText).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent)
+                    Text(next.name).font(.headline).foregroundStyle(.white).lineLimit(2)
+                    Text(Format.episode(next)).font(.caption).foregroundStyle(.white.opacity(0.75))
+                }
                 HStack(spacing: 12) {
-                    Button { controller.playNext() } label: { Label("Play now", systemImage: "play.fill") }
-                        .primaryAction()
-                    Button("Hide") { controller.dismissNextCard() }
-                        .secondaryAction()
+                    if controller.askingStillWatching {
+                        Button { controller.keepWatching() } label: { Label("Keep watching", systemImage: "play.fill") }
+                            .primaryAction()
+                            .accessibilityIdentifier("still-watching-keep")
+                        Button("Stop") { controller.close() }
+                            .secondaryAction()
+                    } else {
+                        Button { controller.playNext() } label: { Label("Play now", systemImage: "play.fill") }
+                            .primaryAction()
+                        Button("Hide") { controller.dismissNextCard() }
+                            .secondaryAction()
+                    }
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -225,7 +239,11 @@ struct SystemPlayer: UIViewControllerRepresentable {
             actions.append(UIAction(title: segment.type == .outro ? "Skip Credits" : segment.type == .recap ? "Skip Recap" : "Skip Intro", image: UIImage(systemName: "forward.end")) { [weak controller] _ in controller?.skipSegment() })
         }
         if controller.nextEpisode != nil, controller.nextCountdown != nil {
-            actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
+            if controller.askingStillWatching {
+                actions.append(UIAction(title: "Keep Watching", image: UIImage(systemName: "play.fill")) { [weak controller] _ in controller?.keepWatching() })
+            } else {
+                actions.append(UIAction(title: "Next Episode", image: UIImage(systemName: "forward.frame")) { [weak controller] _ in controller?.playNext() })
+            }
         }
         vc.contextualActions = actions
     }

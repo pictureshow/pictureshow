@@ -26,6 +26,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     @Published private(set) var nextEpisode: MediaItem?
     /// Seconds until the next episode starts on its own; nil when the card isn't showing.
     @Published private(set) var nextCountdown: Int?
+    /// PLAY-30: the next-episode card asks "Are you still watching?" and nothing plays until the viewer answers.
+    @Published private(set) var askingStillWatching = false
     @Published private(set) var cue: String?
     @Published private(set) var finished = false
     /// The AirPlay receiver's name while the picture plays there (CAST-07); nil while it plays here.
@@ -351,7 +353,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         }
         self.decision = nil
         item = next
-        nextEpisode = nil; nextCountdown = nil; nextCardDismissed = false
+        nextEpisode = nil; nextCountdown = nil; nextCardDismissed = false; askingStillWatching = false
         segments = []; autoSkipped = []; skippable = nil; cues = []; cue = nil
         position = 0; duration = 0; triedTranscodeFallback = false
         started = false
@@ -371,6 +373,9 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             } catch { self.error = error.localizedDescription }
         }
     }
+
+    /// PLAY-30: the viewer answered "Keep watching".
+    func keepWatching() { ViewerInput.shared.record(); playNext() }
 
     func dismissNextCard() { nextCardDismissed = true; nextCountdown = nil; countdownTask?.cancel() }
 
@@ -554,8 +559,11 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             return
         }
         guard nextCountdown == nil else { return }
-        guard app.preferences.autoplayNextEpisode else { nextCountdown = -1; return }
-        nextCountdown = 10
+        guard app.preferences.autoplayNextEpisode, ViewingSettings.shared.countdownSeconds > 0 else { nextCountdown = -1; return }
+        if ViewerInput.shared.stillWatchingDue(policy: ViewingSettings.shared.stillWatching) {
+            askingStillWatching = true; nextCountdown = -1; return
+        }
+        nextCountdown = ViewingSettings.shared.countdownSeconds
         countdownTask?.cancel()
         countdownTask = Task { [weak self] in
             while let self, let left = self.nextCountdown, left > 0 {
@@ -563,7 +571,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
                 if Task.isCancelled { return }
                 if self.isPlaying { self.nextCountdown = left - 1 }
             }
-            if !Task.isCancelled, let self, self.nextCountdown == 0 { self.playNext() }
+            if !Task.isCancelled, let self, self.nextCountdown == 0 { ViewerInput.shared.startedByItself(); self.playNext() }
         }
     }
 
@@ -580,7 +588,15 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { close() }
             return
         }
-        if nextEpisode != nil, app.preferences.autoplayNextEpisode, !nextCardDismissed { playNext() } else { close() }
+        if nextEpisode != nil, app.preferences.autoplayNextEpisode, ViewingSettings.shared.countdownSeconds > 0, !nextCardDismissed {
+            // PLAY-30: an unanswered "still watching?" waits at the end; nothing starts by itself.
+            if askingStillWatching || ViewerInput.shared.stillWatchingDue(policy: ViewingSettings.shared.stillWatching) {
+                askingStillWatching = true; nextCountdown = -1; countdownTask?.cancel()
+                return
+            }
+            ViewerInput.shared.startedByItself()
+            playNext()
+        } else { close() }
     }
 
     private func reportProgress(force: Bool) {

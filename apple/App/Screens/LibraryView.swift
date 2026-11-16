@@ -146,9 +146,9 @@ struct LibraryView: View {
 
     @ViewBuilder private func gridCard(_ item: MediaItem) -> some View {
         #if os(tvOS)
-        ItemCard(item: item, wide: wide)
+        ItemCard(item: item, wide: wide, route: item.route(in: model.query))
         #else
-        NavigationLink(value: item.route) { GridPoster(item: item, wide: wide) }
+        NavigationLink(value: item.route(in: model.query)) { GridPoster(item: item, wide: wide) }
             .buttonStyle(.plain)
             .contextMenu { ItemActions(item: item) }
         #endif
