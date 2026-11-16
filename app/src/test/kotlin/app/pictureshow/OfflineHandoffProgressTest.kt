@@ -103,6 +103,31 @@ class OfflineHandoffProgressTest {
     }
 
     @Test
+    fun `a sign-out during a settle sends nothing more with that viewer's credentials`() = runBlocking<Unit> {
+        store.remember("i", OfflineUserData(positionTicks = 100))
+        gateway.progress(tick(400))
+        val remote = object : OfflineProgressRemote {
+            var requests = 0
+            override suspend fun sameViewer(account: Account): Boolean {
+                store.retire() // the account is removed while the identity check is in flight
+                return true
+            }
+            override suspend fun read(account: Account, itemId: String): OfflineUserData {
+                requests++
+                return OfflineUserData(positionTicks = 100)
+            }
+            override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? {
+                requests++
+                return 204
+            }
+        }
+        assertEquals(OfflineSettleResult.Failed, store.settle("i", remote))
+        assertEquals(0, remote.requests)
+        assertFalse(store.sync(remote))
+        assertEquals(0, remote.requests)
+    }
+
+    @Test
     fun `a conflict already on record answers without a request`() = runBlocking<Unit> {
         store.remember("i", OfflineUserData(positionTicks = 100))
         val remote = Remote(OfflineUserData(positionTicks = 777))

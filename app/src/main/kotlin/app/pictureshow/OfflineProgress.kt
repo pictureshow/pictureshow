@@ -182,7 +182,7 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
         val dirty = load().outbox.filterValues { it.phase != "conflict" && it.phase != "synced" }
         if (dirty.isEmpty()) return@withLock true
         val same = runCatching { remote.sameViewer(account) }.getOrNull() ?: return@withLock false
-        if (!same) return@withLock false
+        if (!same || retired) return@withLock false
         var clean = true
         dirty.forEach { (itemId, start) ->
             try {
@@ -201,6 +201,7 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
     suspend fun settle(itemId: String, remote: OfflineProgressRemote): OfflineSettleResult = mutex.withLock {
         val start = load().outbox[itemId]?.takeIf { it.phase != "synced" } ?: return@withLock OfflineSettleResult.Settled
         if (start.phase == "conflict") return@withLock OfflineSettleResult.Conflict
+        if (retired) return@withLock OfflineSettleResult.Failed
         try {
             if (!remote.sameViewer(account)) return@withLock OfflineSettleResult.Failed
             syncOne(remote, itemId, start)
@@ -223,6 +224,8 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
         // Bounded: read, write, read back, and one reconcile if the answer was lost.
         repeat(6) {
             if (step.ignored != null) return
+            // A sign-out while this viewer's progress was in flight: no further request goes out with their credentials.
+            if (retired) throw IOException("Viewer signed out")
             entry = step.entry
             when (step.effect) {
                 "read" -> {
