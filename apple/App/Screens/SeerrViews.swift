@@ -807,9 +807,9 @@ struct SeerrConnectView: View {
             Text("Requests now appears beside Home. Search also shows what Seerr can add.")
         }
         Section {
-            Button("Disconnect", role: .destructive) {
+            Button(role: .destructive) {
                 if let key = app.account?.key { app.seerr.remove(key) }
-            }
+            } label: { DestructiveLabel("Disconnect") }
         } footer: {
             Text("Removes the Seerr sign-in from this device for \(app.account?.username ?? "this account"). Your requests stay on Seerr.")
         }

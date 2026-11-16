@@ -123,7 +123,7 @@ struct SettingsView: View {
             }
             #endif
             if let account = app.account {
-                Button(role: .destructive) { signOutAccount = account } label: { Label("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
+                Button(role: .destructive) { signOutAccount = account } label: { DestructiveLabel("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
         } header: {
             Text("Accounts")
