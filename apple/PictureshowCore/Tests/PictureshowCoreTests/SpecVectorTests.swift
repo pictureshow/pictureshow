@@ -98,7 +98,7 @@ final class SpecVectorTests:XCTestCase {
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         let syncSuites = SyncVectorRunner.suites
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation","subtitle-download","seerr"]).union(traceSuites).union(pendingSuites).union(syncSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation","subtitle-download","seerr"]).union(traceSuites).union(pendingSuites).union(syncSuites).union(LiveVectorRunner.suites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -156,6 +156,9 @@ final class SpecVectorTests:XCTestCase {
                     for step in steps {
                         guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
                     }
+                } else if suite == "live-source" {
+                    // Observed live-window cases carry their inputs at the top level (spec/vectors/live-source.json).
+                    try PendingSpecCaseManifest.validateEnvelope(vector, suite: suite)
                 } else if !syncSuites.contains(suite) {
                     guard vector["input"] is [String:Any],vector["expected"] != nil else { throw NSError(domain:"Malformed vector \(id)",code:1) }
                 }
@@ -202,6 +205,12 @@ final class SpecVectorTests:XCTestCase {
                     count+=1;counts[suite,default:0]+=1
                     continue
                 }
+                if LiveVectorRunner.suites.contains(suite) {
+                    // Live TV compares its own results: numbers within 0.001, clock spaces normalized as Android does.
+                    do { try await LiveVectorRunner.check(suite: suite, vector: vector) } catch { failures.append("\(text(vector,"id")): \(error)") }
+                    count+=1;counts[suite,default:0]+=1
+                    continue
+                }
                 let id=text(vector,"id")
                 do {
                     let result: Any
@@ -219,6 +228,10 @@ final class SpecVectorTests:XCTestCase {
                 } catch { failures.append("\(id): \(error)") }
                 count+=1;counts[suite,default:0]+=1
             }
+        }
+        if operations == nil, let liveSource = documents.first(where: { text($0.0, "suite") == "live-source" })?.0 {
+            // live-source also carries metadataCases (current-programme display), executed alongside its window cases.
+            do { counts["live-source.metadataCases"] = try LiveVectorRunner.checkMetadata(liveSource) } catch { failures.append("live-source.metadataCases: \(error)") }
         }
         XCTAssertGreaterThan(count, 0)
         print("\(operations == nil ? "Shared" : "Targeted") vectors: \(count) cases executed \(counts), control trace steps \(stepsBySuite), \(failures.count) failures; no skipped cases within the selected cohort.")
