@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -573,7 +574,17 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                     }
                 }
             }
-            if (active && !ready) Text(stringResource(R.string.cast_waiting, device), modifier = Modifier.testTag("cast:waiting"))
+            if (active &&
+                !ready
+            ) {
+                Text(
+                    stringResource(R.string.cast_waiting, device),
+                    modifier = Modifier.testTag("cast:waiting").semantics {
+                        liveRegion =
+                            LiveRegionMode.Polite
+                    }
+                )
+            }
             if (ui.queueError) Text(stringResource(R.string.cast_queue_failed))
             if (cast?.commands?.pending?.result == "rejected") {
                 Text("$device didn't accept that.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -583,22 +594,26 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
             }
         }
         if (active) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { if (paused) host.play() else host.pause() },
-                    enabled = ready && controls?.pause == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:toggle")
-                ) { Text(if (paused) "Play" else "Pause") }
-                OutlinedButton(
-                    onClick = { host.seekBy(-TEN_SECONDS_TICKS) },
-                    enabled = ready && controls?.seek == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:back10")
-                ) { Text(stringResource(R.string.cast_rewind)) }
-                OutlinedButton(
-                    onClick = { host.seekBy(THIRTY_SECONDS_TICKS) },
-                    enabled = ready && controls?.seek == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:forward30")
-                ) { Text(stringResource(R.string.cast_forward)) }
+            if (LocalDensity.current.fontScale > 1.2f) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CastTransportButtons(
+                        host,
+                        paused,
+                        ready && controls?.pause == true,
+                        ready && controls?.seek == true,
+                        Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CastTransportButtons(
+                        host,
+                        paused,
+                        ready && controls?.pause == true,
+                        ready && controls?.seek == true,
+                        Modifier.weight(1f)
+                    )
+                }
             }
             val volumeLabel = stringResource(R.string.cast_volume_device, device)
             val muteLabel = stringResource(R.string.cast_mute)
@@ -682,8 +697,18 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                             onClick = { host.jump(item.entry) },
                             enabled = ready && !ui.changingTrack,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:queue:${item.entry}")
+                                .semantics { selected = item.entry == observed?.entry }
                         ) {
-                            Text(if (item.entry == observed?.entry) "✓ ${item.title.orEmpty()}" else item.title.orEmpty())
+                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(item.title.orEmpty(), color = MaterialTheme.colorScheme.onSurface)
+                                if (item.entry == observed?.entry) {
+                                    Text(
+                                        stringResource(R.string.cast_now_playing),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -708,5 +733,34 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
             }
         }
         if (returning) Text("Stopping on $device…")
+    }
+}
+
+@Composable
+private fun CastTransportButtons(host: CastSenderHost, paused: Boolean, canPause: Boolean, canSeek: Boolean, modifier: Modifier) {
+    val back = stringResource(R.string.cast_rewind_long)
+    val forward = stringResource(R.string.cast_forward)
+    val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    Button(
+        onClick = { if (paused) host.play() else host.pause() },
+        enabled = canPause,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:toggle")
+    ) { Text(if (paused) "Play" else "Pause") }
+    OutlinedButton(
+        onClick = { host.seekBy(-TEN_SECONDS_TICKS) },
+        enabled = canSeek,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:back10").semantics { contentDescription = back }
+    ) {
+        Text(stringResource(R.string.cast_rewind))
+    }
+    OutlinedButton(
+        onClick = { host.seekBy(THIRTY_SECONDS_TICKS) },
+        enabled = canSeek,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:forward30").semantics { contentDescription = forward }
+    ) {
+        Text(stringResource(R.string.cast_forward_short))
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -66,7 +67,13 @@ class TouchCastScreenTest {
                 tracks = listOf(
                     app.pictureshow.core.control.CastTrack(-2, "audio", "English"),
                     app.pictureshow.core.control.CastTrack(-3, "audio", "Unavailable", available = false),
-                    app.pictureshow.core.control.CastTrack(4, "subtitle", "English subtitles")
+                    app.pictureshow.core.control.CastTrack(-4, "audio", "Spanish"),
+                    app.pictureshow.core.control.CastTrack(-5, "audio", "Japanese"),
+                    app.pictureshow.core.control.CastTrack(4, "subtitle", "English subtitles"),
+                    app.pictureshow.core.control.CastTrack(6, "subtitle", "French subtitles"),
+                    app.pictureshow.core.control.CastTrack(7, "subtitle", "German subtitles"),
+                    app.pictureshow.core.control.CastTrack(8, "subtitle", "Spanish subtitles"),
+                    app.pictureshow.core.control.CastTrack(9, "subtitle", "Japanese subtitles")
                 ),
                 activeTracks = listOf(-2, -3, 4)
             )
@@ -106,16 +113,24 @@ class TouchCastScreenTest {
         compose.onNodeWithTag("cast:volume-reason").assertIsDisplayed()
         capture("phone-fixed-volume")
         compose.onNodeWithTag("cast:track:-3").performScrollTo().assertIsNotEnabled().assertIsNotSelected()
+        compose.onNodeWithTag("cast:track:9").performScrollTo().assertIsDisplayed()
         capture("phone-tracks")
         compose.onNodeWithTag("cast:queue:b").performScrollTo().assertIsDisplayed()
         capture("phone-queue")
+        compose.onNodeWithTag("cast:disconnect").performScrollTo().assertIsDisplayed()
+        capture("phone-actions")
     }
 
     @Test fun waitingForFreshReceiverCommandsExplainsDisabledControls() {
         val ui = controlsUi(true)
         val waiting = ui.copy(cast = ui.cast!!.copy(commands = ui.cast.commands!!.copy(fresh = false)))
         compose.setContent { TouchTheme { TouchCastScreen(waiting, inertCastSender(), {}) } }
-        compose.onNodeWithTag("cast:waiting").assertIsDisplayed()
+        compose.onNodeWithTag("cast:waiting").assertIsDisplayed().assert(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.LiveRegion,
+                androidx.compose.ui.semantics.LiveRegionMode.Polite
+            )
+        )
         compose.onNodeWithTag("cast:volume-slider").assertIsNotEnabled()
         capture("phone-waiting")
     }
@@ -133,6 +148,8 @@ class TouchCastScreenTest {
         compose.setContent { TouchTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
         compose.onNodeWithTag("cast:volume-slider").assertIsEnabled()
         capture("tablet-volume")
+        compose.onNodeWithTag("cast:disconnect").performScrollTo().assertIsDisplayed()
+        capture("tablet-actions")
     }
 
     /** Stop, Close and Forget all end with no viewing. "Nothing is casting" was a dead end the viewer had to back out of. */
