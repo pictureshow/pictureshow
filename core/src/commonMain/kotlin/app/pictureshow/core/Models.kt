@@ -26,8 +26,7 @@ data class Account(
     /** A usable session: neither ended by the viewer nor refused by the server. */
     val signedIn: Boolean get() = !expired && !signedOut && accessToken.isNotBlank()
 
-    override fun toString(): String =
-        "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired, signedOut=$signedOut)"
+    override fun toString(): String = "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired, signedOut=$signedOut)"
 }
 
 data class ClientIdentity(val deviceName: String, val deviceId: String, val version: String = "0.1.0") {

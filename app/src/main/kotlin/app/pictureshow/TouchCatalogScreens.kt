@@ -41,12 +41,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -80,8 +80,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -112,6 +112,7 @@ import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.homeNotice
 import app.pictureshow.core.homeRowDestination
+import app.pictureshow.core.missingItemLabel
 import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
 import app.pictureshow.core.sortDirectionLabel
@@ -203,7 +204,16 @@ internal fun TouchCatalogHome(
                     "libraries" -> onLibraries
                     else -> state.libraries.firstOrNull { "library:${it.id}" == destination }?.let { library -> { onOpen(library) } }
                 }
-                TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onTitle, onOpen)
+                TouchCatalogShelf(
+                    row.title,
+                    row.items,
+                    account,
+                    row.wide || row.library,
+                    !row.library,
+                    onTitle,
+                    subtitle = { item -> homeRowSubtitle(row, item) },
+                    onOpen = onOpen
+                )
             }
         }
     }
@@ -1013,6 +1023,7 @@ internal fun TouchCatalogShelf(
     wide: Boolean,
     reserveLines: Boolean = true,
     onTitle: (() -> Unit)? = null,
+    subtitle: (MediaItem) -> String? = { null },
     onOpen: (MediaItem) -> Unit
 ) {
     val shortWindow = isShortTouchWindow()
@@ -1043,7 +1054,15 @@ internal fun TouchCatalogShelf(
                 } else {
                     if (wide) 244.dp else 136.dp
                 }
-                TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(width), reserveLines = reserveLines)
+                TouchCatalogCard(
+                    item,
+                    account,
+                    wide,
+                    { onOpen(item) },
+                    Modifier.width(width),
+                    reserveLines = reserveLines,
+                    subtitle = subtitle(item)
+                )
             }
         }
     }
@@ -1086,7 +1105,8 @@ internal fun TouchCatalogCard(
     reserveLines: Boolean = true,
     caption: (@Composable () -> Unit)? = null,
     artworkProgress: Float? = null,
-    showProgress: Boolean = true
+    showProgress: Boolean = true,
+    subtitle: String? = null
 ) = app.pictureshow.ui.CatalogCard(
     item,
     account,
@@ -1098,7 +1118,8 @@ internal fun TouchCatalogCard(
     catalogAnnouncement(item),
     caption = caption,
     artworkProgress = artworkProgress,
-    showProgress = showProgress
+    showProgress = showProgress,
+    subtitle = subtitle ?: missingItemLabel(item, localToday())
 )
 
 @Composable
@@ -1193,7 +1214,8 @@ private fun TouchAccountMenu(user: String, server: String, busy: Boolean, onSwit
             contentAlignment = Alignment.Center
         ) {
             Box(
-                Modifier.size(34.dp).background(MaterialTheme.colorScheme.secondaryContainer, androidx.compose.foundation.shape.CircleShape),
+                Modifier.size(34.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, androidx.compose.foundation.shape.CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

@@ -26,6 +26,13 @@ data class AccountSnapshot(
     val pendingHomePreferences: Set<String> = emptySet()
 ) {
     val currentAccount: Account? get() = accounts.firstOrNull { it.key == currentKey }
+
+    /**
+     * AUTH-10: viewers whose private local state stays on this device (downloads, offline progress, music queue,
+     * launcher rows and their dismissals). A card the viewer signed out of keeps only its identity and server, so it
+     * owns none of that; a session the server ended (AUTH-12) still does.
+     */
+    val privateStateOwners: List<Account> get() = accounts.filterNot(Account::signedOut)
     val rememberedServers: List<Server> get() = (listOfNotNull(lastServer) + accounts.map { it.server }).distinctBy { it.id to it.url }
 }
 

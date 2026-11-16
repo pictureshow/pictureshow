@@ -53,7 +53,8 @@
           ],
           "hidden": [
             "b"
-          ]
+          ],
+          "mergeWatching": false
         }
       },
       "expected": [
@@ -339,7 +340,8 @@
         "preferences": {
           "hiddenSeries": [
             "s"
-          ]
+          ],
+          "mergeWatching": false
         }
       },
       "expected": [
@@ -386,7 +388,8 @@
               "kind": "COLLECTION",
               "value": "denied"
             }
-          ]
+          ],
+          "mergeWatching": false
         }
       },
       "expected": []
@@ -849,7 +852,7 @@
         "afterPost": false
       },
       "expected": {
-        "merged": true,
+        "merged": false,
         "landing": "home",
         "warned": true,
         "serverSaved": false,
@@ -863,7 +866,7 @@
         "afterPost": true
       },
       "expected": {
-        "merged": true,
+        "merged": false,
         "landing": "libraries",
         "warned": true,
         "serverSaved": true,
@@ -1048,7 +1051,8 @@
         "preferences": {
           "hidden": [
             "resume"
-          ]
+          ],
+          "mergeWatching": false
         }
       },
       "expected": [
@@ -1075,7 +1079,8 @@
             "libraries",
             "nextup",
             "nextup"
-          ]
+          ],
+          "mergeWatching": false
         }
       },
       "expected": [
@@ -2791,6 +2796,589 @@
         "exact": false
       },
       "expected": "35+ titles"
+    },
+    {
+      "id": "home-merge-default-captions-next",
+      "operation": "home-rows-captioned",
+      "note": "HOME-12: one Continue watching row by default; resumed first, then next episodes captioned Next \u00b7 S1:E2. Settings turns mergeWatching off for a separate Next up row.",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Continue watching",
+            "items": [
+              {
+                "Id": "a",
+                "Type": "Episode",
+                "Name": "Ep a",
+                "SeriesId": "s",
+                "SeriesName": "Show A",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 3
+              },
+              {
+                "Id": "film",
+                "Type": "Movie",
+                "Name": "Film"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next up",
+            "items": [
+              {
+                "Id": "a4",
+                "Type": "Episode",
+                "Name": "Ep a4",
+                "SeriesId": "s",
+                "SeriesName": "Show A",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 4
+              },
+              {
+                "Id": "b2",
+                "Type": "Episode",
+                "Name": "Ep b2",
+                "SeriesId": "t",
+                "SeriesName": "Show B",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 2
+              },
+              {
+                "Id": "film",
+                "Type": "Movie",
+                "Name": "Film"
+              }
+            ]
+          }
+        ],
+        "preferences": {}
+      },
+      "expected": [
+        {
+          "key": "watching",
+          "title": "Continue watching",
+          "ids": [
+            "a",
+            "film",
+            "b2"
+          ],
+          "captions": {
+            "b2": "Next \u00b7 S1:E2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "home-merge-off-separate-rows",
+      "operation": "home-rows-captioned",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Continue watching",
+            "items": [
+              {
+                "Id": "a",
+                "Type": "Episode",
+                "Name": "Ep a",
+                "SeriesId": "s",
+                "SeriesName": "Show A",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 3
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next up",
+            "items": [
+              {
+                "Id": "b2",
+                "Type": "Episode",
+                "Name": "Ep b2",
+                "SeriesId": "t",
+                "SeriesName": "Show B",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 2
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "mergeWatching": false
+        }
+      },
+      "expected": [
+        {
+          "key": "resume",
+          "title": "Continue watching",
+          "ids": [
+            "a"
+          ],
+          "captions": {}
+        },
+        {
+          "key": "nextup",
+          "title": "Next up",
+          "ids": [
+            "b2"
+          ],
+          "captions": {}
+        }
+      ]
+    },
+    {
+      "id": "home-duplicate-series-two-libraries",
+      "operation": "home-duplicate-ids",
+      "note": "HOME-13 (web R4-1): the same series name under two series ids is flagged, so its cards name their library.",
+      "input": {
+        "rows": [
+          {
+            "key": "nextup",
+            "title": "Next up",
+            "items": [
+              {
+                "Id": "e2",
+                "Type": "Episode",
+                "Name": "Ep e2",
+                "SeriesId": "copy-1",
+                "SeriesName": "Open Frames Anthology",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 2
+              },
+              {
+                "Id": "e3",
+                "Type": "Episode",
+                "Name": "Ep e3",
+                "SeriesId": "copy-2",
+                "SeriesName": "open frames  anthology",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 3
+              },
+              {
+                "Id": "x1",
+                "Type": "Episode",
+                "Name": "Ep x1",
+                "SeriesId": "solo",
+                "SeriesName": "Solo Show",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 1
+              }
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "e2",
+        "e3"
+      ]
+    },
+    {
+      "id": "home-duplicate-movie-two-libraries",
+      "operation": "home-duplicate-ids",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Continue watching",
+            "items": [
+              {
+                "Id": "m1",
+                "Type": "Movie",
+                "Name": "Open Movie",
+                "ProductionYear": 2008
+              }
+            ]
+          },
+          {
+            "key": "latest:4k",
+            "title": "Latest in 4K",
+            "items": [
+              {
+                "Id": "m2",
+                "Type": "Movie",
+                "Name": "Open Movie",
+                "ProductionYear": 2008
+              },
+              {
+                "Id": "m3",
+                "Type": "Movie",
+                "Name": "Open Movie",
+                "ProductionYear": 1999
+              }
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "m1",
+        "m2"
+      ]
+    },
+    {
+      "id": "home-duplicate-same-item-twice-is-not",
+      "operation": "home-duplicate-ids",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Continue watching",
+            "items": [
+              {
+                "Id": "e1",
+                "Type": "Episode",
+                "Name": "Ep e1",
+                "SeriesId": "s",
+                "SeriesName": "Show",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 1
+              }
+            ]
+          },
+          {
+            "key": "latest:tv",
+            "title": "Latest",
+            "items": [
+              {
+                "Id": "e1",
+                "Type": "Episode",
+                "Name": "Ep e1",
+                "SeriesId": "s",
+                "SeriesName": "Show",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 1
+              },
+              {
+                "Id": "e5",
+                "Type": "Episode",
+                "Name": "Ep e5",
+                "SeriesId": "s",
+                "SeriesName": "Show",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 5
+              }
+            ]
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "home-card-subtitle-episode-library-next",
+      "operation": "home-card-subtitle",
+      "input": {
+        "item": {
+          "Id": "e2",
+          "Type": "Episode",
+          "Name": "Ep e2",
+          "SeriesId": "copy-2",
+          "SeriesName": "Open Frames Anthology",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 2
+        },
+        "caption": "Next \u00b7 S1:E2",
+        "library": "Open Series"
+      },
+      "expected": "Open Frames Anthology \u00b7 Open Series \u00b7 Next \u00b7 S1:E2"
+    },
+    {
+      "id": "home-card-subtitle-episode-plain",
+      "operation": "home-card-subtitle",
+      "input": {
+        "item": {
+          "Id": "e2",
+          "Type": "Episode",
+          "Name": "Ep e2",
+          "SeriesId": "s",
+          "SeriesName": "Open Frames Anthology",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 2
+        },
+        "caption": null,
+        "library": null
+      },
+      "expected": "Open Frames Anthology \u00b7 S1:E2"
+    },
+    {
+      "id": "home-card-subtitle-movie-library",
+      "operation": "home-card-subtitle",
+      "input": {
+        "item": {
+          "Id": "m",
+          "Type": "Movie",
+          "Name": "Open Movie"
+        },
+        "caption": null,
+        "library": "Open Movies"
+      },
+      "expected": "Open Movies"
+    },
+    {
+      "id": "home-card-subtitle-movie-none",
+      "operation": "home-card-subtitle",
+      "input": {
+        "item": {
+          "Id": "m",
+          "Type": "Movie",
+          "Name": "Open Movie"
+        },
+        "caption": null,
+        "library": null
+      },
+      "expected": null
+    },
+    {
+      "id": "missing-series-play-skips-virtual-nextup",
+      "operation": "detail-play-item",
+      "note": "CAT-21: an episode with LocationType Virtual is never a play target; Play starts the first episode the library has.",
+      "input": {
+        "item": {
+          "Id": "s",
+          "Type": "Series",
+          "Name": "Show"
+        },
+        "nextUp": [
+          {
+            "Id": "e1",
+            "Type": "Episode",
+            "Name": "Ep e1",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1,
+            "LocationType": "Virtual"
+          }
+        ],
+        "episodes": [
+          {
+            "Id": "e1",
+            "Type": "Episode",
+            "Name": "Ep e1",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1,
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "e2",
+            "Type": "Episode",
+            "Name": "Ep e2",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2,
+            "LocationType": "FileSystem"
+          },
+          {
+            "Id": "e3",
+            "Type": "Episode",
+            "Name": "Ep e3",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 3
+          }
+        ]
+      },
+      "expected": "e2"
+    },
+    {
+      "id": "missing-season-play-skips-virtual-unplayed",
+      "operation": "detail-play-item",
+      "input": {
+        "item": {
+          "Id": "season",
+          "Type": "Season",
+          "Name": "Season 1"
+        },
+        "nextUp": [],
+        "episodes": [
+          {
+            "Id": "e1",
+            "Type": "Episode",
+            "Name": "Ep e1",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1,
+            "UserData": {
+              "Played": true
+            }
+          },
+          {
+            "Id": "e2",
+            "Type": "Episode",
+            "Name": "Ep e2",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2,
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "e3",
+            "Type": "Episode",
+            "Name": "Ep e3",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 3
+          }
+        ]
+      },
+      "expected": "e3"
+    },
+    {
+      "id": "missing-season-all-virtual-no-play",
+      "operation": "detail-play-item",
+      "input": {
+        "item": {
+          "Id": "season",
+          "Type": "Season",
+          "Name": "Season 2"
+        },
+        "nextUp": [],
+        "episodes": [
+          {
+            "Id": "e1",
+            "Type": "Episode",
+            "Name": "Ep e1",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 1,
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "e2",
+            "Type": "Episode",
+            "Name": "Ep e2",
+            "SeriesId": "s",
+            "SeriesName": "Show",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 2,
+            "LocationType": "Virtual"
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "missing-episode-page-no-play",
+      "operation": "detail-play-item",
+      "input": {
+        "item": {
+          "Id": "e2",
+          "Type": "Episode",
+          "Name": "Ep e2",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 2,
+          "LocationType": "Virtual"
+        },
+        "nextUp": [],
+        "episodes": []
+      },
+      "expected": null
+    },
+    {
+      "id": "present-episode-page-plays-itself",
+      "operation": "detail-play-item",
+      "input": {
+        "item": {
+          "Id": "e2",
+          "Type": "Episode",
+          "Name": "Ep e2",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 2,
+          "LocationType": "FileSystem"
+        },
+        "nextUp": [],
+        "episodes": []
+      },
+      "expected": "e2"
+    },
+    {
+      "id": "missing-label-aired",
+      "operation": "missing-item-label",
+      "note": "today is the viewer's local date, yyyy-MM-dd.",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Type": "Episode",
+          "Name": "Ep e1",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "LocationType": "Virtual",
+          "PremiereDate": "2021-03-04T00:00:00.0000000Z"
+        },
+        "today": "2026-11-16"
+      },
+      "expected": "Not in your library \u00b7 Aired Mar 4, 2021"
+    },
+    {
+      "id": "missing-label-airs",
+      "operation": "missing-item-label",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Type": "Episode",
+          "Name": "Ep e1",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "LocationType": "Virtual",
+          "PremiereDate": "2027-01-15T00:00:00Z"
+        },
+        "today": "2026-11-16"
+      },
+      "expected": "Not in your library \u00b7 Airs Jan 15, 2027"
+    },
+    {
+      "id": "missing-label-no-date",
+      "operation": "missing-item-label",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Type": "Episode",
+          "Name": "Ep e1",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "LocationType": "Virtual"
+        },
+        "today": "2026-11-16"
+      },
+      "expected": "Not in your library"
+    },
+    {
+      "id": "missing-label-present-is-null",
+      "operation": "missing-item-label",
+      "input": {
+        "item": {
+          "Id": "e1",
+          "Type": "Episode",
+          "Name": "Ep e1",
+          "SeriesId": "s",
+          "SeriesName": "Show",
+          "ParentIndexNumber": 1,
+          "IndexNumber": 1,
+          "LocationType": "FileSystem",
+          "PremiereDate": "2021-03-04T00:00:00Z"
+        },
+        "today": "2026-11-16"
+      },
+      "expected": null
     }
   ]
 }

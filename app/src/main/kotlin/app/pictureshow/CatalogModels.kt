@@ -343,6 +343,30 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
 
     fun reload() = reload(pulled = false)
 
+    /**
+     * HOME-13: a card whose title is also on Home from another library names its library, read from the item's
+     * ancestors. Only rows that mix libraries need it (a "Latest in" row already names its own); a failed read leaves
+     * the card as it was.
+     */
+    private suspend fun namedLibraries(rows: List<HomeRow>, libraries: List<MediaItem>): List<HomeRow> = coroutineScope {
+        val duplicates = app.pictureshow.core.homeDuplicateIds(rows)
+        if (duplicates.isEmpty()) return@coroutineScope rows
+        val mixed = rows.filter { !it.library && !it.key.startsWith("latest:") }
+        val names = mixed.flatMap { it.items }.filter { it.id in duplicates }.map { it.id }.distinct().associateWith { id ->
+            async {
+                val ancestors = session.call(account) {
+                    (this as? app.pictureshow.core.SearchService)?.searchAncestors(account, id)
+                        ?: ClientResult.Failure(app.pictureshow.core.ClientError(app.pictureshow.core.ErrorKind.SERVER, "No library"))
+                }
+                (ancestors as? ClientResult.Success)?.value?.let { app.pictureshow.core.searchLibraryName(it, libraries) }
+            }
+        }.mapNotNull { (id, name) -> name.await()?.let { id to it } }.toMap()
+        rows.map { row ->
+            if (row !in mixed) return@map row
+            row.copy(libraryNames = row.items.mapNotNull { item -> names[item.id]?.let { item.id to it } }.toMap())
+        }
+    }
+
     /** Pull-to-refresh: the same read, with the page's refresh indicator held until it settles. */
     fun refresh() = reload(pulled = true)
 
@@ -401,6 +425,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                     latest.mapValues { (_, result) -> (result as? ClientResult.Success)?.value.orEmpty() },
                     config
                 ) + pins
+                val customized = namedLibraries(app.pictureshow.core.customizedHome(rows, preferences.preferences), libraries)
                 currentCoroutineContext().ensureActive()
                 val unreachable = catalogUnreachable(failures)
                 mutableState.update {
@@ -411,7 +436,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                     it.copy(
                         loading = false,
                         refreshing = false,
-                        rows = if (keepRows) it.rows else app.pictureshow.core.customizedHome(rows, preferences.preferences),
+                        rows = if (keepRows) it.rows else customized,
                         availableRows = if (keepRows) it.availableRows else rows,
                         libraries = if (keepLibraries) it.libraries else libraries,
                         preferences = preferences.preferences,

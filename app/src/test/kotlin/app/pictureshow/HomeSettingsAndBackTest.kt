@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
@@ -285,6 +287,11 @@ class HomeSettingsAndBackTest {
         menuKey(Key.DirectionDown)
         menuKey(Key.DirectionCenter)
         compose.onNodeWithTag("home:account-menu").assertDoesNotExist()
+        // AUTH-10: it asks first, starting on Cancel.
+        compose.onNodeWithTag("sign-out:cancel").assertIsFocused()
+        assertEquals(0, signOuts)
+        compose.onNodeWithTag("sign-out:confirm-button").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
         assertEquals(1, signOuts)
         assertEquals(0, switchUsers)
     }

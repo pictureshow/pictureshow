@@ -152,6 +152,9 @@ internal fun PlaybackSettingsScreen(
     onSwitchUser: () -> Unit = {},
     onSignOut: () -> Unit = {},
     signingOut: Boolean = false,
+    /** HOME-12: null hides the switch until the Home layout is read. */
+    separateNextUp: Boolean? = null,
+    onSeparateNextUp: (Boolean) -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -237,6 +240,15 @@ internal fun PlaybackSettingsScreen(
                         }
                     )
                 }
+            }
+            if (separateNextUp != null) {
+                TvSettingsSectionHeader("Home")
+                TvSettingsToggleRow(
+                    "Separate Next up row",
+                    separateNextUp,
+                    Modifier.testTag("settings:separate-next-up"),
+                    supportingText = "Off: next episodes follow what you're watching in one Continue watching row."
+                ) { value -> onSeparateNextUp(value) }
             }
             TvSettingsSectionHeader("Playback & quality")
             group("Network quality", if (account == null) Modifier.focusRequester(first) else Modifier)

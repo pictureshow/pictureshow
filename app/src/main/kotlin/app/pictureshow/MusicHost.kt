@@ -333,9 +333,9 @@ internal class MusicHost(
     /** Always the latest accounts, so a switch a step already made is not undone by an older one still in line. */
     private suspend fun bindLatest() {
         val snapshot = accounts.snapshots.value
-        bind(snapshot.currentAccount, snapshot.accounts.map(Account::key).toSet())
-        // Any viewer no longer saved here, current or not, takes their saved queue with them.
-        store.retain(snapshot.accounts)
+        bind(snapshot.currentAccount, snapshot.privateStateOwners.map(Account::key).toSet())
+        // Any viewer no longer saved here, or signed out of it (AUTH-10), current or not, takes their saved queue with them.
+        store.retain(snapshot.privateStateOwners)
     }
 
     private suspend fun bind(next: Account?, known: Set<String>) {
@@ -1514,7 +1514,9 @@ internal class MusicHost(
         scope.launch {
             accounts.load()
             accounts.snapshots
-                .distinctUntilChangedBy { Triple(it.currentAccount?.key, it.currentAccount?.accessToken, it.accounts.map(Account::key)) }
+                .distinctUntilChangedBy {
+                    Triple(it.currentAccount?.key, it.currentAccount?.accessToken, it.privateStateOwners.map(Account::key))
+                }
                 .collect {
                     // The one step that always runs: it is what moves the queue to the next account.
                     jobs.trySend { bindLatest() }

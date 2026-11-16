@@ -92,12 +92,12 @@ class CatalogModelsTest {
         service.latestItems = mapOf("movies" to ok(listOf(movie)))
         val vm = own(CatalogHomeViewModel(account, session))
         advanceUntilIdle()
-        assertEquals(listOf("nextup", "libraries", "latest:movies"), vm.state.value.rows.map { it.key })
+        assertEquals(listOf("watching", "libraries", "latest:movies"), vm.state.value.rows.map { it.key })
         assertNotNull(vm.state.value.error)
         service.resumeItems = ok(ItemPage(listOf(movie)))
         vm.reload()
         advanceUntilIdle()
-        assertEquals("resume", vm.state.value.rows.first().key)
+        assertEquals("watching", vm.state.value.rows.first().key)
         assertNull(vm.state.value.error)
     }
 

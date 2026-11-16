@@ -32,13 +32,15 @@ local persistence, reload, repeated sign-out, sign-in replacement and Remove.
   trailing chevron shows it can be activated; choosing it fills the saved username and focuses Password. That username
   metadata clears for another-user/new-server flows, and passwords remain form-local and reset on account changes.
   The controller captures the live credential before clearing local state for best-effort remote logout.
-- **Android (TV and touch): port owed.** `HomeViewModel.signOut` (`app/.../ScreenModels.kt`) still calls the legacy
-  `AccountStore.signOut`, which forgets the card. Its `OfflineEngine.observeAccounts` detects ended sessions by
-  removed account keys; a full port must treat blank/expired credentials as ended sessions too, so downloaded bytes,
-  progress stores, background transfers and active sessions still retire on sign-out. Do not switch this caller to
-  retained cards without that cleanup integration and its offline regressions. The retained-card API is explicit
-  so this desktop change does not silently change Android's current cleanup trigger.
-  The TV Home account chip menu (area G, CAT-01) also owes the ask-first confirmation; its Sign out commits at once today.
+- **Android (TV and touch): ported 2026-11-16 (leg 156).** `HomeViewModel.signOut` calls
+  `signOutKeepingAccount`, which now also marks the card `signedOut: true` (the vectors carry the field). A card the
+  viewer signed out of keeps identity and server only: `AccountSnapshot.privateStateOwners` excludes it, and every
+  private-state registry reads that list (downloads and offline progress in `OfflineEngine`, the saved music queue in
+  `MusicHost`, launcher rows and their dismissals in `WatchNextRuntime`). A session the server ended (AUTH-12, `expired`
+  without `signedOut`) keeps its downloads for the next sign-in. Sign out asks first on TV (Home chip menu, Settings,
+  the button below Home's rows) and touch (Home's account menu), starting on Cancel; the chooser and the touch account
+  list show "Signed out · Sign in again" and land on that card, which opens sign-in with the username filled.
+  Tests: `OfflineEngineTest`, `MusicHostTest`, `WatchNextCoordinatorTest`, `AccountStoreTest`, `ScreenModelsTest`.
 - **Web: port owed.** `web/src/main.tsx` `logout()` filters the viewer out of persisted `accounts` today. It needs
   retained identity/server metadata with an empty token, an unselected session, sign-in-again card/routing and menu
   confirmation. The vector runner lists this suite as owed, rather than claiming a runtime port.
@@ -46,6 +48,6 @@ local persistence, reload, repeated sign-out, sign-in replacement and Remove.
   the viewer from the snapshot before best-effort logout. `AccountsView` already offers Sign in again for an empty
   token; port sign-out persistence, confirmation and the shared cases, and preserve catalog/playback/history cleanup.
 
-The legacy Kotlin `signOut` name remains an Android compatibility debt until that port; it is not the desired
-AUTH-10 behavior. `removeAccount` continues to forget a viewer. Source audit above describes the checked code, not
+The legacy Kotlin `signOut` is gone; web and Apple ports should add the `signedOut` flag so an expired session
+(which keeps downloads) and a sign-out (which doesn't) stay distinguishable. `removeAccount` continues to forget a viewer. Source audit above describes the checked code, not
 native runtime verification on those other platforms.

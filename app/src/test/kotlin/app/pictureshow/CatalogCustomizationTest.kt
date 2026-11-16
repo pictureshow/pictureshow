@@ -274,7 +274,7 @@ class CatalogCustomizationTest {
     fun touchSnackbarNeverMovesTheHomeRows() = stableHomeRows()
 
     private fun stableHomeRows() {
-        var state by mutableStateOf(CatalogHomeState(loading = false))
+        var state by mutableStateOf(CatalogHomeState(loading = false, preferences = HomePreferences(mergeWatching = false)))
         compose.setContent { MaterialTheme { HomeCustomization(state, account, service, {}, {}) } }
         val before = compose.onNodeWithTag("home:row:resume").getUnclippedBoundsInRoot()
         compose.runOnIdle { state = state.copy(saving = true) }
@@ -345,7 +345,7 @@ class CatalogCustomizationTest {
     }
 
     @Test fun homeBuilderShowsCurrentChoiceAndPersistsReversibleRowEdits() {
-        var preferences by mutableStateOf(HomePreferences())
+        var preferences by mutableStateOf(HomePreferences(mergeWatching = false))
         var closed = false
         compose.setContent {
             MaterialTheme {
@@ -375,7 +375,7 @@ class CatalogCustomizationTest {
     }
 
     @Test fun pickedRowMovesWithDpadAndSavesOnlyOnDrop() {
-        var preferences by mutableStateOf(HomePreferences())
+        var preferences by mutableStateOf(HomePreferences(mergeWatching = false))
         compose.setContent {
             MaterialTheme {
                 HomeCustomization(
@@ -407,7 +407,7 @@ class CatalogCustomizationTest {
     }
 
     @Test fun repeatedNativeMovesKeepThePickedRowAndItsNeighborVisibleUntilDrop() {
-        var preferences by mutableStateOf(HomePreferences())
+        var preferences by mutableStateOf(HomePreferences(mergeWatching = false))
         val libraries = (1..12).map { library.copy(id = "library-$it", name = "Library $it") }
         compose.setContent {
             MaterialTheme {
@@ -468,7 +468,7 @@ class CatalogCustomizationTest {
     }
 
     @Test fun retryOnlyAppearsAfterARealSaveFailure() {
-        var screen by mutableStateOf(CatalogHomeState(loading = false))
+        var screen by mutableStateOf(CatalogHomeState(loading = false, preferences = HomePreferences(mergeWatching = false)))
         var retried = false
         compose.setContent { MaterialTheme { HomeCustomization(screen, account, service, { retried = true }, {}) } }
         compose.onNodeWithTag("home:retry-save").assertDoesNotExist()

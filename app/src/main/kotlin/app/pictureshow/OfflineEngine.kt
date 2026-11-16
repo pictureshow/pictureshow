@@ -262,7 +262,7 @@ internal class OfflineEngine(
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
             }
             runCatching {
-                sessions().endAllExcept(snapshot.accounts.filterNot(Account::signedOut).map { it.server.id to it.user.id }.toSet())
+                sessions().endAllExcept(snapshot.privateStateOwners.map { it.server.id to it.user.id }.toSet())
             }
             watchRevocations()
             if (keys.isNotEmpty() || lastAccountKeys.isEmpty()) mutex.withLock { pumpLocked() }
@@ -1166,5 +1166,4 @@ internal fun measuredNetwork(context: Context, network: Network? = null): Offlin
 }
 
 /** Viewers whose downloads stay: every saved account except one the viewer signed out of (AUTH-10, OFF-09). */
-internal fun app.pictureshow.core.AccountSnapshot.downloadOwners(): Set<String> =
-    accounts.filterNot(Account::signedOut).map(Account::key).toSet()
+internal fun app.pictureshow.core.AccountSnapshot.downloadOwners(): Set<String> = privateStateOwners.map(Account::key).toSet()

@@ -64,16 +64,25 @@ class WatchNextCoordinatorTest {
         }
     }
     private class Dismissals : WatchDismissals {
+        var retained: Set<String>? = null
         override fun contains(key: String) = false
         override fun add(key: String) = Unit
+        override fun retainAccounts(prefixes: Set<String>) {
+            retained = prefixes
+        }
     }
-    private fun TestScope.coordinator(accounts: AccountStore, service: CatalogService, provider: Provider) = WatchNextCoordinator(
+    private fun TestScope.coordinator(
+        accounts: AccountStore,
+        service: CatalogService,
+        provider: Provider,
+        dismissals: Dismissals = Dismissals()
+    ) = WatchNextCoordinator(
         RuntimeEnvironment.getApplication(),
         accounts,
         service,
         backgroundScope,
         { provider },
-        Dismissals()
+        dismissals
     )
 
     @Test
@@ -99,6 +108,26 @@ class WatchNextCoordinatorTest {
         accounts.removeAccount(account.key)
         runCurrent()
         assertTrue(provider.programs.isEmpty())
+    }
+
+    /** AUTH-10: a card kept after Sign out owns no launcher rows. */
+    @Test
+    fun signOutKeepingTheCardClearsTheViewersRows() = runTest {
+        val accounts = AccountStore(Persistence())
+        accounts.remember(account)
+        val service = CatalogModelsTest.FakeCatalog().apply { resumeItems = ClientResult.Success(ItemPage(listOf(item))) }
+        val provider = Provider()
+        val dismissals = Dismissals()
+        val coordinator = coordinator(accounts, service, provider, dismissals)
+        coordinator.start()
+        runCurrent()
+        assertEquals(1, provider.programs.size)
+        assertEquals(setOf("${watchAccountKey(account)}:"), dismissals.retained)
+        accounts.signOutKeepingAccount(account.key)
+        runCurrent()
+        assertTrue(provider.programs.isEmpty())
+        assertEquals(emptySet(), dismissals.retained, "a signed-out viewer's dismissals are forgotten")
+        assertTrue(accounts.snapshots.value.accounts.single().signedOut)
     }
 
     @Test

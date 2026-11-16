@@ -30,6 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -180,6 +181,8 @@ class OfflineEngineTest {
         restoreCrashHandler()
         hold = false
         scopes.forEach { it.cancel() }
+        // A purge already running on IO finishes before the files go, so the two deletions never race.
+        runBlocking { withTimeoutOrNull(10_000) { scopes.forEach { it.coroutineContext[Job]?.join() } } }
         server.shutdown()
         File(context.noBackupFilesDir, "offline").deleteRecursively()
     }

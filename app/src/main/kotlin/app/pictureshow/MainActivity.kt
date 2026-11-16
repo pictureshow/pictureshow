@@ -309,6 +309,15 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
     nav.currentBackStackEntry?.savedStateHandle?.saveSyncOpen(entry.syncOpen)
 }
 
+/** CAT-21: a link to an episode the library doesn't have opens its page, which says so; no player. */
+internal fun navigateMissingEntry(nav: NavHostController, item: MediaItem) {
+    nav.navigate("home") {
+        popUpTo(nav.graph.id) { inclusive = true }
+        launchSingleTop = true
+    }
+    nav.navigate(itemRoute(item))
+}
+
 /** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
 internal fun recoverPlaybackEntry(nav: NavHostController, item: MediaItem) {
     val player = nav.currentBackStackEntry?.takeIf { it.destination.route?.startsWith("player?") == true } ?: return
@@ -458,6 +467,8 @@ internal fun Pictureshow(
                         launchSingleTop = true
                     }
                 }
+
+                is ResolvedPlaybackEntry.Missing -> navigateMissingEntry(nav, resolved.item)
 
                 is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
             }
@@ -833,8 +844,13 @@ internal fun Pictureshow(
             } == true
             BackHandler(enabled = nav.previousBackStackEntry == null) { leaveLogin(nav) }
             Page("Sign in to ${state.snapshot.serverLabel(server)}") {
-                // Sign in again (AUTH-10): the saved name is filled, so Password is where the viewer starts.
-                val knownUser = !entry.arguments?.getString("username").isNullOrBlank()
+                // Sign in again after Sign out (AUTH-10): the saved name is filled, so Password is where the viewer starts.
+                val knownUser = state.snapshot.accounts.any {
+                    it.signedOut &&
+                        it.server.id == server.id &&
+                        it.server.url == server.url &&
+                        it.user.name == entry.arguments?.getString("username")
+                }
                 RemoteField(
                     "Username",
                     screen.username,
@@ -1002,6 +1018,7 @@ internal fun Pictureshow(
                     probe.start(onChanged = ::update)
                     onDispose { probe.close() }
                 }
+                val separateNextUp = rememberSeparateNextUp(catalog, state.snapshot.currentAccount)
                 PlaybackSettingsScreen(
                     screen,
                     accepted,
@@ -1017,7 +1034,9 @@ internal fun Pictureshow(
                     account = SettingsAccount(profileState.account.user.name, state.snapshot.serverLabel(account.server)),
                     onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
                     onSignOut = profile::signOut,
-                    signingOut = profileState.busy
+                    signingOut = profileState.busy,
+                    separateNextUp = separateNextUp.first,
+                    onSeparateNextUp = separateNextUp.second
                 )
             }
         }

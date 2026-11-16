@@ -212,6 +212,9 @@ class SettingsOrderTest {
         }
         compose.onNodeWithTag("settings:sign-out").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
+        assertEquals(0, signOuts, "Sign out asks first (AUTH-10)")
+        compose.onNodeWithTag("sign-out:confirm-button").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.waitForIdle()
         assertEquals(1, signOuts)
         compose.onNodeWithTag("settings:switch-user").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()

@@ -84,6 +84,17 @@ class AccountStoreTest {
     }
 
     @Test
+    fun aSessionTheServerEndedStillOwnsItsPrivateState() = runTest {
+        val store = AccountStore(MemoryPersistence())
+        store.remember(first)
+        store.remember(second)
+        store.expire(first.key, first.accessToken)
+        assertEquals(listOf(first.key, second.key), store.load().privateStateOwners.map { it.key })
+        store.signOutKeepingAccount(second.key)
+        assertEquals(listOf(first.key), store.load().privateStateOwners.map { it.key })
+    }
+
+    @Test
     fun signingOutKeepsCardButDiscardsCredentialAndPrivateStateAcrossReload() = runTest {
         val persistence = MemoryPersistence()
         val store = AccountStore(persistence)
@@ -104,6 +115,8 @@ class AccountStoreTest {
         assertTrue(restored.homePreferences.isEmpty())
         assertTrue(restored.pendingHomePreferences.isEmpty())
         assertTrue(restored.retiredDeviceAccounts.isEmpty())
+        // The kept card is identity and server only: it owns no private local state (AUTH-10).
+        assertEquals(listOf(second), restored.privateStateOwners)
         for (privateValue in listOf(first.accessToken, "replacement-token", "private search", "old-device")) {
             assertFalse(persistence.value.orEmpty().contains(privateValue))
         }

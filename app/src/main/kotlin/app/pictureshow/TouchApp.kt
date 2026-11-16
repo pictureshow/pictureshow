@@ -216,6 +216,8 @@ internal fun TouchPictureshow(
                         }
                     }
 
+                    is ResolvedPlaybackEntry.Missing -> navigateMissingEntry(nav, resolved.item)
+
                     is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
                 }
             }
@@ -630,6 +632,7 @@ internal fun TouchPictureshow(
                     }
                     val castStored by cast.castEnabled.collectAsStateWithLifecycle()
                     val settingsContext = LocalContext.current
+                    val separateNextUp = rememberSeparateNextUp(catalog, state.snapshot.currentAccount)
                     TouchSettings(
                         screen,
                         accepted,
@@ -648,7 +651,9 @@ internal fun TouchPictureshow(
                         onCastEnabled = cast::setEnabled,
                         onUpdateServices = settingsContext::openPlayServicesListing.takeIf {
                             castState.capability.state == "services-update-required"
-                        }
+                        },
+                        separateNextUp = separateNextUp.first,
+                        onSeparateNextUp = separateNextUp.second
                     )
                 }
             }

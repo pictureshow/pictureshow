@@ -131,8 +131,8 @@ internal class WatchNextCoordinator(
                 ).collectLatest {
                     try {
                         val account = accounts.snapshots.value.currentAccount?.takeUnless { it.expired }
-                        // Clear removed viewers' launcher dismissal history as well as published rows.
-                        val prefixes = accounts.snapshots.value.accounts.map { "${watchAccountKey(it)}:" }.toSet()
+                        // Clear removed and signed-out viewers' launcher dismissal history as well as published rows (AUTH-10).
+                        val prefixes = accounts.snapshots.value.privateStateOwners.map { "${watchAccountKey(it)}:" }.toSet()
                         sync.retainSavedAccounts(prefixes)
                         sync.retainAccount(account)
                         dismissals.retainAccounts(prefixes)

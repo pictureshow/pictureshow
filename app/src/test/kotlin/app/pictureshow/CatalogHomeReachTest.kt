@@ -64,7 +64,7 @@ class CatalogHomeReachTest {
         val vm = CatalogHomeViewModel(account, session).also { store.put("home", it) }
         vm.reload()
         runCurrent()
-        assertTrue(vm.state.value.rows.any { it.key == "resume" })
+        assertTrue(vm.state.value.rows.any { it.key == "watching" })
         service.libraryViews = offline
         service.resumeItems = offline
         service.nextItems = offline
@@ -72,7 +72,7 @@ class CatalogHomeReachTest {
         runCurrent()
         val state = vm.state.value
         assertTrue(state.unreachable)
-        assertEquals(listOf(film), state.rows.first { it.key == "resume" }.items, "What was loaded earlier stays on the page")
+        assertEquals(listOf(film), state.rows.first { it.key == "watching" }.items, "What was loaded earlier stays on the page")
         assertEquals(listOf(movies), state.libraries, "The Libraries tab keeps its tiles")
     }
 
@@ -86,7 +86,7 @@ class CatalogHomeReachTest {
         runCurrent()
         val state = vm.state.value
         assertFalse(state.unreachable)
-        assertTrue(state.rows.none { it.key == "resume" }, "A refusal or a fresh empty answer is not kept from earlier")
+        assertTrue(state.rows.none { it.key == "watching" }, "A refusal or a fresh empty answer is not kept from earlier")
         assertTrue(state.libraries.isEmpty())
     }
 
