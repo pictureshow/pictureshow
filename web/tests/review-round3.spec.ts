@@ -79,6 +79,29 @@ async function shot(page: Page, name: string) {
         await page.locator("body").ariaSnapshot(),
     );
 }
+/** Boxes of `selectors` read in one frame, once the layout has stopped moving. */
+async function settledBoxes(page: Page, selectors: string[]) {
+    return page.evaluate(async (selectors) => {
+        const read = () =>
+            selectors.map((q) => {
+                const r = document.querySelector(q)!.getBoundingClientRect();
+                return { x: r.x, y: r.y, width: r.width, height: r.height };
+            });
+        const frame = () => new Promise((r) => requestAnimationFrame(r));
+        // A resize is observed after layout in frame N and re-measured in
+        // frame N + 1, so frame N alone still shows the stale layout.
+        await frame();
+        await frame();
+        let last = JSON.stringify(read());
+        for (let n = 0; n < 60; n++) {
+            await frame();
+            const now = JSON.stringify(read());
+            if (now === last) return read();
+            last = now;
+        }
+        throw new Error(`layout still moving after 60 frames: ${last}`);
+    }, selectors);
+}
 async function play(page: Page) {
     await signIn(page);
     await page.locator('[data-focus="resume:movie"]').click();
@@ -372,10 +395,16 @@ for (const [size, width, height] of [
         );
         await page.setViewportSize({ width, height });
         await shot(page, `player-${size}`);
-        const skip = (await page.locator(".skip-segment").boundingBox())!,
-            feedback = (await page
-                .locator(".playback-feedback")
-                .boundingBox())!;
+        // The player re-measures its controls one animation frame after a
+        // resize (ResizeObserver, then requestAnimationFrame), and both boxes
+        // move together with it. Two separate boundingBox() calls can straddle
+        // that frame and compare a stale Skip with a settled status (CI on
+        // 6ef83573: Skip 21 px and 41 px too high). Read both from one frame,
+        // once two consecutive frames agree.
+        const { skip, feedback } = await settledBoxes(page, [
+            ".skip-segment",
+            ".playback-feedback",
+        ]).then(([skip, feedback]) => ({ skip, feedback }));
         expect
             .soft(feedback.y + feedback.height + 6)
             .toBeLessThanOrEqual(skip.y);
@@ -448,12 +477,10 @@ for (const [size, width, height] of [
             await expect.soft(button).toBeInViewport({ ratio: 1 });
         await expect
             .soft(
-                page
-                    .locator(".next-episode")
-                    .getByRole("button", {
-                        name: "Cancel next title",
-                        exact: true,
-                    }),
+                page.locator(".next-episode").getByRole("button", {
+                    name: "Cancel next title",
+                    exact: true,
+                }),
             )
             .toHaveText("Cancel");
         if (width === 390) {

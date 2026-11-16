@@ -986,6 +986,20 @@ export function Player({
             );
         }
     }
+    // The transport label in one place (R4-2): it reads Play whenever pressing
+    // it would not pause a running picture. Besides the viewer's own pause and
+    // a failure, that is the held final frame: the player's own pause at the
+    // natural end is an owned pause, so pauseIntent stays false there, and
+    // every later pause or timeupdate event must not relabel it Pause.
+    function transportPaused() {
+        return (
+            pauseIntent.current ||
+            playbackFailed.current ||
+            completionDeferred.current ||
+            pausedAtPhysicalEnd.current ||
+            (ended.current && !!video.current?.paused)
+        );
+    }
     function toggle() {
         if (completing.current || leaving.current) return;
         // Background Media Session commands work, but only an active foreground
@@ -1000,7 +1014,7 @@ export function Player({
             return;
         }
         pauseIntent.current = !pauseIntent.current;
-        setPaused(pauseIntent.current);
+        setPaused(transportPaused());
         lastActivity.current = Date.now();
         setControls(true);
         const el = video.current;
@@ -1498,6 +1512,9 @@ export function Player({
             return;
         }
         if (reader && found && !cancelNext) {
+            // The viewer chooses: Play now, Cancel, or the transport's Play,
+            // which continues exactly as in the deferred case above.
+            completionDeferred.current = true;
             setNext(found);
             setNotice(
                 `Playback finished. Choose Play now for the next ${nextNoun}.`,
@@ -1602,7 +1619,7 @@ export function Player({
                 return;
             }
             sample();
-            setPaused(pauseIntent.current || playbackFailed.current);
+            setPaused(transportPaused());
             const advanced = el.currentTime > lastPlaybackClock;
             lastPlaybackClock = el.currentTime;
             if (
@@ -1720,7 +1737,7 @@ export function Player({
             setNotice("");
             if (!pausedAtPhysicalEnd.current) sample();
             if (pauseIntent.current) pauseDecoder(el);
-            setPaused(pauseIntent.current || playbackFailed.current);
+            setPaused(transportPaused());
             if (!viewing.current.started) {
                 viewing.current.started = true;
                 report("start");
@@ -1774,7 +1791,7 @@ export function Player({
             )
                 pendingSeek.current = undefined;
             if (pauseIntent.current) pauseDecoder(el);
-            setPaused(pauseIntent.current || playbackFailed.current);
+            setPaused(transportPaused());
             if (!viewing.current.started) {
                 viewing.current.started = true;
                 report("start");
@@ -1800,7 +1817,7 @@ export function Player({
             periodicProgressAt.current = Date.now();
             update();
             if (!el.ended) {
-                setPaused(pauseIntent.current || playbackFailed.current);
+                setPaused(transportPaused());
                 if (pauseIntent.current) setControls(true);
                 report("progress");
             }

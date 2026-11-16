@@ -1141,6 +1141,17 @@ test("native ended event completes once after actual final frames, independently
         .toBe(1);
     expect(f.completed()).toBe(0);
     await expect(page.getByRole("status")).toContainText("Playback finished");
+    // R4-2: the decoder is held at the end, so the transport offers Play, and
+    // later pause/timeupdate events must not flip it back to Pause.
+    await page.waitForTimeout(2000);
+    await expect(
+        page
+            .locator(".player-controls > .transport")
+            .getByRole("button", { name: "Play", exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole("button", { name: "Pause", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Play now", exact: true }).click();
     await expect.poll(f.completed).toBe(1);
     await expect(
