@@ -15,7 +15,7 @@ enum PendingSpecCaseManifest {
         "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
         "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
-        "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
@@ -270,6 +270,17 @@ enum PendingSpecCaseManifest {
         live-dvr.semantic-status-tones|live-dvr/status-tones
         live-guide.exact-half-open-overlap-dedupe-denied-channel|live-guide/guide
         live-guide.dst-fold-offsets-are-different-instants|live-guide/guide
+        live-guide.quiet-refresh-young|live-guide/quiet-refresh
+        live-guide.quiet-refresh-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-stale-still-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-while-refreshing|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-offline|live-guide/quiet-refresh
+        live-guide.quiet-refresh-clock-backwards|live-guide/quiet-refresh
+        live-guide.quiet-refresh-never-fetched|live-guide/quiet-refresh
+        live-guide.preview-line-now|live-guide/preview-line
+        live-guide.preview-line-later|live-guide/preview-line
+        live-guide.preview-line-earlier|live-guide/preview-line
+        live-guide.preview-line-no-channel|live-guide/preview-line
         live-guide.natural-subchannels-and-missing-number|live-guide/sort
         live-guide.future-cannot-tune|live-guide/tune
         live-guide.current-at-exact-start|live-guide/tune
@@ -2205,6 +2216,15 @@ enum PendingSpecCaseManifest {
         detail-play-label-movie|application/detail-play-label
         detail-play-label-movie-resume|application/detail-play-label
         detail-play-label-series-nothing-to-play|application/detail-play-label
+        track-menu-empty-no-subtitles|application/track-menu-empty
+        track-menu-empty-no-audio|application/track-menu-empty
+        track-menu-empty-subtitles-present|application/track-menu-empty
+        track-menu-empty-audio-present|application/track-menu-empty
+        controls-last-action-soon|application/controls-restore-last-action
+        controls-last-action-at-window|application/controls-restore-last-action
+        controls-last-action-too-late|application/controls-restore-last-action
+        controls-last-action-never-hidden|application/controls-restore-last-action
+        controls-last-action-clock-backwards|application/controls-restore-last-action
         home-notice-unreachable-keeps-page-and-names-server|home-browse/home-notice
         home-notice-unreachable-keeps-page-offers-downloads|home-browse/home-notice
         home-notice-unnamed-server|home-browse/home-notice
