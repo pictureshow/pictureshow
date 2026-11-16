@@ -35,8 +35,10 @@ data class ProfileLock(
 
 const val PROFILE_PIN_MIN = 4
 const val PROFILE_PIN_MAX = 8
+
 /** Wrong guesses allowed before the first wait. */
 const val PROFILE_PIN_FREE_TRIES = 4
+
 /** At this many wrong guesses in a row the PIN stops working; only the server password opens the viewer. */
 const val PROFILE_PIN_HARD_LIMIT = 10
 
@@ -111,11 +113,11 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
 
     fun lock(key: String): ProfileLock? = mutable.value[key]
 
-    fun needed(key: String, reason: ProfileUnlockReason): Boolean =
-        profilePinNeeded(lock(key), reason, unlockedKey.value == key)
+    fun needed(key: String, reason: ProfileUnlockReason): Boolean = profilePinNeeded(lock(key), reason, unlockedKey.value == key)
 
     private var opened: String? = null
     private var openedSeen = false
+
     /** The viewer the gate last let in. Unlocking someone else doesn't lock it again; only leaving it does. */
     private var admitted: String? = null
 

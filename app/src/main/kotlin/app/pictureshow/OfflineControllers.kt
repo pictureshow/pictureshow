@@ -328,10 +328,11 @@ internal fun offlineAskForNotifications(granted: Boolean, alreadyAsked: Boolean)
 internal fun rememberOfflineNotificationWillAsk(): Boolean {
     val context = LocalContext.current
     return remember(context) {
-        Build.VERSION.SDK_INT >= 33 && offlineAskForNotifications(
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
-            context.getSharedPreferences(OFFLINE_NOTIFICATION_PREFS, Context.MODE_PRIVATE).getBoolean(OFFLINE_NOTIFICATION_ASKED, false)
-        )
+        Build.VERSION.SDK_INT >= 33 &&
+            offlineAskForNotifications(
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+                context.getSharedPreferences(OFFLINE_NOTIFICATION_PREFS, Context.MODE_PRIVATE).getBoolean(OFFLINE_NOTIFICATION_ASKED, false)
+            )
     }
 }
 

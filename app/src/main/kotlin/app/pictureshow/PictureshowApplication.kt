@@ -61,7 +61,9 @@ class PictureshowApplication : Application() {
                 module {
                     single { preferences }
                     single { AccountStore(AccountPersistence(get())) }
-                    single { app.pictureshow.core.ProfileLockStore(ProfileLockPersistence(get()), app.pictureshow.core.JvmProfilePinHasher()) }
+                    single {
+                        app.pictureshow.core.ProfileLockStore(ProfileLockPersistence(get()), app.pictureshow.core.JvmProfilePinHasher())
+                    }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
                     single { AndroidOfflineForeground(this@PictureshowApplication) }

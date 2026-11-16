@@ -224,10 +224,23 @@ internal fun PlaybackSettingsScreen(
                 ProfilePinSettings(
                     tv = true,
                     row = { title, supporting, tag, onClick ->
-                        TvSettingsActionRow(title, Modifier.testTag(tag), supportingText = supporting, enabled = !signingOut, onClick = onClick)
+                        TvSettingsActionRow(
+                            title,
+                            Modifier.testTag(tag),
+                            supportingText = supporting,
+                            enabled = !signingOut,
+                            onClick = onClick
+                        )
                     },
                     toggle = { title, supporting, checked, tag, onChange ->
-                        TvSettingsToggleRow(title, checked, Modifier.testTag(tag), supportingText = supporting, enabled = !signingOut, onToggle = onChange)
+                        TvSettingsToggleRow(
+                            title,
+                            checked,
+                            Modifier.testTag(tag),
+                            supportingText = supporting,
+                            enabled = !signingOut,
+                            onToggle = onChange
+                        )
                     }
                 )
                 TvSettingsActionRow(

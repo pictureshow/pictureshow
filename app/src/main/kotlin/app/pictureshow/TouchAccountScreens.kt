@@ -6,17 +6,12 @@ package app.pictureshow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,13 +20,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import app.pictureshow.core.Account
@@ -168,16 +168,18 @@ internal fun TouchLogin(
                     Text(stringResource(R.string.login_not_you))
                 }
             }
-        } else OutlinedTextField(
-            value = state.username,
-            onValueChange = onUsername,
-            label = { Text("Username") },
-            singleLine = true,
-            enabled = !state.busy,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
-            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
-            modifier = Modifier.fillMaxWidth().testTag("touch:username")
-        )
+        } else {
+            OutlinedTextField(
+                value = state.username,
+                onValueChange = onUsername,
+                label = { Text("Username") },
+                singleLine = true,
+                enabled = !state.busy,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
+                keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
+                modifier = Modifier.fillMaxWidth().testTag("touch:username")
+            )
+        }
         OutlinedTextField(
             value = state.password,
             onValueChange = onPassword,

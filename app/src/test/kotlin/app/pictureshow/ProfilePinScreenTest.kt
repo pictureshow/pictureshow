@@ -52,7 +52,9 @@ class ProfilePinScreenTest {
         var switched = 0
         compose.setContent {
             app.pictureshow.ui.PictureshowTheme {
-                ProfileLockScreen(store, "parent", "Parent", tv = false, onUnlocked = { opened++ }, onSwitch = { switched++ }, onPassword = {})
+                ProfileLockScreen(store, "parent", "Parent", tv = false, onUnlocked = {
+                    opened++
+                }, onSwitch = { switched++ }, onPassword = {})
             }
         }
         type("1111")

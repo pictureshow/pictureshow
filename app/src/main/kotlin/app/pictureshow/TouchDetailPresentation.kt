@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +19,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import app.pictureshow.core.ApiTimeouts
 import app.pictureshow.core.DETAIL_PENDING_LABEL_GRACE_MILLIS
@@ -492,7 +492,15 @@ internal fun rememberTouchDetailPresentation(
                     else -> label("primary", playQueued == "primary", primaryPending)
                 },
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
-                reserve = listOfNotNull("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable", groupPlay),
+                reserve = listOfNotNull(
+                    "Play",
+                    "Resume from 0:00:00",
+                    primaryFresh,
+                    "Play when ready",
+                    "Play requested",
+                    "Play unavailable",
+                    groupPlay
+                ),
                 enabled = local != null || if (pendingEnabled) playOpen("primary") else canFreshPlay,
                 state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
                     local == null && pendingEnabled && playQueued != null && playQueued != "primary"

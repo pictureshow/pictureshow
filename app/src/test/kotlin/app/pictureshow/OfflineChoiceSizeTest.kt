@@ -18,8 +18,21 @@ class OfflineChoiceSizeTest {
         Locale.setDefault(Locale.US)
         try {
             val gib = 1024L * 1024 * 1024
-            assertEquals("2.0 GB", offlineChoiceSize(OfflinePresetChoice(OfflinePreset.original, true, estimateBytes = 2 * gib, exactSize = true)))
-            assertEquals("About 700 MB", offlineChoiceSize(OfflinePresetChoice(OfflinePreset.video720, true, estimateBytes = 700L * 1024 * 1024)))
+            assertEquals(
+                "2.0 GB",
+                offlineChoiceSize(OfflinePresetChoice(OfflinePreset.original, true, estimateBytes = 2 * gib, exactSize = true))
+            )
+            assertEquals(
+                "About 700 MB",
+                offlineChoiceSize(
+                    OfflinePresetChoice(
+                        OfflinePreset.video720,
+                        true,
+                        estimateBytes =
+                        700L * 1024 * 1024
+                    )
+                )
+            )
             assertNull(offlineChoiceSize(OfflinePresetChoice(OfflinePreset.original, true)))
             assertNull(offlineChoiceSize(OfflinePresetChoice(OfflinePreset.original, true, estimateBytes = 0)))
         } finally {

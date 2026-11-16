@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -162,7 +161,15 @@ internal fun ProfilePinPad(
                         digit.toString(),
                         tv,
                         keysOn,
-                        Modifier.testTag("pin:key:$digit").then(if (index == 0 && digit == '1') Modifier.focusRequester(first) else Modifier)
+                        Modifier.testTag("pin:key:$digit").then(
+                            if (index == 0 &&
+                                digit == '1'
+                            ) {
+                                Modifier.focusRequester(first)
+                            } else {
+                                Modifier
+                            }
+                        )
                     ) { type(digit) }
                 }
             }
@@ -213,7 +220,9 @@ private fun PinKey(label: String, tv: Boolean, enabled: Boolean, modifier: Modif
 @Composable
 internal fun PinTextAction(label: String, tv: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     if (tv) {
-        androidx.tv.material3.OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp)) { androidx.tv.material3.Text(label) }
+        androidx.tv.material3.OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp)) {
+            androidx.tv.material3.Text(label)
+        }
     } else {
         TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp)) { Text(label) }
     }
@@ -265,7 +274,10 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
                 ProfilePinResult.LOCKED_OUT -> check.lockedOut = true
                 ProfilePinResult.WAIT -> {
                     check.note = PinPadNote.WAIT
-                    tickWait(check) { store.lock(key)?.let { app.pictureshow.core.profilePinCooldown(it, android.os.SystemClock.elapsedRealtime()) } ?: 0 }
+                    tickWait(check) {
+                        store.lock(key)?.let { app.pictureshow.core.profilePinCooldown(it, android.os.SystemClock.elapsedRealtime()) }
+                            ?: 0
+                    }
                 }
             }
         }
@@ -548,4 +560,3 @@ private fun PinSurface(tv: Boolean, modifier: Modifier = Modifier, content: @Com
         )
     }
 }
-
