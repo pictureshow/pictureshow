@@ -190,6 +190,8 @@ internal fun TouchPictureshow(
         item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
+    val seerrTabs = rememberSeerrConnection(state.snapshot.currentKey) != null
+    val requestsLabel = androidx.compose.ui.res.stringResource(R.string.seerr_nav)
     TouchShell(showNavigation, rememberTouchLitTab(backStackEntry), {
         if (it == "home") landingApplied = true
         selectTouchTab(nav, it)
@@ -198,7 +200,7 @@ internal fun TouchPictureshow(
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
         if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
         if (!inPlayer) TouchSyncStayReminder(route)
-    }) {
+    }, tabs = if (seerrTabs) touchTabsWithRequests(requestsLabel) else touchTabs) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
             val expired = state.snapshot.currentAccount?.expired
@@ -255,6 +257,7 @@ internal fun TouchPictureshow(
         }
         NavHost(navController = nav, startDestination = "waiting") {
             offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
+            seerrTouchScreens(nav) { state.snapshot.currentAccount?.takeUnless { it.expired } }
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
                 val vm: ServerViewModel = koinViewModel()
@@ -443,6 +446,7 @@ internal fun TouchPictureshow(
                     val vm: SearchViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
                     LaunchedEffect(entry) { vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty()) }
+                    val offers = rememberSeerrOffers(account, screen)
                     TouchSearchScreen(
                         screen,
                         account,
@@ -453,8 +457,10 @@ internal fun TouchPictureshow(
                         vm::retry,
                         {
                             vm.opened()
-                            nav.navigate(itemRoute(it))
-                        }
+                            nav.navigate(seerrTitleRoute(it) ?: itemRoute(it))
+                        },
+                        extraRows = offers.rows,
+                        artwork = offers.artwork
                     )
                 }
             }
@@ -590,6 +596,7 @@ internal fun TouchPictureshow(
                             }
                         }
                         // A ready download is what this page plays, with or without the server (offline.md, the detail page).
+                        var subtitleTarget by remember { mutableStateOf<MediaItem?>(null) }
                         val download = rememberTouchDetailDownload(
                             account,
                             item.id,
@@ -645,8 +652,12 @@ internal fun TouchPictureshow(
                             discovery = discoveryRows(screen.item ?: item, discovery),
                             onDiscovery = { chosen ->
                                 openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) }
-                            }
+                            },
+                            onSubtitleDownload = { subtitleTarget = it }
                         )
+                        subtitleTarget?.let { target ->
+                            TouchSubtitleDownloadDialog(account, target) { subtitleTarget = null }
+                        }
                     }
                 }
             }
@@ -707,7 +718,9 @@ internal fun TouchPictureshow(
                             castState.capability.state == "services-update-required"
                         },
                         separateNextUp = separateNextUp.first,
-                        onSeparateNextUp = separateNextUp.second
+                        onSeparateNextUp = separateNextUp.second,
+                        seerrUser = rememberSeerrConnection(account.key)?.user?.name.orEmpty(),
+                        onSeerr = { nav.navigate(SEERR_CONNECT_ROUTE) }
                     )
                 }
             }

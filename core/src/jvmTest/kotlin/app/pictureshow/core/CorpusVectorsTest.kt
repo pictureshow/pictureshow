@@ -42,7 +42,11 @@ class CorpusVectorsTest {
                     "quality-auto-floor",
                     "playback-info-reasons",
                     "settings-presentation",
-                    "recovery"
+                    "recovery",
+                    // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
+                    "subtitle-download",
+                    // SeerrVectorsTest executes the Seerr request rules.
+                    "seerr"
                 ),
             "control-vectors" to
                 setOf(

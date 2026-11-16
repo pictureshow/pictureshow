@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -503,8 +504,9 @@ class CatalogFocusTest {
     // A reader's Left and Right prefer the next node in line and otherwise accept any node further that way (FocusFinder's
     // rules, which TalkBack copies over node bounds). A preview key handler never runs under TalkBack on a TV, so these
     // bounds are what holds the row; real TalkBack on an emulator is in the leg's result.
-    private fun shelfBounds(index: Int = 0) =
-        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))[index].getUnclippedBoundsInRoot()
+    private val shelves = SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange) and !hasTestTag(HOME_ACTIONS_TAG)
+
+    private fun shelfBounds(index: Int = 0) = compose.onAllNodes(shelves)[index].getUnclippedBoundsInRoot()
 
     @Test
     fun aReaderRightAtAShelfEndStopsAfterItsLastCard() {

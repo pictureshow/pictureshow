@@ -69,7 +69,10 @@ internal fun TouchSettings(
     onUpdateServices: (() -> Unit)? = null,
     /** HOME-12: null hides the switch until the Home layout is read. */
     separateNextUp: Boolean? = null,
-    onSeparateNextUp: (Boolean) -> Unit = {}
+    onSeparateNextUp: (Boolean) -> Unit = {},
+    /** Seerr requests: null hides the row; otherwise the connected Seerr name, or "" when not connected. */
+    seerrUser: String? = null,
+    onSeerr: () -> Unit = {}
 ) {
     val local = state.local
     var advanced by rememberSaveable { mutableStateOf<String?>(null) }
@@ -88,6 +91,17 @@ internal fun TouchSettings(
             }
             TouchNavRow("Remote for a TV", onClick = onRemote)
             TouchNavRow("Downloads", onClick = onDownloads)
+            seerrUser?.let { name ->
+                TouchNavRow(
+                    androidx.compose.ui.res.stringResource(R.string.seerr_settings_title),
+                    if (name.isEmpty()) {
+                        androidx.compose.ui.res.stringResource(R.string.seerr_settings_off)
+                    } else {
+                        androidx.compose.ui.res.stringResource(R.string.seerr_settings_on, name)
+                    },
+                    onClick = onSeerr
+                )
+            }
             separateNextUp?.let {
                 TouchSwitchRow(
                     "Separate Next up row",

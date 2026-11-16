@@ -66,6 +66,32 @@ internal fun touchNavIcon(route: String): ImageVector = ImageVector.Builder(
                 lineTo(13f, 16f)
                 close()
             }
+            // Requests (Seerr): a plus in a frame, "ask for something to be added".
+            SEERR_ROUTE -> {
+                moveTo(3f, 3f)
+                lineTo(21f, 3f)
+                lineTo(21f, 21f)
+                lineTo(3f, 21f)
+                close()
+                moveTo(5f, 5f)
+                lineTo(5f, 19f)
+                lineTo(19f, 19f)
+                lineTo(19f, 5f)
+                close()
+                moveTo(11f, 7f)
+                lineTo(13f, 7f)
+                lineTo(13f, 11f)
+                lineTo(17f, 11f)
+                lineTo(17f, 13f)
+                lineTo(13f, 13f)
+                lineTo(13f, 17f)
+                lineTo(11f, 17f)
+                lineTo(11f, 13f)
+                lineTo(7f, 13f)
+                lineTo(7f, 11f)
+                lineTo(11f, 11f)
+                close()
+            }
             else -> {
                 moveTo(3f, 5f)
                 lineTo(21f, 5f)

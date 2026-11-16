@@ -34,7 +34,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -74,8 +76,8 @@ internal fun TouchPlayerSheetContent(
             }
             when (sheet) {
                 TouchPlayerSheet.Chapters -> TouchChapterChoices(host, account, onDismiss, onSeek)
-                TouchPlayerSheet.Audio -> TouchTrackChoices(MediaStreamType.Audio, host, trackMenus, onDismiss)
-                TouchPlayerSheet.Subtitles -> TouchTrackChoices(MediaStreamType.Subtitle, host, trackMenus, onDismiss)
+                TouchPlayerSheet.Audio -> TouchTrackChoices(MediaStreamType.Audio, host, trackMenus, onDismiss, account)
+                TouchPlayerSheet.Subtitles -> TouchTrackChoices(MediaStreamType.Subtitle, host, trackMenus, onDismiss, account)
                 TouchPlayerSheet.Speed -> TouchSpeedChoices(host, onDismiss)
                 TouchPlayerSheet.Info -> TouchPlaybackInformation(host)
             }
@@ -127,9 +129,11 @@ private fun TouchTrackChoices(
     type: MediaStreamType,
     host: PlaybackHostState,
     preparation: PlayerTrackMenuPreparation,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    account: Account? = null
 ) {
-    val reconnect = LocalOfflinePlayback.current?.reconnect
+    val offlinePlayback = LocalOfflinePlayback.current
+    val reconnect = offlinePlayback?.reconnect
     if (reconnect != null && reconnect.state != OfflineReconnectState.Idle) {
         OfflineReconnectTouchContent(reconnect.state, onStream = {
             reconnect.accept(
@@ -145,9 +149,41 @@ private fun TouchTrackChoices(
         Text("Waiting for playback information…", Modifier.heightIn(min = 48.dp))
         return
     }
+    // SUB-DL: the sheet turns into the download flow in place, and Done still closes it.
+    val offersDownload = type == MediaStreamType.Subtitle && account != null && offlinePlayback == null && !host.isLive
+    var downloading by remember { mutableStateOf(false) }
+    if (downloading && account != null && decision != null) {
+        val search = rememberRemoteSubtitleSearch(account) ?: return
+        val target = remember(decision.mediaSourceId) {
+            app.pictureshow.core.subtitles.RemoteSubtitleTarget(
+                host.item.id,
+                host.item.type,
+                playable = true,
+                mediaSourceId = decision.mediaSourceId,
+                streams = decision.mediaSource?.mediaStreams.orEmpty(),
+                selectedAudio = host.state.audioIndex
+            )
+        }
+        TouchSubtitleDownloadContent(
+            search,
+            target,
+            onAdopted = { host.controller?.adoptDownloadedSubtitle(it.audioIndex, it.subtitleIndex) },
+            onClose = onDismiss
+        )
+        return
+    }
+    val downloadButton: @Composable () -> Unit = {
+        if (offersDownload) {
+            TextButton(
+                onClick = { downloading = true },
+                modifier = Modifier.heightIn(min = 48.dp).offset(x = (-12).dp).testTag("touch:subtitle-download")
+            ) { Text(stringResource(R.string.subtitle_download_open)) }
+        }
+    }
     menu.emptyNotice?.let {
         // PLAY-08: nothing to pick, and no delay controls for subtitles that don't exist.
         Text(it, Modifier.heightIn(min = 48.dp).testTag("touch:track-empty"))
+        downloadButton()
         return
     }
     val selectedIndex = if (type == MediaStreamType.Audio) host.state.audioIndex else host.state.subtitleIndex
@@ -179,6 +215,7 @@ private fun TouchTrackChoices(
                         }) { Text(label) }
                     }
                 }
+                downloadButton()
             }
         }
     }

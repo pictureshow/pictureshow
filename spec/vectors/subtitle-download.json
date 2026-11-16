@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "suite": "subtitle-download",
+  "source": "SUB-DL-01..04; core RemoteSubtitlePolicy; SubtitleDownloadVectorsTest",
+  "cases": [
+    {
+      "id": "sub-dl-01.offline-copy-unavailable",
+      "operation": "access",
+      "input": { "playable": false, "isAdministrator": true, "subtitleManagement": true, "fetchers": ["Open Subtitles"] },
+      "expected": "Unavailable"
+    },
+    {
+      "id": "sub-dl-01.no-permission-before-provider",
+      "operation": "access",
+      "input": { "playable": true, "isAdministrator": false, "subtitleManagement": false, "fetchers": [] },
+      "expected": "NotAllowed"
+    },
+    {
+      "id": "sub-dl-01.admin-without-flag-allowed",
+      "operation": "access",
+      "input": { "playable": true, "isAdministrator": true, "subtitleManagement": false, "fetchers": ["Open Subtitles"] },
+      "expected": "Allowed"
+    },
+    {
+      "id": "sub-dl-01.no-provider",
+      "operation": "access",
+      "input": { "playable": true, "isAdministrator": false, "subtitleManagement": true, "fetchers": [] },
+      "expected": "NoProvider"
+    },
+    {
+      "id": "sub-dl-01.unknown-reads-allow-search",
+      "operation": "access",
+      "input": { "playable": true, "isAdministrator": null, "subtitleManagement": null, "fetchers": null },
+      "expected": "Allowed"
+    },
+    {
+      "id": "sub-dl-01.status-meanings",
+      "operation": "failure",
+      "input": { "statuses": [null, 401, 403, 404, 500] },
+      "expected": ["Unreachable", "NotAllowed", "NotAllowed", "Failed", "Failed"]
+    },
+    {
+      "id": "sub-dl-02.subtitle-preference-first",
+      "operation": "initial-language",
+      "input": {
+        "subtitlePreference": "fre",
+        "audioPreference": "spa",
+        "deviceLanguage": "en",
+        "cultures": [
+          { "DisplayName": "English", "TwoLetterISOLanguageName": "en", "ThreeLetterISOLanguageName": "eng" },
+          { "DisplayName": "French", "TwoLetterISOLanguageName": "fr", "ThreeLetterISOLanguageName": "fre", "ThreeLetterISOLanguageNames": ["fre", "fra"] },
+          { "DisplayName": "Spanish", "TwoLetterISOLanguageName": "es", "ThreeLetterISOLanguageName": "spa" }
+        ]
+      },
+      "expected": "fre"
+    },
+    {
+      "id": "sub-dl-02.alternate-code-maps-to-search-code",
+      "operation": "initial-language",
+      "input": {
+        "subtitlePreference": "fra",
+        "audioPreference": null,
+        "deviceLanguage": "en",
+        "cultures": [
+          { "DisplayName": "English", "TwoLetterISOLanguageName": "en", "ThreeLetterISOLanguageName": "eng" },
+          { "DisplayName": "French", "TwoLetterISOLanguageName": "fr", "ThreeLetterISOLanguageName": "fre", "ThreeLetterISOLanguageNames": ["fre", "fra"] }
+        ]
+      },
+      "expected": "fre"
+    },
+    {
+      "id": "sub-dl-02.device-language-two-letter",
+      "operation": "initial-language",
+      "input": {
+        "subtitlePreference": "",
+        "audioPreference": null,
+        "deviceLanguage": "es",
+        "cultures": [
+          { "DisplayName": "English", "TwoLetterISOLanguageName": "en", "ThreeLetterISOLanguageName": "eng" },
+          { "DisplayName": "Spanish", "TwoLetterISOLanguageName": "es", "ThreeLetterISOLanguageName": "spa" }
+        ]
+      },
+      "expected": "spa"
+    },
+    {
+      "id": "sub-dl-02.unknown-preference-skipped",
+      "operation": "initial-language",
+      "input": {
+        "subtitlePreference": "xyz",
+        "audioPreference": null,
+        "deviceLanguage": "qq",
+        "cultures": [
+          { "DisplayName": "English", "TwoLetterISOLanguageName": "en", "ThreeLetterISOLanguageName": "eng" }
+        ]
+      },
+      "expected": "eng"
+    },
+    {
+      "id": "sub-dl-02.choices-preferred-then-common-then-by-name",
+      "operation": "language-choices",
+      "input": {
+        "first": ["wel", "spa", "eng", "spa"],
+        "cultures": [
+          { "DisplayName": "Spanish", "ThreeLetterISOLanguageName": "spa" },
+          { "DisplayName": "Welsh", "ThreeLetterISOLanguageName": "wel" },
+          { "DisplayName": "Basque", "ThreeLetterISOLanguageName": "baq" },
+          { "DisplayName": "German", "ThreeLetterISOLanguageName": "deu", "ThreeLetterISOLanguageNames": ["deu", "ger"] },
+          { "DisplayName": "English", "ThreeLetterISOLanguageName": "eng" },
+          { "DisplayName": "French", "ThreeLetterISOLanguageName": "fra", "ThreeLetterISOLanguageNames": ["fra", "fre"] },
+          { "DisplayName": "Abkhazian", "ThreeLetterISOLanguageName": "abk" },
+          { "DisplayName": "Arabic", "ThreeLetterISOLanguageName": "ara" },
+          { "DisplayName": "", "ThreeLetterISOLanguageName": "zzz" }
+        ]
+      },
+      "expected": ["wel", "spa", "eng", "fra", "deu", "ara", "abk", "baq"]
+    },
+    {
+      "id": "sub-dl-03.order-hash-human-downloads-rating",
+      "operation": "order",
+      "input": {
+        "results": [
+          { "Id": "a", "DownloadCount": 900, "CommunityRating": 9.0, "MachineTranslated": true },
+          { "Id": "b", "DownloadCount": 50 },
+          { "Id": "c", "DownloadCount": 10, "IsHashMatch": true },
+          { "Id": "d", "DownloadCount": 50, "CommunityRating": 8.0 },
+          { "Id": "b", "DownloadCount": 999 },
+          { "Id": "", "DownloadCount": 5000 },
+          { "Id": "e", "DownloadCount": 50 }
+        ]
+      },
+      "expected": ["c", "d", "b", "e", "a"]
+    },
+    {
+      "id": "sub-dl-03.details-tokens",
+      "operation": "details",
+      "input": {
+        "result": { "Id": "x", "ProviderName": "Open Subtitles", "Format": "srt", "DownloadCount": 1234, "IsHashMatch": true, "HearingImpaired": true, "Forced": false, "AiTranslated": true }
+      },
+      "expected": ["hash-match", "hearing-impaired", "machine-translated", "format:SRT", "provider:Open Subtitles", "downloads:1234"]
+    },
+    {
+      "id": "sub-dl-03.title-falls-back-to-provider-format",
+      "operation": "title",
+      "input": { "result": { "Id": "x", "Name": "  ", "ProviderName": "Open Subtitles", "Format": "srt" } },
+      "expected": "Open Subtitles · SRT"
+    },
+    {
+      "id": "sub-dl-04.external-first-renumbering",
+      "operation": "adopt",
+      "input": {
+        "before": [
+          { "Type": "Video", "Index": 0 },
+          { "Type": "Audio", "Index": 1, "Language": "eng" },
+          { "Type": "Audio", "Index": 2, "Language": "fre" },
+          { "Type": "Subtitle", "Index": 3, "Language": "eng", "Codec": "subrip" }
+        ],
+        "after": [
+          { "Type": "Subtitle", "Index": 0, "Language": "spa", "Codec": "srt", "IsExternal": true },
+          { "Type": "Video", "Index": 1 },
+          { "Type": "Audio", "Index": 2, "Language": "eng" },
+          { "Type": "Audio", "Index": 3, "Language": "fre" },
+          { "Type": "Subtitle", "Index": 4, "Language": "eng", "Codec": "subrip" }
+        ],
+        "selectedAudio": 2,
+        "language": "spa",
+        "format": "srt"
+      },
+      "expected": { "subtitleIndex": 0, "audioIndex": 3 }
+    },
+    {
+      "id": "sub-dl-04.existing-external-kept-apart-from-new",
+      "operation": "adopt",
+      "input": {
+        "before": [
+          { "Type": "Subtitle", "Index": 0, "Language": "eng", "Codec": "srt", "IsExternal": true },
+          { "Type": "Video", "Index": 1 },
+          { "Type": "Audio", "Index": 2, "Language": "eng" }
+        ],
+        "after": [
+          { "Type": "Subtitle", "Index": 0, "Language": "eng", "Codec": "srt", "IsExternal": true },
+          { "Type": "Subtitle", "Index": 1, "Language": "eng", "Codec": "srt", "IsExternal": true, "Title": "Downloaded" },
+          { "Type": "Video", "Index": 2 },
+          { "Type": "Audio", "Index": 3, "Language": "eng" }
+        ],
+        "selectedAudio": 2,
+        "language": "eng",
+        "format": "srt"
+      },
+      "expected": { "subtitleIndex": 1, "audioIndex": 3 }
+    },
+    {
+      "id": "sub-dl-04.not-listed-yet",
+      "operation": "adopt",
+      "input": {
+        "before": [
+          { "Type": "Video", "Index": 0 },
+          { "Type": "Audio", "Index": 1 }
+        ],
+        "after": [
+          { "Type": "Video", "Index": 0 },
+          { "Type": "Audio", "Index": 1 }
+        ],
+        "selectedAudio": 1,
+        "language": "eng",
+        "format": "srt"
+      },
+      "expected": null
+    },
+    {
+      "id": "sub-dl-04.prefers-requested-language-among-new",
+      "operation": "adopt",
+      "input": {
+        "before": [
+          { "Type": "Video", "Index": 0 },
+          { "Type": "Audio", "Index": 1 }
+        ],
+        "after": [
+          { "Type": "Subtitle", "Index": 0, "Language": "eng", "Codec": "srt", "IsExternal": true },
+          { "Type": "Subtitle", "Index": 1, "Language": "ger", "Codec": "srt", "IsExternal": true },
+          { "Type": "Video", "Index": 2 },
+          { "Type": "Audio", "Index": 3 }
+        ],
+        "selectedAudio": -1,
+        "language": "ger",
+        "format": "srt"
+      },
+      "expected": { "subtitleIndex": 1, "audioIndex": -1 }
+    }
+  ]
+}

@@ -500,6 +500,30 @@ internal class PlaybackSession(
     }
 
     /**
+     * SUB-DL-04: the server listed a subtitle the viewer just downloaded. Jellyfin renumbers streams when it adds an
+     * external file, so both indices come from the refreshed list and the stream is prepared again at this position:
+     * the old decision's indices no longer name the same tracks.
+     */
+    fun adoptDownloadedSubtitle(audioIndex: Int, subtitleIndex: Int) = enqueue {
+        if (mutable.value.error != null) return@enqueue
+        val current = decision ?: return@enqueue
+        subtitleChosenByViewer = true
+        capture()
+        audioRecoveryRequest = audioRecoveryRequest?.copy(audioStreamIndex = audioIndex, subtitleStreamIndex = subtitleIndex)
+        trace("subtitle-download", "stream=$subtitleIndex audio=$audioIndex positionMs=${lastPosition.milliseconds}")
+        retireStream(releaseOutput = false)
+        negotiate(
+            requested.copy(
+                startPosition = lastPosition.milliseconds.milliseconds,
+                mediaSourceId = current.mediaSourceId,
+                audioStreamIndex = audioIndex.takeIf { it >= 0 },
+                subtitleStreamIndex = subtitleIndex
+            ),
+            lastPosition.paused
+        )
+    }
+
+    /**
      * Every preparation reads the current route (capabilities, network, quality cap) when it starts, so a route change
      * is already served by any preparation that started after it was asked for: a track switch or fallback queued ahead
      * of it. Running it anyway would re-prepare the stream a second time for nothing (leg 144's actor-queue gap).

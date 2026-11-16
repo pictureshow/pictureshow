@@ -33,10 +33,15 @@ import androidx.navigation.NavHostController
 
 internal val touchTabs = listOf("home" to "Home", "libraries" to "Libraries", "search" to "Search", "settings" to "Settings")
 
+/** The bar with Requests before Settings, shown only while the account is connected to Seerr. */
+internal fun touchTabsWithRequests(label: String) = touchTabs.dropLast(1) + (SEERR_ROUTE to label) + touchTabs.last()
+
 internal fun touchTabFor(route: String?): String? = when {
     route == "home" -> "home"
     route in listOf("libraries", "live-tv") -> "libraries"
     route?.startsWith("search?") == true -> "search"
+    route == SEERR_ROUTE -> SEERR_ROUTE
+    route == SEERR_CONNECT_ROUTE -> "settings"
     route in listOf("settings", "accounts", "about", "licenses", "supporter") || route?.startsWith("license/") == true -> "settings"
     else -> null
 }
@@ -72,7 +77,8 @@ internal fun rememberTouchLitTab(entry: NavBackStackEntry?): String? {
 internal fun selectTouchTab(nav: NavHostController, tab: String) {
     val destination = if (tab == "search") searchRoute() else tab
     if (touchTabFor(nav.currentBackStackEntry?.destination?.route) == tab &&
-        nav.currentBackStackEntry?.destination?.route in listOf("home", "libraries", "settings", "search?query={query}&keyboard={keyboard}")
+        nav.currentBackStackEntry?.destination?.route in
+        listOf("home", "libraries", "settings", SEERR_ROUTE, "search?query={query}&keyboard={keyboard}")
     ) {
         return
     }
@@ -119,6 +125,7 @@ internal fun TouchShell(
     onTab: (String) -> Unit,
     fullscreen: Boolean = false,
     above: @Composable () -> Unit = {},
+    tabs: List<Pair<String, String>> = touchTabs,
     content: @Composable () -> Unit
 ) {
     // Playback owns its control insets; the video itself fills the window behind cutouts.
@@ -129,7 +136,7 @@ internal fun TouchShell(
         Row(Modifier.fillMaxSize()) {
             if (navigationVisible && rail) {
                 NavigationRail {
-                    touchTabs.forEach { (route, label) ->
+                    tabs.forEach { (route, label) ->
                         NavigationRailItem(
                             selected = selected == route,
                             onClick = { onTab(route) },
@@ -144,7 +151,7 @@ internal fun TouchShell(
                 above()
                 if (navigationVisible && !rail) {
                     NavigationBar {
-                        touchTabs.forEach { (route, label) ->
+                        tabs.forEach { (route, label) ->
                             NavigationBarItem(
                                 selected = selected == route,
                                 onClick = { onTab(route) },

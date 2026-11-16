@@ -63,6 +63,8 @@ const pendingPortSuites = new Set([
     "cast-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
+    // SEERR: Seerr requests are on Android first; web port owed.
+    "seerr",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
     "search-presentation",
     // CAT-30..32, PHOTO-01/02, PLAY-30, SAVER-01 detail discovery (Android leg 160): web port owed.
@@ -146,6 +148,8 @@ const pendingPortSuites = new Set([
     "touch-player-director-clearance-paint-edges",
     // Native seek/orientation ink and TV overflow paint remain owed UI adapters.
     "player-control-affordances",
+    // SUB-DL-01..04 remote subtitle search and stream adoption (Android leg 163): web port owed.
+    "subtitle-download",
 ]);
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.
