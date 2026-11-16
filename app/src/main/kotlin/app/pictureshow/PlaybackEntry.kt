@@ -131,6 +131,7 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
         return ResolvedPlaybackEntry.Unavailable
     }
     val item = (result as? ClientResult.Success)?.value ?: return ResolvedPlaybackEntry.Unavailable
+    if (item.id.equals(entry.itemId, ignoreCase = true) && item.type == "Season") return resolveSeasonEntry(item, account, catalog)
     if (!item.id.equals(entry.itemId, ignoreCase = true) || item.type !in setOf("Movie", "Episode") || item.isFolder) {
         return ResolvedPlaybackEntry.Unavailable
     }
@@ -139,5 +140,28 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
         item,
         app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs),
         if (entry.positionMs == null) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
+    )
+}
+
+/**
+ * A link to a season plays it as Jellyfin's clients do: its first episode the library has and the viewer hasn't
+ * finished, resuming that episode's saved point; autoplay carries on through the season. Missing episodes are skipped
+ * (CAT-21). A season with nothing to play is unavailable.
+ */
+private suspend fun resolveSeasonEntry(season: MediaItem, account: Account, catalog: CatalogSession): ResolvedPlaybackEntry {
+    val seriesId = season.seriesId ?: return ResolvedPlaybackEntry.Unavailable
+    val result = try {
+        catalog.call(account) { episodes(account, seriesId, season.id) }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        return ResolvedPlaybackEntry.Unavailable
+    }
+    val episodes = (result as? ClientResult.Success)?.value?.items ?: return ResolvedPlaybackEntry.Unavailable
+    val episode = app.pictureshow.core.detailPlayItem(season, emptyList(), episodes) ?: return ResolvedPlaybackEntry.Unavailable
+    return ResolvedPlaybackEntry.Open(
+        episode,
+        app.pictureshow.core.resumeStartPositionMs(episode.userData.playbackPositionTicks),
+        PlaybackStartOrigin.SavedResume
     )
 }

@@ -84,8 +84,11 @@ fun customizedHome(rows: List<HomeRow>, preferences: HomePreferences): List<Home
     val next = rows.firstOrNull { it.key == "nextup" }?.items.orEmpty().filterNot { it.seriesId in preferences.hiddenSeries }
     val prepared = if (preferences.mergeWatching) {
         val resumedSeries = resume.mapNotNull { it.seriesId }.toSet()
-        val upcoming = next.filterNot { it.seriesId in resumedSeries || it.id in resume.map(MediaItem::id) }
-        val combined = (resume + upcoming).distinctBy { it.id }
+        val candidates = next.filterNot { it.seriesId in resumedSeries || it.id in resume.map(MediaItem::id) }
+        // Next up also lists an episode the viewer has started (beyond the resume read's limit, or saved after it). It
+        // is still a resume: it joins the resumed group, uncaptioned, so its card reads like the others with progress.
+        val (resumable, upcoming) = candidates.partition(MediaItem::isResumable)
+        val combined = (resume + resumable + upcoming).distinctBy { it.id }
         val captions = upcoming.associate { it.id to nextCaption(it) }
         listOf(HomeRow("watching", "Continue watching", combined, wide = true, captions = captions)) +
             rows.filterNot { it.key in listOf("resume", "nextup") }
@@ -160,6 +163,12 @@ fun configuredHome(
         }
     ).map { row -> if (row.library) row.copy(items = row.items.filterNot { it.id in excluded("MyMediaExcludes") }) else row }
 }
+
+/**
+ * The server saved a resume point. Jellyfin's own Resume list uses the same test, a rewatch of a played item included;
+ * HOME-12 keeps such an item a resume card.
+ */
+val MediaItem.isResumable: Boolean get() = userData.playbackPositionTicks > 0
 
 /** A next episode in the merged row says so, "Next · S1:E2", so it isn't mistaken for one already started (HOME-12). */
 fun nextCaption(item: MediaItem): String = if (item.type == "Episode") "Next · ${episodeLabel(item)}" else "Next"

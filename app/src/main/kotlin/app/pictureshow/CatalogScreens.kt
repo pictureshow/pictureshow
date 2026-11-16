@@ -2666,7 +2666,9 @@ fun CatalogDetail(
                             section = section,
                             items = items,
                             account = state.account,
-                            onOpen = if (section == "seasons") onSeason else onOpen,
+                            // Resting on a season card shows its episodes here; OK opens the season's own page, whose Play
+                            // plays the season (its first unfinished episode, resumed), as Jellyfin's TV clients do.
+                            onOpen = onOpen,
                             wide = section != "seasons",
                             selectedId = if (section == "seasons") state.selectedSeasonId else null,
                             onFocusRested = if (section == "seasons") {
@@ -3119,6 +3121,8 @@ private fun DetailActions(
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     var focusedTarget by remember { mutableStateOf<String?>(null) }
     val position = playItem?.userData?.playbackPositionTicks ?: 0
+    // CAT-21: a missing episode offers nothing that plays, including the returning layout's reserved Play from start.
+    val offersFromStart = !item.isMissing
     val labels = mapOf(
         "primary" to (pending?.playLabel ?: app.pictureshow.core.detailPlayLabel(item, playItem)),
         "from-start" to (pending?.fromStartLabel ?: "Play from start"),
@@ -3313,7 +3317,7 @@ private fun DetailActions(
                 }
         }
         if (compact) {
-            recordingDetailActionOrder(stableLayout || position > 0, onDownload != null && pending == null).forEach { target ->
+            recordingDetailActionOrder(offersFromStart && (stableLayout || position > 0), onDownload != null && pending == null).forEach { target ->
                 key(target) {
                     when (target) {
                         "primary" -> {
@@ -3421,7 +3425,7 @@ private fun DetailActions(
                     }
                 }
             }
-            if (!stableLayout && position > 0) {
+            if (offersFromStart && !stableLayout && position > 0) {
                 key("from-start") {
                     Box {
                         Button(
@@ -3530,7 +3534,7 @@ private fun DetailActions(
             }
             // After playback Play from start keeps its last place, so the pending handoff and the ready row agree on Right
             // from the primary landing on Mark watched (CAT-08..12); the shorter hero keeps a wrapped second row on screen (T-8).
-            if (stableLayout) {
+            if (offersFromStart && stableLayout) {
                 key("from-start") {
                     Box {
                         val click = pending?.onFromStart ?: {

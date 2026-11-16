@@ -207,8 +207,8 @@ fun detailPlayItem(item: MediaItem?, nextUp: List<MediaItem>, episodes: List<Med
 }
 
 /**
- * CAT-21: Jellyfin lists an episode it knows of but has no file for with `LocationType: "Virtual"` (only for viewers
- * whose "Display missing episodes" setting is on; the server applies that setting). Nothing can play, download or cast it.
+ * CAT-21: Jellyfin lists an episode it knows of but has no file for with `LocationType: "Virtual"` (for a viewer's
+ * own session, only when their "Display missing episodes" setting is on; an API-key read always gets them). Nothing can play, download or cast it.
  */
 val MediaItem.isMissing: Boolean get() = locationType.equals("Virtual", ignoreCase = true)
 

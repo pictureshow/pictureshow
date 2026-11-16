@@ -2871,6 +2871,84 @@
       ]
     },
     {
+      "id": "home-merge-resumable-next-up-stays-resume",
+      "operation": "home-rows-captioned",
+      "note": "HOME-12: an item with a saved position is a resume card, never 'Next', even when only Next up returned it (Jellyfin's Next up includes started episodes; the Resume read has a limit and can be read before the position was saved). It joins the resumed group, after the Resume read's items and before the next episodes, uncaptioned, so its card shows progress.",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Continue watching",
+            "items": [
+              {
+                "Id": "a",
+                "Type": "Episode",
+                "Name": "Ep a",
+                "SeriesId": "s",
+                "SeriesName": "Show A",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 3,
+                "UserData": {
+                  "PlaybackPositionTicks": 4200000000
+                }
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next up",
+            "items": [
+              {
+                "Id": "c2",
+                "Type": "Episode",
+                "Name": "Ep c2",
+                "SeriesId": "u",
+                "SeriesName": "Show C",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 2
+              },
+              {
+                "Id": "h1",
+                "Type": "Episode",
+                "Name": "Ep h1",
+                "SeriesId": "h",
+                "SeriesName": "Show H",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 1,
+                "UserData": {
+                  "PlaybackPositionTicks": 915080000
+                }
+              },
+              {
+                "Id": "a4",
+                "Type": "Episode",
+                "Name": "Ep a4",
+                "SeriesId": "s",
+                "SeriesName": "Show A",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 4
+              }
+            ]
+          }
+        ],
+        "preferences": {}
+      },
+      "expected": [
+        {
+          "key": "watching",
+          "title": "Continue watching",
+          "ids": [
+            "a",
+            "h1",
+            "c2"
+          ],
+          "captions": {
+            "c2": "Next \u00b7 S1:E2"
+          }
+        }
+      ]
+    },
+    {
       "id": "home-merge-off-separate-rows",
       "operation": "home-rows-captioned",
       "input": {

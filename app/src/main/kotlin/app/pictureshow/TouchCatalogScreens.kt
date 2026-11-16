@@ -506,6 +506,14 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
 }
 
 /** TV's playback choice, withholding a stale target until the report and every dependent read settle. */
+/** The selected season and what its Play starts, once its episodes have loaded; null while loading or with nothing to play. */
+internal fun touchSeasonPlay(state: CatalogDetailState): Pair<MediaItem, MediaItem>? {
+    if (state.item?.type != "Series" || state.playbackPending || state.loading || state.error != null) return null
+    val season = state.seasons.firstOrNull { it.id == state.selectedSeasonId } ?: return null
+    val episode = app.pictureshow.core.detailPlayItem(season.copy(type = "Season"), emptyList(), state.episodes) ?: return null
+    return season to episode
+}
+
 internal fun touchDetailPlayItem(state: CatalogDetailState): MediaItem? {
     if (state.playbackPending || state.loading || state.error != null && state.item == null) return null
     return app.pictureshow.core.detailPlayItem(state.item, state.nextUp, state.episodes)
@@ -676,6 +684,15 @@ internal fun TouchCatalogDetail(
                                     modifier = Modifier.heightIn(min = 48.dp)
                                 )
                             }
+                        }
+                        // Play the chosen season: its first episode the library has and the viewer hasn't finished,
+                        // resumed from its saved point (as Jellyfin plays a season; CAT-06, CAT-21).
+                        touchSeasonPlay(state)?.let { (season, episode) ->
+                            OutlinedButton(
+                                onClick = { onPlay(episode, episode.userData.playbackPositionTicks > 0) },
+                                modifier = Modifier.padding(horizontal = 20.dp).heightIn(min = 48.dp)
+                                    .testTag("touch:detail:season-play")
+                            ) { Text(app.pictureshow.core.detailPlayLabel(season, episode)) }
                         }
                     }
                 }

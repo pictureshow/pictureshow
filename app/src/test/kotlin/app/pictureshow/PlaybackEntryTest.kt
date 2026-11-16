@@ -157,6 +157,52 @@ class PlaybackEntryTest {
         http.close()
     }
 
+    /** A season link plays its first episode the library has and the viewer hasn't finished, from its saved point. */
+    @Test
+    fun aSeasonLinkPlaysItsFirstUnfinishedEpisodeSkippingMissingOnes() = runTest {
+        val season = MediaItem(id, "Season 2", "Season", seriesId = "series", isFolder = true)
+        val episodes = listOf(
+            MediaItem("e1", "One", "Episode", userData = ItemUserData(played = true)),
+            MediaItem("e2", "Two", "Episode", locationType = "Virtual"),
+            MediaItem("e3", "Three", "Episode", userData = ItemUserData(playbackPositionTicks = 915_080_000)),
+            MediaItem("e4", "Four", "Episode")
+        )
+        val http = HttpClient(MockEngine) {
+            engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
+                addHandler { request ->
+                    val body = when {
+                        request.url.encodedPath.endsWith("/Shows/series/Episodes") && request.url.parameters["seasonId"] == id ->
+                            Json.encodeToString(app.pictureshow.core.ItemPage(episodes, episodes.size))
+                        request.url.parameters["ids"] != null -> """{"Items":[${Json.encodeToString(season)}]}"""
+                        else -> Json.encodeToString(season)
+                    }
+                    respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                }
+            }
+        }
+        val resolved = assertIs<ResolvedPlaybackEntry.Open>(resolvePlaybackEntry(PlaybackEntry(id), account, session(http)))
+        assertEquals("e3", resolved.item.id)
+        assertEquals(91_508L, resolved.positionMs)
+        http.close()
+
+        val nothing = HttpClient(MockEngine) {
+            engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
+                addHandler { request ->
+                    val body = when {
+                        request.url.encodedPath.endsWith("/Episodes") -> Json.encodeToString(app.pictureshow.core.ItemPage(listOf(episodes[1]), 1))
+                        request.url.parameters["ids"] != null -> """{"Items":[${Json.encodeToString(season)}]}"""
+                        else -> Json.encodeToString(season)
+                    }
+                    respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                }
+            }
+        }
+        assertIs<ResolvedPlaybackEntry.Unavailable>(resolvePlaybackEntry(PlaybackEntry(id), account, session(nothing)))
+        nothing.close()
+    }
+
     private fun TestScope.http(
         body: String,
         status: HttpStatusCode = HttpStatusCode.OK,
