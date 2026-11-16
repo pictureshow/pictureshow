@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import SwiftUI
+import Combine
 import VideoToolbox
 import PictureshowCore
 
@@ -34,6 +35,9 @@ import PictureshowCore
     private(set) var remote: RemoteControl!
     /// Watch together for the selected viewer (SYN-01..11).
     private(set) var syncPlay: SyncPlaySession!
+    /// Each account's Seerr connection (SEERR-01..07); its changes redraw whatever reads it through the app.
+    let seerr = SeerrConnections()
+    private var seerrChanges: AnyCancellable?
 
     deinit {
         let socket = socket
@@ -50,6 +54,8 @@ import PictureshowCore
         remoteTarget = RemoteTarget(app: self)
         remote = RemoteControl(app: self)
         syncPlay = SyncPlaySession(app: self)
+        seerr.load(keys: snapshot.accounts.filter { !$0.signedOut }.map(\.key))
+        seerrChanges = seerr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         socket.follow(account)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
@@ -107,6 +113,8 @@ import PictureshowCore
         // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
         if player?.account.key == account.key { player = nil }
         downloads.removeViewer(account)
+        // SEERR-02: the account's Seerr connection goes with its sign-in.
+        seerr.remove(account.key)
         homeLayoutGeneration += 1
         homeLayouts.removeValue(forKey: account.key)
         homeLayoutPending.remove(account.key)

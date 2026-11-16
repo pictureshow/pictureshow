@@ -33,7 +33,6 @@ enum PendingSpecCaseManifest {
         "playback-start": "The merged start-origin and rewind policy is not ported to Apple.",
         "player-overlay-layout": "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed.",
         "player-quality": "The merged per-viewing quality selection policy is not ported to Apple.",
-        "seerr": "Seerr requests (leg 163, Android) are not ported to Apple: client, account-bound encrypted store and request screens.",
         "reference": "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute.",
         "settings-presentation": "The merged advanced playback setting labels and consequences are not ported to Apple.",
         "sync-completion-reporting": "Merged on main after the Apple core was last synced; core ported, needs the Apple playback host's report pipeline (Android TouchPlaybackHostTest).",

@@ -41,6 +41,7 @@ struct SettingsView: View {
                 }
             }
             LanguageSection()
+            SeerrSettingsSection()
             Section("Subtitles") {
                 Picker("Size", selection: $app.preferences.playback.subtitleSize) {
                     ForEach(SubtitleSize.allCases, id: \.self) { Text(sizeTitle($0)).tag($0) }

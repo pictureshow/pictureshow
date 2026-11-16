@@ -22,6 +22,7 @@ struct SearchView: View {
                 } else if !searching && results.values.allSatisfy(\.isEmpty) {
                     MessageView(symbol: "magnifyingglass", title: "No results", message: "Nothing matches “\(query)”.")
                         .padding(.top, 60)
+                    SeerrOffersShelf(query: query, library: [])
                 } else {
                     ForEach(SearchKind.allCases, id: \.self) { kind in
                         if let items = results[kind], !items.isEmpty {
@@ -32,6 +33,8 @@ struct SearchView: View {
                             }
                         }
                     }
+                    // SEERR-07: what Seerr can add, after what the library already has.
+                    SeerrOffersShelf(query: query, library: (results[.movies] ?? []) + (results[.shows] ?? []))
                 }
             }
             .padding(.vertical, 20)
