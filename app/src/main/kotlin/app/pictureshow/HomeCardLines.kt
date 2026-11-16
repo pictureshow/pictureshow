@@ -50,3 +50,10 @@ internal fun rememberSeparateNextUp(catalog: CatalogSession, account: Account?):
         }
     }
 }
+
+/** The switch's line says what Home does now, so it never reads "Off" beside a switch that is on. */
+internal fun separateNextUpSummary(separate: Boolean): String = if (separate) {
+    "Next up has its own row on Home."
+} else {
+    "Next episodes follow what you're watching in one Continue watching row on Home."
+}

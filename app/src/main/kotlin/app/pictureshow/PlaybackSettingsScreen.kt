@@ -247,7 +247,7 @@ internal fun PlaybackSettingsScreen(
                     "Separate Next up row",
                     separateNextUp,
                     Modifier.testTag("settings:separate-next-up"),
-                    supportingText = "Off: next episodes follow what you're watching in one Continue watching row."
+                    supportingText = separateNextUpSummary(separateNextUp)
                 ) { value -> onSeparateNextUp(value) }
             }
             TvSettingsSectionHeader("Playback & quality")

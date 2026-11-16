@@ -82,7 +82,7 @@ internal fun TouchSettings(
             separateNextUp?.let {
                 TouchSwitchRow(
                     "Separate Next up row",
-                    "Off: next episodes follow what you're watching in one Continue watching row on Home.",
+                    separateNextUpSummary(it),
                     it,
                     "touch:settings:separate-next-up",
                     onSeparateNextUp
