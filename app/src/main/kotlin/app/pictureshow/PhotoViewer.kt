@@ -88,19 +88,21 @@ class PhotoViewerViewModel(
     private val descending: Boolean,
     private val session: CatalogSession
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(PhotoViewerState(listOf(item), 0, loading = item.parentId != null))
+    private val mutableState = MutableStateFlow(PhotoViewerState(listOf(item), 0, loading = true))
     val state = mutableState.asStateFlow()
 
     init {
-        val parent = item.parentId
-        if (parent != null) {
-            viewModelScope.launch {
-                // The folder's photos, or just this one when the read fails: the viewer always shows what was chosen.
-                val siblings = (session.call(account) { photos(account, parent, sortBy, descending) } as? ClientResult.Success)
-                    ?.value?.items.orEmpty()
-                val photos = if (siblings.any { it.id == item.id }) siblings else listOf(item) + siblings
-                mutableState.value = PhotoViewerState(photos, photos.indexOfFirst { it.id == item.id }.coerceAtLeast(0), loading = false)
-            }
+        viewModelScope.launch {
+            // Jellyfin's item lists leave ParentId out unless asked for it, so a photo opened from a grid usually comes
+            // without one; the photo's own read carries it.
+            val parent = item.parentId
+                ?: (session.call(account) { item(account, item.id) } as? ClientResult.Success)?.value?.parentId
+            // The folder's photos, or just this one when a read fails: the viewer always shows what was chosen.
+            val siblings = parent?.let {
+                (session.call(account) { photos(account, it, sortBy, descending) } as? ClientResult.Success)?.value?.items
+            }.orEmpty()
+            val photos = if (siblings.any { it.id == item.id }) siblings else listOf(item) + siblings
+            mutableState.value = PhotoViewerState(photos, photos.indexOfFirst { it.id == item.id }.coerceAtLeast(0), loading = false)
         }
     }
 }
