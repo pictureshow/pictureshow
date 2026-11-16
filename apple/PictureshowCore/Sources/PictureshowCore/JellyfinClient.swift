@@ -347,7 +347,8 @@ public final class JellyfinClient: @unchecked Sendable {
             if let codec = Self.videoCodec(fallback), codec != "h264" { throw ClientError.noCompatibleSource }
             return fallback
         }
-        guard baseline.method == .transcode, let provider = hevcTranscodeCapabilities,
+        // A live source is already open (and holds a tuner); a second negotiation could open another.
+        guard baseline.method == .transcode, !baseline.isLive, let provider = hevcTranscodeCapabilities,
               let capabilities = await provider(), ReferenceDeviceProfile.prefersHevcTranscode(capabilities),
               let sourceID = baseline.source.id, !sourceID.isEmpty else { return baseline }
         do {
@@ -406,7 +407,77 @@ public final class JellyfinClient: @unchecked Sendable {
                 info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: path, method: "POST", body: body, includeUserID: false))
             }
         }
-        return try PlayDecisions.decide(account: account, itemID: itemID, response: info, startTicks: startTicks, audioIndex: audioIndex, subtitleIndex: subtitleIndex, mediaSourceID: boundSourceID, deviceName: deviceName, version: version)
+        let owned = try await openLiveSourceIfNeeded(account: account, itemID: itemID, path: path, body: &body, info: &info, boundSourceID: &boundSourceID)
+        do {
+            var decision = try PlayDecisions.decide(account: account, itemID: itemID, response: info, startTicks: startTicks, audioIndex: audioIndex, subtitleIndex: subtitleIndex, mediaSourceID: boundSourceID, deviceName: deviceName, version: version)
+            decision.ownedLiveStreamId = owned
+            return decision
+        } catch {
+            // An unplayable opened source must not keep holding a tuner.
+            if let owned { try? await closeLiveStream(account: account, liveStreamID: owned) }
+            throw error
+        }
+    }
+    private struct OpenedLiveStream: Decodable {
+        let mediaSource: MediaSource
+        enum CodingKeys: String, CodingKey { case mediaSource = "MediaSource" }
+    }
+    /// Live TV (LIVE-04): PlaybackInfo is asked with AutoOpenLiveStream=false, so a source that RequiresOpening is opened
+    /// here exactly once with its OpenToken. The opened source is authoritative and replaces the listed ones. Returns the
+    /// live stream id this client owns (RequiresClosing), which the caller closes when playback ends.
+    private func openLiveSourceIfNeeded(account: Account, itemID: String, path: String, body: inout [String:Any], info: inout PlaybackInfo, boundSourceID: inout String?) async throws -> String? {
+        guard info.errorCode == nil else { return nil }
+        func blank(_ value: String?) -> Bool { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let bound = boundSourceID
+        let source = info.mediaSources.first { (bound == nil || $0.id == bound) && ($0.requiresOpening || $0.supportsDirectPlay || $0.supportsDirectStream || !blank($0.transcodingUrl)) }
+        var owned: String?
+        if let source, source.requiresOpening, blank(source.liveStreamId) {
+            guard let token = source.openToken, !blank(token) else { throw ClientError.invalidResponse }
+            var open: [String:Any] = ["OpenToken": token, "DirectPlayProtocols": ["Http"], "ItemId": itemID, "UserId": account.userId,
+                                      "EnableDirectPlay": body["EnableDirectPlay"] as? Bool ?? true, "EnableDirectStream": body["EnableDirectStream"] as? Bool ?? true,
+                                      "AlwaysBurnInSubtitleWhenTranscoding": body["AlwaysBurnInSubtitleWhenTranscoding"] as? Bool ?? false]
+            for key in ["DeviceProfile", "MaxStreamingBitrate", "StartTimeTicks", "AudioStreamIndex", "SubtitleStreamIndex", "MaxAudioChannels"] {
+                if let value = body[key] { open[key] = value }
+            }
+            if let session = info.playSessionId { open["PlaySessionId"] = session }
+            let live = try decoder.decode(OpenedLiveStream.self, from: await request(account: account, path: "LiveStreams/Open", method: "POST", body: open, includeUserID: false)).mediaSource
+            guard let liveID = live.liveStreamId, !blank(liveID) else { throw ClientError.invalidResponse }
+            owned = live.requiresClosing ? liveID : nil
+            info.mediaSources = [live]
+            boundSourceID = live.id
+        } else if let source, (body["AutoOpenLiveStream"] as? Bool) == true, source.requiresClosing {
+            owned = source.liveStreamId
+        }
+        // A live source may only publish its audio list after Open. Ask again for the same open stream (never a second
+        // tuner) with a real audio track, so a "no default audio" answer does not become a silent transcode.
+        let current = boundSourceID
+        if let live = info.mediaSources.first(where: { current == nil || $0.id == current }), !blank(live.liveStreamId),
+           (live.defaultAudioStreamIndex ?? 0) < 0, body["AudioStreamIndex"] == nil {
+            let audio = PlaybackSelection.defaultStream(streams: live.mediaStreams, type: "Audio", serverIndex: nil)
+            if audio >= 0 {
+                if let id = live.id { body["MediaSourceId"] = id }
+                body["LiveStreamId"] = live.liveStreamId
+                body["AudioStreamIndex"] = audio
+                do {
+                    info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: path, method: "POST", body: body, includeUserID: false))
+                } catch {
+                    if let owned { try? await closeLiveStream(account: account, liveStreamID: owned) }
+                    throw error
+                }
+                info.mediaSources = info.mediaSources.map { item in
+                    var item = item
+                    if item.id == current, (item.defaultAudioStreamIndex ?? 0) < 0 { item.defaultAudioStreamIndex = audio }
+                    return item
+                }
+            }
+        }
+        return owned
+    }
+    /// Releases a live stream this client opened. A stopped report may already have closed it, so 404 counts as closed.
+    public func closeLiveStream(account: Account, liveStreamID: String) async throws {
+        do {
+            _ = try await request(account: account, path: "LiveStreams/Close", method: "POST", query: [URLQueryItem(name: "liveStreamId", value: liveStreamID)], includeUserID: false)
+        } catch ClientError.server(404) { }
     }
     public func sendReport(account: Account, kind: String, body: [String:Any]) async throws {
         let paths = ["start":"Sessions/Playing", "progress":"Sessions/Playing/Progress", "stopped":"Sessions/Playing/Stopped"]

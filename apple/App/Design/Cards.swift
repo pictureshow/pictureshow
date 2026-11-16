@@ -10,6 +10,8 @@ enum Route: Hashable {
     case person(id: String, name: String)
     /// PHOTO-01: a photo opens full screen among its folder's photos, in the grid's order.
     case photo(MediaItem, sortBy: String, descending: Bool)
+    /// LIVE-01: the Live TV destination (Channels, Guide, Recordings, Schedules), never an item grid.
+    case liveTV
 }
 
 extension MediaItem: @retroactive Hashable {
@@ -18,6 +20,7 @@ extension MediaItem: @retroactive Hashable {
 
 extension MediaItem {
     var route: Route {
+        if isLiveTvLibrary { return .liveTV }
         if type == "CollectionFolder" || type == "UserView" || (collectionType != nil && type != "BoxSet") { return .library(self) }
         if type == "Person" { return .person(id: id, name: name) }
         if type == "Photo" { return .photo(self, sortBy: "SortName", descending: false) }

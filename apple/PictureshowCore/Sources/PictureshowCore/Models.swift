@@ -110,6 +110,23 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
     public var remoteTrailers: [RemoteTrailer] = []
     /// The folder or album the item sits in; a photo's album (PHOTO-01).
     public var parentId: String?
+    // Live TV recordings (spec/features/live-tv.md). Decoded only; not part of the encoded item.
+    public var episodeTitle: String? = nil
+    public var recordingStartDate: String? = nil
+    public var recordingEndDate: String? = nil
+    public var recordingCompletionPercentage: Double? = nil
+    public var isInProgress: Bool = false
+    public var recordingStatus: String? = nil
+    public var canDelete: Bool? = nil
+    public var channelId: String? = nil
+    /// The server's Live TV view; it is reached through Live TV, never as an ordinary library.
+    public var isLiveTvLibrary: Bool {
+        (type == "UserView" || type == "CollectionFolder") && collectionType?.lowercased() == "livetv"
+    }
+    private enum LiveKeys: String, CodingKey {
+        case episodeTitle = "EpisodeTitle", startDate = "StartDate", endDate = "EndDate", completion = "CompletionPercentage"
+        case isInProgress = "IsInProgress", status = "Status", canDelete = "CanDelete", channelId = "ChannelId"
+    }
     public init(id: String, name: String = "Untitled", type: String = "", userData: ItemUserData = ItemUserData(), runTimeTicks: Int64? = nil) {
         self.id = id; self.name = name; self.type = type; self.userData = userData; self.runTimeTicks = runTimeTicks
         isFolder = false; genres = []; imageTags = [:]; backdropImageTags = []; parentBackdropImageTags = []; mediaSources = []; people = []; chapters = []; trickplay = [:]
@@ -155,6 +172,15 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         extraType = try c.decodeIfPresent(String.self, forKey: .extraType)
         remoteTrailers = try c.decodeIfPresent([RemoteTrailer].self, forKey: .remoteTrailers) ?? []
         parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
+        let live = try decoder.container(keyedBy: LiveKeys.self)
+        episodeTitle = try? live.decodeIfPresent(String.self, forKey: .episodeTitle)
+        recordingStartDate = try? live.decodeIfPresent(String.self, forKey: .startDate)
+        recordingEndDate = try? live.decodeIfPresent(String.self, forKey: .endDate)
+        recordingCompletionPercentage = try? live.decodeIfPresent(Double.self, forKey: .completion)
+        isInProgress = ((try? live.decodeIfPresent(Bool.self, forKey: .isInProgress)) ?? nil) ?? false
+        recordingStatus = try? live.decodeIfPresent(String.self, forKey: .status)
+        canDelete = try? live.decodeIfPresent(Bool.self, forKey: .canDelete)
+        channelId = try? live.decodeIfPresent(String.self, forKey: .channelId)
     }
     public var isEmptyContainer: Bool {
         let container = isFolder || ["BoxSet", "Playlist", "Folder", "CollectionFolder", "Series", "Season"].contains(type)

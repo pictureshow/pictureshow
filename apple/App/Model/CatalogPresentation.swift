@@ -6,7 +6,7 @@ import PictureshowCore
 /// All entry points share the same availability decision, including context menus and returning pages.
 enum CatalogPresentation {
     static func offersPlayback(_ item: MediaItem) -> Bool {
-        !item.isMissing && ["Movie", "Episode", "Video", "MusicVideo"].contains(item.type)
+        !item.isMissing && ["Movie", "Episode", "Video", "MusicVideo", "Recording"].contains(item.type)
     }
 
     static func offersRestart(_ item: MediaItem) -> Bool {

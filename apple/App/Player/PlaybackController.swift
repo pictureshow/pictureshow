@@ -32,6 +32,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     @Published private(set) var finished = false
     /// The AirPlay receiver's name while the picture plays there (CAST-07); nil while it plays here.
     @Published private(set) var externalRoute: String?
+    /// Live TV (LIVE-04/05): the measured window, pause/expiry and the programme on air; unused for other items.
+    @Published private(set) var live = LivePlayerState()
+    fileprivate var liveTask: Task<Void, Never>?
+    /// When the current live item was opened, and how many times it has been reopened without becoming ready.
+    fileprivate var liveOpened = Date()
+    fileprivate var liveReopens = 0
+    /// A channel plays live; its timeline comes from the player, never a duration.
+    var isLive: Bool { item.type == "TvChannel" || decision?.isLive == true }
 
     let player = AVPlayer()
     let app: AppModel
@@ -138,6 +146,12 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         do {
             let full = try await client.item(account: account, id: item.id)
             item = full
+            if full.type == "TvChannel" {
+                // LIVE-04: always the live point; no resume, segments or next episode.
+                try await load(startTicks: 0, audio: full.mediaSources.first?.defaultAudioStreamIndex, subtitle: -1)
+                startLiveTick()
+                return
+            }
             async let segments = try? client.segments(account: account, itemID: full.id)
             async let next = try? client.nextEpisode(account: account, item: full)
             let resumeTicks = requestedStartTicks ?? (fromStart ? 0 : full.userData.playbackPositionTicks)
@@ -161,8 +175,16 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         isBuffering = true
         let stream = source?.mediaStreams.first { $0.type == "Subtitle" && $0.index == subtitle }
         let textSubtitle = stream.map(Captions.isText) ?? false
+        // A channel's listed source id is the channel itself, and a recording still being written lists its file while
+        // PlaybackInfo offers a growing stream under another id; pinning either is refused (NoCompatibleStream, OBSERVED).
+        // Neither pins a listed source before the server has named the one it plays.
+        let pinned: String? = switch item.type {
+        case "TvChannel": nil
+        case "Recording": decision?.source.id
+        default: source?.id ?? item.mediaSources.first?.id
+        }
         var next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks, audioIndex: audio, subtitleIndex: subtitle,
-                                            forceTranscode: forceTranscode, mediaSourceID: source?.id ?? item.mediaSources.first?.id,
+                                            forceTranscode: forceTranscode, mediaSourceID: pinned,
                                             preferences: app.preferences.playback, externalTextSubtitle: textSubtitle)
         // The server may pick a default subtitle we didn't know about until now.
         if !textSubtitle, let chosen = next.subtitleIndex, chosen >= 0,
@@ -177,18 +199,27 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         log.notice("Negotiated item=\(next.itemID, privacy: .public) method=\(next.method.rawValue, privacy: .public) session=\(next.playSessionId ?? "none", privacy: .public)")
         notice = app.preferences.playback.showConversionNotice ? ConversionNotice.of(next, subtitleIndex: next.subtitleIndex ?? -1, device: DeviceIdentity.name) : nil
         noticeDismissed = false
-        let url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url, token: account.accessToken, requiredHeaders: next.headers)
+        // An opened tuner source lists the headers the server sends upstream (an M3U tuner's User-Agent); the player
+        // only ever fetches the server's own same-origin URL, so those never apply to it.
+        let url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url, token: account.accessToken,
+                                             requiredHeaders: next.isLive ? [:] : next.headers)
         let playerItem = AVPlayerItem(url: url)
         playerItem.externalMetadata = metadata()
         applySubtitleStyle(playerItem)
         pendingSeek = next.initialSeekSeconds > 1 ? next.initialSeekSeconds : nil
         observe(playerItem)
         player.replaceCurrentItem(with: playerItem)
-        player.isMuted = next.audioIndex == -1
+        liveOpened = Date(); liveReopens = 0
+        // A live remux names no audio track (AudioStreamIndex=-1) yet copies the tuner's audio (OBSERVED), so only a
+        // recorded item's "no audio" choice mutes.
+        player.isMuted = next.audioIndex == -1 && !next.isLive
         // A group viewing starts paused; the server's command starts it on every device at once.
         if grouped { syncExpectPlaying = false; player.pause() } else { player.play() }
         if let previous, previous.playSessionId != next.playSessionId {
             try? await client.stopEncoding(account: account, decision: previous)
+        }
+        if let previous, let owned = previous.ownedLiveStreamId, owned != next.ownedLiveStreamId {
+            try? await client.closeLiveStream(account: account, liveStreamID: owned)
         }
         try? await client.reportStart(account: account, decision: next, positionTicks: startTicks)
         lastReport = Date()
@@ -210,7 +241,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         let durationMs = Int64(duration * 1000)
         player.pause()
         player.replaceCurrentItem(with: nil)
-        cueTask?.cancel(); countdownTask?.cancel()
+        cueTask?.cancel(); countdownTask?.cancel(); liveTask?.cancel()
         detachObservers()
         nowPlaying.detach()
         if app.activeController === self { app.activeController = nil }
@@ -229,6 +260,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
                 let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
                 try? await client.reportStopped(account: account, decision: decision, positionTicks: ms * 10_000)
                 try? await client.stopEncoding(account: account, decision: decision)
+                // LIVE-04: the stopped report carried LiveStreamId; then the stream this client opened is closed.
+                if let owned = decision.ownedLiveStreamId { try? await client.closeLiveStream(account: account, liveStreamID: owned) }
             }
             app.downloads.onlineViewingStopped(account: account, itemID: itemID)
             app.catalogChanged()
@@ -254,6 +287,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     /// The viewer's own Play and Pause. In a group they ask the server, which moves every device (SYN-03).
     func userPlay(origin: SyncControlOrigin = .viewer) {
         lastControlOrigin = origin
+        // LIVE-05: a paused buffer that slid out of the window can only resume at the live point.
+        if isLive, live.expired { goLive(); return }
         if grouped { app.syncPlay.engine.requestUnpause(); return }
         player.play()
     }
@@ -265,6 +300,11 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     func seek(to seconds: Double, origin: SyncControlOrigin = .viewer) {
+        if isLive {
+            // LIVE-05: only inside the measured window and never past the live point.
+            if let target = live.clampedSeek(seconds), abs(target - currentSeconds) > 0.25 { nativeSeek(target) }
+            return
+        }
         let target = max(0, duration > 0 ? min(seconds, duration - 1) : seconds)
         let ready = player.currentItem?.status == .readyToPlay && pendingSeek == nil
         switch seekGate.seek(millis: Int64(target * 1000), origin: origin, grouped: grouped, ready: ready || !grouped) {
@@ -274,7 +314,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         }
     }
 
-    private func nativeSeek(_ target: Double, then: (() -> Void)? = nil) {
+    fileprivate func nativeSeek(_ target: Double, then: (() -> Void)? = nil) {
         position = target
         ownSeeks += 1
         lastOwnSeek = Date()
@@ -364,6 +404,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
                 let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
                 try? await client.reportStopped(account: account, decision: decision, positionTicks: ms * 10_000)
                 try? await client.stopEncoding(account: account, decision: decision)
+                // LIVE-04: the stopped report carried LiveStreamId; then the stream this client opened is closed.
+                if let owned = decision.ownedLiveStreamId { try? await client.closeLiveStream(account: account, liveStreamID: owned) }
             }
         }
         self.decision = nil
@@ -541,6 +583,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     private func tick(_ seconds: Double) {
         guard seconds.isFinite, !finished, pendingSeek == nil else { return }
+        if isLive { position = seconds; sampleLive(); reportProgress(force: false); return }
         position = seconds
         let ms = Int64(seconds * 1000)
         if !cues.isEmpty { cue = TextSubtitles.text(cues: cues, positionMs: ms) } else if cue != nil { cue = nil }
@@ -672,9 +715,16 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         if !attributes.isEmpty, let rule = AVTextStyleRule(textMarkupAttributes: attributes) { playerItem.textStyleRules = [rule] }
     }
 
-    private func metadata() -> [AVMetadataItem] {
+    fileprivate func metadata() -> [AVMetadataItem] {
         func entry(_ id: AVMetadataIdentifier, _ value: String) -> AVMetadataItem {
             let item = AVMutableMetadataItem(); item.identifier = id; item.value = value as NSString; item.extendedLanguageTag = "und"; return item
+        }
+        if isLive {
+            // LIVE-05: the programme on air leads; the channel and airing time are secondary.
+            var items = [entry(.commonIdentifierTitle, live.program?.name ?? item.name)]
+            items.append(entry(.iTunesMetadataTrackSubTitle, liveSubtitle ?? item.name))
+            if let overview = live.program?.overview { items.append(entry(.commonIdentifierDescription, overview)) }
+            return items
         }
         var items = [entry(.commonIdentifierTitle, item.type == "Episode" ? (item.seriesName ?? item.name) : item.name)]
         if item.type == "Episode" { items.append(entry(.iTunesMetadataTrackSubTitle, [Format.episode(item).nilIfBlank, item.name].compactMap { $0 }.joined(separator: " · "))) }
@@ -683,8 +733,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     /// Title line for the player chrome.
-    var title: String { item.type == "Episode" ? (item.seriesName ?? item.name) : item.name }
-    var subtitle: String? { item.type == "Episode" ? [Format.episode(item).nilIfBlank, item.name].compactMap { $0 }.joined(separator: " · ") : nil }
+    var title: String { isLive ? (live.program?.name ?? item.name) : item.type == "Episode" ? (item.seriesName ?? item.name) : item.name }
+    var subtitle: String? { isLive ? liveSubtitle : item.type == "Episode" ? [Format.episode(item).nilIfBlank, item.name].compactMap { $0 }.joined(separator: " · ") : nil }
 
     var methodDescription: String {
         switch decision?.method {
@@ -829,5 +879,94 @@ final class SyncRendererBox: SyncRenderer {
 
     func syncApply(positionTicks: Int64?, playing: Bool) {
         MainActor.assumeIsolated { controller?.syncApply(positionTicks: positionTicks, playing: playing) }
+    }
+}
+
+// MARK: - Live TV (LIVE-04/05)
+
+extension PlaybackController {
+    /// Samples the player's seekable range once a second (the periodic observer stops while paused) and keeps the
+    /// on-air programme current.
+    fileprivate func startLiveTick() {
+        liveTask?.cancel()
+        liveTask = Task { [weak self] in
+            var lastProgramRead = Date.distantPast
+            while !Task.isCancelled {
+                guard let self, !self.finished else { return }
+                self.sampleLive()
+                let now = LiveFormat.nowMs()
+                let ended = self.live.program.map { LiveRules.instant($0.endDate).map { $0 <= now } ?? true } ?? true
+                if Date().timeIntervalSince(lastProgramRead) >= (ended ? 30 : 300) {
+                    lastProgramRead = Date()
+                    await self.readLiveProgram()
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    fileprivate func sampleLive() {
+        guard isLive, let playerItem = player.currentItem else { return }
+        if LiveStartWatchdog.shouldReopen(ready: playerItem.status != .unknown, openedSecondsAgo: Date().timeIntervalSince(liveOpened), reopens: liveReopens),
+           let asset = playerItem.asset as? AVURLAsset {
+            reopenLive(asset.url)
+            return
+        }
+        var next = live
+        let range = playerItem.liveRange
+        next.observe(rangeStart: range?.start, rangeDuration: range?.duration, currentSeconds: player.currentTime().seconds,
+                     paused: player.rate == 0 && !isBuffering)
+        if next != live { live = next }
+    }
+
+    fileprivate func readLiveProgram() async {
+        let channel = try? await app.liveService(for: account).channel(account: account, id: item.id)
+        guard !finished else { return }
+        let program = LiveRules.playerProgram(channel: channel, nowMs: LiveFormat.nowMs())
+        var next = live
+        next.channel = channel ?? next.channel
+        next.program = program
+        guard next != live else { return }
+        live = next
+        player.currentItem?.externalMetadata = metadata()
+        nowPlaying.refresh(force: true)
+    }
+
+    /// Channel, then the programme's airing time: "Test A · 2:00 – 3:00 PM".
+    var liveSubtitle: String? {
+        guard isLive else { return nil }
+        let channel = live.channel.map(\.accessibleName) ?? item.name
+        guard let program = live.program, let start = program.startDate, let end = program.endDate else { return channel }
+        return "\(channel) · \(LiveFormat.time(nowMs: LiveFormat.nowMs()).range(start, end))"
+    }
+
+    /// A fresh live remux starts with two segments, less than the player's hold-back. The Apple TV player can give up
+    /// on that first playlist and never ask again (OBSERVED on the tvOS simulator: item status unknown, error -12783,
+    /// playlist reloads stop while the server's playlist keeps growing). The same URL opened again plays.
+    fileprivate func reopenLive(_ url: URL) {
+        liveReopens += 1
+        liveOpened = Date()
+        log.notice("Reopening live item attempt=\(self.liveReopens)")
+        let playerItem = AVPlayerItem(url: url)
+        playerItem.externalMetadata = metadata()
+        applySubtitleStyle(playerItem)
+        observe(playerItem)
+        player.replaceCurrentItem(with: playerItem)
+        player.play()
+    }
+
+    /// LIVE-05: jump to the player's own live point and play.
+    func goLive() {
+        guard let edge = live.liveEdgeSeconds else { player.play(); return }
+        nativeSeek(edge) { [weak self] in self?.player.play() }
+    }
+}
+
+/// When a live item that never became ready is opened again: after 10 seconds, at most three times.
+enum LiveStartWatchdog {
+    static let patienceSeconds: Double = 10
+    static let maxReopens = 3
+    static func shouldReopen(ready: Bool, openedSecondsAgo: Double, reopens: Int) -> Bool {
+        !ready && openedSecondsAgo >= patienceSeconds && reopens < maxReopens
     }
 }
