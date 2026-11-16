@@ -19,8 +19,6 @@
     <string name="subtitle_download_not_listed">The server downloaded the file but hasn\'t listed it yet. It will appear under Subtitles once the server finishes scanning the title.</string>
     <string name="subtitle_download_retry">Try again</string>
     <string name="subtitle_download_close">Close</string>
-    <string name="subtitle_download_back">Back</string>
-    <string name="subtitle_download_result_count">%1$d results</string>
     <string name="subtitle_detail_hash_match">Made for this video</string>
     <string name="subtitle_detail_hearing_impaired">Hearing impaired</string>
     <string name="subtitle_detail_forced">Forced</string>

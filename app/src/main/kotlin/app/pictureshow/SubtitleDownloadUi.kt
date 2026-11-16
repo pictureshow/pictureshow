@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -144,7 +145,7 @@ internal fun TvSubtitleDownloadContent(
     onClose: () -> Unit
 ) {
     val state by search.state.collectAsState()
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     var choosingLanguage by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     LaunchedEffect(search, target) { search.open(target) }
@@ -261,7 +262,7 @@ internal fun TouchSubtitleDownloadContent(
     onClose: () -> Unit
 ) {
     val state by search.state.collectAsState()
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     var choosingLanguage by remember { mutableStateOf(false) }
     LaunchedEffect(search, target) { search.open(target) }
     Column(Modifier.fillMaxWidth().testTag("subtitle-download"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
