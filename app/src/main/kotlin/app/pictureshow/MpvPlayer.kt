@@ -34,6 +34,11 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /** PLAY-60: whether this device can run mpv at all (its ABI has the libraries and they load). */
 /**
@@ -151,13 +156,69 @@ internal fun mpvSubtitleOptions(appearance: SubtitleAppearance): Map<String, Str
 }
 
 /**
+ * The libmpv calls [MpvPlayer] makes. Most of them wait for mpv's core, which a stuck decoder can hold indefinitely, so
+ * the player makes them on its own thread; a test stands in for a hung mpv through this seam.
+ */
+internal interface MpvApi {
+    fun create(context: Context): Long
+    fun setOptionString(handle: Long, name: String, value: String): Int
+    fun initialize(handle: Long): Int
+    fun requestLogMessages(handle: Long, level: String): Int
+    fun observeProperty(handle: Long, replyId: Long, name: String, format: Int): Int
+    fun waitEvent(handle: Long, timeoutSeconds: Double): MpvEvent?
+    fun destroy(handle: Long)
+    fun command(handle: Long, args: Array<String>): Int
+    fun getPropertyString(handle: Long, name: String): String?
+    fun getPropertyLong(handle: Long, name: String): Long
+    fun getPropertyFlag(handle: Long, name: String): Int
+    fun setPropertyString(handle: Long, name: String, value: String): Int
+    fun setPropertyDouble(handle: Long, name: String, value: Double): Int
+    fun setPropertyLong(handle: Long, name: String, value: Long): Int
+    fun setPropertyFlag(handle: Long, name: String, value: Boolean): Int
+    fun attachSurface(handle: Long, surface: Surface): Int
+    fun detachSurface(handle: Long): Int
+}
+
+internal object NativeMpvApi : MpvApi {
+    override fun create(context: Context): Long {
+        MpvAvailability.prepareFonts(context)
+        return MpvNative.create(context.applicationContext)
+    }
+    override fun setOptionString(handle: Long, name: String, value: String) = MpvNative.setOptionString(handle, name, value)
+    override fun initialize(handle: Long) = MpvNative.initialize(handle)
+    override fun requestLogMessages(handle: Long, level: String) = MpvNative.requestLogMessages(handle, level)
+    override fun observeProperty(handle: Long, replyId: Long, name: String, format: Int) =
+        MpvNative.observeProperty(handle, replyId, name, format)
+    override fun waitEvent(handle: Long, timeoutSeconds: Double) = MpvNative.waitEvent(handle, timeoutSeconds)
+    override fun destroy(handle: Long) = MpvNative.destroy(handle)
+    override fun command(handle: Long, args: Array<String>) = MpvNative.command(handle, args)
+    override fun getPropertyString(handle: Long, name: String) = MpvNative.getPropertyString(handle, name)
+    override fun getPropertyLong(handle: Long, name: String) = MpvNative.getPropertyLong(handle, name)
+    override fun getPropertyFlag(handle: Long, name: String) = MpvNative.getPropertyFlag(handle, name)
+    override fun setPropertyString(handle: Long, name: String, value: String) = MpvNative.setPropertyString(handle, name, value)
+    override fun setPropertyDouble(handle: Long, name: String, value: Double) = MpvNative.setPropertyDouble(handle, name, value)
+    override fun setPropertyLong(handle: Long, name: String, value: Long) = MpvNative.setPropertyLong(handle, name, value)
+    override fun setPropertyFlag(handle: Long, name: String, value: Boolean) = MpvNative.setPropertyFlag(handle, name, value)
+    override fun attachSurface(handle: Long, surface: Surface) = MpvNative.attachSurface(handle, surface)
+    override fun detachSurface(handle: Long) = MpvNative.detachSurface(handle)
+}
+
+/**
  * A Media3 [Player] over libmpv, so the existing output, session, controls, media session and frame-rate matching
  * drive mpv as they drive ExoPlayer. mpv's events arrive on a reader thread and are applied on the main looper; the
  * reader thread owns the handle's destruction, after mpv says it shut down.
+ *
+ * Every call that can wait for mpv's core (commands, property reads and writes, the surface) runs in order on one
+ * `mpv-commands` thread, and what it reads is posted back to the main looper. A decoder that holds the core (OBSERVED
+ * on the emulator's MediaCodec before software decoding was forced) then stalls only that thread: the controls keep
+ * answering and Back still leaves the player. Only surface detachment waits on the main thread, for at most
+ * [DETACH_WAIT_MS], because mpv must stop drawing before Android takes the Surface away.
  */
 @UnstableApi
-internal class MpvPlayer(context: Context, private val source: MpvSource) : SimpleBasePlayer(Looper.getMainLooper()) {
+internal class MpvPlayer(context: Context, private val source: MpvSource, private val api: MpvApi = NativeMpvApi) :
+    SimpleBasePlayer(Looper.getMainLooper()) {
     private val main = Handler(Looper.getMainLooper())
+    private val commands = Executors.newSingleThreadExecutor { task -> Thread(task, "mpv-commands").apply { isDaemon = true } }
     private val handle: Long
     private var released = false
     private var prepared = false
@@ -203,8 +264,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         private set
 
     init {
-        MpvAvailability.prepareFonts(context)
-        handle = MpvNative.create(context.applicationContext)
+        handle = api.create(context)
         check(handle != 0L) { "mpv could not be created" }
         val options = linkedMapOf(
             "config" to "no",
@@ -235,17 +295,18 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
             "msg-level" to "all=warn"
         )
         options.putAll(mpvSubtitleOptions(source.subtitles))
-        options.forEach { (name, value) -> MpvNative.setOptionString(handle, name, value) }
-        val result = MpvNative.initialize(handle)
+        // Before the first file mpv's core is idle, so setting it up here can't wait on a decoder.
+        options.forEach { (name, value) -> api.setOptionString(handle, name, value) }
+        val result = api.initialize(handle)
         check(result >= 0) { "mpv could not start ($result)" }
-        MpvNative.requestLogMessages(handle, "warn")
-        OBSERVED.forEachIndexed { id, (name, format) -> MpvNative.observeProperty(handle, id.toLong(), name, format) }
+        api.requestLogMessages(handle, "warn")
+        OBSERVED.forEachIndexed { id, (name, format) -> api.observeProperty(handle, id.toLong(), name, format) }
         Thread({ readEvents() }, "mpv-events").apply { isDaemon = true }.start()
     }
 
     private fun readEvents() {
         while (true) {
-            val event = MpvNative.waitEvent(handle, -1.0) ?: continue
+            val event = api.waitEvent(handle, -1.0) ?: continue
             if (event.id == MpvEvent.SHUTDOWN) break
             if (event.id == MpvEvent.LOG_MESSAGE) {
                 // Never log URLs: mpv's messages name the loopback path, which carries the proxy secret.
@@ -254,7 +315,20 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
             }
             main.post { if (!released) apply(event) }
         }
-        MpvNative.destroy(handle)
+        api.destroy(handle)
+    }
+
+    /** Runs [block] on the mpv thread, after every call queued before it; dropped once the player is released. */
+    private fun onMpv(block: () -> Unit) {
+        try {
+            commands.execute(block)
+        } catch (_: RejectedExecutionException) {
+        }
+    }
+
+    /** Posts [block] back to the main looper unless the player was released meanwhile. */
+    private fun onMain(block: () -> Unit) {
+        main.post { if (!released) block() }
     }
 
     private fun apply(event: MpvEvent) {
@@ -265,8 +339,8 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
             }
             MpvEvent.FILE_LOADED -> {
                 loaded = true
-                refreshTracks()
-                applyWantedTracks()
+                val known = externalIds.toMap()
+                onMpv { addExternalSubtitles(known) }
             }
             MpvEvent.PLAYBACK_RESTART -> {
                 restarted = true
@@ -315,9 +389,16 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         }
     }
 
-    private fun refreshVideo() {
-        val w = MpvNative.getPropertyLong(handle, "dwidth")
-        val h = MpvNative.getPropertyLong(handle, "dheight")
+    private fun refreshVideo() = onMpv {
+        val w = api.getPropertyLong(handle, "dwidth")
+        val h = api.getPropertyLong(handle, "dheight")
+        onMain {
+            useVideoSize(w, h)
+            invalidateState()
+        }
+    }
+
+    private fun useVideoSize(w: Long, h: Long) {
         if (w > 0 && h > 0 && (w.toInt() != width || h.toInt() != height)) {
             width = w.toInt()
             height = h.toInt()
@@ -340,19 +421,32 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         pendingSeek = null
     }
 
-    private fun refreshTracks() {
-        val count = MpvNative.getPropertyLong(handle, "track-list/count").coerceAtLeast(0)
-        trackList = (0 until count).map { i ->
-            fun text(name: String) = MpvNative.getPropertyString(handle, "track-list/$i/$name")
+    private fun refreshTracks() = onMpv {
+        val tracks = readTracks()
+        onMain {
+            useTracks(tracks)
+            invalidateState()
+        }
+    }
+
+    /** mpv thread. */
+    private fun readTracks(): List<MpvTrack> {
+        val count = api.getPropertyLong(handle, "track-list/count").coerceAtLeast(0)
+        return (0 until count).map { i ->
+            fun text(name: String) = api.getPropertyString(handle, "track-list/$i/$name")
             MpvTrack(
-                id = MpvNative.getPropertyLong(handle, "track-list/$i/id").toInt(),
+                id = api.getPropertyLong(handle, "track-list/$i/id").toInt(),
                 type = text("type").orEmpty(),
-                external = MpvNative.getPropertyFlag(handle, "track-list/$i/external") == 1,
-                selected = MpvNative.getPropertyFlag(handle, "track-list/$i/selected") == 1,
-                ffIndex = MpvNative.getPropertyLong(handle, "track-list/$i/ff-index").takeIf { it >= 0 }?.toInt(),
+                external = api.getPropertyFlag(handle, "track-list/$i/external") == 1,
+                selected = api.getPropertyFlag(handle, "track-list/$i/selected") == 1,
+                ffIndex = api.getPropertyLong(handle, "track-list/$i/ff-index").takeIf { it >= 0 }?.toInt(),
                 codec = text("codec")
             )
         }
+    }
+
+    private fun useTracks(tracks: List<MpvTrack>) {
+        trackList = tracks
         videoCodec = trackList.firstOrNull { it.type == "video" && it.selected }?.codec
         audioCodec = trackList.firstOrNull { it.type == "audio" && it.selected }?.codec
         tracksRevision++
@@ -372,35 +466,53 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         return tracks.getOrNull(position)?.id
     }
 
-    /** Selects a server stream; false when mpv has no matching track (the session then asks the server instead). */
+    /**
+     * Selects a server stream; false when mpv has no matching track (the session then asks the server instead). The
+     * match is decided here from the tracks mpv last published; mpv applies it on its own thread.
+     */
     fun selectStream(type: MediaStreamType, index: Int): Boolean {
         if (released) return false
         if (type == MediaStreamType.Audio) wantedAudio = index else wantedSubtitle = index
         if (!loaded) return true
         val property = if (type == MediaStreamType.Audio) "aid" else "sid"
-        if (index < 0) return MpvNative.setPropertyString(handle, property, "no") >= 0
+        if (index < 0) {
+            onMpv { api.setPropertyString(handle, property, "no") }
+            return true
+        }
         // A transcode carries one audio stream: another one is the server's job.
         if (source.transcoding && type == MediaStreamType.Audio) return false
         val id = trackId(type, index) ?: return false
-        return MpvNative.setPropertyLong(handle, property, id.toLong()) >= 0
+        onMpv { api.setPropertyLong(handle, property, id.toLong()) }
+        return true
     }
 
     /** Subtitle delay (PLAY-31): positive shows subtitles later, as mpv's sub-delay does. */
     fun subtitleDelayMs(milliseconds: Int) {
-        if (!released) MpvNative.setPropertyDouble(handle, "sub-delay", milliseconds / 1000.0)
+        if (!released) onMpv { api.setPropertyDouble(handle, "sub-delay", milliseconds / 1000.0) }
     }
 
-    private fun applyWantedTracks() {
+    /**
+     * mpv thread, once a file has loaded: adds the server's external subtitles, learns the id mpv gave each, then hands
+     * the tracks back to the main looper to apply the viewer's choices (as they stand by then).
+     */
+    private fun addExternalSubtitles(known: Map<Int, Int>) {
+        val ids = known.toMutableMap()
+        var tracks = readTracks()
         source.externalSubtitles.forEach { (stream, url) ->
-            if (stream.index in externalIds) return@forEach
-            val before = trackList.filter { it.type == "sub" }.map { it.id }.toSet()
+            if (stream.index in ids) return@forEach
+            val before = tracks.filter { it.type == "sub" }.map { it.id }.toSet()
             val title = stream.displayTitle ?: stream.language ?: "Subtitle ${stream.index}"
-            MpvNative.command(handle, arrayOf("sub-add", url, "auto", title, stream.language ?: ""))
-            refreshTracks()
-            trackList.firstOrNull { it.type == "sub" && it.id !in before }?.let { externalIds[stream.index] = it.id }
+            api.command(handle, arrayOf("sub-add", url, "auto", title, stream.language ?: ""))
+            tracks = readTracks()
+            tracks.firstOrNull { it.type == "sub" && it.id !in before }?.let { ids[stream.index] = it.id }
         }
-        wantedAudio?.let { selectStream(MediaStreamType.Audio, it) }
-        wantedSubtitle?.let { selectStream(MediaStreamType.Subtitle, it) } ?: MpvNative.setPropertyString(handle, "sid", "no")
+        onMain {
+            externalIds.putAll(ids)
+            useTracks(tracks)
+            wantedAudio?.let { selectStream(MediaStreamType.Audio, it) }
+            wantedSubtitle?.let { selectStream(MediaStreamType.Subtitle, it) } ?: onMpv { api.setPropertyString(handle, "sid", "no") }
+            invalidateState()
+        }
     }
 
     override fun getState(): State {
@@ -473,15 +585,18 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
 
     private fun load() {
         loadPending = false
-        MpvNative.setPropertyFlag(handle, "pause", !playWhenReady)
-        if (source.startMs > 0) MpvNative.setPropertyString(handle, "start", "%.3f".format(Locale.ROOT, source.startMs / 1000.0))
-        source.title?.let { MpvNative.setPropertyString(handle, "force-media-title", it) }
-        MpvNative.command(handle, arrayOf("loadfile", source.url, "replace"))
+        val paused = !playWhenReady
+        onMpv {
+            api.setPropertyFlag(handle, "pause", paused)
+            if (source.startMs > 0) api.setPropertyString(handle, "start", "%.3f".format(Locale.ROOT, source.startMs / 1000.0))
+            source.title?.let { api.setPropertyString(handle, "force-media-title", it) }
+            api.command(handle, arrayOf("loadfile", source.url, "replace"))
+        }
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
         this.playWhenReady = playWhenReady
-        if (!released) MpvNative.setPropertyFlag(handle, "pause", !playWhenReady)
+        if (!released) onMpv { api.setPropertyFlag(handle, "pause", !playWhenReady) }
         return Futures.immediateVoidFuture()
     }
 
@@ -494,18 +609,19 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         pendingSeek?.set(null)
         val done = SettableFuture.create<Any?>()
         pendingSeek = done
-        MpvNative.command(handle, arrayOf("seek", "%.3f".format(Locale.ROOT, target / 1000.0), "absolute"))
+        onMpv { api.command(handle, arrayOf("seek", "%.3f".format(Locale.ROOT, target / 1000.0), "absolute")) }
         return done
     }
 
     override fun handleSetPlaybackParameters(playbackParameters: PlaybackParameters): ListenableFuture<*> {
         speed = playbackParameters.speed
-        if (!released) MpvNative.setPropertyDouble(handle, "speed", speed.toDouble())
+        val rate = speed.toDouble()
+        if (!released) onMpv { api.setPropertyDouble(handle, "speed", rate) }
         return Futures.immediateVoidFuture()
     }
 
     override fun handleStop(): ListenableFuture<*> {
-        if (!released) MpvNative.command(handle, arrayOf("stop"))
+        if (!released) onMpv { api.command(handle, arrayOf("stop")) }
         prepared = false
         loadPending = false
         loaded = false
@@ -521,8 +637,10 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         pendingSeek = null
         holder?.removeCallback(surfaceCallback)
         holder = null
-        // The reader thread destroys the handle once mpv reports its shutdown.
-        MpvNative.command(handle, arrayOf("quit"))
+        // The reader thread destroys the handle once mpv reports its shutdown. Queued behind any call mpv is still
+        // stuck in, so nothing here waits on it; a decoder that never lets go keeps that one handle.
+        onMpv { api.command(handle, arrayOf("quit")) }
+        commands.shutdown()
         return Futures.immediateVoidFuture()
     }
 
@@ -545,7 +663,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) = attach(holder.surface)
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-            if (!released) MpvNative.setPropertyString(handle, "android-surface-size", "${width}x$height")
+            if (!released) onMpv { api.setPropertyString(handle, "android-surface-size", "${width}x$height") }
         }
         override fun surfaceDestroyed(holder: SurfaceHolder) = detach()
     }
@@ -558,7 +676,8 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         next.surface?.takeIf { it.isValid }?.let { valid ->
             attach(valid)
             val frame = next.surfaceFrame
-            if (frame.width() > 0) MpvNative.setPropertyString(handle, "android-surface-size", "${frame.width()}x${frame.height()}")
+            val size = "${frame.width()}x${frame.height()}"
+            if (frame.width() > 0) onMpv { api.setPropertyString(handle, "android-surface-size", size) }
         }
     }
 
@@ -566,19 +685,35 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
         if (released || surface === next) return
         if (surface != null) detach()
         surface = next
-        MpvNative.attachSurface(handle, next)
-        MpvNative.setOptionString(handle, "force-window", "yes")
-        MpvNative.setPropertyString(handle, "vo", VIDEO_OUTPUT)
+        onMpv {
+            api.attachSurface(handle, next)
+            api.setOptionString(handle, "force-window", "yes")
+            api.setPropertyString(handle, "vo", VIDEO_OUTPUT)
+        }
         if (loadPending && prepared) load()
     }
 
     private fun detach() {
         if (released || surface == null) return
-        // mpv must stop drawing before the Surface goes away.
-        MpvNative.setPropertyString(handle, "vo", "null")
-        MpvNative.setOptionString(handle, "force-window", "no")
-        MpvNative.detachSurface(handle)
         surface = null
+        // mpv must stop drawing before the Surface goes away, so this waits, but not on a decoder that never returns.
+        val done = try {
+            commands.submit {
+                api.setPropertyString(handle, "vo", "null")
+                api.setOptionString(handle, "force-window", "no")
+                api.detachSurface(handle)
+            }
+        } catch (_: RejectedExecutionException) {
+            return
+        }
+        try {
+            done.get(DETACH_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            Log.w(TAG, "mpv did not release the surface within $DETACH_WAIT_MS ms")
+        } catch (_: ExecutionException) {
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     private data class MpvTrack(
@@ -593,6 +728,7 @@ internal class MpvPlayer(context: Context, private val source: MpvSource) : Simp
     companion object {
         private const val TAG = "PictureshowMpv"
         private const val SEEK_STEP_MS = 10_000L
+        const val DETACH_WAIT_MS = 1_000L
         private const val MPV_ERROR_LOADING_FAILED = -13
         private const val MPV_ERROR_UNKNOWN_FORMAT = -17
         private const val PLACEHOLDER_URI = "about:mpv"
