@@ -116,6 +116,8 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
 
     private var opened: String? = null
     private var openedSeen = false
+    /** The viewer the gate last let in. Unlocking someone else doesn't lock it again; only leaving it does. */
+    private var admitted: String? = null
 
     /**
      * The app-wide check, run whenever the current viewer changes. The viewer Pictureshow opened on follows its
@@ -127,7 +129,14 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
             opened = key
             openedSeen = true
         }
-        if (key == null || unlockedKey.value == key) return false
+        if (key == null || unlockedKey.value == key) {
+            admitted = key
+            return false
+        }
+        // Unlocking another viewer happens just before it becomes current (the chooser, a sign-in), so the open one
+        // stays open through that moment instead of flashing its own lock screen.
+        if (key == admitted) return false
+        admitted = null
         val reason = if (key == opened) ProfileUnlockReason.START else ProfileUnlockReason.SWITCH
         return profilePinNeeded(lock(key), reason, false)
     }
@@ -180,10 +189,7 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         saveLocked(mutable.value - key)
     }
 
-    /**
-     * Signing in with the server password proves who this is, so it clears a forgotten PIN (the Forgot PIN path)
-     * and unlocks. Removing a viewer forgets its PIN too, so a re-added viewer starts open.
-     */
+    /** Drops a viewer's PIN without the unlock check, for a viewer removed from this device. */
     suspend fun forget(key: String) = mutex.withLock {
         loadLocked()
         if (key in mutable.value) saveLocked(mutable.value - key)

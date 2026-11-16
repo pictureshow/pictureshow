@@ -92,10 +92,10 @@ internal fun ProfilePinPad(
     LaunchedEffect(clearSignal) { pin = "" }
     LaunchedEffect(lockedOut) { runCatching { first.requestFocus() } }
     fun type(digit: Char) {
-        if (!busy && !lockedOut && pin.length < PROFILE_PIN_MAX) pin += digit
+        if (!busy && waitSeconds == 0 && !lockedOut && pin.length < PROFILE_PIN_MAX) pin += digit
     }
     fun submit() {
-        if (!busy && !lockedOut && pin.isNotEmpty()) onSubmit(pin)
+        if (!busy && waitSeconds == 0 && !lockedOut && pin.isNotEmpty()) onSubmit(pin)
     }
     val noteText = when {
         lockedOut -> stringResource(R.string.pin_locked_out)
@@ -244,10 +244,15 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
     val submit: (String) -> Unit = { pin ->
         scope.launch {
             check.busy = true
-            val result = withContext(Dispatchers.Default) { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }
-            check.busy = false
+            // A save that fails (storage full) leaves the pad usable rather than crashing the lock screen.
+            val result = try {
+                withContext(Dispatchers.Default) { runCatching { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }.getOrNull() }
+            } finally {
+                check.busy = false
+            }
             check.tries++
             when (result) {
+                null -> check.note = PinPadNote.NONE
                 ProfilePinResult.UNLOCKED -> {
                     check.note = PinPadNote.NONE
                     onUnlocked()

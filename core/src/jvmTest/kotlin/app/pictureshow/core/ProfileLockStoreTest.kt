@@ -138,4 +138,19 @@ class ProfileLockStoreTest {
         assertFalse(store.gateNeeded("teen"))
         assertTrue(store.gateNeeded("parent").not(), "parent still follows its opening choice")
     }
+
+    @Test
+    fun unlockingTheNextViewerDoesNotLockTheOpenOneBeforeTheSwitchLands() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = true)
+        store.set("teen", "1357", askOnStart = true)
+        store.markUnlocked("parent")
+        assertFalse(store.gateNeeded("parent"))
+        // The chooser checks teen's PIN; parent is still current for a moment.
+        assertEquals(ProfilePinResult.UNLOCKED, store.verify("teen", "1357", 0))
+        assertFalse(store.gateNeeded("parent"), "parent stays open until the switch lands")
+        assertFalse(store.gateNeeded("teen"))
+        // Back on parent by any route but the chooser: it asks.
+        assertTrue(store.gateNeeded("parent"))
+    }
 }
