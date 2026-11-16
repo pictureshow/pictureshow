@@ -60,7 +60,9 @@ python -m unittest discover -s desktop/tools/app-smoke -p test_smoke.py -v
 
 The macOS job also runs `macos-focus.py PREFIX SURFACE_LIBRARY BUILD OUTPUT_JSON`
 before this flow. It launches its own helper application, requires that helper to
-own foreground, then creates and replaces the real mpv/AppKit surface while the
+own foreground (the host yields activation to it, since macOS 14 activation is
+cooperative and the host's own launch activation can arrive late; the receipt
+counts `foregroundHandoffs`), then creates and replaces the real mpv/AppKit surface while the
 host stays inactive. Both attachments must keep the helper frontmost and report
 `applicationActive: false`. This isolates the attachment path shared by manual
 playback and autoplay from the separate natural-EOF/controller smoke. Rebuilding
@@ -115,9 +117,12 @@ The Mac wrapper sets `PICTURESHOW_SMOKE_4K=1` for additional 3840x2160 Home,
 detail and Settings captures, clipped to the display's usable work area so the
 OS menu bar cannot cover app controls. The paint sidecar records requested and
 actual dimensions and work-area origin. Capture uses a Robot bound to the window's display so native scaling follows that
-display on mixed-DPI desktops. A bounded five-second paint retry rejects blank or
+display on mixed-DPI desktops. A bounded paint retry rejects blank or
 near-uniform app pixels below the menu/title strip even when semantics exist.
-Its sidecar records each attempt's window bounds, display bounds, transforms and
+Its budget is five seconds per 1920x1080 of capture area (about 20 s at 4K),
+because CI rasterizes the first post-resize frame in software and its latency
+grows with pixel count. Its sidecar records `paintBudgetMillis` and each
+attempt's elapsed time, window bounds, display bounds, transforms and
 pixel statistics. Failed paint preserves the rejected 900px JPEG and sidecar;
 the smaller recovery screenshot does not replace the failed capture. Wrapped
 failures also record a bounded cause chain with class/method/line locations,
