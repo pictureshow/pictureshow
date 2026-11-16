@@ -40,12 +40,15 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
-/** Sign-in steps and every playing route, downloaded or streamed, own the whole screen. */
+/** Sign-in steps, every playing route (downloaded or streamed) and the photo viewer own the whole screen. */
 internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = signedIn &&
     route !in listOf("waiting", "servers") &&
     route?.startsWith("login?") != true &&
     route?.startsWith("quick?") != true &&
-    !isPlayerRoute(route)
+    !touchOwnsScreen(route)
+
+/** Routes that draw edge to edge with no app bars over them: the players and the photo viewer (PHOTO-01). */
+internal fun touchOwnsScreen(route: String?): Boolean = isPlayerRoute(route) || route?.startsWith("photo?") == true
 
 @Composable
 internal fun TouchPictureshow(
@@ -94,7 +97,7 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = isPlayerRoute(route)
+    val inPlayer = touchOwnsScreen(route)
     val showNavigation = touchShowsNavigation(route, signedIn)
     val sync: SyncPlayHost = koinInject()
     SyncPlayCoordinator(state.snapshot.currentAccount, catalog, onMusicOpen = {

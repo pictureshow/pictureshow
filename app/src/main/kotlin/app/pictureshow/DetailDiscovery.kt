@@ -6,8 +6,8 @@ package app.pictureshow
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pictureshow.core.Account
@@ -75,7 +75,7 @@ private fun MediaItem.withTitleArt(title: MediaItem): MediaItem =
 private fun trailerSource(choice: TrailerChoice): String = when {
     choice.item != null -> listOf("Trailer", runtimeLabel(choice.item?.runTimeTicks)).filter(String::isNotBlank).joinToString(" · ")
     choice.youTubeId != null -> "YouTube"
-    else -> choice.url?.let { runCatching { Uri.parse(it).host?.removePrefix("www.") }.getOrNull() } ?: "Online"
+    else -> choice.url?.let { runCatching { it.toUri().host?.removePrefix("www.") }.getOrNull() } ?: "Online"
 }
 
 fun discoveryRows(title: MediaItem?, state: DetailDiscoveryState): List<DiscoveryRow> {
@@ -133,13 +133,13 @@ fun openRemoteTrailer(context: Context, choice: TrailerChoice) {
     val url = choice.url ?: return
     val attempts = buildList {
         choice.youTubeId?.let { id ->
-            val watch = Uri.parse("https://www.youtube.com/watch?v=$id")
+            val watch = "https://www.youtube.com/watch?v=$id".toUri()
             add(Intent(Intent.ACTION_VIEW, watch).setPackage("com.google.android.youtube.tv"))
             add(Intent(Intent.ACTION_VIEW, watch).setPackage("com.amazon.firetv.youtube"))
             add(Intent(Intent.ACTION_VIEW, watch).setPackage("com.google.android.youtube"))
-            add(Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$id")))
+            add(Intent(Intent.ACTION_VIEW, "vnd.youtube:$id".toUri()))
         }
-        add(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        add(Intent(Intent.ACTION_VIEW, url.toUri()))
     }
     for (intent in attempts) {
         try {

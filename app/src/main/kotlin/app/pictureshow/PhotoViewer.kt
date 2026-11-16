@@ -49,9 +49,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -138,16 +137,18 @@ fun PhotoViewer(account: Account, viewModel: PhotoViewerViewModel, tv: Boolean, 
     }
 
     // A running slideshow keeps the screen on and moves on by itself; it wraps from the last photo to the first.
-    LaunchedEffect(slideshow, seconds, pager.currentPage, touched) {
+    // Keyed on the settled page: currentPage flips halfway through a slide, and restarting here then cancelled the
+    // slide and left two photos side by side on screen.
+    LaunchedEffect(slideshow, seconds, pager.settledPage, touched) {
         view.keepScreenOn = slideshow
         if (slideshow) {
             delay(seconds * 1000L)
-            val next = photoStep(pager.currentPage, photos.size, forward = true, slideshow = true)
+            val next = photoStep(pager.settledPage, photos.size, forward = true, slideshow = true)
             if (next == null) slideshow = false else pager.animateScrollToPage(next)
         }
     }
     LaunchedEffect(Unit) {
-        snapshotFlow { pager.currentPage }.collect { touched++ }
+        snapshotFlow { pager.settledPage }.collect { touched++ }
     }
     DisposableEffect(Unit) { onDispose { view.keepScreenOn = false } }
     // Controls fade after a few seconds so the photo is the whole screen; any key or tap brings them back.
@@ -164,15 +165,21 @@ fun PhotoViewer(account: Account, viewModel: PhotoViewerViewModel, tv: Boolean, 
         if (menu) menu = false else onBack()
     }
 
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val maxWidth = with(density) { configuration.screenWidthDp.dp.roundToPx() }.coerceIn(640, 3840)
-    val maxHeight = with(density) { configuration.screenHeightDp.dp.roundToPx() }.coerceIn(360, 2160)
+    // The window in pixels already: the server scales each photo down to it, never up.
+    val window = LocalWindowInfo.current.containerSize
+    val maxWidth = window.width.coerceIn(640, 3840)
+    val maxHeight = window.height.coerceIn(360, 2160)
 
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
+                // Back with the menu open closes it here: left to the system, the first Back only took focus off the
+                // menu's button and the menu stayed up. Down and up are both consumed so the release can't leave too.
+                if (tv && menu && event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyUp) menu = false
+                    return@onPreviewKeyEvent true
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 touched++
                 when {

@@ -375,7 +375,7 @@ private fun PlaybackSettingRows(
                 app.pictureshow.core.playback.StillWatching.entries,
                 touch,
                 ::stillWatchingLabel,
-                supporting = "Pauses before the next episode when you haven't pressed anything for a while."
+                supporting = stillWatchingSupporting(tuning.stillWatching)
             ) { value ->
                 onLocal { it.copy(tuning = it.tuning.copy(stillWatching = value)) }
             }
@@ -668,13 +668,17 @@ internal fun imageSubtitleSample(): Bitmap = createBitmap(480, 80, Bitmap.Config
     canvas.drawText("Image subtitle", 240f, 56f, paint)
 }
 
-internal fun stillWatchingLabel(value: app.pictureshow.core.playback.StillWatching): String {
-    if (value == app.pictureshow.core.playback.StillWatching.Off) return "Never"
+internal fun stillWatchingLabel(value: app.pictureshow.core.playback.StillWatching): String =
+    if (value == app.pictureshow.core.playback.StillWatching.Off) "Never" else "After ${value.episodes} episodes"
+
+/** The time half of the still-watching limit, in the row's supporting text so the value stays short enough to read. */
+internal fun stillWatchingSupporting(value: app.pictureshow.core.playback.StillWatching): String {
+    if (value == app.pictureshow.core.playback.StillWatching.Off) return "Episodes keep playing until you stop them."
     val hours = value.minutes / 60
     val time = when {
         value.minutes % 60 == 30 -> "$hours½ hours"
         hours == 1 -> "1 hour"
         else -> "$hours hours"
     }
-    return "After ${value.episodes} episodes or $time"
+    return "Also asks after $time without a button press, before the next episode starts."
 }

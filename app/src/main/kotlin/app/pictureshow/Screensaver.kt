@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
@@ -59,12 +60,12 @@ internal class ScreensaverSettings(context: Context) {
 
     fun minutes(value: Int) {
         minutes = value
-        stored.edit().putInt("minutes", value).apply()
+        stored.edit { putInt("minutes", value) }
     }
 
     fun maxAge(value: Int?) {
         maxAge = value
-        stored.edit().putInt("maxAge", value ?: -1).apply()
+        stored.edit { putInt("maxAge", value ?: -1) }
     }
 
     companion object {

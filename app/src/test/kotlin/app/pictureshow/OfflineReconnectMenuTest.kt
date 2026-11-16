@@ -98,6 +98,7 @@ class OfflineReconnectMenuTest {
             assertFalse(touchShowsNavigation(it, signedIn = true), it)
         }
         assertTrue(touchShowsNavigation("downloads", signedIn = true))
+        assertFalse(touchShowsNavigation(PHOTO_ROUTE_PATTERN, signedIn = true), "the photo viewer is full screen")
         listOf("downloads", "home", null).forEach { assertFalse(isPlayerRoute(it)) }
     }
 
