@@ -89,6 +89,11 @@ struct DownloadOptions {
 
     private let api: OfflineAPI
     private var fileSession: URLSession!
+    /// Subtitles and artwork: cross-origin redirects are refused, so the viewer's token stays on their server.
+    private let sidecarSession = Downloads.sidecarSession(.default)
+    nonisolated static func sidecarSession(_ configuration: URLSessionConfiguration) -> URLSession {
+        URLSession(configuration: configuration, delegate: OriginRedirects(), delegateQueue: nil)
+    }
     #if os(iOS)
     private var hlsSession: AVAssetDownloadURLSession!
     #endif
@@ -664,8 +669,8 @@ struct DownloadOptions {
             guard let url else { continue }
             var request = URLRequest(url: url, timeoutInterval: 60)
             request.setValue(api.authorization(deviceID: device, token: token), forHTTPHeaderField: "Authorization")
-            guard let (data, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode), !(http.value(forHTTPHeaderField: "Content-Type") ?? "").contains("text/html") else { continue }
+            guard let (data, response) = try? await sidecarSession.data(for: request), let http = response as? HTTPURLResponse,
+                  Self.servedBy(account.server.url, http), (200..<300).contains(http.statusCode), !(http.value(forHTTPHeaderField: "Content-Type") ?? "").contains("text/html") else { continue }
             let target = files.resourceURL(entryID, resource)
             guard (try? files.write(data, to: target)) != nil else { continue }
             let sha = try? OfflineFiles.sha256(of: target)
@@ -981,7 +986,16 @@ struct DownloadOptions {
 
 // MARK: - System transfer callbacks
 
+extension Downloads {
+    /// Whether the response came from the viewer's server, after any redirects (`OfflineAPI.call` checks the same).
+    nonisolated static func servedBy(_ server: URL, _ response: HTTPURLResponse) -> Bool {
+        guard let final = response.url else { return false }
+        return ServerURLs.isSameOrigin(server, final)
+    }
+}
+
 #if os(iOS)
+
 extension Downloads: URLSessionDownloadDelegate, AVAssetDownloadDelegate {
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         let description = downloadTask.taskDescription
@@ -998,9 +1012,12 @@ extension Downloads: URLSessionDownloadDelegate, AVAssetDownloadDelegate {
         MainActor.assumeIsolated {
             guard let tag = TaskTag(description), let v = viewers[tag.viewer], let entry = entry(tag.viewer, tag.entryID),
                   entry.job.attempt == tag.attempt, let media = entry.resources.first(where: { $0.id == tag.resourceID }) else { return }
-            let status = http?.statusCode ?? 0
+            // Background sessions follow redirects without asking the delegate, so a file another host answered is
+            // refused here rather than saved as the viewer's media.
+            guard let http, Self.servedBy(v.account.server.url, http) else { failedStatus[downloadTask.taskIdentifier] = -1; return }
+            let status = http.statusCode
             // A sign-in page isn't a file: an HTML answer is a network interruption, before anything touches the partial.
-            if (http?.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased().contains("text/html") {
+            if (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased().contains("text/html") {
                 failedStatus[downloadTask.taskIdentifier] = -1; return
             }
             guard (200..<300).contains(status) else { failedStatus[downloadTask.taskIdentifier] = status; return }
@@ -1011,7 +1028,7 @@ extension Downloads: URLSessionDownloadDelegate, AVAssetDownloadDelegate {
                 try? FileManager.default.removeItem(at: target)
                 // Name the file before hashing it: a kill after this costs a hash, not the download.
                 try FileManager.default.moveItem(at: location, to: target)
-                if let length = http?.expectedContentLength, length > 0, status == 200 { expectedLength[tag.viewer + "|" + tag.entryID] = length }
+                if http.expectedContentLength > 0, status == 200 { let length = http.expectedContentLength; expectedLength[tag.viewer + "|" + tag.entryID] = length }
                 finished.insert(downloadTask.taskIdentifier)
             } catch {
                 log.error("move failed: \(error.localizedDescription, privacy: .public)")

@@ -2,9 +2,11 @@
 // Copyright (c) Legitimate LLC.
 import Foundation
 
-/// Rejects cross-origin redirects before a request's Authorization reaches another server.
-private final class OriginRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+/// Rejects cross-origin redirects before a request's Authorization reaches another server. A same-origin redirect
+/// keeps the Authorization header, which Foundation drops on every redirect (measured on macOS 27.2).
+public final class OriginRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    public override init() { super.init() }
+    public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         guard let origin = task.originalRequest?.url, let target = request.url, ServerURLs.isSameOrigin(origin, target) else { completionHandler(nil); return }
         var redirect = request
         redirect.setValue(task.originalRequest?.value(forHTTPHeaderField: "Authorization"), forHTTPHeaderField: "Authorization")
