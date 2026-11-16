@@ -173,8 +173,21 @@ class DesktopRoundThreeTest {
             onNodeWithText(qualitySupport(cap)!!, useUnmergedTree=true).fetchSemanticsNode()
                 .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
             assertEquals(1, layouts.single().lineCount, "$cap Mbps supporting line must not orphan a word")
-            assertFalse(layouts.single().hasVisualOverflow, "$cap Mbps text must fit vertically too")
+            val layout = layouts.single()
+            // A paragraph can retain the parent's 292px allocation while Text measures to its 239px
+            // intrinsic width. hasVisualOverflow then reports width overflow even when every glyph fits.
+            // Check actual line extents, ellipsis and vertical bounds instead of that allocation comparison.
+            assertFalse(layout.isLineEllipsized(0), "$cap Mbps support must not be truncated")
+            assertTrue(layout.getLineLeft(0) >= 0f && layout.getLineRight(0) <= layout.size.width,
+                "$cap Mbps glyph line must fit its measured width: left=${layout.getLineLeft(0)}, right=${layout.getLineRight(0)}, size=${layout.size}, paragraphWidth=${layout.multiParagraph.width}")
+            assertFalse(layout.didOverflowHeight, "$cap Mbps support must fit vertically")
+            assertTrue(layout.getLineBottom(0) <= layout.size.height,
+                "$cap Mbps line bottom ${layout.getLineBottom(0)} exceeds text height ${layout.size.height}")
             val bounds = onNodeWithTag("quality:$cap").getUnclippedBoundsInRoot()
+            val supportBounds = onNodeWithText(qualitySupport(cap)!!, useUnmergedTree=true).getUnclippedBoundsInRoot()
+            assertTrue(supportBounds.left >= bounds.left && supportBounds.right <= bounds.right &&
+                supportBounds.top >= bounds.top && supportBounds.bottom <= bounds.bottom,
+                "$cap Mbps support bounds $supportBounds must stay inside its row $bounds")
             assertEquals(first, bounds.bottom-bounds.top, "$cap Mbps row must match Original's height")
         }
     }
