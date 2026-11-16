@@ -173,6 +173,7 @@ final class OfflineOwnershipTests: XCTestCase {
     }
 
     func testRemovingAnExpiredViewerClearsItsDownloads() throws {
+        try XCTSkipUnless(Downloads.supported, "Apple TV has no downloads (OFF-PD03)")
         let expired = account("expired-\(UUID().uuidString.prefix(6))", token: "")
         let folder = try downloadsFolder(for: expired)
         let app = try model(with: [expired])
@@ -182,6 +183,7 @@ final class OfflineOwnershipTests: XCTestCase {
     }
 
     func testSigningOutAnExpiredViewerClearsItsDownloads() throws {
+        try XCTSkipUnless(Downloads.supported, "Apple TV has no downloads (OFF-PD03)")
         let expired = account("expired-\(UUID().uuidString.prefix(6))", token: "")
         let folder = try downloadsFolder(for: expired)
         let app = try model(with: [expired])
@@ -190,6 +192,7 @@ final class OfflineOwnershipTests: XCTestCase {
     }
 
     func testASignedOutViewersLeftoverDownloadsAreClearedAtStart() throws {
+        try XCTSkipUnless(Downloads.supported, "Apple TV has no downloads (OFF-PD03)")
         var gone = account("gone-\(UUID().uuidString.prefix(6))", token: "")
         gone.signedOut = true
         let folder = try downloadsFolder(for: gone)
@@ -198,6 +201,7 @@ final class OfflineOwnershipTests: XCTestCase {
     }
 
     func testATokenThatArrivesAfterSignOutIsNotKept() throws {
+        try XCTSkipUnless(Downloads.supported, "Apple TV has no downloads (OFF-PD03)")
         let gone = account("late-\(UUID().uuidString.prefix(6))", token: "")
         let app = try model(with: [])
         let device = "pictureshow-dl-test-\(UUID().uuidString)"
