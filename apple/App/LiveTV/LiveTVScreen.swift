@@ -108,6 +108,7 @@ private struct LiveTVContent: View {
                             Text(item.rawValue).font(.callout.weight(.semibold))
                         }
                         .buttonStyle(LiveTabStyle(selected: item == tab))
+                        .fixedSize() // never hyphenate a tab name to make room for the filters
                     }
                     Spacer()
                     filters
@@ -163,6 +164,9 @@ private struct LiveTVContent: View {
                     #if os(iOS)
                     .buttonStyle(.bordered)
                     .tint(favoritesOnly ? Theme.accent : .secondary)
+                    #else
+                    .secondaryAction()
+                    .fixedSize() // the header row would otherwise squeeze the label out of the button
                     #endif
                     .accessibilityValue(favoritesOnly ? "On" : "Off")
             }
@@ -183,11 +187,14 @@ private struct LiveTVContent: View {
             }
             #else
             if tab == .channels {
-                TextField("Search channels", text: $search).frame(width: 420)
+                TextField("Search channels", text: $search).frame(minWidth: 220, maxWidth: 340)
             }
             #endif
             #if os(tvOS)
             Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .labelStyle(.iconOnly)
+                .secondaryAction()
+                .fixedSize()
                 .disabled(state.loading)
             #endif
         }

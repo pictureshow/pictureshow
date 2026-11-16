@@ -29,13 +29,16 @@ struct LiveTimeline: View {
                 if !readout.clock.isEmpty {
                     Text(readout.clock).font(.footnote.weight(.bold).monospacedDigit()).accessibilityHidden(true)
                 }
-                Text(visual).font(.footnote.weight(.semibold).monospacedDigit()).lineLimit(1)
+                // The pill already says Live; the status text only adds what the pill doesn't.
+                if !(live.atEdge && !live.paused) {
+                    Text(visual).font(.footnote.weight(.semibold).monospacedDigit()).lineLimit(1)
+                }
                 Spacer()
                 if live.canGoLive {
                     Button { controller.goLive(); interacted() } label: { Label("Go live", systemImage: "dot.radiowaves.forward") }
                         .font(.footnote.weight(.semibold))
                         .buttonStyle(.borderedProminent)
-                        .tint(Theme.accent)
+                        .tint(Color(red: 0.78, green: 0.13, blue: 0.13)) // white label at about 6:1
                 }
             }
             if live.canTimeShift, let edge = live.window.goLivePosition(), edge > 0 {

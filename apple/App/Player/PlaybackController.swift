@@ -35,6 +35,9 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     /// Live TV (LIVE-04/05): the measured window, pause/expiry and the programme on air; unused for other items.
     @Published private(set) var live = LivePlayerState()
     fileprivate var liveTask: Task<Void, Never>?
+    /// When the current live item was opened, and how many times it has been reopened without becoming ready.
+    fileprivate var liveOpened = Date()
+    fileprivate var liveReopens = 0
     /// A channel plays live; its timeline comes from the player, never a duration.
     var isLive: Bool { item.type == "TvChannel" || decision?.isLive == true }
 
@@ -172,8 +175,16 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         isBuffering = true
         let stream = source?.mediaStreams.first { $0.type == "Subtitle" && $0.index == subtitle }
         let textSubtitle = stream.map(Captions.isText) ?? false
+        // A channel's listed source id is the channel itself, and a recording still being written lists its file while
+        // PlaybackInfo offers a growing stream under another id; pinning either is refused (NoCompatibleStream, OBSERVED).
+        // Neither pins a listed source before the server has named the one it plays.
+        let pinned: String? = switch item.type {
+        case "TvChannel": nil
+        case "Recording": decision?.source.id
+        default: source?.id ?? item.mediaSources.first?.id
+        }
         var next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks, audioIndex: audio, subtitleIndex: subtitle,
-                                            forceTranscode: forceTranscode, mediaSourceID: source?.id ?? item.mediaSources.first?.id,
+                                            forceTranscode: forceTranscode, mediaSourceID: pinned,
                                             preferences: app.preferences.playback, externalTextSubtitle: textSubtitle)
         // The server may pick a default subtitle we didn't know about until now.
         if !textSubtitle, let chosen = next.subtitleIndex, chosen >= 0,
@@ -188,14 +199,20 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         log.notice("Negotiated item=\(next.itemID, privacy: .public) method=\(next.method.rawValue, privacy: .public) session=\(next.playSessionId ?? "none", privacy: .public)")
         notice = app.preferences.playback.showConversionNotice ? ConversionNotice.of(next, subtitleIndex: next.subtitleIndex ?? -1, device: DeviceIdentity.name) : nil
         noticeDismissed = false
-        let url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url, token: account.accessToken, requiredHeaders: next.headers)
+        // An opened tuner source lists the headers the server sends upstream (an M3U tuner's User-Agent); the player
+        // only ever fetches the server's own same-origin URL, so those never apply to it.
+        let url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url, token: account.accessToken,
+                                             requiredHeaders: next.isLive ? [:] : next.headers)
         let playerItem = AVPlayerItem(url: url)
         playerItem.externalMetadata = metadata()
         applySubtitleStyle(playerItem)
         pendingSeek = next.initialSeekSeconds > 1 ? next.initialSeekSeconds : nil
         observe(playerItem)
         player.replaceCurrentItem(with: playerItem)
-        player.isMuted = next.audioIndex == -1
+        liveOpened = Date(); liveReopens = 0
+        // A live remux names no audio track (AudioStreamIndex=-1) yet copies the tuner's audio (OBSERVED), so only a
+        // recorded item's "no audio" choice mutes.
+        player.isMuted = next.audioIndex == -1 && !next.isLive
         // A group viewing starts paused; the server's command starts it on every device at once.
         if grouped { syncExpectPlaying = false; player.pause() } else { player.play() }
         if let previous, previous.playSessionId != next.playSessionId {
@@ -890,10 +907,15 @@ extension PlaybackController {
 
     fileprivate func sampleLive() {
         guard isLive, let playerItem = player.currentItem else { return }
+        if LiveStartWatchdog.shouldReopen(ready: playerItem.status != .unknown, openedSecondsAgo: Date().timeIntervalSince(liveOpened), reopens: liveReopens),
+           let asset = playerItem.asset as? AVURLAsset {
+            reopenLive(asset.url)
+            return
+        }
         var next = live
         let range = playerItem.liveRange
         next.observe(rangeStart: range?.start, rangeDuration: range?.duration, currentSeconds: player.currentTime().seconds,
-                     liveOffsetSeconds: playerItem.liveOffsetSeconds, paused: player.rate == 0 && !isBuffering)
+                     paused: player.rate == 0 && !isBuffering)
         if next != live { live = next }
     }
 
@@ -918,9 +940,33 @@ extension PlaybackController {
         return "\(channel) · \(LiveFormat.time(nowMs: LiveFormat.nowMs()).range(start, end))"
     }
 
+    /// A fresh live remux starts with two segments, less than the player's hold-back. The Apple TV player can give up
+    /// on that first playlist and never ask again (OBSERVED on the tvOS simulator: item status unknown, error -12783,
+    /// playlist reloads stop while the server's playlist keeps growing). The same URL opened again plays.
+    fileprivate func reopenLive(_ url: URL) {
+        liveReopens += 1
+        liveOpened = Date()
+        log.notice("Reopening live item attempt=\(self.liveReopens)")
+        let playerItem = AVPlayerItem(url: url)
+        playerItem.externalMetadata = metadata()
+        applySubtitleStyle(playerItem)
+        observe(playerItem)
+        player.replaceCurrentItem(with: playerItem)
+        player.play()
+    }
+
     /// LIVE-05: jump to the player's own live point and play.
     func goLive() {
         guard let edge = live.liveEdgeSeconds else { player.play(); return }
         nativeSeek(edge) { [weak self] in self?.player.play() }
+    }
+}
+
+/// When a live item that never became ready is opened again: after 10 seconds, at most three times.
+enum LiveStartWatchdog {
+    static let patienceSeconds: Double = 10
+    static let maxReopens = 3
+    static func shouldReopen(ready: Bool, openedSecondsAgo: Double, reopens: Int) -> Bool {
+        !ready && openedSecondsAgo >= patienceSeconds && reopens < maxReopens
     }
 }

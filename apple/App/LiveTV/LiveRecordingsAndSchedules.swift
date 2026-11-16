@@ -15,8 +15,10 @@ struct LiveRecordingsView: View {
 
     var body: some View {
         let recordings = model.state.recordings
-        let active = recordings.filter(\.isInProgress)
-        let done = recordings.filter { !$0.isInProgress }
+        // The server marks a growing recording either way (IsInProgress or Status InProgress), as the core reads it.
+        let growing: (MediaItem) -> Bool = { $0.isInProgress || $0.recordingStatus == "InProgress" }
+        let active = recordings.filter(growing)
+        let done = recordings.filter { !growing($0) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: platformValue(tv: 14, touch: 10)) {
                 if !active.isEmpty { section("Recording now", active) }
@@ -172,6 +174,7 @@ struct LiveSchedulesView: View {
         .disabled(model.state.writing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([schedule.name, detail, status, error].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", "))
+        .accessibilityAddTraits(.isButton)
         .accessibilityHint("Shows edit and cancel")
     }
 

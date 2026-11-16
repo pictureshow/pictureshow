@@ -8,27 +8,37 @@ import PictureshowCore
 @testable import Pictureshow_iOS
 #endif
 
-/// The live player's timeline comes only from the player's seekable range (LIVE-05).
+/// The live player's timeline comes only from the player's seekable range (LIVE-05). AVPlayer keeps the end of that
+/// range its hold-back behind the newest segment, so the range end is the live point and the player may sit past it.
 final class LivePlayerStateTests: XCTestCase {
-    private func sample(_ state: inout LivePlayerState, start: Double? = 100, length: Double? = 60, at current: Double, offset: Double? = 3, paused: Bool = false) {
-        state.observe(rangeStart: start, rangeDuration: length, currentSeconds: current, liveOffsetSeconds: offset, paused: paused)
+    private func sample(_ state: inout LivePlayerState, start: Double? = 100, length: Double? = 60, at current: Double, paused: Bool = false) {
+        state.observe(rangeStart: start, rangeDuration: length, currentSeconds: current, paused: paused)
     }
 
-    func testPlayingAtTheLivePointIsLiveWithNoGoLive() {
+    func testPlayingAtTheRangeEndIsLiveWithNoGoLive() {
         var state = LivePlayerState()
-        sample(&state, at: 157)
+        sample(&state, at: 160)
         XCTAssertTrue(state.canTimeShift)
-        XCTAssertEqual(state.window.defaultPositionMs, 57_000, "the live point sits the player's live offset before the range end")
-        XCTAssertEqual(state.positionMs, 57_000)
+        XCTAssertEqual(state.window.defaultPositionMs, 60_000, "the live point is the end of the seekable range")
         XCTAssertTrue(state.atEdge)
         XCTAssertFalse(state.canGoLive)
-        XCTAssertEqual(state.liveEdgeSeconds, 157)
+        XCTAssertEqual(state.liveEdgeSeconds, 160)
+    }
+
+    /// OBSERVED: the player plays inside the hold-back, 6 to 13 s past the range end. That is live, not "unavailable".
+    func testPlayingInsideTheHoldBackPastTheRangeEndIsLive() {
+        var state = LivePlayerState()
+        sample(&state, at: 171)
+        XCTAssertEqual(state.positionMs, 60_000)
+        XCTAssertEqual(state.behindMs, 0)
+        XCTAssertTrue(state.atEdge)
+        XCTAssertFalse(state.canGoLive)
     }
 
     func testBehindLiveOffersGoLiveAndMeasuresFromTheLivePoint() {
         var state = LivePlayerState()
         sample(&state, at: 120)
-        XCTAssertEqual(state.behindMs, 37_000)
+        XCTAssertEqual(state.behindMs, 40_000)
         XCTAssertFalse(state.atEdge)
         XCTAssertTrue(state.canGoLive)
     }
@@ -49,10 +59,21 @@ final class LivePlayerStateTests: XCTestCase {
         XCTAssertNil(state.pausedAbsoluteMs)
     }
 
+    func testPausingInsideTheHoldBackIsNotAnExpiredBuffer() {
+        var state = LivePlayerState()
+        sample(&state, at: 170, paused: true)
+        XCTAssertFalse(state.expired)
+        XCTAssertEqual(state.pausedAbsoluteMs, 160_000, "held at the live point")
+        // A growing (event) window keeps the paused point; it falls behind instead, measured from where the player sits.
+        sample(&state, length: 90, at: 170, paused: true)
+        XCTAssertFalse(state.expired)
+        XCTAssertEqual(state.behindMs, 20_000)
+    }
+
     func testSeeksStayInsideTheWindowAndNeverPassTheLivePoint() {
         var state = LivePlayerState()
         sample(&state, at: 150)
-        XCTAssertEqual(state.clampedSeek(500), 157, "a forward seek stops at the live point")
+        XCTAssertEqual(state.clampedSeek(500), 160, "a forward seek stops at the live point")
         XCTAssertEqual(state.clampedSeek(10), 100, "no rewind before the oldest held time")
         XCTAssertEqual(state.clampedSeek(140), 140)
     }
@@ -65,12 +86,6 @@ final class LivePlayerStateTests: XCTestCase {
         XCTAssertFalse(state.canGoLive)
         sample(&state, start: 100, length: 0, at: 100)
         XCTAssertFalse(state.canTimeShift, "an empty range is not a time-shift window")
-    }
-
-    func testAnOffsetLargerThanTheWindowPutsTheLivePointAtItsStart() {
-        var state = LivePlayerState()
-        sample(&state, length: 4, at: 100, offset: 30)
-        XCTAssertEqual(state.window.defaultPositionMs, 0)
     }
 }
 
@@ -194,5 +209,26 @@ final class LiveTVModelTests: XCTestCase {
         await live.waitForLoad()
         XCTAssertTrue(live.state.channels.isEmpty)
         XCTAssertEqual(live.state.policy?.access, false)
+    }
+}
+
+/// LIVE-09: a recording opens through the normal item page, which must offer Play for it.
+final class LiveRecordingPlaybackTests: XCTestCase {
+    func testARecordingOffersPlaybackFromItsItemPage() {
+        var item = MediaItem(id: "rec", type: "Recording")
+        item.locationType = "FileSystem"
+        XCTAssertTrue(CatalogPresentation.offersPlayback(item))
+        XCTAssertFalse(CatalogPresentation.offersPlayback(MediaItem(id: "ch", type: "TvChannel")), "a channel tunes from Live TV, not an item page")
+    }
+}
+
+/// A live item that never becomes ready is opened again after ten seconds, at most three times (OBSERVED on tvOS).
+final class LiveStartWatchdogTests: XCTestCase {
+    func testReopensOnlyAStuckItemAfterTenSecondsAndAtMostThreeTimes() {
+        XCTAssertFalse(LiveStartWatchdog.shouldReopen(ready: false, openedSecondsAgo: 9.9, reopens: 0), "patience first")
+        XCTAssertTrue(LiveStartWatchdog.shouldReopen(ready: false, openedSecondsAgo: 10, reopens: 0))
+        XCTAssertFalse(LiveStartWatchdog.shouldReopen(ready: true, openedSecondsAgo: 60, reopens: 0), "a ready item is left alone")
+        XCTAssertTrue(LiveStartWatchdog.shouldReopen(ready: false, openedSecondsAgo: 30, reopens: 2))
+        XCTAssertFalse(LiveStartWatchdog.shouldReopen(ready: false, openedSecondsAgo: 30, reopens: 3), "gives up after three")
     }
 }

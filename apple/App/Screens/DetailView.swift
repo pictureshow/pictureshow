@@ -125,7 +125,9 @@ struct DetailPage: View {
 
     /// What the main button plays: the item itself, or for a series the next episode.
     private var playTarget: MediaItem? {
-        Catalog.detailPlayItem(item: item, nextUp: content.nextUp.map { [$0] } ?? [], episodes: content.episodes)
+        // LIVE-09: a DVR recording plays itself (the core's rule covers library types only).
+        if item.type == "Recording" { return CatalogPresentation.offersPlayback(item) ? item : nil }
+        return Catalog.detailPlayItem(item: item, nextUp: content.nextUp.map { [$0] } ?? [], episodes: content.episodes)
     }
 
     private var header: some View {

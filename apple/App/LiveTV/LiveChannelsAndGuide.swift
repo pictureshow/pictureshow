@@ -183,7 +183,9 @@ struct LiveGuide: View {
             Button { choosingDay = true } label: {
                 Text(platformValue(tv: "\(LiveFormat.day(start)) ▾", touch: "\(LiveFormat.day(start)) · \(time.clock(LiveTVModel.iso(start))) ▾"))
                     .lineLimit(1)
+                    #if os(iOS)
                     .frame(maxWidth: .infinity)
+                    #endif
             }
             .accessibilityLabel("Guide day, \(LiveFormat.day(start))")
             Button { model.refresh(start: start + LiveTVModel.window) } label: { Image(systemName: "chevron.right") }
@@ -198,7 +200,9 @@ struct LiveGuide: View {
         .padding(.horizontal, Theme.gutter)
         .frame(height: 44)
         #else
-        .frame(width: Self.column + 220)
+        .secondaryAction()
+        .fixedSize() // the TV buttons keep their whole labels
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.gutter)
         .focusSection()
         #endif

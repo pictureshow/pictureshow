@@ -171,7 +171,12 @@ struct LiveCancelRequest: Identifiable {
     var id: String { "\(series):\(schedule.id)" }
 
     static func occurrence(_ schedule: LiveSchedule, name: String) -> LiveCancelRequest {
-        LiveCancelRequest(schedule: schedule, series: false, title: "Cancel this recording?",
+        // Cancelling a recording that is already running stops it; what it has written stays (OBSERVED on Jellyfin).
+        if schedule.status == "InProgress" {
+            return LiveCancelRequest(schedule: schedule, series: false, title: "Stop this recording?",
+                                     message: "“\(name)” stops recording now. What's already recorded stays in Recordings.", action: "Stop recording")
+        }
+        return LiveCancelRequest(schedule: schedule, series: false, title: "Cancel this recording?",
                           message: "“\(name)” won't be recorded. Other airings and series rules stay in place.", action: "Cancel recording")
     }
 

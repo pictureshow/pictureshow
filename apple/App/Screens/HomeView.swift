@@ -212,10 +212,11 @@ struct LibraryShelf: View {
             SectionHeader(title: "Libraries").padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.cardSpacing) {
-                    ForEach(libraries.filter { !$0.isLiveTvLibrary }) { library in LibraryTile(library: library) }
+                    // Apple TV reaches Live TV from Home, first in the row like the Libraries card on touch.
                     #if os(tvOS)
                     LiveTVTile()
                     #endif
+                    ForEach(libraries.filter { !$0.isLiveTvLibrary }) { library in LibraryTile(library: library) }
                 }
                 .padding(.horizontal, Theme.gutter)
                 #if os(tvOS)

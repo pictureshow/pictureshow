@@ -24,21 +24,24 @@ struct LivePlayerState: Equatable {
     /// The absolute player time of the live edge, in seconds.
     var liveEdgeSeconds: Double? { window.goLivePosition().map { Double(window.offsetMs + $0) / 1000 } }
 
-    /// One sample of the player. `range` is the last seekable range; `liveOffsetSeconds` is how far behind the end of
-    /// that range the player keeps itself at the live point (AVPlayerItem's configured or recommended offset).
-    mutating func observe(rangeStart: Double?, rangeDuration: Double?, currentSeconds: Double, liveOffsetSeconds: Double?, paused: Bool) {
+    /// One sample of the player. `range` is the last seekable range. AVPlayer already keeps that range's end its
+    /// hold-back (three target durations) behind the newest segment, so the end of the range is the live point, and a
+    /// playing position up to the hold-back past it is still live (OBSERVED on a Jellyfin live HLS stream: range end
+    /// 18 s behind the playlist, the player 6 to 13 s past the range end).
+    mutating func observe(rangeStart: Double?, rangeDuration: Double?, currentSeconds: Double, paused: Bool) {
         if let start = rangeStart, let length = rangeDuration, start.isFinite, length.isFinite, length > 0 {
             let durationMs = Int64(length * 1000)
-            let offset = liveOffsetSeconds.flatMap { $0.isFinite && $0 > 0 ? Int64($0 * 1000) : nil } ?? 0
-            window = ObservedLiveWindow(offsetMs: Int64(start * 1000), durationMs: durationMs,
-                                        defaultPositionMs: max(0, durationMs - min(offset, durationMs)), seekable: true)
+            window = ObservedLiveWindow(offsetMs: Int64(start * 1000), durationMs: durationMs, defaultPositionMs: durationMs, seekable: true)
         } else {
             window = ObservedLiveWindow(offsetMs: 0, durationMs: 0, defaultPositionMs: 0, seekable: false)
         }
+        // Past the end of the range is the hold-back the player plays inside: that is the live point, not unknown.
+        let end = window.canTimeShift ? window.offsetMs + window.durationMs : nil
         let absolute = currentSeconds.isFinite ? Int64(currentSeconds * 1000) : nil
-        if let absolute { positionMs = absolute - window.offsetMs }
+        let held = absolute.map { value in end.map { min(value, $0) } ?? value }
+        if let held { positionMs = held - window.offsetMs }
         if paused {
-            if !self.paused || pausedAbsoluteMs == nil { pausedAbsoluteMs = absolute }
+            if !self.paused || pausedAbsoluteMs == nil { pausedAbsoluteMs = held }
         } else {
             pausedAbsoluteMs = nil
         }
@@ -62,11 +65,4 @@ extension AVPlayerItem {
         return (range.start.seconds, range.duration.seconds)
     }
 
-    /// How far behind the end of the seekable range the player sits when it is "live".
-    var liveOffsetSeconds: Double? {
-        let configured = configuredTimeOffsetFromLive
-        if configured.isNumeric, configured.seconds > 0 { return configured.seconds }
-        let recommended = recommendedTimeOffsetFromLive
-        return recommended.isNumeric && recommended.seconds > 0 ? recommended.seconds : nil
-    }
 }
