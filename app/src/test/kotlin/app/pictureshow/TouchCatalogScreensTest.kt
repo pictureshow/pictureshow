@@ -222,7 +222,7 @@ class TouchCatalogScreensTest {
                 TouchSearchScreen(SearchState(query = "Sintel", rows = listOf(row), completed = true), account, {}, {}, {}, {}, {}, {})
             }
         }
-        compose.onNodeWithText("Open Movies", substring = true).assertExists()
+        compose.onNodeWithText("Open Movies", substring = true, useUnmergedTree = true).assertExists()
         compose.onAllNodesWithContentDescription("Open Movies", substring = true).assertCountEquals(1)
     }
 

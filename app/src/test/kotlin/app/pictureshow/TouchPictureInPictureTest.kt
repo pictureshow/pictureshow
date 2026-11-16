@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /** TOUCH-15: the window grows out of the picture itself, not the black bars around it. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(sdk = [30], application = android.app.Application::class)
 class TouchPictureInPictureTest {
     @Test fun aWideFilmOnAPortraitPhoneGrowsFromItsLetterbox() {
         val source = touchPictureInPictureSource(Rect(0f, 100f, 1080f, 2100f), VideoSize(1920, 800))

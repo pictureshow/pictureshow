@@ -41,6 +41,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -2184,7 +2185,8 @@ class TouchPlayerControlsTest {
         assertEquals(input.getValue("heightDp").jsonPrimitive.float, (frame.bottom - frame.top).value, 1f)
         val expected = case.getValue("expected").jsonObject
         assertEquals(false, expected.getValue("syncEnabled").jsonPrimitive.boolean)
-        val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed().assertIsNotEnabled()
+        // P-5: unavailable Watch together stays tappable and says why, rather than a silent disabled icon.
+        val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed()
         watch.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watch together is unavailable for live streams."))
         val watchBox = watch.getBoundsInRoot()
         assertTrue((watchBox.right - watchBox.left).value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
@@ -2193,10 +2195,14 @@ class TouchPlayerControlsTest {
         val row = bounds("touch:secondary")
         assertEquals(row.left, bounds("touch:open:Audio").left)
         assertEquals(row.right, bounds("touch:more").right)
-        assertEquals(row.left, bounds("touch:title").left)
+        // P-4: the Close player arrow leads the title row; the title follows it.
+        assertEquals(row.left, bounds("touch:close").left)
+        assertTrue(bounds("touch:close").right <= bounds("touch:title").left)
         assertEquals(row.right, bounds("touch:quality").right)
         val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(2, marks.size)
+        compose.onNodeWithTag("touch:syncplay").performClick()
+        compose.onNodeWithTag("touch:note").assertTextContains("Watch together is unavailable for live streams.")
         val toggle = compose.onNodeWithTag("touch:toggle")
         val scale = toggle.fetchSemanticsNode().layoutInfo.density.density
         val box = toggle.getBoundsInRoot()
