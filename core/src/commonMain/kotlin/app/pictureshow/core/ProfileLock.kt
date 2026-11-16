@@ -211,8 +211,12 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         loaded = true
     }
 
+    /**
+     * Memory first, then disk: a write that fails (storage full, a broken file) still leaves the wrong try counted for
+     * as long as the app runs, so a failing disk can't hand out unlimited guesses.
+     */
     private suspend fun saveLocked(next: Map<String, ProfileLock>) {
-        persistence.write(json.encodeToString(next))
         mutable.value = next
+        persistence.write(json.encodeToString(next))
     }
 }

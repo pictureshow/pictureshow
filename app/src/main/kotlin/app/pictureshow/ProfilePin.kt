@@ -244,15 +244,19 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
     val submit: (String) -> Unit = { pin ->
         scope.launch {
             check.busy = true
-            // A save that fails (storage full) leaves the pad usable rather than crashing the lock screen.
+            // A save that fails (storage full) must not crash the lock screen or hand back a fresh pad: the store has
+            // already counted the try in memory, so the result is read from that count.
             val result = try {
-                withContext(Dispatchers.Default) { runCatching { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }.getOrNull() }
+                withContext(Dispatchers.Default) { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                pinResultAfterFailedCheck(store.lock(key), android.os.SystemClock.elapsedRealtime())
             } finally {
                 check.busy = false
             }
             check.tries++
             when (result) {
-                null -> check.note = PinPadNote.NONE
                 ProfilePinResult.UNLOCKED -> {
                     check.note = PinPadNote.NONE
                     onUnlocked()
@@ -267,6 +271,17 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
         }
     }
     return check to submit
+}
+
+/**
+ * What the pad shows when a check threw: never a fresh pad. A locked-out or waiting count stays so; otherwise the try
+ * reads as wrong, since the viewer was not unlocked.
+ */
+internal fun pinResultAfterFailedCheck(lock: app.pictureshow.core.ProfileLock?, now: Long): ProfilePinResult = when {
+    lock == null -> ProfilePinResult.WRONG
+    app.pictureshow.core.profilePinLockedOut(lock) -> ProfilePinResult.LOCKED_OUT
+    app.pictureshow.core.profilePinCooldown(lock, now) > 0 -> ProfilePinResult.WAIT
+    else -> ProfilePinResult.WRONG
 }
 
 private suspend fun tickWait(check: PinCheck, remaining: () -> Long) {

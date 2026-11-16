@@ -153,4 +153,25 @@ class ProfileLockStoreTest {
         // Back on parent by any route but the chooser: it asks.
         assertTrue(store.gateNeeded("parent"))
     }
+
+    @Test
+    fun aFailingDiskStillCountsEveryWrongTry() = runTest {
+        val memory = Memory()
+        val store = ProfileLockStore(memory, hasher)
+        store.set("parent", "2468", askOnStart = true)
+        store.markUnlocked(null)
+        val broken = object : TextPersistence {
+            override suspend fun read() = memory.text
+            override suspend fun write(value: String) = throw java.io.IOException("disk full")
+        }
+        val failing = ProfileLockStore(broken, hasher)
+        var now = 1_000L
+        repeat(PROFILE_PIN_HARD_LIMIT) {
+            assertFailsWith<java.io.IOException> { failing.verify("parent", "0000", now) }
+            now += 3_600_000
+        }
+        assertEquals(PROFILE_PIN_HARD_LIMIT, failing.lock("parent")!!.failures)
+        assertEquals(ProfilePinResult.LOCKED_OUT, failing.verify("parent", "2468", now))
+        assertNull(failing.unlocked.value)
+    }
 }
