@@ -7,7 +7,7 @@ final class PendingSpecVectorTests: XCTestCase {
     func testPendingApplication11Cases() throws { try pending("application") }
     func testPendingHomeBrowse142Cases() throws { try pending("home-browse") }
     func testPendingLiveDvr22Cases() throws { try pending("live-dvr") }
-    func testPendingLiveGuide14Cases() throws { try pending("live-guide") }
+    func testPendingLiveGuide25Cases() throws { try pending("live-guide") }
     func testPendingLivePresentation366Cases() throws { try pending("live-presentation") }
     func testPendingLiveSource11Cases() throws { try pending("live-source") }
     func testPendingPlayerOverlayLayout8Cases() throws { try pending("player-overlay-layout") }

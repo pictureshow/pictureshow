@@ -143,6 +143,23 @@ class LiveVectorsTest {
                 put("actionAllowed", after.actionAllowed(candidate, input.getValue("now").jsonPrimitive.long))
             }
         }
+        "preview-line" -> JsonPrimitive(
+            app.pictureshow.core.livetv.liveGuidePreviewLine(
+                json.decodeFromJsonElement(input.getValue("program")),
+                input["channel"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.content,
+                input.getValue("now").jsonPrimitive.long
+            )
+        )
+        "quiet-refresh" -> JsonPrimitive(
+            LiveGuideCache(
+                "viewer",
+                1,
+                emptySet(),
+                fetchedAtMillis = input["fetchedAt"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.long,
+                offline = input.getValue("offline").jsonPrimitive.boolean,
+                refreshing = input.getValue("refreshing").jsonPrimitive.boolean
+            ).quietRefreshDue(input.getValue("now").jsonPrimitive.long)
+        )
         "create-trace" -> createTrace(input)
         else -> error("Unhandled Live TV vector operation $operation")
     }

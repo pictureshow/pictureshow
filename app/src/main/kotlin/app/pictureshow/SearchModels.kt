@@ -88,6 +88,36 @@ class SearchViewModel(private val account: Account, private val session: Catalog
         }
     }
 
+    /**
+     * CAT-14a (TV review T-12): results that would show identical cards (one film in two libraries) name their library,
+     * read from each item's ancestors after the results are up. A failed read leaves the card as it was; a newer query
+     * discards the labels.
+     */
+    private suspend fun labelDuplicates(epoch: Int) = coroutineScope {
+        val items = state.value.rows.flatMap { it.items }
+        val duplicates = app.pictureshow.core.searchDuplicateLabels(
+            items.map { app.pictureshow.core.SearchLabelItem(it.id, it.type, it.name, it.productionYear, it.seriesName) }
+        ).toSet()
+        if (duplicates.isEmpty()) return@coroutineScope
+        val names = duplicates.map { id ->
+            async {
+                val ancestors = session.call(account) {
+                    (this as? SearchService)?.searchAncestors(account, id)
+                        ?: ClientResult.Failure(app.pictureshow.core.ClientError(app.pictureshow.core.ErrorKind.SERVER, "No library"))
+                }
+                val name = (ancestors as? ClientResult.Success)?.value?.let { app.pictureshow.core.searchLibraryName(it, emptyList()) }
+                name?.let { id to it }
+            }
+        }.awaitAll().filterNotNull().toMap()
+        if (names.isEmpty() || epoch != generation) return@coroutineScope
+        mutableState.update {
+            val labelled = it.rows.map { row ->
+                row.copy(libraryNames = row.items.mapNotNull { item -> names[item.id]?.let { name -> item.id to name } }.toMap())
+            }
+            it.copy(rows = labelled)
+        }
+    }
+
     fun query(value: String, immediate: Boolean = false) {
         val bounded = value.take(app.pictureshow.core.SEARCH_QUERY_LIMIT)
         savedQuery?.set("searchQuery", bounded)
@@ -136,6 +166,7 @@ class SearchViewModel(private val account: Account, private val session: Catalog
                     )
                 }
                 if (revision != session.changes.value.revision) refresher.refresh()
+                labelDuplicates(epoch)
             }
         }
     }

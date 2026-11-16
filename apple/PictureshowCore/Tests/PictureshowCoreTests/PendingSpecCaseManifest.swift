@@ -16,7 +16,7 @@ enum PendingSpecCaseManifest {
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-guide": Suite(count: 25, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "offline-budget": Suite(count: 40, reason: "The merged offline policy and its Apple runtime integration are not ported."),

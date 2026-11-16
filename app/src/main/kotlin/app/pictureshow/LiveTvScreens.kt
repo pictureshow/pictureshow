@@ -200,9 +200,11 @@ internal fun LiveTvScreen(
         }
     }
 
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state.fetchedAt) {
         while (true) {
             now = System.currentTimeMillis()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) vm.quietRefreshIfDue(now)
             delay(1_000)
         }
     }
@@ -296,14 +298,16 @@ internal fun LiveTvScreen(
                         Modifier.weight(1f).fillMaxHeight().testTag("live:guide-preview"),
                         verticalArrangement = Arrangement.Center
                     ) {
+                        // T-15: the title stays "Live TV" on every tab; the focused programme sits under it.
                         androidx.tv.material3.Text(
-                            preview?.name ?: focusedChannel?.name ?: "Live TV guide",
+                            "Live TV",
                             Modifier.semantics { heading() },
                             style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         if (preview == null && focusedChannel != null) {
+                            LiveText(focusedChannel.name, true, small = true, maxLines = 1)
                             LiveText(
                                 liveChannelIdleLabel(
                                     state.programs.any { it.channelId == focusedChannel.id },
@@ -315,15 +319,24 @@ internal fun LiveTvScreen(
                         }
                         preview?.let { show ->
                             LiveText(
-                                "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +
-                                    time.range(show.startDate, show.endDate) +
+                                app.pictureshow.core.livetv.liveGuidePreviewLine(
+                                    show,
+                                    show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name,
+                                    now
+                                ),
+                                true,
+                                small = true,
+                                maxLines = 1,
+                                modifier = Modifier.testTag("live:preview-line")
+                            )
+                            LiveText(
+                                time.range(show.startDate, show.endDate) +
                                     liveProgramEpisodeLabel(show)?.let { " · $it" }.orEmpty() +
                                     show.episodeTitle?.let { " · $it" }.orEmpty(),
                                 true,
                                 small = true,
                                 maxLines = 1
                             )
-                            show.overview?.let { LiveText(it, true, small = true, maxLines = 1) }
                         }
                     }
                 } else {

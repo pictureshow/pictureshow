@@ -8900,6 +8900,87 @@
         "playItem": null
       },
       "expected": "Play"
+    },
+    {
+      "id": "track-menu-empty-no-subtitles",
+      "operation": "track-menu-empty",
+      "input": {
+        "type": "Subtitle",
+        "tracks": 0
+      },
+      "expected": "This video has no subtitles."
+    },
+    {
+      "id": "track-menu-empty-no-audio",
+      "operation": "track-menu-empty",
+      "input": {
+        "type": "Audio",
+        "tracks": 0
+      },
+      "expected": "This video has no audio tracks."
+    },
+    {
+      "id": "track-menu-empty-subtitles-present",
+      "operation": "track-menu-empty",
+      "input": {
+        "type": "Subtitle",
+        "tracks": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "track-menu-empty-audio-present",
+      "operation": "track-menu-empty",
+      "input": {
+        "type": "Audio",
+        "tracks": 2
+      },
+      "expected": null
+    },
+    {
+      "id": "controls-last-action-soon",
+      "operation": "controls-restore-last-action",
+      "input": {
+        "hiddenAtMs": 1000,
+        "nowMs": 20000
+      },
+      "expected": true
+    },
+    {
+      "id": "controls-last-action-at-window",
+      "operation": "controls-restore-last-action",
+      "input": {
+        "hiddenAtMs": 1000,
+        "nowMs": 31000
+      },
+      "expected": true
+    },
+    {
+      "id": "controls-last-action-too-late",
+      "operation": "controls-restore-last-action",
+      "input": {
+        "hiddenAtMs": 1000,
+        "nowMs": 31001
+      },
+      "expected": false
+    },
+    {
+      "id": "controls-last-action-never-hidden",
+      "operation": "controls-restore-last-action",
+      "input": {
+        "hiddenAtMs": null,
+        "nowMs": 5000
+      },
+      "expected": false
+    },
+    {
+      "id": "controls-last-action-clock-backwards",
+      "operation": "controls-restore-last-action",
+      "input": {
+        "hiddenAtMs": 9000,
+        "nowMs": 5000
+      },
+      "expected": false
     }
   ]
 }

@@ -177,7 +177,19 @@ internal fun LiveChip(
 ) {
     val target = modifier.then(controlHeight?.let { Modifier.height(it) } ?: Modifier)
     if (tv) {
-        androidx.tv.material3.FilterChip(selected, onClick, modifier = target, enabled = enabled) {
+        // LIVE (TV review T-14): on TV the chip's only selected cue was a colour change that reads as focus; the same check
+        // as touch says the filter is on, focused or not.
+        androidx.tv.material3.FilterChip(
+            selected,
+            onClick,
+            modifier = target,
+            enabled = enabled,
+            leadingIcon = if (selected) {
+                { androidx.tv.material3.Icon(liveIcon("check"), null, Modifier.size(18.dp).testTag("live:filter-check")) }
+            } else {
+                null
+            }
+        ) {
             Box(controlHeight?.let { Modifier.height(it - 16.dp) } ?: Modifier, contentAlignment = Alignment.Center) {
                 androidx.tv.material3.Text(label, maxLines = 1)
             }

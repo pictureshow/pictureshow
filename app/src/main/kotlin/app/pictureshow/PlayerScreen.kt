@@ -230,6 +230,14 @@ internal fun PlayerItemScreen(
     val speedFocus = remember { FocusRequester() }
     val infoFocus = remember { FocusRequester() }
     val qualityFocus = remember { FocusRequester() }
+    val syncFocus = remember { FocusRequester() }
+    val stopFocus = remember { FocusRequester() }
+    // PLAY-03 (TV review T-3): a viewer who brings the controls back soon after they hid returns to the action they were on.
+    val lastAction = remember { PlayerLastAction<FocusRequester>() }
+    val remembersAction: (FocusRequester) -> Modifier = { requester ->
+        Modifier.focusRequester(requester).onFocusChanged { if (it.isFocused) lastAction.focused(requester) }
+    }
+    var preferLastAction by remember { mutableStateOf(false) }
     fun extraPanelFocus(title: String?) = when (title) {
         "Playback speed" -> speedFocus
         "Quality" -> qualityFocus
@@ -379,6 +387,7 @@ internal fun PlayerItemScreen(
 
             controls -> {
                 controls = false
+                lastAction.hidden(android.os.SystemClock.uptimeMillis())
                 if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
                 val focusMoves = !rootFocused
                 val focused = rootFocus.requestFocus()
@@ -393,7 +402,11 @@ internal fun PlayerItemScreen(
     PlaybackHostEffects(host, account, catalog, paused)
     LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
         if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && extraPanel == null && !restoringSeekFocus) {
-            if (primaryEnabled) playFocus.requestFocus() else audioFocus.requestFocus()
+            val restore = lastAction.restorable(android.os.SystemClock.uptimeMillis()).takeIf { preferLastAction }
+            preferLastAction = false
+            if (restore == null || runCatching { restore.requestFocus() }.isFailure) {
+                if (primaryEnabled) playFocus.requestFocus() else audioFocus.requestFocus()
+            }
             focusControls = false
         }
     }
@@ -522,6 +535,7 @@ internal fun PlayerItemScreen(
         interaction
     ) {
         controls = false
+        lastAction.hidden(android.os.SystemClock.uptimeMillis())
         rootFocus.requestFocus()
     }
     PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
@@ -542,7 +556,10 @@ internal fun PlayerItemScreen(
                     seek = ::keySeek,
                     showControls = {
                         controls = true
-                        if (rootFocused) focusControls = true
+                        if (rootFocused) {
+                            focusControls = true
+                            preferLastAction = true
+                        }
                     },
                     interact = { interaction++ },
                     back = ::handleBack,
@@ -787,7 +804,7 @@ internal fun PlayerItemScreen(
                         PlaybackToggle(
                             paused,
                             primaryAction != "pause",
-                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))
+                            remembersAction(playFocus).then(readerOpenerOnly("player:play"))
                                 .then(
                                     if (host.isLive) {
                                         Modifier.width(liveControlWidth()).heightIn(min = 48.dp).align(Alignment.CenterVertically)
@@ -821,7 +838,7 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.audioIndex
                             )
-                        }, modifier = Modifier.focusRequester(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
+                        }, modifier = remembersAction(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
                         PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Subtitle,
@@ -830,14 +847,14 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.subtitleIndex
                             )
-                        }, modifier = Modifier.focusRequester(subtitleFocus).then(readerOpenerOnly("player:subtitles"))) {
+                        }, modifier = remembersAction(subtitleFocus).then(readerOpenerOnly("player:subtitles"))) {
                             Text("Subtitles")
                         }
                         if (metadata.chapters.isNotEmpty()) {
                             PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                                 chaptersOpen = true
                                 seekPreview = null
-                            }, modifier = Modifier.focusRequester(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
+                            }, modifier = remembersAction(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
                                 Text("Chapters")
                             }
                         }
@@ -847,7 +864,7 @@ internal fun PlayerItemScreen(
                             onClick = {
                                 openExtraPanel("Playback speed", speedFocus)
                             },
-                            modifier = Modifier.focusRequester(speedFocus).testTag("player:speed").then(readerOpenerOnly("player:speed"))
+                            modifier = remembersAction(speedFocus).testTag("player:speed").then(readerOpenerOnly("player:speed"))
                                 .playerTouchClick {
                                     openExtraPanel("Playback speed", speedFocus)
                                 }
@@ -860,14 +877,14 @@ internal fun PlayerItemScreen(
                             onClick = {
                                 openExtraPanel("Playback info", infoFocus)
                             },
-                            modifier = Modifier.focusRequester(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
+                            modifier = remembersAction(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
                                 .playerTouchClick { openExtraPanel("Playback info", infoFocus) }
                         ) {
                             Text("Playback info")
                         }
                         PlayerActionButton(liveStyle = host.isLive, scale = playerButtonScale(), onClick = {
                             host.sync?.show()
-                        }, modifier = Modifier.testTag("player:syncplay")) {
+                        }, modifier = remembersAction(syncFocus).testTag("player:syncplay")) {
                             Text(androidx.compose.ui.res.stringResource(R.string.sync_title))
                         }
                         PlayerActionButton(
@@ -877,9 +894,7 @@ internal fun PlayerItemScreen(
                                 openExtraPanel("Quality", qualityFocus)
                                 interaction++
                             },
-                            modifier = Modifier.focusRequester(
-                                qualityFocus
-                            ).testTag("player:quality").then(readerOpenerOnly("player:quality"))
+                            modifier = remembersAction(qualityFocus).testTag("player:quality").then(readerOpenerOnly("player:quality"))
                                 .playerTouchClick {
                                     if (offline == null &&
                                         !state.preparing &&
@@ -894,7 +909,7 @@ internal fun PlayerItemScreen(
                             liveStyle = host.isLive,
                             scale = playerButtonScale(),
                             onClick = { finish(reason = "stop-button") },
-                            modifier = readerOpenerOnly("player:stop")
+                            modifier = remembersAction(stopFocus).then(readerOpenerOnly("player:stop"))
                         ) {
                             Text("Stop")
                         }
@@ -1007,6 +1022,10 @@ internal fun PlayerItemScreen(
                                 }
                             )
                         }, onClose = { close(closeChooser) })
+                        return@PlayerPanel
+                    }
+                    menu.emptyNotice?.let { notice ->
+                        EmptyTrackPanel(notice, onClose = { close(closeChooser) })
                         return@PlayerPanel
                     }
                     TrackChoices(

@@ -74,6 +74,16 @@ class ApplicationParityVectorsTest {
                             }
                         ).map(::JsonPrimitive)
                     )
+                    "controls-restore-last-action" -> JsonPrimitive(
+                        app.pictureshow.core.playback.restoresLastAction(
+                            input.getValue("hiddenAtMs").jsonPrimitive.content.toLongOrNull(),
+                            input.getValue("nowMs").jsonPrimitive.content.toLong()
+                        )
+                    )
+                    "track-menu-empty" -> app.pictureshow.core.playback.trackMenuEmptyNotice(
+                        app.pictureshow.core.playback.MediaStreamType.valueOf(input.getValue("type").jsonPrimitive.content),
+                        input.getValue("tracks").jsonPrimitive.content.toInt()
+                    ).let { if (it == null) JsonNull else JsonPrimitive(it) }
                     "detail-play-label" -> JsonPrimitive(
                         detailPlayLabel(
                             Json.decodeFromJsonElement(input.getValue("item")),

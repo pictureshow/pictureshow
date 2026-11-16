@@ -502,6 +502,147 @@
         },
         "overview": "Generated guide description."
       }
+    },
+    {
+      "id": "live-guide.quiet-refresh-young",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919912639999,
+        "offline": false,
+        "refreshing": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-guide.quiet-refresh-due",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919912640000,
+        "offline": false,
+        "refreshing": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-guide.quiet-refresh-stale-still-due",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919913000000,
+        "offline": false,
+        "refreshing": false
+      },
+      "expected": true
+    },
+    {
+      "id": "live-guide.quiet-refresh-not-while-refreshing",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919912650000,
+        "offline": false,
+        "refreshing": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-guide.quiet-refresh-not-offline",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919912650000,
+        "offline": true,
+        "refreshing": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-guide.quiet-refresh-clock-backwards",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": 1919912400000,
+        "now": 1919912399999,
+        "offline": false,
+        "refreshing": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-guide.quiet-refresh-never-fetched",
+      "operation": "quiet-refresh",
+      "input": {
+        "fetchedAt": null,
+        "now": 1919912400000,
+        "offline": false,
+        "refreshing": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-guide.preview-line-now",
+      "operation": "preview-line",
+      "input": {
+        "program": {
+          "Id": "p",
+          "Name": "News",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "channel": "Test A",
+        "now": 1919912400000
+      },
+      "expected": "Now on Test A: News"
+    },
+    {
+      "id": "live-guide.preview-line-later",
+      "operation": "preview-line",
+      "input": {
+        "program": {
+          "Id": "p",
+          "Name": "News",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "channel": "Test A",
+        "now": 1919912399999
+      },
+      "expected": "Later on Test A: News"
+    },
+    {
+      "id": "live-guide.preview-line-earlier",
+      "operation": "preview-line",
+      "input": {
+        "program": {
+          "Id": "p",
+          "Name": "News",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "channel": "Test A",
+        "now": 1919919600000
+      },
+      "expected": "Earlier on Test A: News"
+    },
+    {
+      "id": "live-guide.preview-line-no-channel",
+      "operation": "preview-line",
+      "input": {
+        "program": {
+          "Id": "p",
+          "Name": "News",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "channel": null,
+        "now": 1919912400000
+      },
+      "expected": "News"
     }
   ]
 }

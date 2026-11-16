@@ -18,7 +18,9 @@ import kotlinx.coroutines.withContext
 internal data class PlayerTrackMenu(
     val streams: List<MediaStream>,
     val choices: List<Pair<Int, String>>,
-    val needsConnection: Set<Int> = emptySet()
+    val needsConnection: Set<Int> = emptySet(),
+    /** Set when the type has no tracks at all: the panel shows this line and nothing to pick. */
+    val emptyNotice: String? = null
 )
 
 internal data class PlayerTrackMenus(val audio: PlayerTrackMenu, val subtitles: PlayerTrackMenu) {
@@ -44,7 +46,9 @@ internal fun preparePlayerTrackMenus(mediaStreams: List<MediaStream>, undownload
         val rows = (local + missing).mapIndexed { i, stream ->
             stream.index to if (stream.index in needed) "${labels[i]} · $NEEDS_CONNECTION" else labels[i]
         }
-        return PlayerTrackMenu(streams, (if (type == MediaStreamType.Subtitle) listOf(-1 to "Off") else emptyList()) + rows, needed)
+        // PLAY-08: with no tracks at all there is nothing to turn off; the panel says so instead (T-10).
+        val off = if (type == MediaStreamType.Subtitle && rows.isNotEmpty()) listOf(-1 to "Off") else emptyList()
+        return PlayerTrackMenu(streams, off + rows, needed, app.pictureshow.core.playback.trackMenuEmptyNotice(type, rows.size))
     }
     return PlayerTrackMenus(menu(MediaStreamType.Audio), menu(MediaStreamType.Subtitle))
 }

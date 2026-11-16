@@ -78,6 +78,30 @@ class LiveTvViewModelTest {
         assertTrue(vm.state.value.timers.isEmpty())
     }
 
+    /** LIVE-11 (T-5): the guide refreshes itself before it turns stale, keeps its actions meanwhile, and a failure is silent. */
+    @Test fun quietRefreshKeepsTheGuideFreshWithoutAStaleOrOfflineState() = runTest(dispatcher) {
+        var clock = 1_000L
+        val vm = LiveTvViewModel(account, fake) { clock }
+        vm.refresh(0)
+        advanceUntilIdle()
+        vm.quietRefreshIfDue(1_000L + 239_999)
+        advanceUntilIdle()
+        assertEquals(1_000L, vm.state.value.fetchedAt, "too young to refresh")
+        clock = 241_000L
+        vm.quietRefreshIfDue(241_000L)
+        kotlin.test.assertFalse(vm.state.value.loading, "a quiet refresh never shows a pending state")
+        assertTrue(vm.state.value.actionsAvailable(241_000L), "actions stay while the quiet refresh runs")
+        advanceUntilIdle()
+        assertEquals(241_000L, vm.state.value.fetchedAt)
+        fake.failPrograms = true
+        clock = 481_000L
+        vm.quietRefreshIfDue(481_000L)
+        advanceUntilIdle()
+        kotlin.test.assertFalse(vm.state.value.offline, "a failed quiet refresh doesn't announce offline")
+        assertEquals(241_000L, vm.state.value.fetchedAt)
+        assertEquals("p", vm.state.value.programs.single().id)
+    }
+
     @Test fun channelRemovalPurgesCachedMetadataEvenWhenGuideFails() = runTest(dispatcher) {
         val vm = LiveTvViewModel(account, fake)
         vm.refresh(0)
