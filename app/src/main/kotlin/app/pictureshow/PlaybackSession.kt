@@ -456,9 +456,25 @@ internal class PlaybackSession(
         }
     }
 
-    fun routeChanged() = enqueue {
-        if (mutable.value.error != null) return@enqueue
-        val current = decision ?: return@enqueue
+    /**
+     * Every preparation reads the current route (capabilities, network, quality cap) when it starts, so a route change
+     * is already served by any preparation that started after it was asked for: a track switch or fallback queued ahead
+     * of it. Running it anyway would re-prepare the stream a second time for nothing (leg 144's actor-queue gap).
+     */
+    fun routeChanged() {
+        val askedAfter = preparations.get()
+        enqueue {
+            if (preparations.get() != askedAfter) {
+                trace("route-skip", "a newer preparation already read this route")
+                return@enqueue
+            }
+            changeRoute()
+        }
+    }
+
+    private suspend fun changeRoute() {
+        if (mutable.value.error != null) return
+        val current = decision ?: return
         capture()
         audioRecoveryRequest?.let { requested = it }
         audioRecoveryRequest = null
@@ -674,6 +690,9 @@ internal class PlaybackSession(
         if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
     }
 
+    /** Preparations started so far. Written in the command queue, read where a route change is asked for. */
+    private val preparations = java.util.concurrent.atomic.AtomicLong()
+
     private fun enqueue(block: suspend () -> Unit) {
         if (!closing && !ending) commands.trySend { if (!closed && !closing) block() }
     }
@@ -684,6 +703,7 @@ internal class PlaybackSession(
     }
 
     private suspend fun negotiate(request: PlaybackRequest, paused: Boolean, openWhen: () -> Boolean = { true }) {
+        preparations.incrementAndGet()
         requested = request
         trace(
             "prepare",

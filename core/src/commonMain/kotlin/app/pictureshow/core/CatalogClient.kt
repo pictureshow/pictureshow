@@ -55,7 +55,30 @@ interface CatalogService {
     suspend fun played(account: Account, id: String, value: Boolean): ClientResult<ItemUserData>
 
     suspend fun favorite(account: Account, id: String, value: Boolean): ClientResult<ItemUserData>
+
+    /** CAT-30..32. Optional rows: a server without them answers with nothing rather than an error page. */
+    suspend fun localTrailers(account: Account, id: String): ClientResult<List<MediaItem>> = ClientResult.Success(emptyList())
+
+    suspend fun specialFeatures(account: Account, id: String): ClientResult<List<MediaItem>> = ClientResult.Success(emptyList())
+
+    suspend fun similar(account: Account, id: String): ClientResult<ItemPage> = ClientResult.Success(ItemPage())
+
+    /** SAVER-01: titles with backdrops, in the server's random order. */
+    suspend fun screensaverItems(account: Account): ClientResult<ItemPage> = ClientResult.Success(ItemPage())
+
+    /** The server's parental rating names and their ages, for a rating ceiling (SAVER-01). */
+    suspend fun parentalRatings(account: Account): ClientResult<List<ParentalRating>> = ClientResult.Success(emptyList())
+
+    /** PHOTO-01: the photos in one folder, in the folder's browse order. */
+    suspend fun photos(account: Account, parentId: String, sortBy: String, descending: Boolean): ClientResult<ItemPage> =
+        ClientResult.Success(ItemPage())
 }
+
+@kotlinx.serialization.Serializable
+data class ParentalRating(
+    @kotlinx.serialization.SerialName("Name") val name: String = "",
+    @kotlinx.serialization.SerialName("Value") val value: Int? = null
+)
 
 internal class CatalogClient(private val client: HttpClient, private val identity: ClientIdentity) : CatalogService {
     // Jellyfin's optional DTO properties may be omitted or explicitly null.
@@ -218,6 +241,43 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         account,
         "UserFavoriteItems/${id.encodeURLPathPart()}",
         method = if (value) HttpMethod.Post else HttpMethod.Delete
+    )
+
+    override suspend fun localTrailers(account: Account, id: String): ClientResult<List<MediaItem>> =
+        request(account, "Items/${id.encodeURLPathPart()}/LocalTrailers")
+
+    override suspend fun specialFeatures(account: Account, id: String): ClientResult<List<MediaItem>> =
+        request(account, "Items/${id.encodeURLPathPart()}/SpecialFeatures")
+
+    override suspend fun similar(account: Account, id: String): ClientResult<ItemPage> =
+        request(account, "Items/${id.encodeURLPathPart()}/Similar", mapOf("limit" to "16", "fields" to CARD_FIELDS))
+
+    override suspend fun screensaverItems(account: Account): ClientResult<ItemPage> = request(
+        account,
+        "Items",
+        mapOf(
+            "includeItemTypes" to "Movie,Series",
+            "recursive" to "true",
+            "imageTypes" to "Backdrop",
+            "sortBy" to "Random",
+            "limit" to "40",
+            "fields" to "OfficialRating"
+        )
+    )
+
+    override suspend fun parentalRatings(account: Account): ClientResult<List<ParentalRating>> =
+        request(account, "Localization/ParentalRatings")
+
+    override suspend fun photos(account: Account, parentId: String, sortBy: String, descending: Boolean): ClientResult<ItemPage> = request(
+        account,
+        "Items",
+        mapOf(
+            "parentId" to parentId,
+            "includeItemTypes" to "Photo",
+            "sortBy" to sortBy,
+            "sortOrder" to if (descending) "Descending" else "Ascending",
+            "limit" to "1000"
+        )
     )
 
     internal suspend inline fun <reified T> request(

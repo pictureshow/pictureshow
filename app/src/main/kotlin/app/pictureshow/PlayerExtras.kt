@@ -194,9 +194,13 @@ internal fun NextEpisodeControl(
     // Time left in this episode when there are no credits to skip: the card shows it and waits for the end.
     remainingMs: Long? = null,
     autoPlay: Boolean = true,
-    card: (@Composable (Long, () -> Unit, () -> Unit) -> Unit)? = null
+    card: (@Composable (Long, () -> Unit, () -> Unit) -> Unit)? = null,
+    /** PLAY-30: when the countdown would start the next episode by itself, ask first if the viewer has been away. */
+    stillWatching: app.pictureshow.core.playback.StillWatching = app.pictureshow.core.playback.StillWatching.Off,
+    stillWatchingPrompt: (@Composable (() -> Unit, () -> Unit) -> Unit)? = null
 ) {
     var cancelled by remember(next.id) { mutableStateOf(false) }
+    var asking by remember(next.id) { mutableStateOf(false) }
     var played by remember(next.id) { mutableStateOf(false) }
     var remaining by remember(next.id) { mutableIntStateOf(countdownSeconds) }
     var focused by remember { mutableStateOf(false) }
@@ -204,17 +208,45 @@ internal fun NextEpisodeControl(
     val restore by rememberUpdatedState(onFocusRemoved)
     val untilEnd = remainingMs != null
     LaunchedEffect(eligible) { if (!eligible) remaining = countdownSeconds }
-    LaunchedEffect(eligible, ended, paused, cancelled, untilEnd, autoPlay) {
-        if (!autoPlay || (!eligible && !ended) || cancelled || played) return@LaunchedEffect
+    LaunchedEffect(eligible, ended, paused, cancelled, untilEnd, autoPlay, asking) {
+        if (!autoPlay || (!eligible && !ended) || cancelled || played || asking) return@LaunchedEffect
         if (!ended && (paused || untilEnd)) return@LaunchedEffect
         while (!ended && remaining > 0) {
             delay(1_000)
             remaining--
         }
         if (!played) {
+            if (ViewerInput.stillWatchingDue(stillWatching)) {
+                asking = true
+            } else {
+                played = true
+                ViewerInput.automaticallyAdvanced()
+                play()
+            }
+        }
+    }
+    val keepWatching = {
+        if (!played) {
             played = true
             play()
         }
+    }
+    val stopWatching = {
+        val hadFocus = focused
+        cancelled = true
+        onCancel()
+        if (hadFocus) {
+            focused = false
+            restore()
+        }
+    }
+    if (asking && !cancelled && !played) {
+        if (stillWatchingPrompt != null) {
+            stillWatchingPrompt(keepWatching, stopWatching)
+        } else {
+            TvStillWatchingPrompt(next.name, keepWatching, stopWatching, Modifier.onFocusChanged { focused = it.hasFocus })
+        }
+        return
     }
     val shown = visible && (eligible || ended) && !cancelled && !played
     val removedWithFocus = !shown && focused

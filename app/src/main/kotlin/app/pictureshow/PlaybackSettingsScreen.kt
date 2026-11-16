@@ -188,7 +188,7 @@ internal fun PlaybackSettingsScreen(
                     "Size ${subtitleSizeLabel(local.subtitleSize)} · Background ${subtitleBackgroundLabel(local.subtitleBackground)}, " +
                         "with a live preview"
                 "Subtitle conversion" -> "When the server draws subtitles into the picture"
-                "Playback" -> "After credits and returning to a saved position"
+                "Playback" -> "After credits, next episode and resume"
                 "Audio output" ->
                     "Passthrough: " + app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
                         local.passthrough,
@@ -307,6 +307,7 @@ internal fun PlaybackSettingsScreen(
                     Modifier.testTag("settings:segment:$type")
                 ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
             }
+            TvScreensaverSettingsRows()
             TvSettingsSectionHeader("Your server preferences")
             val enabled = !state.loading && !state.saving && configuration != null
             TvSettingsChoiceRow(

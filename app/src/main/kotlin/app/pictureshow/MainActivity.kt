@@ -112,6 +112,17 @@ class MainActivity : ComponentActivity() {
     // Activity's framework callback is inherited through the restricted AndroidX core base.
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) ViewerInput.input()
+        // A press that wakes the screensaver only wakes it: neither its down nor its up reaches the screen beneath.
+        if (TvScreensaver.active && event.action == android.view.KeyEvent.ACTION_DOWN) {
+            TvScreensaver.active = false
+            screensaverWakeKey = event.keyCode
+            return true
+        }
+        if (screensaverWakeKey == event.keyCode) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) screensaverWakeKey = null
+            return true
+        }
         if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             playbackExitHandoff.input(event.keyCode)
         }
@@ -125,6 +136,13 @@ class MainActivity : ComponentActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private var screensaverWakeKey: Int? = null
+
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) ViewerInput.input()
+        return super.dispatchTouchEvent(event)
     }
 
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
@@ -247,6 +265,7 @@ internal fun liveOrdinaryLibraries(libraries: List<MediaItem>) = libraries.filte
 internal fun itemRoute(item: MediaItem) = when {
     item.isLiveTvLibrary() -> "live-tv"
     item.isMusic() -> musicRoute(item)
+    item.type == "Photo" -> photoRoute(item)
     else -> "item?item=${Uri.encode(Json.encodeToString(item))}"
 }
 internal fun liveRecordingItemRoute(item: MediaItem) = itemRoute(item) + if (item.isMusic()) "" else "&liveRecording=true"
@@ -1132,6 +1151,28 @@ internal fun Pictureshow(
         }
         composable(MUSIC_NOW_ROUTE) { TvMusicNow(music) { nav.popBackStack() } }
         composable(
+            PHOTO_ROUTE_PATTERN,
+            arguments = listOf(
+                navArgument("item") { type = NavType.StringType },
+                navArgument("sort") {
+                    type = NavType.StringType
+                    defaultValue = "SortName"
+                },
+                navArgument("desc") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { entry ->
+            state.snapshot.currentAccount?.let { account ->
+                val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                val sort = entry.arguments?.getString("sort") ?: "SortName"
+                val descending = entry.arguments?.getBoolean("desc") == true
+                val vm: PhotoViewerViewModel = koinViewModel(parameters = { parametersOf(account, item, sort, descending, catalog) })
+                PhotoViewer(account, vm, tv = true) { nav.popBackStack() }
+            }
+        }
+        composable(
             "item?item={item}&liveRecording={liveRecording}",
             arguments = listOf(
                 navArgument("item") { type = NavType.StringType },
@@ -1159,7 +1200,7 @@ internal fun Pictureshow(
                     if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
                     CatalogGrid(
                         screen,
-                        { nav.navigate(itemRoute(it)) },
+                        { nav.navigate(if (it.type == "Photo") photoRoute(it, screen.sortBy, screen.descending) else itemRoute(it)) },
                         vm::nearEnd,
                         vm::sort,
                         vm::retry,
@@ -1170,6 +1211,9 @@ internal fun Pictureshow(
                 } else {
                     val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
+                    val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                    val discovery by discoveryVm.state.collectAsStateWithLifecycle()
+                    val context = LocalContext.current
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                             vm.resumed()
@@ -1197,7 +1241,9 @@ internal fun Pictureshow(
                         recordingContext = entry.arguments?.getBoolean("liveRecording") == true,
                         onDownload = { shown, season, seasonName ->
                             offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
-                        }
+                        },
+                        discovery = discoveryRows(screen.item ?: item, discovery),
+                        onDiscovery = { chosen -> openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) } }
                     )
                 }
             }
@@ -1213,6 +1259,12 @@ internal fun Pictureshow(
     }
     val tvRemote: RemoteControllerHost = koinInject()
     TvMusicPrompts(music) { play -> tvRemote.playNow(play.tracks.drop(play.start ?: 0).map(MusicTrack::id)) }
+    // Not over a player, a photo or Live TV's guide preview: there the picture on screen is the point.
+    TvScreensaverHost(
+        state.snapshot.currentAccount?.takeUnless { it.expired || it.signedOut },
+        catalog,
+        suppressed = isPlayerRoute(tvRoute) || tvRoute?.startsWith("photo?") == true || tvRoute == "live-tv"
+    )
 }
 
 /** Keep the Add-server heading visible while large-text statuses and actions scroll below it. */

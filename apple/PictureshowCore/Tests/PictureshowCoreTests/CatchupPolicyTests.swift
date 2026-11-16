@@ -3,11 +3,20 @@ import XCTest
 @testable import PictureshowCore
 
 final class CatchupPolicyTests: XCTestCase {
+    func testPendingCastTraceEnvelopesRetainTheirStateAndSteps() throws {
+        for suite in ["cast-capability", "cast-session", "cast-handoff", "cast-queue"] {
+            XCTAssertNoThrow(try PendingSpecCaseManifest.validateEnvelope(["state": [:], "steps": [["event": [:], "expected": ["ok": true]]]], suite: suite))
+            XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["input": [:], "expected": true], suite: suite))
+            XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["state": [:], "steps": []], suite: suite))
+            XCTAssertThrowsError(try PendingSpecCaseManifest.validateEnvelope(["state": [:], "steps": [["event": [:]]]], suite: suite))
+        }
+    }
+
     func testManifestRejectsUnknownIDsAndMismatchedContracts() throws {
         XCTAssertEqual(SpecCaseManifest.contracts.count, 2385)
-        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 1287)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 51)
-        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 1287)
+        XCTAssertEqual(PendingSpecCaseManifest.contracts.count, 1391)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.count, 56)
+        XCTAssertEqual(PendingSpecCaseManifest.suites.values.reduce(0) { $0 + $1.count }, 1391)
         XCTAssertTrue(Set(SpecCaseManifest.contracts.keys).isDisjoint(with: Set(PendingSpecCaseManifest.contracts.keys)))
         XCTAssertThrowsError(try PendingSpecCaseManifest.validate(id: "offline-job.invented", suite: "offline-job", operation: "job"))
         let pendingID = try XCTUnwrap(PendingSpecCaseManifest.contracts.keys.first)

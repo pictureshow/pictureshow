@@ -204,6 +204,9 @@ class TouchNavigationTest {
                     viewModel { (account: Account, item: MediaItem, session: CatalogSession) ->
                         CatalogDetailViewModel(account, item, session)
                     }
+                    viewModel { (account: Account, item: MediaItem, session: CatalogSession) ->
+                        DetailDiscoveryViewModel(account, item, session)
+                    }
                 }
             )
         }

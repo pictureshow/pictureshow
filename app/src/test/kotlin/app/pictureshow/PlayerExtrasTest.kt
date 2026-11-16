@@ -203,6 +203,57 @@ class PlayerExtrasTest {
     }
 
     @Test
+    fun anAwayViewerIsAskedBeforeTheNextEpisodeAndOnlyKeepWatchingPlaysIt() {
+        // Two episodes already started by themselves: the third in a row reaches the default limit (PLAY-30).
+        ViewerInput.input()
+        ViewerInput.automaticallyAdvanced()
+        ViewerInput.automaticallyAdvanced()
+        var plays = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                NextEpisodeControl(
+                    account, MediaItem("next", "Next story"), true, false, false, {}, { plays++ },
+                    countdownSeconds = 2,
+                    stillWatching = app.pictureshow.core.playback.StillWatching.ThreeEpisodes
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.onNodeWithText("Are you still watching?").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(60_000)
+        compose.runOnIdle { assertEquals(0, plays, "Nothing plays until the viewer answers") }
+        compose.onNodeWithTag("still-watching:continue").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnIdle { assertEquals(1, plays) }
+        ViewerInput.input()
+    }
+
+    @Test
+    fun aViewerWhoPressedAKeyIsNotAskedAndTheEpisodeCountsAsStartedByItself() {
+        ViewerInput.input()
+        ViewerInput.automaticallyAdvanced()
+        var plays = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                NextEpisodeControl(
+                    account, MediaItem("next", "Next story"), true, false, false, {}, { plays++ },
+                    countdownSeconds = 2,
+                    stillWatching = app.pictureshow.core.playback.StillWatching.ThreeEpisodes
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.runOnIdle {
+            assertEquals(1, plays)
+            assertEquals(2, ViewerInput.automaticAdvances)
+        }
+        compose.onNodeWithText("Are you still watching?").assertDoesNotExist()
+        ViewerInput.input()
+    }
+
+    @Test
     fun countdownPlaysOnceAndPausingStopsTheClock() {
         var paused by mutableStateOf(true)
         var plays = 0

@@ -23,6 +23,7 @@ internal val settingsViewerTags =
         listOf("settings:advanced:Subtitle appearance", "settings:advanced:Subtitle conversion") +
         listOf("settings:advanced:Audio output", "settings:advanced:Video output", "settings:this-tv") +
         SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
+        listOf("settings:screensaver", "settings:screensaver-ratings") +
         listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode", "settings:syncplay")
 
 /** The Account group's rows, first on the page whenever someone is signed in. */

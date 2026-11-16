@@ -10,24 +10,29 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
+        "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
+        "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
+        "cast-session": Suite(count: 1, reason: "Pending audio reload reattachment awaits the Apple sender port."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "discovery": Suite(count: 59, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-guide": Suite(count: 25, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "playback-formats": Suite(count: 30, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-info-reasons": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "playback-information": Suite(count: 19, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "playback-settings": Suite(count: 68, reason: "The merged playback tuning, network and preference policies are not ported to Apple."),
+        "playback-settings": Suite(count: 72, reason: "The merged playback tuning, network and preference policies are not ported to Apple."),
         "playback-settings-layout": Suite(count: 8, reason: "These eight measured Android Compose layouts require native Apple UI acceptance; a pure core answer would not prove them."),
         "playback-start": Suite(count: 5, reason: "The merged start-origin and rewind policy is not ported to Apple."),
         "player-control-affordances": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "player-overlay-layout": Suite(count: 8, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "player-quality": Suite(count: 14, reason: "The merged per-viewing quality selection policy is not ported to Apple."),
         "quality-auto-floor": Suite(count: 14, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "reference": Suite(count: 19, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "reference": Suite(count: 25, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "search-presentation": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "settings-presentation": Suite(count: 65, reason: "The merged advanced playback setting labels and consequences are not ported to Apple."),
         "sync-application": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
@@ -1351,6 +1356,110 @@ enum PendingSpecCaseManifest {
         sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
         sync-stay.open.following-opens-new-entries|sync-stay/case
         sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
+        track-menu-empty-no-subtitles|application/track-menu-empty
+        track-menu-empty-no-audio|application/track-menu-empty
+        track-menu-empty-subtitles-present|application/track-menu-empty
+        track-menu-empty-audio-present|application/track-menu-empty
+        controls-last-action-soon|application/controls-restore-last-action
+        controls-last-action-at-window|application/controls-restore-last-action
+        controls-last-action-too-late|application/controls-restore-last-action
+        controls-last-action-never-hidden|application/controls-restore-last-action
+        controls-last-action-clock-backwards|application/controls-restore-last-action
+        cast-capability.audio-reload-does-not-need-text-edit-command|cast-capability/controls
+        cast-handoff.system-pause-updates-intent-through-app-command|cast-handoff/cast
+        cast-handoff.receiver-queue-and-pause-update-return-intent|cast-handoff/cast
+        cast-queue.duplicate-media-keeps-entry-identity|cast-queue/cast-queue
+        cast-queue.receiver-order-wins-on-reattach|cast-queue/cast-queue
+        cast-queue.natural-end-wraps-only-repeat-all|cast-queue/cast-queue
+        cast-queue.repeat-one-is-a-receiver-mode-not-a-second-advance|cast-queue/cast-queue
+        cast-queue.foreign-order-cannot-invent-media|cast-queue/cast-queue
+        cast-queue.missing-entry-never-falls-back-to-first-item|cast-queue/cast-queue
+        cast-queue.paused-audio-reload-keeps-observed-moment|cast-queue/track-reload
+        cast-queue.unavailable-audio-cannot-load|cast-queue/track-reload
+        cast-queue.audio-reload-clamps-to-duration|cast-queue/track-reload
+        cast-queue.music-uses-receiver-audio-profile|cast-queue/profile-music
+        cast-queue.single-song-retains-queue-identity-for-repeat|cast-queue/cast-queue
+        cast-session.pending-audio-load-retains-previous-confirmed-binding|cast-session/reattach
+        catalog-local-trailers|reference/http
+        catalog-special-features|reference/http
+        catalog-similar|reference/http
+        catalog-screensaver-items|reference/http
+        catalog-parental-ratings|reference/http
+        catalog-photos|reference/http
+        detail-reads-movie|discovery/detail-reads
+        detail-reads-series|discovery/detail-reads
+        detail-reads-episode|discovery/detail-reads
+        detail-reads-season|discovery/detail-reads
+        detail-reads-video|discovery/detail-reads
+        detail-reads-boxset|discovery/detail-reads
+        youtube-id-0|discovery/youtube-id
+        youtube-id-1|discovery/youtube-id
+        youtube-id-2|discovery/youtube-id
+        youtube-id-3|discovery/youtube-id
+        youtube-id-4|discovery/youtube-id
+        youtube-id-5|discovery/youtube-id
+        youtube-id-6|discovery/youtube-id
+        youtube-id-7|discovery/youtube-id
+        youtube-id-8|discovery/youtube-id
+        youtube-id-9|discovery/youtube-id
+        youtube-id-10|discovery/youtube-id
+        trailers-local-then-remote|discovery/trailers
+        trailers-none|discovery/trailers
+        extra-label-BehindTheScenes|discovery/extra-label
+        extra-label-Featurette|discovery/extra-label
+        extra-label-Interview|discovery/extra-label
+        extra-label-DeletedScene|discovery/extra-label
+        extra-label-Scene|discovery/extra-label
+        extra-label-Short|discovery/extra-label
+        extra-label-Clip|discovery/extra-label
+        extra-label-Unknown|discovery/extra-label
+        extra-label-absent|discovery/extra-label
+        extra-label-ThemeSong|discovery/extra-label
+        extra-label-ThemeVideo|discovery/extra-label
+        extra-label-Sample|discovery/extra-label
+        extra-label-Trailer|discovery/extra-label
+        extras-grouped|discovery/extras
+        more-like-this|discovery/more-like-this
+        more-like-this-empty|discovery/more-like-this
+        still-watching-Off-99-999|discovery/still-watching
+        still-watching-TwoEpisodes-1-59|discovery/still-watching
+        still-watching-TwoEpisodes-2-0|discovery/still-watching
+        still-watching-TwoEpisodes-1-60|discovery/still-watching
+        still-watching-ThreeEpisodes-2-89|discovery/still-watching
+        still-watching-ThreeEpisodes-3-10|discovery/still-watching
+        still-watching-ThreeEpisodes-1-90|discovery/still-watching
+        still-watching-FiveEpisodes-4-149|discovery/still-watching
+        still-watching-FiveEpisodes-5-0|discovery/still-watching
+        still-watching-EightEpisodes-7-239|discovery/still-watching
+        still-watching-EightEpisodes-1-240|discovery/still-watching
+        photo-step-0|discovery/photo-step
+        photo-step-1|discovery/photo-step
+        photo-step-2|discovery/photo-step
+        photo-step-3|discovery/photo-step
+        photo-step-4|discovery/photo-step
+        photo-step-5|discovery/photo-step
+        photo-step-6|discovery/photo-step
+        photo-step-7|discovery/photo-step
+        photo-step-8|discovery/photo-step
+        screensaver-art-any|discovery/screensaver-art
+        screensaver-art-ceiling|discovery/screensaver-art
+        photo-url|discovery/photo-url
+        photo-url-no-image|discovery/photo-url
+        live-guide.quiet-refresh-young|live-guide/quiet-refresh
+        live-guide.quiet-refresh-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-stale-still-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-while-refreshing|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-offline|live-guide/quiet-refresh
+        live-guide.quiet-refresh-clock-backwards|live-guide/quiet-refresh
+        live-guide.quiet-refresh-never-fetched|live-guide/quiet-refresh
+        live-guide.preview-line-now|live-guide/preview-line
+        live-guide.preview-line-later|live-guide/preview-line
+        live-guide.preview-line-earlier|live-guide/preview-line
+        live-guide.preview-line-no-channel|live-guide/preview-line
+        playback-settings.next.countdown-off-never-advances|playback-settings/automatic-next
+        playback-settings.next.countdown-off-during-credits|playback-settings/automatic-next
+        playback-settings.json.countdown-and-still-watching|playback-settings/tuning-json
+        playback-settings.json.countdown-kept|playback-settings/tuning-json
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)
@@ -1372,16 +1481,16 @@ enum PendingSpecCaseManifest {
                   vector["expected"] is [String: Any] else {
                 throw NSError(domain: "Malformed pending observed live-window vector", code: 1)
             }
-        } else if suite.hasPrefix("offline-") {
+        } else if suite.hasPrefix("offline-") || ["cast-capability", "cast-session", "cast-handoff", "cast-queue"].contains(suite) {
             let permitsNoRecord = suite == "offline-outbox" && (vector["operation"] as? String) == "outbox"
             guard vector["state"] is [String: Any] || (permitsNoRecord && vector["state"] is NSNull),
                   let steps = vector["steps"] as? [[String: Any]], !steps.isEmpty,
                   vector["input"] == nil, vector["expected"] == nil else {
-                throw NSError(domain: "Malformed pending offline vector", code: 1)
+                throw NSError(domain: "Malformed pending trace vector", code: 1)
             }
             for step in steps {
                 guard step["event"] is [String: Any], let expected = step["expected"] as? [String: Any], !expected.isEmpty else {
-                    throw NSError(domain: "Malformed pending offline vector step", code: 1)
+                    throw NSError(domain: "Malformed pending trace vector step", code: 1)
                 }
             }
         } else {

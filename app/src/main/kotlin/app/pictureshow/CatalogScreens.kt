@@ -1494,7 +1494,10 @@ fun CatalogDetail(
     onPendingQueueExpired: (() -> Boolean)? = null,
     onPlayedRequest: () -> Unit = {},
     recordingContext: Boolean = false,
-    onDownload: ((MediaItem, String?, String?) -> Unit)? = null
+    onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
+    /** Trailers, Extras and More like this under the title (CAT-30..32); they arrive after the page and never hold it. */
+    discovery: List<DiscoveryRow> = emptyList(),
+    onDiscovery: (DiscoveryEntry) -> Unit = {}
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -2197,6 +2200,8 @@ fun CatalogDetail(
     // Removing pending shelves can send a final focus callback from their previous
     // composition. Judge it against current readiness, not that disposed row's state.
     val trackSelection by rememberUpdatedState(!state.loading && !playbackWaiting && restored)
+    // Cast & crew, as on touch: the fresh read's credits, each opening the person's page.
+    val cast = item?.people.orEmpty().filter { it.id.isNotBlank() }.distinctBy(app.pictureshow.core.MediaPerson::id)
     val sections = buildList {
         if (!playbackWaiting && item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
         if (!playbackWaiting && item?.type == "Series" && state.seasons.isNotEmpty()) add("seasons" to state.seasons)
@@ -2206,7 +2211,13 @@ fun CatalogDetail(
         ) {
             add("episodes" to state.episodes)
         }
+        if (!playbackWaiting && !state.loading && state.error == null) {
+            discovery.filter { it.key != "similar" }.forEach { row -> add(row.key to row.entries.map(DiscoveryEntry::card)) }
+            if (cast.isNotEmpty()) add("people" to cast.map { it.touchPersonItem() })
+            discovery.filter { it.key == "similar" }.forEach { row -> add(row.key to row.entries.map(DiscoveryEntry::card)) }
+        }
     }
+    val discoveryByKey = discovery.associateBy(DiscoveryRow::key)
     val rowStates = mutableMapOf<String, LazyListState>()
     sections.forEach { (section, _) -> key(section) { rowStates[section] = rememberLazyListState() } }
     fun moveSection(index: Int) {
@@ -2656,11 +2667,13 @@ fun CatalogDetail(
                     }
                 }
                 sections.forEach { (section, items) ->
+                    val discoveryRow = discoveryByKey[section]
                     item(key = section) {
                         DetailRow(
-                            title = when (section) {
+                            title = discoveryRow?.title ?: when (section) {
                                 "next" -> "Next up"
                                 "seasons" -> "Seasons"
+                                "people" -> "Cast & crew"
                                 else -> "Episodes"
                             },
                             section = section,
@@ -2668,8 +2681,25 @@ fun CatalogDetail(
                             account = state.account,
                             // Resting on a season card shows its episodes here; OK opens the season's own page, whose Play
                             // plays the season (its first unfinished episode, resumed), as Jellyfin's TV clients do.
-                            onOpen = onOpen,
-                            wide = section != "seasons",
+                            onOpen = if (discoveryRow == null) {
+                                onOpen
+                            } else {
+                                { card ->
+                                    discoveryRow.entries.firstOrNull { it.card.id == card.id }?.let(onDiscovery)
+                                    Unit
+                                }
+                            },
+                            subtitles = if (section == "people") {
+                                cast.mapNotNull { person ->
+                                    (person.role?.takeIf(String::isNotBlank) ?: person.type?.takeIf(String::isNotBlank))?.let {
+                                        person.id to
+                                            it
+                                    }
+                                }.toMap()
+                            } else {
+                                discoveryRow?.entries?.mapNotNull { entry -> entry.subtitle?.let { entry.card.id to it } }?.toMap()
+                            },
+                            wide = discoveryRow?.wide ?: (section != "seasons" && section != "people"),
                             selectedId = if (section == "seasons") state.selectedSeasonId else null,
                             onFocusRested = if (section == "seasons") {
                                 { season -> if (trackSelection) onSeason(season) }
@@ -3615,7 +3645,9 @@ private fun DetailRow(
     requests: MutableMap<String, FocusRequester>,
     onFocus: (MediaItem) -> Unit,
     selectedId: String? = null,
-    onFocusRested: ((MediaItem) -> Unit)? = null
+    onFocusRested: ((MediaItem) -> Unit)? = null,
+    /** A line under a card in place of its year, read with it (a trailer's source, an extra's kind and length). */
+    subtitles: Map<String, String>? = null
 ) {
     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CatalogHeading(title, large = false)
@@ -3648,6 +3680,8 @@ private fun DetailRow(
                             wide,
                             onClick = { onOpen(item) },
                             selected = selectedId?.let { item.id == it },
+                            subtitle = subtitles?.get(item.id),
+                            announceSubtitle = subtitles != null,
                             modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
                                 .staysInRow(index == 0, index == items.lastIndex)
                                 .then(endModifier)
@@ -3718,7 +3752,9 @@ internal fun CatalogCard(
     compact: Boolean = false,
     nameInArtwork: Boolean = false,
     /** Replaces the line under the title: Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
-    subtitle: String? = null
+    subtitle: String? = null,
+    /** Reads [subtitle] after the card's own announcement, where the line says what the card is (a trailer's source). */
+    announceSubtitle: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
     // A missing episode says so wherever its card appears (CAT-21).
@@ -3726,12 +3762,17 @@ internal fun CatalogCard(
     val selection = Modifier.semantics {
         role = Role.Button
         if (selected != null) this.selected = selected
-        contentDescription = catalogAnnouncement(item)
+        contentDescription = if (announceSubtitle && !subtitle.isNullOrBlank()) {
+            "${catalogAnnouncement(item)}, $subtitle"
+        } else {
+            catalogAnnouncement(item)
+        }
         onClick(
-            label = when (item.type) {
-                "Season" -> "Open season"
-                "CollectionFolder", "Folder" -> "Open library"
-                "BoxSet" -> "Open collection"
+            label = when {
+                item.type == "Trailer" || item.extraType != null -> "Play"
+                item.type == "Season" -> "Open season"
+                item.type == "CollectionFolder" || item.type == "Folder" -> "Open library"
+                item.type == "BoxSet" -> "Open collection"
                 else -> "Open details"
             },
             action = null

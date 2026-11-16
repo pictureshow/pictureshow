@@ -210,3 +210,16 @@ internal fun PlayerActionButton(
         }
     }
 }
+
+/** PLAY-03: remembers the TV action that last had focus and when the controls hid, for [restoresLastAction]. */
+internal class PlayerLastAction<T : Any> {
+    private var last: T? = null
+    private var hiddenAt: Long? = null
+    fun focused(action: T) {
+        last = action
+    }
+    fun hidden(nowMs: Long) {
+        hiddenAt = nowMs
+    }
+    fun restorable(nowMs: Long): T? = last.takeIf { app.pictureshow.core.playback.restoresLastAction(hiddenAt, nowMs) }
+}

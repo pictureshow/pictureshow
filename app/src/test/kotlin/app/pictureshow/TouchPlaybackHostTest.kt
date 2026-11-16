@@ -91,6 +91,9 @@ class TouchPlaybackHostTest {
     private var terminalGroupScope: kotlinx.coroutines.CoroutineScope? = null
     private var terminalOpening by androidx.compose.runtime.mutableStateOf<SyncOpen?>(null)
 
+    // Episodes that started by themselves are counted process-wide for PLAY-30; each test starts as a viewer who just pressed a key.
+    @org.junit.Before fun freshViewer() = ViewerInput.input()
+
     @After fun cleanup() {
         releaseLookup.complete(Unit)
         metadataGate.complete(Unit)

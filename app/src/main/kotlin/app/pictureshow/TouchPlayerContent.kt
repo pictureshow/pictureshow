@@ -911,6 +911,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                             remainingMs = if (creditsCountdown) null else (host.duration - host.position).coerceAtLeast(0),
                             autoPlay = autoPlay,
                             visible = actionsVisible,
+                            countdownSeconds = host.localPreferences.tuning.nextEpisodeCountdownSeconds,
+                            stillWatching = host.localPreferences.tuning.stillWatching,
+                            stillWatchingPrompt = { keepWatching, stop -> TouchStillWatchingPrompt(next.name, keepWatching, stop) },
                             card = { seconds, play, cancel ->
                                 val shown = nextEpisodeCardSeconds(
                                     seconds,

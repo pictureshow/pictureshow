@@ -396,7 +396,7 @@ No previously active case was reclassified to obtain a green gate.
 |---|---:|---|
 | home-browse | 142 | Home configuration, library filters and editor policy adapters |
 | live-dvr | 22 | Native Live TV recording policy and mutations |
-| live-guide | 14 | Guide data, freshness and tune policies |
+| live-guide | 25 | Guide data, freshness and tune policies |
 | live-source | 11 | Observed live player windows; its distinct envelope is validated explicitly |
 | live-presentation | 366 | Native Live TV presentation and input acceptance |
 | player-overlay-layout | 8 | Native transport layout acceptance |

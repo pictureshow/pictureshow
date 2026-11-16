@@ -30,8 +30,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
@@ -227,6 +229,20 @@ class LiveLayoutReviewTest {
         val list = compose.onNodeWithTag("live:content-list").getUnclippedBoundsInRoot()
         assertTrue(list.top >= bar.bottom)
         compose.onNodeWithTag("live:p:p").assertIsDisplayed()
+    }
+
+    // T-6: Up from the full-width channel row entered the tab row at Schedules; it enters at the selected tab.
+    @Test fun upFromTheChannelListLandsOnTheSelectedTab() {
+        compose.setContent {
+            PictureshowTheme {
+                LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, LiveFake()) }, account, true, {}, {}, {})
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:c:c").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionUp) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithTag("live:tab:Channels").assertIsFocused()
     }
 
     @Test fun programmeGapNamesTheGapInBothTheChannelAndFocusedPreview() {

@@ -40,12 +40,15 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
-/** Sign-in steps and every playing route, downloaded or streamed, own the whole screen. */
+/** Sign-in steps, every playing route (downloaded or streamed) and the photo viewer own the whole screen. */
 internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = signedIn &&
     route !in listOf("waiting", "servers") &&
     route?.startsWith("login?") != true &&
     route?.startsWith("quick?") != true &&
-    !isPlayerRoute(route)
+    !touchOwnsScreen(route)
+
+/** Routes that draw edge to edge with no app bars over them: the players and the photo viewer (PHOTO-01). */
+internal fun touchOwnsScreen(route: String?): Boolean = isPlayerRoute(route) || route?.startsWith("photo?") == true
 
 @Composable
 internal fun TouchPictureshow(
@@ -94,7 +97,7 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = isPlayerRoute(route)
+    val inPlayer = touchOwnsScreen(route)
     val showNavigation = touchShowsNavigation(route, signedIn)
     val sync: SyncPlayHost = koinInject()
     SyncPlayCoordinator(state.snapshot.currentAccount, catalog, onMusicOpen = {
@@ -141,7 +144,7 @@ internal fun TouchPictureshow(
         )
     }
     val music: MusicHost = koinInject()
-    LaunchedEffect(music, cast) { music.castAttached = { cast.state.value.deviceName } }
+    LaunchedEffect(music, cast) { music.bindCast(cast) }
     TouchMusicPrompts(music) { play ->
         val tracks = play.tracks.drop(play.start ?: 0)
         if (remoteState.controller?.phase == "attached") {
@@ -149,7 +152,21 @@ internal fun TouchPictureshow(
         } else {
             cast.openChooser(
                 CastPlayRequest(
-                    tracks.map { CastPlayItem(it.id, it.title, it.artUrl, it.durationTicks?.let { ticks -> ticks / 10_000 }) },
+                    tracks.map {
+                        CastPlayItem(
+                            it.id,
+                            it.title,
+                            it.artUrl,
+                            it.durationTicks?.let { ticks ->
+                                ticks / 10_000
+                            },
+                            music = true,
+                            artist = it.artist,
+                            album = it.album
+                        )
+                    },
+                    shuffled = play.shuffle,
+                    continueEpisodes = false,
                     onThisDevice = { music.playHere(play) }
                 )
             )
@@ -160,6 +177,12 @@ internal fun TouchPictureshow(
     // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
     LaunchedEffect(castState.localStart?.serial) {
         val start = castState.localStart ?: return@LaunchedEffect
+        if (start.music) {
+            music.resumeCast(start)
+            nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true }
+            cast.localStartHandled(start.serial)
+            return@LaunchedEffect
+        }
         val account = state.snapshot.currentAccount
         val item = account?.let { catalogService.item(it, start.itemId) } as? app.pictureshow.core.ClientResult.Success
         cast.localStartHandled(start.serial)
@@ -502,6 +525,28 @@ internal fun TouchPictureshow(
                 }
             }
             composable(MUSIC_NOW_ROUTE) { TouchMusicNow(music) { nav.popBackStack() } }
+            composable(
+                PHOTO_ROUTE_PATTERN,
+                arguments = listOf(
+                    navArgument("item") { type = NavType.StringType },
+                    navArgument("sort") {
+                        type = NavType.StringType
+                        defaultValue = "SortName"
+                    },
+                    navArgument("desc") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) { entry ->
+                state.snapshot.currentAccount?.let { account ->
+                    val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    val sort = entry.arguments?.getString("sort") ?: "SortName"
+                    val descending = entry.arguments?.getBoolean("desc") == true
+                    val vm: PhotoViewerViewModel = koinViewModel(parameters = { parametersOf(account, item, sort, descending, catalog) })
+                    PhotoViewer(account, vm, tv = false) { nav.popBackStack() }
+                }
+            }
             composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
@@ -521,7 +566,7 @@ internal fun TouchPictureshow(
                         if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
                         TouchCatalogGrid(
                             screen,
-                            { nav.navigate(itemRoute(it)) },
+                            { nav.navigate(if (it.type == "Photo") photoRoute(it, screen.sortBy, screen.descending) else itemRoute(it)) },
                             vm::nearEnd,
                             vm::sort,
                             vm::retry,
@@ -533,6 +578,9 @@ internal fun TouchPictureshow(
                     } else {
                         val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
+                        val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                        val discovery by discoveryVm.state.collectAsStateWithLifecycle()
+                        val context = LocalContext.current
                         LaunchedEffect(entry) {
                             entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                                 // The model's arrival read and a deliberate Retry own the budget; this only refreshes a real return.
@@ -573,14 +621,14 @@ internal fun TouchPictureshow(
                                 ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
                             onPlayNext = { playable ->
-                                if (remoteState.controller?.phase == "attached") {
+                                if (remote.state.value.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = true)
                                 } else {
                                     chooseRemote(then = { remote.queue(listOf(playable.id), next = true) })
                                 }
                             },
                             onAddToQueue = { playable ->
-                                if (remoteState.controller?.phase == "attached") {
+                                if (remote.state.value.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = false)
                                 } else {
                                     chooseRemote(then = { remote.queue(listOf(playable.id), next = false) })
@@ -592,7 +640,11 @@ internal fun TouchPictureshow(
                             onDownload = { shown, season, seasonName ->
                                 offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
                             },
-                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
+                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached"),
+                            discovery = discoveryRows(screen.item ?: item, discovery),
+                            onDiscovery = { chosen ->
+                                openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) }
+                            }
                         )
                     }
                 }

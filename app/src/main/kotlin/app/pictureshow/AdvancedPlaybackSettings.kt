@@ -356,6 +356,30 @@ private fun PlaybackSettingRows(
                 onLocal { it.copy(tuning = it.tuning.copy(postCredits = value)) }
             }
             ChoiceRow(
+                "Next episode countdown",
+                tuning.nextEpisodeCountdownSeconds,
+                app.pictureshow.core.playback.PlaybackTuning.NEXT_EPISODE_COUNTDOWNS,
+                touch,
+                { if (it == 0) "Off" else "$it seconds" },
+                supporting = if (tuning.nextEpisodeCountdownSeconds == 0) {
+                    "The next episode waits for you to choose Play next."
+                } else {
+                    "How long the next episode card counts down before it plays."
+                }
+            ) { value ->
+                onLocal { it.copy(tuning = it.tuning.copy(nextEpisodeCountdownSeconds = value)) }
+            }
+            ChoiceRow(
+                "Ask if I'm still watching",
+                tuning.stillWatching,
+                app.pictureshow.core.playback.StillWatching.entries,
+                touch,
+                ::stillWatchingLabel,
+                supporting = stillWatchingSupporting(tuning.stillWatching)
+            ) { value ->
+                onLocal { it.copy(tuning = it.tuning.copy(stillWatching = value)) }
+            }
+            ChoiceRow(
                 "Rewind on resume",
                 tuning.rewindSeconds,
                 listOf(0, 5, 10, 15, 30),
@@ -642,4 +666,19 @@ internal fun imageSubtitleSample(): Bitmap = createBitmap(480, 80, Bitmap.Config
     paint.style = Paint.Style.FILL
     paint.color = AndroidColor.WHITE
     canvas.drawText("Image subtitle", 240f, 56f, paint)
+}
+
+internal fun stillWatchingLabel(value: app.pictureshow.core.playback.StillWatching): String =
+    if (value == app.pictureshow.core.playback.StillWatching.Off) "Never" else "After ${value.episodes} episodes"
+
+/** The time half of the still-watching limit, in the row's supporting text so the value stays short enough to read. */
+internal fun stillWatchingSupporting(value: app.pictureshow.core.playback.StillWatching): String {
+    if (value == app.pictureshow.core.playback.StillWatching.Off) return "Episodes keep playing until you stop them."
+    val hours = value.minutes / 60
+    val time = when {
+        value.minutes % 60 == 30 -> "$hours½ hours"
+        hours == 1 -> "1 hour"
+        else -> "$hours hours"
+    }
+    return "Also asks after $time without a button press, before the next episode starts."
 }

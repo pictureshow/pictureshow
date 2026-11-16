@@ -93,6 +93,8 @@ class ReferenceParityVectorsTest {
                         "recovery",
                         "playback-information",
                         "playback-formats", "catalog-return",
+                        // DiscoveryVectorsTest executes trailers, extras, More like this, still watching, photos and screensaver art.
+                        "discovery",
                         "playback-settings",
                         "player-quality",
                         "quality-auto-floor",
@@ -420,6 +422,12 @@ class ReferenceParityVectorsTest {
                 )
                 "catalog.played" -> catalog.played(account, input.text("itemId"), input.bool("value"))
                 "catalog.favorite" -> catalog.favorite(account, input.text("itemId"), input.bool("value"))
+                "catalog.localTrailers" -> catalog.localTrailers(account, input.text("itemId"))
+                "catalog.specialFeatures" -> catalog.specialFeatures(account, input.text("itemId"))
+                "catalog.similar" -> catalog.similar(account, input.text("itemId"))
+                "catalog.screensaverItems" -> catalog.screensaverItems(account)
+                "catalog.parentalRatings" -> catalog.parentalRatings(account)
+                "catalog.photos" -> catalog.photos(account, input.text("parentId"), input.text("sortBy"), input.bool("descending"))
                 "search" -> search.search(account, input.text("query"), SearchKind.valueOf(input.text("kind")))
                 "personItems" -> search.personItems(account, input.text("personId"), input.int("startIndex"), input.int("limit"))
                 "prepare" -> playback.prepare(

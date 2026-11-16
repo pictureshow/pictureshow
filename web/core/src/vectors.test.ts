@@ -60,10 +60,13 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    "cast-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
     "search-presentation",
+    // CAT-30..32, PHOTO-01/02, PLAY-30, SAVER-01 detail discovery (Android leg 160): web port owed.
+    "discovery",
     "frame-rate-match",
     "playback-start",
     "playback-settings",
@@ -145,6 +148,16 @@ const pendingPortSuites = new Set([
 // Desktop slice 1 added these shared application policies. Their web adapters/UI
 // are still owed; list exact case IDs rather than accepting unknown operations.
 // These remain visible todos, never execution passes.
+// Android leg 160 catalog reads (CAT-30..32, PHOTO-01, SAVER-01): web client port owed.
+// Exact case ID -> HTTP action, so a changed vector cannot hide behind a todo.
+const pendingReferenceHttpCases = new Map([
+    ["catalog-local-trailers", "catalog.localTrailers"],
+    ["catalog-special-features", "catalog.specialFeatures"],
+    ["catalog-similar", "catalog.similar"],
+    ["catalog-screensaver-items", "catalog.screensaverItems"],
+    ["catalog-parental-ratings", "catalog.parentalRatings"],
+    ["catalog-photos", "catalog.photos"],
+]);
 const pendingApplicationCases = new Map([
     ["detail-primary-next", "detail-play-item"],
     ["detail-primary-unplayed", "detail-play-item"],
@@ -168,6 +181,17 @@ const pendingApplicationCases = new Map([
     ["placeholder-kind-unknown-library", "catalog-placeholder-kind"],
     ["placeholder-kind-boxset", "catalog-placeholder-kind"],
     ["placeholder-kind-title", "catalog-placeholder-kind"],
+    // PLAY-03 last focused action on D-pad re-show (Android TV review T-3): web TV-mode port owed.
+    ["controls-last-action-soon", "controls-restore-last-action"],
+    ["controls-last-action-at-window", "controls-restore-last-action"],
+    ["controls-last-action-too-late", "controls-restore-last-action"],
+    ["controls-last-action-never-hidden", "controls-restore-last-action"],
+    ["controls-last-action-clock-backwards", "controls-restore-last-action"],
+    // PLAY-08 empty track menus (Android TV review T-10): web port owed.
+    ["track-menu-empty-no-subtitles", "track-menu-empty"],
+    ["track-menu-empty-no-audio", "track-menu-empty"],
+    ["track-menu-empty-subtitles-present", "track-menu-empty"],
+    ["track-menu-empty-audio-present", "track-menu-empty"],
     // Detail media badges and the series Play label (Android TV review T-11/T-13): web port owed.
     ["media-badges-uhd-hdr10-51", "media-badges"],
     ["media-badges-sdr-stereo-empty", "media-badges"],
@@ -322,6 +346,15 @@ for (const file of files) {
                         "Changed owed application operation: " + c.id,
                     );
                 it.todo(c.id + " (web application policy port owed)");
+                continue;
+            }
+            if (
+                suite.suite === "reference" &&
+                pendingReferenceHttpCases.has(c.id)
+            ) {
+                if (pendingReferenceHttpCases.get(c.id) !== c.input?.action)
+                    throw new Error("Changed owed HTTP action: " + c.id);
+                it.todo(c.id + " (web catalog client port owed)");
                 continue;
             }
             it(c.id, async () => {

@@ -129,6 +129,26 @@ fun recordingStatus(status: String): String = when (status) {
     else -> "Unknown status ($status)"
 }
 
+/**
+ * LIVE-PD03 (TV review T-15): the TV guide header keeps "Live TV" as its title and names the focused programme under it,
+ * led by where and when it is: "Now on Test A: News", "Later on Test A: News", "Earlier on Test A: News". Without a
+ * channel name the lead is dropped; unparseable times read as "On".
+ */
+fun liveGuidePreviewLine(program: LiveProgram, channelName: String?, nowEpochMillis: Long): String {
+    val start = liveInstant(program.startDate)
+    val end = liveInstant(program.endDate)
+    val lead = when {
+        start == null || end == null -> "On"
+        nowEpochMillis < start -> "Later on"
+        nowEpochMillis >= end -> "Earlier on"
+        else -> "Now on"
+    }
+    return channelName?.takeIf(String::isNotBlank)?.let { "$lead $it: ${program.name}" } ?: program.name
+}
+
+/** LIVE-11: one minute before a guide snapshot stops being fresh. */
+const val LIVE_GUIDE_QUIET_REFRESH_MS = 240_000L
+
 /** Cache ownership and a request generation prevent late pages and account switches from revealing another viewer's guide. */
 data class LiveGuideCache(
     val accountKey: String,
@@ -155,6 +175,17 @@ data class LiveGuideCache(
         fetchedAtMillis != null &&
         now >= fetchedAtMillis &&
         now - fetchedAtMillis <= 300_000
+
+    /**
+     * LIVE-11 (TV review T-5): a guide on screen refreshes itself quietly once it is [LIVE_GUIDE_QUIET_REFRESH_MS] old,
+     * before it turns stale at five minutes, so a viewer who leaves the guide up never meets "out of date". Not while a
+     * refresh is running, offline (that needs the viewer's Retry), or with a clock that runs backwards.
+     */
+    fun quietRefreshDue(now: Long): Boolean = !offline &&
+        !refreshing &&
+        fetchedAtMillis != null &&
+        now >= fetchedAtMillis &&
+        now - fetchedAtMillis >= LIVE_GUIDE_QUIET_REFRESH_MS
 
     fun actionAllowed(program: LiveProgram, now: Long): Boolean = snapshotFresh(now) &&
         program.channelId in channelIds &&

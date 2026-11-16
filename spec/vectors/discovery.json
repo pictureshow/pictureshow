@@ -1,0 +1,889 @@
+{
+  "schemaVersion": 1,
+  "suite": "discovery",
+  "sources": [
+    "core/src/commonMain/kotlin/app/pictureshow/core/Discovery.kt"
+  ],
+  "cases": [
+    {
+      "id": "detail-reads-movie",
+      "operation": "detail-reads",
+      "input": {
+        "type": "Movie"
+      },
+      "expected": {
+        "trailers": true,
+        "extras": true,
+        "similar": true
+      }
+    },
+    {
+      "id": "detail-reads-series",
+      "operation": "detail-reads",
+      "input": {
+        "type": "Series"
+      },
+      "expected": {
+        "trailers": true,
+        "extras": true,
+        "similar": true
+      }
+    },
+    {
+      "id": "detail-reads-episode",
+      "operation": "detail-reads",
+      "input": {
+        "type": "Episode"
+      },
+      "expected": {
+        "trailers": false,
+        "extras": true,
+        "similar": false
+      }
+    },
+    {
+      "id": "detail-reads-season",
+      "operation": "detail-reads",
+      "input": {
+        "type": "Season"
+      },
+      "expected": {
+        "trailers": false,
+        "extras": false,
+        "similar": false
+      }
+    },
+    {
+      "id": "detail-reads-video",
+      "operation": "detail-reads",
+      "input": {
+        "type": "Video"
+      },
+      "expected": {
+        "trailers": false,
+        "extras": false,
+        "similar": false
+      }
+    },
+    {
+      "id": "detail-reads-boxset",
+      "operation": "detail-reads",
+      "input": {
+        "type": "BoxSet"
+      },
+      "expected": {
+        "trailers": false,
+        "extras": false,
+        "similar": false
+      }
+    },
+    {
+      "id": "youtube-id-0",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://www.youtube.com/watch?v=yUQM7H4Swgw"
+      },
+      "expected": "yUQM7H4Swgw"
+    },
+    {
+      "id": "youtube-id-1",
+      "operation": "youtube-id",
+      "input": {
+        "url": "http://youtube.com/watch?feature=share&v=HOfdboHvshg"
+      },
+      "expected": "HOfdboHvshg"
+    },
+    {
+      "id": "youtube-id-2",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://youtu.be/WwHux5QZfC8?t=4"
+      },
+      "expected": "WwHux5QZfC8"
+    },
+    {
+      "id": "youtube-id-3",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://m.youtube.com/watch?v=_0wxP7EWsOc"
+      },
+      "expected": "_0wxP7EWsOc"
+    },
+    {
+      "id": "youtube-id-4",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://www.youtube.com/embed/u8Y6S6ev-Vg"
+      },
+      "expected": "u8Y6S6ev-Vg"
+    },
+    {
+      "id": "youtube-id-5",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://www.youtube-nocookie.com/embed/u8Y6S6ev-Vg"
+      },
+      "expected": "u8Y6S6ev-Vg"
+    },
+    {
+      "id": "youtube-id-6",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://www.youtube.com/playlist?list=PL123"
+      },
+      "expected": null
+    },
+    {
+      "id": "youtube-id-7",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://www.youtube.com/watch?v=short"
+      },
+      "expected": null
+    },
+    {
+      "id": "youtube-id-8",
+      "operation": "youtube-id",
+      "input": {
+        "url": "https://vimeo.com/12345"
+      },
+      "expected": null
+    },
+    {
+      "id": "youtube-id-9",
+      "operation": "youtube-id",
+      "input": {
+        "url": "ftp://youtube.com/watch?v=yUQM7H4Swgw"
+      },
+      "expected": null
+    },
+    {
+      "id": "youtube-id-10",
+      "operation": "youtube-id",
+      "input": {
+        "url": "not a url"
+      },
+      "expected": null
+    },
+    {
+      "id": "trailers-local-then-remote",
+      "operation": "trailers",
+      "input": {
+        "local": [
+          {
+            "Id": "t1",
+            "Name": "Sintel Trailer"
+          },
+          {
+            "Id": "t2",
+            "Name": "Untitled"
+          },
+          {
+            "Id": "t3",
+            "Name": "Gone",
+            "LocationType": "Virtual"
+          }
+        ],
+        "remote": [
+          {
+            "Url": "https://www.youtube.com/watch?v=HOfdboHvshg"
+          },
+          {
+            "Url": "https://youtu.be/HOfdboHvshg",
+            "Name": "Same video"
+          },
+          {
+            "Url": "https://example.org/trailer.mp4",
+            "Name": " Teaser "
+          },
+          {
+            "Url": "javascript:alert(1)"
+          },
+          {
+            "Url": ""
+          },
+          {
+            "Name": "No address"
+          },
+          {
+            "Url": "https://example.org/trailer.mp4"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "key": "local:t1",
+          "title": "Sintel Trailer",
+          "itemId": "t1",
+          "url": null,
+          "youTubeId": null
+        },
+        {
+          "key": "local:t2",
+          "title": "Trailer",
+          "itemId": "t2",
+          "url": null,
+          "youTubeId": null
+        },
+        {
+          "key": "remote:HOfdboHvshg",
+          "title": "Trailer 2",
+          "itemId": null,
+          "url": "https://www.youtube.com/watch?v=HOfdboHvshg",
+          "youTubeId": "HOfdboHvshg"
+        },
+        {
+          "key": "remote:https://example.org/trailer.mp4",
+          "title": "Teaser",
+          "itemId": null,
+          "url": "https://example.org/trailer.mp4",
+          "youTubeId": null
+        }
+      ]
+    },
+    {
+      "id": "trailers-none",
+      "operation": "trailers",
+      "input": {
+        "local": [],
+        "remote": []
+      },
+      "expected": []
+    },
+    {
+      "id": "extra-label-BehindTheScenes",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "BehindTheScenes"
+      },
+      "expected": "Behind the scenes"
+    },
+    {
+      "id": "extra-label-Featurette",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Featurette"
+      },
+      "expected": "Featurette"
+    },
+    {
+      "id": "extra-label-Interview",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Interview"
+      },
+      "expected": "Interview"
+    },
+    {
+      "id": "extra-label-DeletedScene",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "DeletedScene"
+      },
+      "expected": "Deleted scene"
+    },
+    {
+      "id": "extra-label-Scene",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Scene"
+      },
+      "expected": "Scene"
+    },
+    {
+      "id": "extra-label-Short",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Short"
+      },
+      "expected": "Short"
+    },
+    {
+      "id": "extra-label-Clip",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Clip"
+      },
+      "expected": "Clip"
+    },
+    {
+      "id": "extra-label-Unknown",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Unknown"
+      },
+      "expected": "Extra"
+    },
+    {
+      "id": "extra-label-absent",
+      "operation": "extra-label",
+      "input": {
+        "extraType": null
+      },
+      "expected": "Extra"
+    },
+    {
+      "id": "extra-label-ThemeSong",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "ThemeSong"
+      },
+      "expected": null
+    },
+    {
+      "id": "extra-label-ThemeVideo",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "ThemeVideo"
+      },
+      "expected": null
+    },
+    {
+      "id": "extra-label-Sample",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Sample"
+      },
+      "expected": null
+    },
+    {
+      "id": "extra-label-Trailer",
+      "operation": "extra-label",
+      "input": {
+        "extraType": "Trailer"
+      },
+      "expected": null
+    },
+    {
+      "id": "extras-grouped",
+      "operation": "extras",
+      "input": {
+        "items": [
+          {
+            "Id": "s1",
+            "Name": "Untitled",
+            "ExtraType": "DeletedScene"
+          },
+          {
+            "Id": "s2",
+            "Name": "Untitled",
+            "ExtraType": "Featurette"
+          },
+          {
+            "Id": "s3",
+            "Name": "Untitled",
+            "ExtraType": "ThemeSong"
+          },
+          {
+            "Id": "s4",
+            "Name": "Untitled",
+            "ExtraType": "BehindTheScenes"
+          },
+          {
+            "Id": "s5",
+            "Name": "Untitled",
+            "ExtraType": "Featurette"
+          },
+          {
+            "Id": "s6",
+            "Name": "Untitled"
+          },
+          {
+            "Id": "s7",
+            "Name": "Untitled",
+            "ExtraType": "Trailer"
+          },
+          {
+            "Id": "s8",
+            "Name": "Untitled",
+            "ExtraType": "Interview",
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "s2",
+            "Name": "Untitled",
+            "ExtraType": "Featurette"
+          },
+          {
+            "Id": "s9",
+            "Name": "Untitled",
+            "ExtraType": "Sample"
+          },
+          {
+            "Id": "s10",
+            "Name": "Untitled",
+            "ExtraType": "Clip"
+          }
+        ]
+      },
+      "expected": [
+        "s4",
+        "s2",
+        "s5",
+        "s1",
+        "s10",
+        "s6"
+      ]
+    },
+    {
+      "id": "more-like-this",
+      "operation": "more-like-this",
+      "input": {
+        "self": {
+          "Id": "m",
+          "Name": "Sintel",
+          "ProductionYear": 2010
+        },
+        "limit": 3,
+        "similar": [
+          {
+            "Id": "m",
+            "Name": "Sintel",
+            "ProductionYear": 2010
+          },
+          {
+            "Id": "m2",
+            "Name": "Sintel",
+            "ProductionYear": 2010
+          },
+          {
+            "Id": "a",
+            "Name": "Spring",
+            "ProductionYear": 2019
+          },
+          {
+            "Id": "b",
+            "Name": "Spring",
+            "ProductionYear": 2019
+          },
+          {
+            "Id": "c",
+            "Name": "Missing",
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "a",
+            "Name": "Spring",
+            "ProductionYear": 2019
+          },
+          {
+            "Id": "d",
+            "Name": "Sintel",
+            "ProductionYear": 1999
+          },
+          {
+            "Id": "e",
+            "Name": "Glass Half",
+            "ProductionYear": 2015
+          },
+          {
+            "Id": "f",
+            "Name": "Cosmos Laundromat",
+            "ProductionYear": 2015
+          }
+        ]
+      },
+      "expected": [
+        "a",
+        "d",
+        "e"
+      ]
+    },
+    {
+      "id": "more-like-this-empty",
+      "operation": "more-like-this",
+      "input": {
+        "self": {
+          "Id": "m",
+          "Name": "Sintel"
+        },
+        "limit": 12,
+        "similar": []
+      },
+      "expected": []
+    },
+    {
+      "id": "still-watching-Off-99-999",
+      "operation": "still-watching",
+      "input": {
+        "policy": "Off",
+        "episodesInARow": 99,
+        "minutesSinceInput": 999
+      },
+      "expected": false
+    },
+    {
+      "id": "still-watching-TwoEpisodes-1-59",
+      "operation": "still-watching",
+      "input": {
+        "policy": "TwoEpisodes",
+        "episodesInARow": 1,
+        "minutesSinceInput": 59
+      },
+      "expected": false
+    },
+    {
+      "id": "still-watching-TwoEpisodes-2-0",
+      "operation": "still-watching",
+      "input": {
+        "policy": "TwoEpisodes",
+        "episodesInARow": 2,
+        "minutesSinceInput": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "still-watching-TwoEpisodes-1-60",
+      "operation": "still-watching",
+      "input": {
+        "policy": "TwoEpisodes",
+        "episodesInARow": 1,
+        "minutesSinceInput": 60
+      },
+      "expected": true
+    },
+    {
+      "id": "still-watching-ThreeEpisodes-2-89",
+      "operation": "still-watching",
+      "input": {
+        "policy": "ThreeEpisodes",
+        "episodesInARow": 2,
+        "minutesSinceInput": 89
+      },
+      "expected": false
+    },
+    {
+      "id": "still-watching-ThreeEpisodes-3-10",
+      "operation": "still-watching",
+      "input": {
+        "policy": "ThreeEpisodes",
+        "episodesInARow": 3,
+        "minutesSinceInput": 10
+      },
+      "expected": true
+    },
+    {
+      "id": "still-watching-ThreeEpisodes-1-90",
+      "operation": "still-watching",
+      "input": {
+        "policy": "ThreeEpisodes",
+        "episodesInARow": 1,
+        "minutesSinceInput": 90
+      },
+      "expected": true
+    },
+    {
+      "id": "still-watching-FiveEpisodes-4-149",
+      "operation": "still-watching",
+      "input": {
+        "policy": "FiveEpisodes",
+        "episodesInARow": 4,
+        "minutesSinceInput": 149
+      },
+      "expected": false
+    },
+    {
+      "id": "still-watching-FiveEpisodes-5-0",
+      "operation": "still-watching",
+      "input": {
+        "policy": "FiveEpisodes",
+        "episodesInARow": 5,
+        "minutesSinceInput": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "still-watching-EightEpisodes-7-239",
+      "operation": "still-watching",
+      "input": {
+        "policy": "EightEpisodes",
+        "episodesInARow": 7,
+        "minutesSinceInput": 239
+      },
+      "expected": false
+    },
+    {
+      "id": "still-watching-EightEpisodes-1-240",
+      "operation": "still-watching",
+      "input": {
+        "policy": "EightEpisodes",
+        "episodesInARow": 1,
+        "minutesSinceInput": 240
+      },
+      "expected": true
+    },
+    {
+      "id": "photo-step-0",
+      "operation": "photo-step",
+      "input": {
+        "index": 0,
+        "count": 3,
+        "forward": true,
+        "slideshow": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "photo-step-1",
+      "operation": "photo-step",
+      "input": {
+        "index": 2,
+        "count": 3,
+        "forward": true,
+        "slideshow": false
+      },
+      "expected": null
+    },
+    {
+      "id": "photo-step-2",
+      "operation": "photo-step",
+      "input": {
+        "index": 2,
+        "count": 3,
+        "forward": true,
+        "slideshow": true
+      },
+      "expected": 0
+    },
+    {
+      "id": "photo-step-3",
+      "operation": "photo-step",
+      "input": {
+        "index": 0,
+        "count": 3,
+        "forward": false,
+        "slideshow": true
+      },
+      "expected": null
+    },
+    {
+      "id": "photo-step-4",
+      "operation": "photo-step",
+      "input": {
+        "index": 0,
+        "count": 3,
+        "forward": false,
+        "slideshow": false
+      },
+      "expected": null
+    },
+    {
+      "id": "photo-step-5",
+      "operation": "photo-step",
+      "input": {
+        "index": 1,
+        "count": 3,
+        "forward": false,
+        "slideshow": false
+      },
+      "expected": 0
+    },
+    {
+      "id": "photo-step-6",
+      "operation": "photo-step",
+      "input": {
+        "index": 0,
+        "count": 1,
+        "forward": true,
+        "slideshow": true
+      },
+      "expected": null
+    },
+    {
+      "id": "photo-step-7",
+      "operation": "photo-step",
+      "input": {
+        "index": 0,
+        "count": 0,
+        "forward": true,
+        "slideshow": true
+      },
+      "expected": null
+    },
+    {
+      "id": "photo-step-8",
+      "operation": "photo-step",
+      "input": {
+        "index": 9,
+        "count": 3,
+        "forward": false,
+        "slideshow": false
+      },
+      "expected": 1
+    },
+    {
+      "id": "screensaver-art-any",
+      "operation": "screensaver-art",
+      "input": {
+        "items": [
+          {
+            "Id": "x1",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG"
+          },
+          {
+            "Id": "x2",
+            "Name": "Untitled",
+            "BackdropImageTags": []
+          },
+          {
+            "Id": "x3",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "R"
+          },
+          {
+            "Id": "x4",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ]
+          },
+          {
+            "Id": "x5",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG",
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "x1",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG"
+          },
+          {
+            "Id": "x6",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "Unrated-Thing"
+          }
+        ],
+        "maxAge": null,
+        "ratings": {
+          "PG": 10,
+          "PG-13": 13,
+          "R": 17
+        }
+      },
+      "expected": [
+        "x1",
+        "x3",
+        "x4",
+        "x6"
+      ]
+    },
+    {
+      "id": "screensaver-art-ceiling",
+      "operation": "screensaver-art",
+      "input": {
+        "items": [
+          {
+            "Id": "x1",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG"
+          },
+          {
+            "Id": "x2",
+            "Name": "Untitled",
+            "BackdropImageTags": []
+          },
+          {
+            "Id": "x3",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "R"
+          },
+          {
+            "Id": "x4",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ]
+          },
+          {
+            "Id": "x5",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG",
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "x1",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "PG"
+          },
+          {
+            "Id": "x6",
+            "Name": "Untitled",
+            "BackdropImageTags": [
+              "b"
+            ],
+            "OfficialRating": "Unrated-Thing"
+          }
+        ],
+        "maxAge": 13,
+        "ratings": {
+          "PG": 10,
+          "PG-13": 13,
+          "R": 17
+        }
+      },
+      "expected": [
+        "x1"
+      ]
+    },
+    {
+      "id": "photo-url",
+      "operation": "photo-url",
+      "input": {
+        "server": "https://media.example/jellyfin/",
+        "item": {
+          "Id": "p 1",
+          "Name": "Untitled",
+          "ImageTags": {
+            "Primary": "tag1"
+          }
+        },
+        "maxWidth": 1920,
+        "maxHeight": 1080
+      },
+      "expected": "https://media.example/jellyfin/Items/p%201/Images/Primary?tag=tag1&maxWidth=1920&maxHeight=1080&quality=90"
+    },
+    {
+      "id": "photo-url-no-image",
+      "operation": "photo-url",
+      "input": {
+        "server": "https://media.example",
+        "item": {
+          "Id": "p2",
+          "Name": "Untitled"
+        },
+        "maxWidth": 1920,
+        "maxHeight": 1080
+      },
+      "expected": null
+    }
+  ]
+}

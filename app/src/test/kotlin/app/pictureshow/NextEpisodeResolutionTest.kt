@@ -88,6 +88,9 @@ class NextEpisodeResolutionTest {
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
 
+    // Episodes that started by themselves are counted process-wide for PLAY-30; each test starts as a viewer who just pressed a key.
+    @org.junit.Before fun freshViewer() = ViewerInput.input()
+
     @After fun cleanup() {
         reopenedManifest.countDown()
         initialPrepareGate.complete(Unit)

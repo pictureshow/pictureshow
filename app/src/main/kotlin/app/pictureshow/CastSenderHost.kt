@@ -86,7 +86,10 @@ internal class CastPlayRequest(
     /** What "This device" does in the chooser; null when this device is already playing it. */
     val onThisDevice: (() -> Unit)? = null,
     /** Runs after a Pictureshow TV is attached from this same chooser. */
-    val onJellyfinPick: (() -> Unit)? = null
+    val onJellyfinPick: (() -> Unit)? = null,
+    val repeat: String = "off",
+    val shuffled: Boolean = false,
+    val continueEpisodes: Boolean = true
 )
 
 internal data class CastPlayItem(
@@ -94,10 +97,23 @@ internal data class CastPlayItem(
     val title: String,
     val imageUrl: String? = null,
     val durationMs: Long? = null,
-    val live: Boolean = false
+    val live: Boolean = false,
+    val music: Boolean = false,
+    val artist: String? = null,
+    val album: String? = null,
+    val entry: String? = null
 )
 
-internal data class CastLocalStart(val itemId: String, val positionMs: Long, val paused: Boolean, val serial: Long)
+internal data class CastLocalStart(
+    val itemId: String,
+    val positionMs: Long,
+    val paused: Boolean,
+    val serial: Long,
+    val music: Boolean = false,
+    val items: List<CastViewedItem> = emptyList(),
+    val repeat: String = "off",
+    val entry: String? = null
+)
 
 internal data class CastUi(
     val capability: CastCapability = CastCapability("idle", visible = true, canDiscover = true),
@@ -112,7 +128,15 @@ internal data class CastUi(
     /** Why the last pick didn't start anything, as a fixed category. */
     val pickRefusal: String? = null,
     /** The device a pick still starting was dropped from, until the viewer has been told. */
-    val droppedFrom: String? = null
+    val droppedFrom: String? = null,
+    val volume: Double? = null,
+    val muted: Boolean = false,
+    val queue: List<CastViewedItem> = emptyList(),
+    val repeat: String = "off",
+    val shuffled: Boolean = false,
+    val changingTrack: Boolean = false,
+    val trackError: String? = null,
+    val queueError: Boolean = false
 )
 
 private data class IssuedCastSession(val account: Account, val binding: TemporarySession)
@@ -131,6 +155,7 @@ internal sealed interface CastSessionIssue {
  */
 internal interface CastMediaGateway {
     /** Stable for one receiver, server and viewer, and never the viewer's own: logging in under that one logs the viewer out. */
+    suspend fun following(account: Account, item: CastPlayItem): List<CastPlayItem> = emptyList()
     suspend fun sessionDevice(account: Account, route: String): String
     suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue
 
@@ -178,6 +203,9 @@ internal interface CastEnvironment {
     val viewing: CastViewingRecord?
     suspend fun saveViewing(record: CastViewingRecord)
     fun clearViewing()
+
+    /** Starts the app-owned remote media session only on a phone with an attached viewing. */
+    fun controlsChanged(ui: CastUi) = Unit
 }
 
 /**
@@ -258,6 +286,25 @@ internal class CastSenderHost(
     private var awaitingReattach = false
 
     private var startPausedItem: String? = null
+    private var loadedItems: List<CastLoadItem> = emptyList()
+    private var reloadJob: Job? = null
+    private var reloadingNonce: String? = null
+    private var pendingViewing: CastViewingRecord? = null
+    private var reloadPreviousReport: CastReport? = null
+    private var reportsPending: Job? = null
+
+    /** Report operations for successive items are transactions, including encoder retirement between Stop and Start. */
+    private fun queueReport(block: suspend () -> Unit) {
+        val previous = reportsPending
+        reportsPending = scope.launch {
+            previous?.join()
+            block()
+        }
+    }
+
+    init {
+        scope.launch { state.collect { environment.controlsChanged(it) } }
+    }
 
     private val cast get() = mutable.value.cast
 
@@ -338,6 +385,7 @@ internal class CastSenderHost(
         cleanupJob = scope.launch {
             // A change of account during an earlier wait must not revoke the session that wait still has to report with.
             earlier?.join()
+            reportsPending?.join()
             // Detached, only the receiver knows how far it got, so its answer comes before the session goes.
             val final = answer?.await()?.let { lastReportOf(requireNotNull(rejoined), it) } ?: last
             if (lastReporter != null && final != null) {
@@ -514,7 +562,9 @@ internal class CastSenderHost(
         viewing = null
         environment.clearViewing()
         if (record == null) return
+        val pendingReports = reportsPending
         cleanupJob = scope.launch {
+            pendingReports?.join()
             if (reporter != null) encodings.forEach { gateway.stopEncoding(reporter, it) }
             endRecord(record, trigger)
         }
@@ -544,9 +594,28 @@ internal class CastSenderHost(
         val active = account ?: return
         val record = environment.viewing ?: return
         if (record.server != active.server.id || record.viewer != active.user.id || !adopt(record)) return
-        val entry = record.items.firstOrNull()?.entry
-        val state = castReattachState(ownerOf(record), localIdentity(active, record.generation), ControlIntent(entry = entry))
-        mutable.update { it.copy(cast = state, title = record.title, deviceName = record.deviceName) }
+        val entry = record.currentEntry ?: record.items.firstOrNull()?.entry
+        val state =
+            castReattachState(
+                ownerOf(record),
+                localIdentity(active, record.generation),
+                ControlIntent(entry = entry, ticks = record.ticks, paused = record.paused, queue = record.order)
+            )
+        mutable.update {
+            it.copy(
+                cast = state,
+                title = record.title,
+                deviceName = record.deviceName,
+                queue = record.order.mapNotNull { entry ->
+                    record.items.firstOrNull {
+                        it.entry ==
+                            entry
+                    }
+                },
+                repeat = record.repeat,
+                shuffled = record.shuffled
+            )
+        }
     }
 
     private fun ownerOf(record: CastViewingRecord) =
@@ -679,10 +748,10 @@ internal class CastSenderHost(
             "cast"
         )
         val intent = ControlIntent(
-            entry = entryId(playRequest.startIndex, item.id),
+            entry = item.entry ?: entryId(playRequest.startIndex, item.id),
             ticks = playRequest.startMs * MS_TO_TICKS,
             paused = playRequest.paused,
-            queue = playRequest.items.mapIndexed { index, it -> entryId(index, it.id) }
+            queue = playRequest.items.mapIndexed { index, it -> it.entry ?: entryId(index, it.id) }
         )
         val before = cast
         val next = reduceCast(
@@ -812,9 +881,10 @@ internal class CastSenderHost(
 
     private fun entryId(index: Int, itemId: String) = "$index:$itemId"
 
-    private fun dispatch(event: CastEvent) {
+    private fun dispatch(event: CastEvent, status: CastStatus? = null) {
         val current = cast ?: return
         val next = reduceCast(current, event)
+        if (status != null && next.observed === event.observation) lastStatus = status
         mutable.update { ui ->
             ui.copy(cast = next, controls = next.observed?.let(::controlsFor))
         }
@@ -828,16 +898,24 @@ internal class CastSenderHost(
             live = lastStatus?.live == true,
             seekableStartTicks = lastStatus?.seekableStartMs?.let { it * MS_TO_TICKS },
             seekableEndTicks = lastStatus?.seekableEndMs?.let { it * MS_TO_TICKS },
-            tracks = (prepared[observed.entry] ?: prepared.values.firstOrNull())?.let { decision ->
-                account?.let { castTracks(it.server, decision) }
-            }.orEmpty(),
-            activeTracks = observed.activeTracks
+            tracks = viewing?.items?.firstOrNull { it.entry == observed.entry }?.tracks.orEmpty(),
+            activeTracks = observed.activeTracks + listOfNotNull(
+                viewing?.items?.firstOrNull { it.entry == observed.entry }?.audioStreamIndex?.let { audioTrackId(it) }
+            )
         )
     )
 
-    private fun castTracks(server: Server, decision: PlayDecision) = castSubtitles(server, decision, "").map {
-        CastTrack(it.trackId, "subtitle", it.label)
-    }
+    private fun castTracks(server: Server, decision: PlayDecision): List<CastTrack> =
+        castSubtitles(server, decision, "").map { CastTrack(it.trackId, "subtitle", it.label) } +
+            decision.mediaSource.mediaStreams.filter { it.type == app.pictureshow.core.playback.MediaStreamType.Audio }.map {
+                CastTrack(audioTrackId(it.index), "audio", it.displayTitle ?: it.title ?: it.language ?: "Audio ${it.index}")
+            }
+
+    private fun audioTrackId(index: Int) = -(index + 1)
+
+    private fun selectedAudio(decision: PlayDecision): Int? = decision.url.substringAfter('?', "").split('&')
+        .firstOrNull { it.substringBefore('=').equals("AudioStreamIndex", true) }?.substringAfter('=')?.toIntOrNull()
+        ?: decision.mediaSource.defaultAudioStreamIndex
 
     private fun runEffect(state: CastState) {
         when (state.effect) {
@@ -885,32 +963,26 @@ internal class CastSenderHost(
             }
             session = temporary
             val nonce = UUID.randomUUID().toString()
+            val tail = if (playRequest.continueEpisodes && playRequest.items.size == 1 && !playRequest.items.single().music) {
+                gateway.following(temporary, playRequest.items.single())
+            } else {
+                emptyList()
+            }
+            val playItems = playRequest.items + tail
             val items = mutableListOf<CastLoadItem>()
             val decisions = mutableMapOf<String, PlayDecision>()
-            playRequest.items.forEachIndexed { index, item ->
-                val outcome = gateway.prepare(temporary, item.id, playRequest, if (index == playRequest.startIndex) startMs else 0)
-                val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
-                if (decision?.ownedLiveStreamId != null) {
-                    val ref = sessions.state.records.firstOrNull {
-                        it.device == binding.device && it.generation == binding.generation
-                    }?.secretRef
-                    if (ref != null) {
-                        val source = CastViewedItem(
-                            entryId(index, item.id),
-                            item.id,
-                            decision.mediaSourceId,
-                            decision.playSessionId,
-                            decision.method.name,
-                            liveStreamId = decision.mediaSource.liveStreamId,
-                            ownedLiveStreamId = decision.ownedLiveStreamId
-                        )
-                        sessions = sessions.copy(
-                            liveSources = sessions.liveSources +
-                                (ref to (sessions.liveSources[ref].orEmpty() + source))
-                        )
-                        environment.saveSessions(sessions)
-                    }
+            playItems.forEachIndexed { index, item ->
+                // A source/track index belongs to one file, never to the next episode or song.
+                val itemRequest = if (index ==
+                    playRequest.startIndex
+                ) {
+                    playRequest
+                } else {
+                    CastPlayRequest(listOf(item), continueEpisodes = false)
                 }
+                val outcome = gateway.prepare(temporary, item.id, itemRequest, if (index == playRequest.startIndex) startMs else 0)
+                val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+                if (decision != null) rememberLiveSource(binding, item.entry ?: entryId(index, item.id), item.id, decision)
                 if (cast?.owner?.candidate?.generation != serial) {
                     endRecord(binding, "cancel")
                     return@launch
@@ -920,7 +992,7 @@ internal class CastSenderHost(
                     dispatch(CastEvent("load-failed", recovery = if (refused) "unsupported-media" else "server-unreachable"))
                     return@launch
                 }
-                val entry = entryId(index, item.id)
+                val entry = item.entry ?: entryId(index, item.id)
                 decisions[entry] = decision
                 items += loadItem(temporary, target, item, entry, decision, nonce)
             }
@@ -933,8 +1005,8 @@ internal class CastSenderHost(
                 device = temporary.deviceId.orEmpty(),
                 session = target.session,
                 generation = target.generation,
-                items = playRequest.items.mapIndexed { index, item ->
-                    val entry = entryId(index, item.id)
+                items = playItems.mapIndexed { index, item ->
+                    val entry = item.entry ?: entryId(index, item.id)
                     val decision = decisions.getValue(entry)
                     CastViewedItem(
                         entry,
@@ -944,19 +1016,35 @@ internal class CastSenderHost(
                         decision.method.name,
                         castUrlBase(castMediaUrl(decision, temporary.accessToken)),
                         decision.mediaSource.liveStreamId,
-                        decision.ownedLiveStreamId
+                        decision.ownedLiveStreamId,
+                        title = item.title,
+                        imageUrl = item.imageUrl,
+                        music = item.music,
+                        artist = item.artist,
+                        album = item.album,
+                        audioStreamIndex = selectedAudio(decision),
+                        tracks = castTracks(temporary.server, decision)
                     )
                 },
                 title = playRequest.items.getOrNull(playRequest.startIndex)?.title,
-                deviceName = mutable.value.deviceName
+                deviceName = mutable.value.deviceName,
+                shuffled = playRequest.shuffled,
+                repeat = playRequest.repeat,
+                currentEntry = playItems.getOrNull(playRequest.startIndex)?.let { it.entry ?: entryId(playRequest.startIndex, it.id) },
+                ticks = startMs * MS_TO_TICKS,
+                paused = state.owner.intent.paused
             )
             viewing = record
+            loadedItems = items
+            mutable.update { it.copy(queue = record.items, repeat = playRequest.repeat, shuffled = playRequest.shuffled) }
             environment.saveViewing(record)
             if (cast?.owner?.candidate?.generation != serial) return@launch
             loadedUrls = items.associate { it.url to (it.customData["entry"] ?: "") }
             loadStarted = true
             val current = link ?: return@launch dispatch(CastEvent("load-failed"))
-            current.load(CastLoadRequest(items, playRequest.startIndex, startMs, autoplay = !state.owner.intent.paused)) { accepted ->
+            current.load(
+                CastLoadRequest(items, playRequest.startIndex, startMs, autoplay = !state.owner.intent.paused, repeat = playRequest.repeat)
+            ) { accepted ->
                 if (!accepted && cast?.owner?.candidate?.generation == serial) {
                     dispatch(CastEvent("load-failed", recovery = "unsupported-media"))
                 } else if (accepted && cast?.owner?.candidate?.generation == serial) {
@@ -994,7 +1082,12 @@ internal class CastSenderHost(
                 "nonce" to nonce,
                 "generation" to target.generation.toString(),
                 "entry" to entry
-            )
+            ),
+            music = item.music,
+            artist = item.artist,
+            album = item.album,
+            activeTracks = castSubtitles(temporary.server, decision, temporary.accessToken)
+                .filter { it.streamIndex == decision.mediaSource.defaultSubtitleStreamIndex }.map { it.trackId.toLong() }
         )
     }
 
@@ -1028,7 +1121,7 @@ internal class CastSenderHost(
         val report = reportFor()
         reported = report
         if (active != null && report != null) {
-            scope.launch {
+            queueReport {
                 gateway.reportStart(active, report)
                 rememberClosedLiveSources(active)
             }
@@ -1061,7 +1154,7 @@ internal class CastSenderHost(
         val active = session ?: return
         val value = reportFor() ?: return
         reported = value
-        scope.launch {
+        queueReport {
             gateway.reportProgress(active, value)
             rememberClosedLiveSources(active)
         }
@@ -1072,7 +1165,7 @@ internal class CastSenderHost(
         val observed = cast?.observed ?: return reported
         val entry = observed.entry ?: cast?.owner?.intent?.entry
         val items = viewing?.items.orEmpty()
-        val item = items.firstOrNull { it.entry == entry } ?: items.firstOrNull()
+        val item = items.firstOrNull { it.entry == entry }
         val paused = observed.playerState == "paused"
         return if (item != null) {
             CastReport(
@@ -1140,6 +1233,10 @@ internal class CastSenderHost(
 
     /** The last report and the encoder go out under the session, which is only revoked after them. */
     private fun cleanup(ticks: Long?, trigger: String) {
+        reloadJob?.cancel()
+        reloadingNonce = null
+        pendingViewing = null
+        reloadPreviousReport = null
         val reporter = session
         val record = sessionBinding
         val last = reportFor()?.let { it.copy(positionTicks = ticks ?: it.positionTicks) }
@@ -1148,7 +1245,9 @@ internal class CastSenderHost(
         sessionBinding = null
         viewing = null
         environment.clearViewing()
+        val pendingReports = reportsPending
         cleanupJob = scope.launch {
+            pendingReports?.join()
             if (reporter != null && last != null) {
                 gateway.reportStopped(reporter, last)
                 rememberClosedLiveSources(reporter)
@@ -1169,9 +1268,20 @@ internal class CastSenderHost(
     private fun playLocal() {
         val state = cast ?: return
         val entry = state.owner.intent.entry
-        val itemId = entry?.substringAfter(':') ?: return
+        val itemId = state.let { mutable.value.queue.firstOrNull { it.entry == entry }?.itemId } ?: entry?.substringAfter(':') ?: return
         localSerial += 1
-        val start = CastLocalStart(itemId, state.owner.intent.ticks / MS_TO_TICKS, state.owner.intent.paused, localSerial)
+        val ui = mutable.value
+        val item = ui.queue.firstOrNull { it.entry == entry }
+        val start = CastLocalStart(
+            item?.itemId ?: itemId,
+            state.owner.intent.ticks / MS_TO_TICKS,
+            state.owner.intent.paused,
+            localSerial,
+            item?.music == true,
+            ui.queue,
+            ui.repeat,
+            entry
+        )
         // The choice to play here despite a Stop nobody confirmed: the viewer took responsibility, so tidy up now.
         if (state.stop == "unknown") {
             environment.mayBeLive = false
@@ -1257,6 +1367,12 @@ internal class CastSenderHost(
     }
 
     private fun clear() {
+        reloadJob?.cancel()
+        reloadingNonce = null
+        loadedItems = emptyList()
+        pendingViewing = null
+        reloadPreviousReport = null
+        unshuffled = null
         loadTimer?.cancel()
         stopTimer?.cancel()
         commandTimer?.cancel()
@@ -1273,6 +1389,7 @@ internal class CastSenderHost(
     }
 
     private fun command(value: String, entry: String? = null) {
+        if (mutable.value.changingTrack) return
         val state = cast ?: return
         val id = (state.commands?.sequence ?: 0).coerceAtLeast(commandId) + 1
         commandId = id
@@ -1287,8 +1404,357 @@ internal class CastSenderHost(
 
     fun seekBy(ticks: Long) = command("seek-relative", ticks.toString())
 
+    private fun attached() = cast?.let { it.owner.phase == "active" && it.owner.owner.kind == "cast" && it.link == "connected" } == true
+
+    fun setVolume(value: Double) {
+        if (!attached() || state.value.controls?.volume != true || !value.isFinite()) return
+        link?.setVolume(value.coerceIn(0.0, 1.0)) { link?.requestStatus() }
+    }
+
+    fun setMuted(value: Boolean) {
+        if (!attached() || state.value.controls?.volume != true) return
+        link?.setMuted(value) { link?.requestStatus() }
+    }
+
+    fun jump(entry: String) {
+        if (!attached() || state.value.changingTrack || viewing?.items?.none { it.entry == entry } != false) return
+        link?.queueJump(entry) { link?.requestStatus() }
+    }
+
+    fun next() = adjacent(1)
+    fun previous() = adjacent(-1)
+    private fun adjacent(offset: Int) {
+        val queue = state.value.queue
+        val plan = app.pictureshow.core.control.castQueue(
+            app.pictureshow.core.control.CastQueueInput(
+                queue.map { it.entry },
+                queue.map { it.itemId },
+                cast?.observed?.entry,
+                repeat = state.value.repeat
+            )
+        )
+        (if (offset > 0) plan.next else plan.previous)?.let(::jump)
+    }
+
+    fun setRepeat(mode: String) {
+        if (!attached() || state.value.changingTrack || mode !in listOf("off", "one", "all")) return
+        link?.setRepeat(mode) { link?.requestStatus() }
+    }
+
+    private var queueEdit: Job? = null
+    private fun saveQueueSnapshot(status: CastStatus, order: List<String>) {
+        if (pendingViewing != null) return
+        val record = viewing ?: return
+        val next = record.copy(
+            order = order,
+            repeat = status.repeat,
+            shuffled = mutable.value.shuffled,
+            currentEntry = cast?.observed?.entry,
+            ticks = cast?.observed?.ticks ?: record.ticks,
+            paused = status.playerState == "paused"
+        )
+        viewing = next
+        scope.launch { environment.saveViewing(next) }
+    }
+
+    fun remove(entries: List<String>) {
+        if (!attached() ||
+            state.value.changingTrack ||
+            entries.isEmpty() ||
+            entries.any { id -> state.value.queue.none { it.entry == id } }
+        ) {
+            return
+        }
+        link?.remove(entries) { ok ->
+            mutable.update { it.copy(queueError = !ok) }
+            link?.requestStatus()
+        }
+    }
+
+    fun move(entry: String, index: Int) {
+        if (!attached() || state.value.changingTrack) return
+        val order = state.value.queue.map { it.entry }.toMutableList()
+        if (!order.remove(entry)) return
+        order.add(index.coerceIn(0, order.size), entry)
+        link?.reorder(order) { ok ->
+            mutable.update { it.copy(queueError = !ok) }
+            link?.requestStatus()
+        }
+    }
+
+    fun clearUpcoming() {
+        val ui = state.value
+        val index = ui.queue.indexOfFirst { it.entry == ui.cast?.observed?.entry }
+        if (index >= 0) remove(ui.queue.drop(index + 1).map { it.entry })
+    }
+
+    /** Journal a newly acquired stream before another suspension can lose its cleanup identity. */
+    private suspend fun rememberLiveSource(binding: TemporarySession?, entry: String, item: String, decision: PlayDecision) {
+        if (binding == null || decision.ownedLiveStreamId == null) return
+        val ref = sessions.state.records.firstOrNull {
+            it.device == binding.device && it.generation == binding.generation
+        }?.secretRef ?: return
+        val source = CastViewedItem(
+            entry,
+            item,
+            decision.mediaSourceId,
+            decision.playSessionId,
+            decision.method.name,
+            liveStreamId = decision.mediaSource.liveStreamId,
+            ownedLiveStreamId = decision.ownedLiveStreamId
+        )
+        val acquired = sessions.liveSources[ref].orEmpty()
+        if (acquired.none { it.ownedLiveStreamId == source.ownedLiveStreamId }) {
+            sessions = sessions.copy(liveSources = sessions.liveSources + (ref to (acquired + source)))
+            environment.saveSessions(sessions)
+        }
+    }
+
+    fun append(items: List<CastPlayItem>, next: Boolean) {
+        if (!attached() || state.value.changingTrack || items.isEmpty() || queueEdit?.isActive == true) return
+        val record = viewing ?: return
+        val active = session ?: return
+        val binding = sessionBinding
+        val target = cast?.owner?.owner ?: return
+        val ui = state.value
+        val before = if (next) ui.queue.getOrNull(ui.queue.indexOfFirst { it.entry == ui.cast?.observed?.entry } + 1)?.entry else null
+        queueEdit = scope.launch {
+            val loaded = mutableListOf<CastLoadItem>()
+            val records = mutableListOf<CastViewedItem>()
+            for (item in items) {
+                val result = gateway.prepare(active, item.id, CastPlayRequest(listOf(item), continueEpisodes = false), 0)
+                val decision = ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+                if (decision != null) rememberLiveSource(binding, item.entry ?: "pending-append", item.id, decision)
+                if (decision == null || viewing?.nonce != record.nonce || !attached()) {
+                    mutable.update { it.copy(queueError = true) }
+                    return@launch
+                }
+                val entry = "cast-entry-" + UUID.randomUUID().toString()
+                val load = loadItem(active, target, item, entry, decision, record.nonce)
+                loaded += load
+                records += CastViewedItem(
+                    entry, item.id, decision.mediaSourceId, decision.playSessionId, decision.method.name,
+                    castUrlBase(load.url), decision.mediaSource.liveStreamId, decision.ownedLiveStreamId,
+                    item.title, item.imageUrl, item.music, item.artist, item.album,
+                    selectedAudio(
+                        decision
+                    ),
+                    castTracks(active.server, decision)
+                )
+                prepared = prepared + (entry to decision)
+            }
+            val latest = viewing ?: return@launch
+            val updated = latest.copy(items = latest.items + records)
+            viewing = updated
+            environment.saveViewing(updated)
+            if (!attached() || viewing?.nonce != record.nonce) return@launch
+            link?.insert(loaded, before) { ok ->
+                mutable.update { it.copy(queueError = !ok) }
+                link?.requestStatus()
+            }
+        }
+    }
+
+    private var unshuffled: List<String>? = null
+    fun setShuffle(on: Boolean) {
+        if (!attached() || state.value.changingTrack || state.value.shuffled == on) return
+        val ui = state.value
+        val current = cast?.observed?.entry ?: return
+        val order = ui.queue.map { it.entry }
+        val nonce = viewing?.nonce ?: return
+        if (on) unshuffled = order
+        val canonical = (unshuffled ?: viewing?.items?.map { it.entry } ?: order).filter { it in order }
+        val target = if (on) listOf(current) + order.filter { it != current }.shuffled() else canonical + order.filter { it !in canonical }
+        link?.reorder(target) { accepted ->
+            if (viewing?.nonce != nonce || !attached()) return@reorder
+            if (accepted) {
+                mutable.update { it.copy(shuffled = on) }
+                viewing?.let { record ->
+                    val next = record.copy(shuffled = on)
+                    viewing = next
+                    scope.launch { environment.saveViewing(next) }
+                }
+            }
+            link?.requestStatus()
+        }
+    }
+
     fun setSubtitle(id: Int?) {
+        if (!attached() || state.value.changingTrack) return
+        val tracks = state.value.controls?.tracks.orEmpty().filter { it.type == "subtitle" }
+        if (id != null && tracks.none { it.id == id && it.selectable }) return
+        if (id == null && cast?.observed?.commands?.contains("tracks") != true) return
         link?.setActiveTracks(listOfNotNull(id?.toLong())) { link?.requestStatus() }
+    }
+
+    /** DMR exposes text tracks only. An audio choice is a new server negotiation and LOAD, never a claimed active id. */
+    fun setAudio(id: Int) {
+        if (!attached() || state.value.changingTrack || queueEdit?.isActive == true) return
+        val track = state.value.controls?.tracks?.firstOrNull { it.id == id && it.type == "audio" && it.selectable } ?: return
+        if (track.selected) return
+        readPosition()
+        val observed = cast?.observed ?: return
+        val record = viewing ?: return
+        val queueAtReload = mutable.value.queue.map { it.entry }
+        val ordered = mutable.value.queue.mapNotNull { uiItem -> record.items.firstOrNull { it.entry == uiItem.entry } }
+        val current = record.items.firstOrNull { it.entry == observed.entry } ?: return
+        val active = session ?: return
+        val binding = sessionBinding
+        val target = cast?.owner?.owner ?: return
+        val plan = app.pictureshow.core.control.castTrackReload(
+            app.pictureshow.core.control.CastTrackReloadInput(
+                observed.ticks,
+                observed.playerState == "paused",
+                track.selectable,
+                observed.durationTicks
+            )
+        )
+        if (!plan.allowed) return
+        val position = plan.ticks / MS_TO_TICKS
+        val paused = plan.paused
+        reloadPreviousReport = reportFor()
+        mutable.update { it.copy(changingTrack = true, trackError = null) }
+        reloadJob = scope.launch {
+            val item = CastPlayItem(
+                current.itemId,
+                current.title.orEmpty(),
+                current.imageUrl,
+                music = current.music,
+                artist = current.artist,
+                album = current.album,
+                entry = current.entry
+            )
+            val request = CastPlayRequest(
+                listOf(item),
+                startMs = position,
+                paused = paused,
+                mediaSourceId = current.mediaSourceId,
+                audioStreamIndex = -id - 1,
+                continueEpisodes = false
+            )
+            val outcome = gateway.prepare(active, item.id, request, position)
+            val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+            if (decision != null) rememberLiveSource(binding, current.entry, item.id, decision)
+            if (viewing?.nonce != record.nonce || cast?.observed?.entry != current.entry || !attached()) {
+                mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
+                return@launch
+            }
+            if (decision == null || selectedAudio(decision) != -id - 1 || decision.method != PlayMethod.Transcode) {
+                mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
+                return@launch
+            }
+            val nonce = UUID.randomUUID().toString()
+            // Rebuild the rest from private URLs saved in this process, or renegotiate after sender recreation.
+            val replacements = mutableListOf<CastLoadItem>()
+            val updated = mutableListOf<CastViewedItem>()
+            for (saved in ordered.ifEmpty { record.items }) {
+                val picked = saved.entry == current.entry
+                val source = if (picked) {
+                    decision
+                } else {
+                    prepared[saved.entry] ?: run {
+                        val result = gateway.prepare(
+                            active,
+                            saved.itemId,
+                            CastPlayRequest(
+                                listOf(CastPlayItem(saved.itemId, saved.title.orEmpty(), music = saved.music)),
+                                continueEpisodes = false
+                            ),
+                            0
+                        )
+                        ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
+                    }
+                }
+                if (source != null) rememberLiveSource(binding, saved.entry, saved.itemId, source)
+                if (source == null || viewing?.nonce != record.nonce || cast?.observed?.entry != current.entry || !attached()) {
+                    mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
+                    return@launch
+                }
+                val model =
+                    CastPlayItem(
+                        saved.itemId,
+                        saved.title.orEmpty(),
+                        saved.imageUrl,
+                        music = saved.music,
+                        artist = saved.artist,
+                        album = saved.album
+                    )
+                val loaded = loadItem(active, target, model, saved.entry, source, nonce)
+                replacements += if (picked) {
+                    CastLoadItem(
+                        loaded.url, loaded.contentType, loaded.title, loaded.imageUrl,
+                        loaded.durationMs, loaded.live, loaded.tracks, loaded.customData, loaded.music, loaded.artist, loaded.album,
+                        observed.activeTracks.filter { track -> loaded.tracks.any { it.id == track.toLong() } }.map(Int::toLong)
+                    )
+                } else {
+                    loaded
+                }
+                updated +=
+                    saved.copy(
+                        mediaSourceId = source.mediaSourceId,
+                        playSessionId = source.playSessionId,
+                        method = source.method.name,
+                        url = castUrlBase(loaded.url),
+                        audioStreamIndex = selectedAudio(source),
+                        tracks = castTracks(active.server, source),
+                        liveStreamId = source.mediaSource.liveStreamId,
+                        ownedLiveStreamId = source.ownedLiveStreamId
+                    )
+                prepared = prepared + (saved.entry to source)
+            }
+            val nextRecord = record.copy(
+                nonce = nonce,
+                items = updated,
+                order = updated.map {
+                    it.entry
+                },
+                previous = record.copy(previous = null)
+            )
+            pendingViewing = nextRecord
+            reloadingNonce = nonce
+            environment.saveViewing(nextRecord)
+            if (viewing?.nonce != record.nonce ||
+                cast?.observed?.entry != current.entry ||
+                !attached() ||
+                mutable.value.queue.map { it.entry } != queueAtReload
+            ) {
+                if (pendingViewing === nextRecord) {
+                    pendingViewing = null
+                    reloadingNonce = null
+                    reloadPreviousReport = null
+                    mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
+                    viewing?.let { environment.saveViewing(it.copy(previous = null)) }
+                }
+                return@launch
+            }
+            loadedItems = replacements
+            loadedUrls = replacements.associate { it.url to it.customData.getValue("entry") }
+            link?.load(
+                CastLoadRequest(
+                    replacements,
+                    updated.indexOfFirst {
+                        it.entry == current.entry
+                    },
+                    position,
+                    !paused,
+                    state.value.repeat
+                )
+            ) {
+                if (!it && pendingViewing === nextRecord) {
+                    pendingViewing = null
+                    reloadingNonce = null
+                    reloadPreviousReport = null
+                    scope.launch { environment.saveViewing(record) }
+                    mutable.update { ui -> ui.copy(changingTrack = false, trackError = "audio-load-failed") }
+                }
+                link?.requestStatus()
+            }
+            delay(CAST_LOAD_TIMEOUT_MS)
+            if (reloadingNonce == nonce) {
+                reloadingNonce = null
+                mutable.update { it.copy(changingTrack = false, trackError = "audio-load-unknown") }
+            }
+        }
     }
 
     fun stop() {
@@ -1307,6 +1773,7 @@ internal class CastSenderHost(
         pendingPick = null
         // Nothing reports while detached, so this is the position the server keeps until someone comes back.
         report()
+        lastStatus?.let { saveQueueSnapshot(it, mutable.value.queue.map { item -> item.entry }) }
         dispatch(CastEvent("disconnect"))
     }
 
@@ -1421,14 +1888,76 @@ internal class CastSenderHost(
             link?.endSession(stopReceiver = ours)
             return
         }
-        lastStatus = status
+        if (reloadingNonce != null && status.mediaSession >= 0 && status.customData["nonce"] != reloadingNonce) return
+        val pending = pendingViewing
+        val confirmsReload = pending != null &&
+            status.customData["nonce"] == pending.nonce &&
+            pending.items.any {
+                it.entry == status.customData["entry"] &&
+                    (status.contentUrl == null || it.url == castUrlBase(status.contentUrl))
+            }
+        val oldReport = if (confirmsReload) reloadPreviousReport else reportFor()
+        if (confirmsReload) {
+            viewing = pending!!.copy(previous = null)
+            pendingViewing = null
+            scope.launch { viewing?.let { environment.saveViewing(it) } }
+        }
+        val oldEntry = cast?.observed?.entry
         if (cast == null) {
+            lastStatus = status
             if (awaitingReattach) reattach(status)
             return
         }
         val before = cast?.observed?.playerState?.takeIf { cast?.owner?.phase == "active" && cast?.owner?.owner?.kind == "cast" }
-        dispatch(CastEvent("observe", observation = observation(status), nowMs = nowMs()))
+        val incoming = observation(status)
+        dispatch(CastEvent("observe", observation = incoming, nowMs = nowMs()), status)
         val after = cast?.observed?.playerState?.takeIf { cast?.owner?.phase == "active" }
+        val nowEntry = cast?.observed?.entry
+        val currentItem = viewing?.items?.firstOrNull { it.entry == nowEntry }
+        if (currentItem != null && cast?.owner?.phase == "active" && cast?.observed === incoming) {
+            val recordItems = viewing?.items.orEmpty()
+            val plan = app.pictureshow.core.control.castQueue(
+                app.pictureshow.core.control.CastQueueInput(
+                    recordItems.map { it.entry },
+                    recordItems.map { it.itemId },
+                    nowEntry,
+                    status.queue,
+                    status.repeat
+                )
+            )
+            val order = plan.order
+            mutable.update { ui ->
+                ui.copy(
+                    title = currentItem.title ?: status.title ?: ui.title,
+                    volume = status.volume,
+                    muted = status.muted,
+                    repeat = status.repeat,
+                    queue = order.mapNotNull { entry -> viewing?.items?.firstOrNull { it.entry == entry } }
+                )
+            }
+            if (!mutable.value.changingTrack && pendingViewing == null) saveQueueSnapshot(status, order)
+            val reloaded = confirmsReload
+            if (reloaded) {
+                reloadingNonce = null
+                reloadPreviousReport = null
+                reloadJob?.cancel()
+                mutable.update { it.copy(changingTrack = false, trackError = null) }
+            }
+            if (oldEntry != null && (oldEntry != nowEntry || reloaded)) {
+                val active = session
+                val nextReport = reportFor()
+                reported = nextReport
+                if (active != null && nextReport != null) {
+                    queueReport {
+                        if (oldReport != null) {
+                            gateway.reportStopped(active, oldReport)
+                            oldReport.playSessionId?.let { gateway.stopEncoding(active, it) }
+                        }
+                        gateway.reportStart(active, nextReport)
+                    }
+                }
+            }
+        }
         // A change of state goes out at once. The first status is the start report's, not a change.
         if (before != null && after != null && before != after) report()
         settlePendingPick()
@@ -1441,7 +1970,8 @@ internal class CastSenderHost(
     /** After a process death: ours only if what the receiver shows is what we stored, and what we report comes from that. */
     private fun reattach(status: CastStatus) {
         val active = account ?: return
-        val record = environment.viewing
+        val storedRecord = environment.viewing
+        val record = storedRecord?.previous?.takeIf { it.nonce == status.customData["nonce"] } ?: storedRecord
         val answer = castReattach(reattachInput(record, active.server.id, active.user.id, status, reattachEmptySeen))
         if (answer.decision == "recheck") {
             reattachEmptySeen = true
@@ -1475,9 +2005,35 @@ internal class CastSenderHost(
             item.liveStreamId,
             item.ownedLiveStreamId
         )
-        val intent = ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = record.items.map { it.entry })
+        val projection = app.pictureshow.core.control.castQueue(
+            app.pictureshow.core.control.CastQueueInput(
+                record.items.map { it.entry },
+                record.items.map { it.itemId },
+                entry,
+                status.queue.ifEmpty { record.order },
+                status.repeat
+            )
+        )
+        val ordered = projection.order.mapNotNull { id -> record.items.firstOrNull { it.entry == id } }
+        val intent =
+            ControlIntent(
+                entry = entry,
+                ticks = status.positionMs * MS_TO_TICKS,
+                paused = status.playerState == "paused",
+                queue = projection.order
+            )
         val state = castReattachState(ownerOf(record), localIdentity(active, record.generation), intent)
-        mutable.update { it.copy(cast = state, title = record.title ?: status.title) }
+        mutable.update {
+            it.copy(
+                cast = state,
+                title = item.title ?: record.title ?: status.title,
+                queue = ordered,
+                volume = status.volume,
+                muted = status.muted,
+                repeat = status.repeat,
+                shuffled = record.shuffled
+            )
+        }
         dispatch(CastEvent("link-connected"))
         dispatch(CastEvent("observe", observation = observation(status), nowMs = nowMs()))
         startReporting()
@@ -1514,9 +2070,15 @@ internal class CastSenderHost(
         val target = cast?.owner?.candidate ?: cast?.owner?.owner
         val ours = viewing?.let { record ->
             status.customData["nonce"] == record.nonce &&
-                (status.contentUrl == null || record.items.any { it.url == castUrlBase(status.contentUrl) })
+                record.items.any {
+                    it.entry == status.customData["entry"] &&
+                        (status.contentUrl == null || it.url == castUrlBase(status.contentUrl))
+                }
         } == true
-        val entryFromUrl = status.contentUrl?.let(loadedUrls::get)
+        // A URL shared by duplicate queue occurrences cannot identify which occurrence owns a position.
+        val entryFromUrl = status.contentUrl?.takeIf { status.customData["nonce"] == null }?.let { url ->
+            loadedItems.singleOrNull { it.url == url }?.customData?.get("entry")
+        }
         val stamped = when {
             ours -> status.customData["generation"]?.toLongOrNull() ?: target?.generation ?: -1
             entryFromUrl != null -> target?.generation ?: -1
