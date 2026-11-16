@@ -321,7 +321,7 @@ an explicit missing port, not a passing policy test or a claim of launch parity.
 | Explicitly pending suite | Cases | Work owed |
 |---|---:|---|
 | frame-rate-match | 6 | Display-mode policy and native display qualification are not ported to Apple. |
-| playback-engine | 19 | PLAY-60 chooses between two Android engines; Apple has one player. |
+| playback-engine | 29 | PLAY-60 chooses between two Android engines; Apple has one player. |
 | offline-budget | 40 | The merged offline policy and its Apple runtime integration are not ported. |
 | offline-fmp4 | 43 | The merged offline policy and its Apple runtime integration are not ported. |
 | offline-job | 283 | The merged offline policy and its Apple runtime integration are not ported. |

@@ -22,9 +22,11 @@ data class PlaybackEngineContext(
     val live: Boolean = false,
     val offline: Boolean = false,
     val syncPlay: Boolean = false,
-    val audio: Boolean = false
+    val audio: Boolean = false,
+    /** mpv showed no picture for this viewing ([EngineFirstFrame]): the rest of it plays on the platform player. */
+    val mpvFailed: Boolean = false
 ) {
-    val mpvEligible: Boolean get() = mpvAvailable && !live && !offline && !syncPlay && !audio
+    val mpvEligible: Boolean get() = mpvAvailable && !live && !offline && !syncPlay && !audio && !mpvFailed
 }
 
 /**
@@ -79,5 +81,43 @@ object PlaybackEngineRule {
         !retryWithMpv(context, platformMethod, platformReasons) -> PlaybackEngine.Media3
         mpvMethod != null && keepMpv(mpvMethod) -> PlaybackEngine.Mpv
         else -> PlaybackEngine.Media3
+    }
+}
+
+/** What the first-frame watchdog does now. */
+enum class FirstFrameAction { Wait, WithoutPassthrough, Platform }
+
+/**
+ * PLAY-61: a viewer who picks mpv never ends on a black screen. mpv can open a file and then never show a picture,
+ * without an error: when its audio passthrough can't start it waits for audio for good and holds every decoded frame
+ * (OBSERVED on the household projector with AC-3 and E-AC-3, on HEVC and any other video). Once the file has opened,
+ * the watchdog counts from the moment the stream had [DATA_MS] of media buffered (the network has delivered; what's
+ * missing is the player) and waits [READY_MS] from there, or [CEILING_MS] from the open whatever the buffer says.
+ * Then mpv retries once at the same position with audio decoded instead of passed through; without passthrough, it
+ * gives way to the built-in player with a notice.
+ */
+object EngineFirstFrame {
+    const val DATA_MS: Long = 2_000
+    const val READY_MS: Long = 8_000
+    const val CEILING_MS: Long = 20_000
+
+    /**
+     * [dataReadyForMs]: how long the stream has held at least [DATA_MS] of buffered media, or null if it never has;
+     * [loadedForMs]: how long since the file opened; [passthrough]: this open passes compressed audio to the output.
+     */
+    fun action(
+        loaded: Boolean,
+        firstFrame: Boolean,
+        dataReadyForMs: Long?,
+        loadedForMs: Long,
+        passthrough: Boolean
+    ): FirstFrameAction {
+        if (!loaded || firstFrame) return FirstFrameAction.Wait
+        val stalled = (dataReadyForMs != null && dataReadyForMs >= READY_MS) || loadedForMs >= CEILING_MS
+        return when {
+            !stalled -> FirstFrameAction.Wait
+            passthrough -> FirstFrameAction.WithoutPassthrough
+            else -> FirstFrameAction.Platform
+        }
     }
 }

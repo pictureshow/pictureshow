@@ -96,6 +96,16 @@ on an emulator it decodes in software only, because the emulator's MediaCodec ne
 tone-mapped to SDR under mpv for now; the device's passthrough formats go to mpv's `audio-spdif`, and the frame rate mpv
 reports drives the same display refresh-rate switch as Media3's.
 
+**PLAY-61 (first-frame watchdog, Android leg 168).** mpv can open a file and then show no picture without reporting
+an error (OBSERVED on the household projector: its audio passthrough couldn't start, so mpv waited on audio for good and
+held every decoded frame). Once the file has opened, a viewing that has had 2 s of media buffered for 8 s, or that has
+been open 20 s whatever the buffer, without a first frame is stalled; time with the app in the background doesn't count.
+A stalled mpv viewing that passes audio through reopens once on mpv at its position with the audio decoded; a stalled
+viewing with decoded audio reopens at its position on the built-in player, which plays the rest of that viewing, and the
+player shows "MPV couldn't decode this video on this device; playing with the built-in player" for 8 s once it has a
+picture (never focusable; the player's engine choice then offers MPV again). The next viewing starts on mpv as usual.
+`playback-engine` vectors (operation `first-frame`, and `mpvFailed` on `engine`) freeze the rule.
+
 
 PLAY-01/09 use SET-13/14/16/19/21 in each PlaybackInfo request and local output selection. A player Quality action
 renegotiates within the same viewing, preserving full-media position, paused state, tracks, and one Start/Stop pair.
