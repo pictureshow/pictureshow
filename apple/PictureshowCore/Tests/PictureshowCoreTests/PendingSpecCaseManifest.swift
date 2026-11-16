@@ -10,6 +10,9 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
+        "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
+        "cast-session": Suite(count: 1, reason: "Pending audio reload reattachment awaits the Apple sender port."),
+        "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
         "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
         "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
@@ -77,6 +80,21 @@ enum PendingSpecCaseManifest {
     ]
     static let contracts: [String: String] = {
         let rows = """
+        cast-capability.audio-reload-does-not-need-text-edit-command|cast-capability/controls
+        cast-session.pending-audio-load-retains-previous-confirmed-binding|cast-session/reattach
+        cast-handoff.system-pause-updates-intent-through-app-command|cast-handoff/cast
+        cast-handoff.receiver-queue-and-pause-update-return-intent|cast-handoff/cast
+        cast-queue.duplicate-media-keeps-entry-identity|cast-queue/cast-queue
+        cast-queue.receiver-order-wins-on-reattach|cast-queue/cast-queue
+        cast-queue.natural-end-wraps-only-repeat-all|cast-queue/cast-queue
+        cast-queue.repeat-one-is-a-receiver-mode-not-a-second-advance|cast-queue/cast-queue
+        cast-queue.foreign-order-cannot-invent-media|cast-queue/cast-queue
+        cast-queue.missing-entry-never-falls-back-to-first-item|cast-queue/cast-queue
+        cast-queue.paused-audio-reload-keeps-observed-moment|cast-queue/track-reload
+        cast-queue.unavailable-audio-cannot-load|cast-queue/track-reload
+        cast-queue.audio-reload-clamps-to-duration|cast-queue/track-reload
+        cast-queue.music-uses-receiver-audio-profile|cast-queue/profile-music
+        cast-queue.single-song-retains-queue-identity-for-repeat|cast-queue/cast-queue
         detail-primary-next|application/detail-play-item
         detail-primary-unplayed|application/detail-play-item
         detail-primary-all-played|application/detail-play-item
@@ -2299,16 +2317,16 @@ enum PendingSpecCaseManifest {
                   vector["expected"] is [String: Any] else {
                 throw NSError(domain: "Malformed pending observed live-window vector", code: 1)
             }
-        } else if suite.hasPrefix("offline-") {
+        } else if suite.hasPrefix("offline-") || ["cast-capability", "cast-session", "cast-handoff", "cast-queue"].contains(suite) {
             let permitsNoRecord = suite == "offline-outbox" && (vector["operation"] as? String) == "outbox"
             guard vector["state"] is [String: Any] || (permitsNoRecord && vector["state"] is NSNull),
                   let steps = vector["steps"] as? [[String: Any]], !steps.isEmpty,
                   vector["input"] == nil, vector["expected"] == nil else {
-                throw NSError(domain: "Malformed pending offline vector", code: 1)
+                throw NSError(domain: "Malformed pending trace vector", code: 1)
             }
             for step in steps {
                 guard step["event"] is [String: Any], let expected = step["expected"] as? [String: Any], !expected.isEmpty else {
-                    throw NSError(domain: "Malformed pending offline vector step", code: 1)
+                    throw NSError(domain: "Malformed pending trace vector step", code: 1)
                 }
             }
         } else {

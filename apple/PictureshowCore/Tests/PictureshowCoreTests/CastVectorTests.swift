@@ -29,6 +29,24 @@ final class CastVectorTests: XCTestCase {
         XCTAssertEqual(cases,189)
         XCTAssertEqual(steps,532)
     }
+    func testPendingAndroidCastContractsHaveValidEnvelopes() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        let specRoot = ProcessInfo.processInfo.environment["PICTURESHOW_SPEC_DIR"].map { URL(fileURLWithPath: $0) } ?? root.appendingPathComponent("spec")
+        var count = 0
+        for suite in ["cast-capability", "cast-session", "cast-handoff", "cast-queue"] {
+            let data = try Data(contentsOf: specRoot.appendingPathComponent("vectors/\(suite).json"))
+            let document = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            for vector in try XCTUnwrap(document["cases"] as? [[String: Any]]) {
+                let id = try XCTUnwrap(vector["id"] as? String)
+                guard PendingSpecCaseManifest.contracts[id] != nil else { continue }
+                try PendingSpecCaseManifest.validate(id: id, suite: suite, operation: try XCTUnwrap(vector["operation"] as? String))
+                try PendingSpecCaseManifest.validateEnvelope(vector, suite: suite)
+                count += 1
+            }
+        }
+        XCTAssertEqual(count, 15)
+    }
     func testPendingAndroidCastPolicies4Cases() throws {
         throw XCTSkip("Four leg 161 cases remain pending: audio re-negotiation capability, system/receiver intent, and pending LOAD previous binding.")
     }
