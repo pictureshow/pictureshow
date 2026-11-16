@@ -99,12 +99,20 @@ struct MainShell: View {
             Tab("Libraries", systemImage: "rectangle.stack", value: MainTab.libraries) {
                 RoutedStack { LibrariesView() }
             }
-            // SEERR-05: only while this account has connected Seerr.
+            // SEERR-05: only while this account has connected Seerr. On iOS it's hidden rather than left out, so
+            // connecting doesn't rebuild the other tabs; tvOS has no hidden tabs.
+            #if os(iOS)
+            Tab("Requests", systemImage: "plus.rectangle.on.rectangle", value: MainTab.requests) {
+                RoutedStack { SeerrHubView() }.id(app.account?.key)
+            }
+            .hidden(app.seerr.config(app.account?.key) == nil)
+            #else
             if app.seerr.config(app.account?.key) != nil {
                 Tab("Requests", systemImage: "plus.rectangle.on.rectangle", value: MainTab.requests) {
                     RoutedStack { SeerrHubView() }.id(app.account?.key)
                 }
             }
+            #endif
             Tab(value: MainTab.search, role: .search) {
                 RoutedStack { SearchView() }
             }

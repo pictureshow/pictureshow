@@ -164,7 +164,12 @@ struct SeerrRequestRow: Identifiable {
         case .failure(let error): sent = false; sendError = error
         }
         // The page then shows the new state: requested seasons stop being selectable.
-        if sent || sendError == .alreadyRequested { await openTitle(app, type: title.mediaType, id: title.id) }
+        if sent || sendError == .alreadyRequested {
+            let error = sendError
+            await openTitle(app, type: title.mediaType, id: title.id)
+            // Reloading clears messages; "already requested" still explains why nothing new was sent.
+            sendError = sendError ?? error
+        }
     }
 
     func connect(_ app: AppModel, url: String, apiKey: String?, username: String, password: String) async {
@@ -508,6 +513,16 @@ struct SeerrTitleView: View {
     @EnvironmentObject private var app: AppModel
     let route: SeerrTitleRoute
     @StateObject private var model = SeerrModel()
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var sideBySide: Bool { sizeClass == .regular }
+    #else
+    private let sideBySide = true
+    /// Focus starts on Request, as on Android TV, not on the first season row; with nothing to request, on Back.
+    @FocusState private var requestFocused: Bool
+    @FocusState private var backFocused: Bool
+    @Environment(\.dismiss) private var dismiss
+    #endif
 
     var body: some View {
         Group {
@@ -522,8 +537,8 @@ struct SeerrTitleView: View {
             }
         }
         .pageBackground()
-        .navigationTitle(model.title?.label ?? "")
         #if os(iOS)
+        .navigationTitle(model.title?.label ?? "")
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await model.openTitle(app, type: route.type, id: route.id) }
@@ -532,8 +547,9 @@ struct SeerrTitleView: View {
     private func page(_ title: SeerrTitle) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: platformValue(tv: 40, touch: 20)) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: platformValue(tv: 60, touch: 20)) { poster(title); heading(title) }
+                if sideBySide {
+                    HStack(alignment: .top, spacing: platformValue(tv: 60, touch: 24)) { poster(title); heading(title) }
+                } else {
                     VStack(alignment: .leading, spacing: 16) { poster(title); heading(title) }
                 }
                 if title.mediaType == "tv" { seasons(title) }
@@ -541,10 +557,17 @@ struct SeerrTitleView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, platformValue(tv: 40, touch: 20))
         }
+        #if os(tvOS)
+        .task(id: "\(title.cardID)|\(offersRequest(title))") {
+            // Once the page has laid out, so the focus engine doesn't settle on the first row after us.
+            try? await Task.sleep(for: .milliseconds(150))
+            if offersRequest(title) { requestFocused = true } else { backFocused = true }
+        }
+        #endif
     }
 
     private func poster(_ title: SeerrTitle) -> some View {
-        SeerrPoster(title: title, width: platformValue(tv: 300, touch: 140))
+        SeerrPoster(title: title, width: platformValue(tv: 300, touch: sideBySide ? 200 : 140))
             .clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
     }
 
@@ -559,15 +582,12 @@ struct SeerrTitleView: View {
             }
             action(title)
         }
-        .frame(minWidth: platformValue(tv: 700, touch: 200), alignment: .leading)
     }
 
     @ViewBuilder private func action(_ title: SeerrTitle) -> some View {
         let user = app.seerr.config(app.account?.key)?.user
         VStack(alignment: .leading, spacing: 10) {
-            if model.sent {
-                Label("Requested. You'll find it in My requests.", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.accent)
-            } else if let user, !user.canRequest(title.mediaType) {
+            if let user, !user.canRequest(title.mediaType) {
                 note("Your Seerr account can't request this kind of title.")
             } else if title.mediaType == "movie" {
                 if seerrMovieRequestable(title) {
@@ -576,29 +596,49 @@ struct SeerrTitleView: View {
                     }
                     .primaryAction()
                     .disabled(model.sending)
-                } else {
+                    #if os(tvOS)
+                    .focused($requestFocused)
+                    #endif
+                } else if !model.sent {
                     note("This is already requested or available.")
                 }
+            } else if seerrSelectableSeasons(title).isEmpty {
+                // Right after our own request the confirmation below says it; this would repeat it.
+                if !model.sent { note("Every season is already requested or available.") }
             } else {
                 let count = seerrSelectableSeasons(title).filter(model.chosen.contains).count
-                if seerrSelectableSeasons(title).isEmpty {
-                    note("Every season is already requested or available.")
-                } else {
-                    Button {
-                        // On Apple TV the button stays focusable with nothing chosen and does nothing (SEERR-06).
-                        if count > 0 { Task { await model.request(app) } }
-                    } label: {
-                        Label(model.sending ? "Requesting…" : count == 0 ? "Choose the seasons to request." : "Request \(count) season\(count == 1 ? "" : "s")", systemImage: "plus")
-                    }
-                    .primaryAction()
-                    #if os(iOS)
-                    .disabled(model.sending || count == 0)
-                    #endif
+                Button {
+                    // On Apple TV the button stays focusable with nothing chosen and does nothing (SEERR-06).
+                    if count > 0 { Task { await model.request(app) } }
+                } label: {
+                    Label(model.sending ? "Requesting…" : count == 0 ? "Choose the seasons to request." : "Request \(count) season\(count == 1 ? "" : "s")", systemImage: "plus")
                 }
+                .primaryAction()
+                #if os(iOS)
+                .disabled(model.sending || count == 0)
+                #else
+                .focused($requestFocused)
+                #endif
+            }
+            if model.sent {
+                Label("Requested. You'll find it in My requests.", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.accent)
             }
             if let error = model.sendError { note(SeerrText.error(error), warning: true) }
+            #if os(tvOS)
+            // As on Android TV: with nothing left to request the page would have nothing to focus, and Menu from the
+            // tab bar leaves the app instead of going back.
+            Button("Back") { dismiss() }
+                .secondaryAction()
+                .focused($backFocused)
+            #endif
         }
         .padding(.top, 6)
+    }
+
+    /// Whether the page shows a Request button (a requestable movie, or a series with a season left to pick).
+    private func offersRequest(_ title: SeerrTitle) -> Bool {
+        if let user = app.seerr.config(app.account?.key)?.user, !user.canRequest(title.mediaType) { return false }
+        return title.mediaType == "movie" ? seerrMovieRequestable(title) : !seerrSelectableSeasons(title).isEmpty
     }
 
     private func note(_ text: String, warning: Bool = false) -> some View {
@@ -608,19 +648,19 @@ struct SeerrTitleView: View {
     @ViewBuilder private func seasons(_ title: SeerrTitle) -> some View {
         let taken = seerrTakenSeasons(title)
         let selectable = seerrSelectableSeasons(title)
-        let shown = title.seasons.filter { $0.seasonNumber > 0 }.sorted { $0.seasonNumber < $1.seasonNumber }
+        let shown = title.seasons.filter { $0.seasonNumber > 0 && $0.episodeCount > 0 }.sorted { $0.seasonNumber < $1.seasonNumber }
         if !shown.isEmpty {
             VStack(alignment: .leading, spacing: platformValue(tv: 12, touch: 6)) {
                 SectionHeader(title: "Seasons")
-                if selectable.count > 1 && !model.sent {
-                    seasonRow(label: "All seasons", detail: nil, on: model.chosen.isSuperset(of: Set(selectable)), enabled: true) { model.toggleAll() }
+                if !selectable.isEmpty {
+                    seasonRow(label: "All seasons", detail: nil, on: model.chosen.isSuperset(of: Set(selectable)), enabled: !model.sending) { model.toggleAll() }
                 }
                 ForEach(shown, id: \.seasonNumber) { season in
                     let reason = taken[season.seasonNumber].flatMap(SeerrText.status)
                     let episodes = "\(season.episodeCount) episode\(season.episodeCount == 1 ? "" : "s")"
                     seasonRow(label: "Season \(season.seasonNumber)", detail: [episodes, reason].compactMap { $0 }.joined(separator: " · "),
                               on: model.chosen.contains(season.seasonNumber) && selectable.contains(season.seasonNumber),
-                              enabled: selectable.contains(season.seasonNumber) && !model.sent) { model.toggleSeason(season.seasonNumber) }
+                              enabled: selectable.contains(season.seasonNumber) && !model.sending) { model.toggleSeason(season.seasonNumber) }
                 }
             }
             #if os(tvOS)
@@ -632,11 +672,13 @@ struct SeerrTitleView: View {
     private func seasonRow(label: String, detail: String?, on: Bool, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Image(systemName: on ? "checkmark.circle.fill" : "circle").foregroundStyle(on ? Theme.accent : Theme.muted)
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    // On Apple TV the mark takes the row's own colour, which flips to dark on the white focused row.
+                    .foregroundStyle(platformValue(tv: AnyShapeStyle(.foreground), touch: AnyShapeStyle(on ? Theme.accent : Theme.muted)))
                     .font(Font.title3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label).font(.body.weight(.semibold))
-                    if let detail, !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(Theme.muted) }
+                    if let detail, !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
                 }
                 Spacer(minLength: 0)
             }
@@ -646,11 +688,36 @@ struct SeerrTitleView: View {
         }
         #if os(iOS)
         .buttonStyle(.plain)
+        #else
+        .buttonStyle(SeerrSeasonRowStyle())
         #endif
         .disabled(!enabled)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
+
+#if os(tvOS)
+/// A season row on Apple TV: the system bordered style fills with the app tint and hides the words, so rows are a
+/// translucent panel, white with dark text when focused, like the app's action buttons.
+private struct SeerrSeasonRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { RowBody(configuration: configuration) }
+
+    private struct RowBody: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isFocused) private var focused
+        @Environment(\.isEnabled) private var enabled
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, 24).padding(.vertical, 6)
+                .foregroundStyle(focused ? Color.black : Color.white.opacity(enabled ? 1 : 0.55))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(focused ? Color.white : Color.white.opacity(0.08)))
+                .scaleEffect(configuration.isPressed ? 0.98 : (focused ? 1.03 : 1))
+                .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 16, y: 8)
+                .animation(.easeOut(duration: 0.15), value: focused)
+        }
+    }
+}
+#endif
 
 // MARK: - Connect (SEERR-01)
 
@@ -682,8 +749,8 @@ struct SeerrConnectView: View {
     @ViewBuilder private var form: some View {
         Section {
             TextField("Seerr address", text: $address, prompt: Text("requests.example.com or seerr.home.example:5055"))
-                .textContentType(.URL)
                 #if os(iOS)
+                .textContentType(.URL)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 #endif
@@ -720,7 +787,7 @@ struct SeerrConnectView: View {
                     if model.connecting { Spacer(); ProgressView() }
                 }
             }
-            .disabled(model.connecting || address.trimmingCharacters(in: .whitespaces).isEmpty || (useKey ? apiKey.isEmpty : username.isEmpty))
+            .disabled(model.connecting || address.trimmingCharacters(in: .whitespaces).isEmpty || (useKey ? apiKey.isEmpty : username.isEmpty || password.isEmpty))
             if let error = model.connectError {
                 Text(SeerrText.error(error)).font(.footnote).foregroundStyle(Theme.warning)
             }
@@ -777,7 +844,9 @@ struct SeerrOffersShelf: View {
         let term = seerrNormalizeSearch(query)
         let offers = model.searched == term && model.searchError == nil
             ? seerrSearchOffers(model.results, library: library.map { (name: $0.name, year: $0.productionYear) }) : []
-        Group {
+        // A real (1 pt) view even with nothing to show: an empty one never appears, so its search would never run.
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: 1)
             if app.seerr.config(app.account?.key) != nil && !offers.isEmpty {
                 SeerrShelf(title: "Not in your library", titles: offers)
             }

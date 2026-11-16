@@ -467,3 +467,22 @@ the 2026-11-16 two-viewer live check on the demo server: iPhone simulator plus a
   output latency converges instead of re-seeking behind; the lead resets with each viewing.
 - The renderer reports buffering only for a real stall (empty buffer or AVPlayer waiting to minimise stalls), not
   AVPlayer's brief "evaluating buffering rate" wait at every start.
+
+## Requests with Seerr (leg 155 item 6, 2026-11-16)
+
+Reference: [seerr](../spec/features/seerr.md). PictureshowCore's `Seerr.swift` (rules) and `SeerrClient.swift` (HTTP: no
+redirects, no cookie jar, no Jellyfin token) run all 95 `seerr/*` vector cases (`SeerrVectorRunner`); `SeerrClientTests`
+(15) replays Seerr v3.5.2's answers: sign-in, renewal, the 403 ambiguity, 202 and the fail-closed API-key link.
+`SeerrStoreTests` (8, app unit tests with a fake Keychain) cover the per-account store. Live runs used a test Seerr
+3.5.2 linked to the demo Jellyfin, signed in as the `apple-whole` test viewer, on the iPad Air simulator and the
+Apple TV 4K simulator.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| SEERR-01 | Implemented | Settings, "Requests (Seerr)" shows "Connected as {user}" or "Not connected" and opens the connect page (address, Sign in with Jellyfin or Use an API key, username prefilled, password or key, Connect/Connecting…, errors by kind; connected: address, Seerr user, mode, a can't-request warning, Disconnect). OBSERVED on iPad and Apple TV: a wrong password shows "Seerr didn't accept that Jellyfin username and password."; the right one connects and the Requests tab appears. | The API-key path is covered by client tests only (ASSUMED live: the test Seerr's API key isn't in the vault). |
+| SEERR-02 | Implemented | `SeerrConnections`: one Keychain item per account (`app.pictureshow.seerr|{account}`, this device only, after first unlock) holds the config and secret; nothing in files or defaults. Any Keychain failure but a missing entitlement fails the connect (`storage`); a corrupt or unreadable item reads as not connected. Disconnect, sign-out and forget drop only that account's item; a sign-in that finishes after sign-out, or a renewal after Disconnect, isn't saved (generation per account). OBSERVED: the connection survived reinstall on both simulators and was gone after Disconnect and relaunch. | Keychain refusal on hardware is covered by the fake-Keychain tests only. |
+| SEERR-03 | Implemented | `SeerrClient`: a 401/403 is checked against `/auth/me`; only an ended session renews once with the saved password (coalesced), retries, and saves the new cookie only if the stored secret still matches. Client and store tests. | A live session expiry wasn't waited out. |
+| SEERR-04 | Implemented | API key: the viewer is looked up by Jellyfin id across all user pages, then `X-API-User` names that user on every call; no match fails closed with "not linked". Vectors `seerr/headers`, `seerr/link`, client tests. OBSERVED server side: every live request (ids 7–10) has `requestedBy` = the viewer's Seerr user, not the admin. | — |
+| SEERR-05 | Implemented | Requests tab while connected (iOS: a hidden tab otherwise, so connecting doesn't reset other tabs; tvOS: added to the top bar). Trending (two pages, movies and series rows), Search (debounced, 2+ characters), My requests (the viewer's 30 latest, each with its title and status). OBSERVED on both platforms. | On Apple TV, connecting or disconnecting rebuilds the top bar, which returns Settings to its top. |
+| SEERR-06 | Implemented | Title page: movie Request; series season picker with episode counts, taken seasons shown with their status and not pickable, All seasons, "Request N seasons" (iPhone/iPad disabled with none chosen; Apple TV stays focusable and does nothing), focus starts on Request (or Back when nothing is left). After a request the page reloads and says "Requested. You'll find it in My requests." OBSERVED: movie, one season, two seasons, then the last season. | Permission, quota and blocklist errors are covered by vectors and client tests, not live. |
+| SEERR-07 | Implemented | Search adds "Not in your library" after the library rows (and under "No results"): Seerr's movies and series for the same words minus what the library matched (`seerr/offers`). OBSERVED: "bunny" leaves out Big Buck Bunny and lists 20 others; "dune" with nothing in the library shows the row under No results. | — |
