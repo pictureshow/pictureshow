@@ -344,6 +344,7 @@ internal class PersistentIdentityService(
     override suspend fun search(account: Account, query: String, kind: SearchKind) = call(account.deviceId) {
         it.search(account, query, kind)
     }
+    override suspend fun searchAncestors(account: Account, itemId: String) = call(account.deviceId) { it.searchAncestors(account, itemId) }
     override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) =
         call(account.deviceId) { it.personItems(account, personId, startIndex, limit) }
 

@@ -156,7 +156,7 @@ class ScreenModelsTest {
         runCurrent()
         assertFalse(vm.state.value.loading)
         val rotated = second.copy(accessToken = "rotated-token", expired = true)
-        accounts.signOut(account.key)
+        accounts.removeAccount(account.key)
         accounts.remember(rotated)
         accounts.select(null)
         runCurrent()
@@ -337,7 +337,7 @@ class ScreenModelsTest {
             vm.signIn()
             advanceUntilIdle()
             assertTrue(vm.state.value.signedIn)
-            accounts.signOut(account.key)
+            accounts.removeAccount(account.key)
         }
     }
 
@@ -471,7 +471,7 @@ class ScreenModelsTest {
     }
 
     @Test
-    fun signOutRevokesTokenAndRemovesOnlyCurrentAccountEvenOffline() = runTest(dispatcher) {
+    fun signOutRevokesTokenAndKeepsTheCardSignedOutEvenOffline() = runTest(dispatcher) {
         val other = account.copy(server = server.copy(id = "server-2"), user = User("u2", "Robin"))
         accounts.remember(other)
         accounts.remember(account)
@@ -481,7 +481,11 @@ class ScreenModelsTest {
         vm.signOut()
         advanceUntilIdle()
         assertEquals(account, service.loggedOut)
-        assertEquals(listOf(other), accounts.snapshots.value.accounts)
+        // AUTH-10: the other viewer is untouched and the signed-out card stays, with no token, for "Sign in again".
+        assertEquals(
+            listOf(other, account.copy(accessToken = "", expired = true, signedOut = true)),
+            accounts.snapshots.value.accounts
+        )
         assertNull(accounts.snapshots.value.currentKey)
     }
 

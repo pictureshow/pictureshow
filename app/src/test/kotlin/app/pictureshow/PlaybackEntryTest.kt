@@ -148,6 +148,15 @@ class PlaybackEntryTest {
         }
     }
 
+    /** CAT-21: a link to an episode the library doesn't have opens its page, never the player. */
+    @Test
+    fun aMissingEpisodeOpensItsPageNotThePlayer() = runTest {
+        val missing = MediaItem(id, type = "Episode", locationType = "Virtual", premiereDate = "2021-03-04T00:00:00Z")
+        val http = http(Json.encodeToString(missing))
+        assertEquals(ResolvedPlaybackEntry.Missing(missing), resolvePlaybackEntry(PlaybackEntry(id), account, session(http)))
+        http.close()
+    }
+
     private fun TestScope.http(
         body: String,
         status: HttpStatusCode = HttpStatusCode.OK,

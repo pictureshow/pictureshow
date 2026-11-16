@@ -202,9 +202,10 @@ internal class OfflineEngine(
             emptyTrashSoon()
             val snapshot = accounts.load()
             mutex.withLock {
-                purgeOrphansLocked(snapshot.accounts.map(Account::key).toSet())
-                snapshot.accounts.forEach { loadLocked(it.key) }
-                lastAccountKeys = snapshot.accounts.map(Account::key).toSet()
+                val keys = snapshot.downloadOwners()
+                purgeOrphansLocked(keys)
+                keys.forEach { loadLocked(it) }
+                lastAccountKeys = keys
                 pumpLocked()
                 watchStorageLocked()
             }
@@ -246,10 +247,13 @@ internal class OfflineEngine(
         scope.launch { trashCleaner(files) }
     }
 
-    /** Sign-out and removal: bytes go now, without waiting for any server (OFF-09). */
+    /**
+     * Sign-out and removal: bytes go now, without waiting for any server (OFF-09). A signed-out card that stays on the
+     * device (AUTH-10) owns nothing, the same as a removed one; a session the server expired (AUTH-12) keeps its downloads.
+     */
     private suspend fun observeAccounts() {
         accounts.snapshots.collect { snapshot ->
-            val keys = snapshot.accounts.map(Account::key).toSet()
+            val keys = snapshot.downloadOwners()
             mutex.withLock {
                 val gone = lastAccountKeys - keys
                 lastAccountKeys = keys
@@ -257,7 +261,9 @@ internal class OfflineEngine(
                 synchronized(progressStores) { signedOut.removeAll(keys) }
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
             }
-            runCatching { sessions().endAllExcept(snapshot.accounts.map { it.server.id to it.user.id }.toSet()) }
+            runCatching {
+                sessions().endAllExcept(snapshot.privateStateOwners.map { it.server.id to it.user.id }.toSet())
+            }
             watchRevocations()
             if (keys.isNotEmpty() || lastAccountKeys.isEmpty()) mutex.withLock { pumpLocked() }
         }
@@ -1158,3 +1164,6 @@ internal fun measuredNetwork(context: Context, network: Network? = null): Offlin
         capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     return if (free) OfflineNetwork.unmetered else OfflineNetwork.metered
 }
+
+/** Viewers whose downloads stay: every saved account except one the viewer signed out of (AUTH-10, OFF-09). */
+internal fun app.pictureshow.core.AccountSnapshot.downloadOwners(): Set<String> = privateStateOwners.map(Account::key).toSet()

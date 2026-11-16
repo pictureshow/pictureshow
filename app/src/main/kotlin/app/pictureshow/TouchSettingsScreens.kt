@@ -64,7 +64,10 @@ internal fun TouchSettings(
     castEnabled: Boolean? = null,
     onCastEnabled: (Boolean) -> Unit = {},
     /** Set while Google Play services need updating before Cast can run. */
-    onUpdateServices: (() -> Unit)? = null
+    onUpdateServices: (() -> Unit)? = null,
+    /** HOME-12: null hides the switch until the Home layout is read. */
+    separateNextUp: Boolean? = null,
+    onSeparateNextUp: (Boolean) -> Unit = {}
 ) {
     val local = state.local
     var advanced by rememberSaveable { mutableStateOf<String?>(null) }
@@ -76,6 +79,15 @@ internal fun TouchSettings(
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
             TouchNavRow("Downloads", onClick = onDownloads)
+            separateNextUp?.let {
+                TouchSwitchRow(
+                    "Separate Next up row",
+                    separateNextUpSummary(it),
+                    it,
+                    "touch:settings:separate-next-up",
+                    onSeparateNextUp
+                )
+            }
             TouchNavRow(androidx.compose.ui.res.stringResource(R.string.sync_title), onClick = onSyncPlay)
             castEnabled?.let {
                 TouchSwitchRow(

@@ -9,6 +9,7 @@ import androidx.lifecycle.SavedStateHandle
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.isMissing
 import kotlinx.coroutines.CancellationException
 
 internal const val PLAY_ACTION = "app.pictureshow.action.PLAY"
@@ -83,6 +84,9 @@ private fun validatedEntry(id: String, positionMs: Long?): ParsedPlaybackEntry =
 internal sealed interface ResolvedPlaybackEntry {
     data object NormalStartup : ResolvedPlaybackEntry
     data object Unavailable : ResolvedPlaybackEntry
+
+    /** CAT-21: the link names an episode the library doesn't have; its page opens and says so, nothing plays. */
+    data class Missing(val item: MediaItem) : ResolvedPlaybackEntry
     data class Open(
         val item: MediaItem,
         val positionMs: Long,
@@ -130,6 +134,7 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
     if (!item.id.equals(entry.itemId, ignoreCase = true) || item.type !in setOf("Movie", "Episode") || item.isFolder) {
         return ResolvedPlaybackEntry.Unavailable
     }
+    if (item.isMissing) return ResolvedPlaybackEntry.Missing(item)
     return ResolvedPlaybackEntry.Open(
         item,
         app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs),

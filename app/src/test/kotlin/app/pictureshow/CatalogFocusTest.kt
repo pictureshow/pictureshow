@@ -98,6 +98,11 @@ class CatalogFocusTest {
             override suspend fun read(): String? = null
             override suspend fun write(value: String) = Unit
         })
+        // These cases move between separate Continue watching and Next up rows (HOME-12's switch on).
+        runBlocking {
+            accounts.remember(account)
+            accounts.saveHomePreferences(account.key, app.pictureshow.core.HomePreferences(mergeWatching = false), pending = false)
+        }
         lateinit var vm: CatalogHomeViewModel
         compose.runOnIdle {
             vm = CatalogHomeViewModel(account, CatalogSession(service, accounts))

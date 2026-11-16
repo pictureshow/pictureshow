@@ -42,6 +42,12 @@ class LiveRecordingOfflineTest {
         assertTrue(entry.tracks.any { it.type == "audio" && it.available })
     }
 
+    /** CAT-21: an episode the library doesn't have has no file to download. */
+    @Test fun aMissingEpisodeOffersNoDownload() {
+        assertTrue(offlineOffersDownload(MediaItem("present", "Present", "Episode", locationType = "FileSystem")))
+        assertFalse(offlineOffersDownload(MediaItem("missing", "Missing", "Episode", locationType = "Virtual")))
+    }
+
     @Test fun growingRecordingIsBlockedAtDetailAndAuthoritativePreview() {
         assertFalse(offlineOffersDownload(MediaItem("growing", "Growing recording", "Recording")))
         val growing = recording.replace("\"IsInProgress\":false", "\"IsInProgress\":true")

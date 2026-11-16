@@ -440,7 +440,9 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
                 val account = state.value.account
                 val retired = accounts.snapshots.value.retiredDeviceAccounts.filter { it.key == account.key }
                 withContext(NonCancellable) {
-                    accounts.signOut(account.key)
+                    // AUTH-10: the card stays as "Signed out · Sign in again"; only Remove forgets it.
+                    SignOutFocus.key = account.key
+                    accounts.signOutKeepingAccount(account.key)
                     mutableState.update { it.copy(busy = false, finished = true) }
                     // Capture queued credentials before forgetting them, just as account removal does.
                     (listOf(account) + retired).filter { it.accessToken.isNotBlank() }.forEach { credential ->
@@ -460,4 +462,18 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
             }
         }
     }
+}
+
+/** AUTH-10: after Sign out, the account chooser starts on the card that was just signed out, once. */
+internal object SignOutFocus {
+    @Volatile var key: String? = null
+
+    fun take(): String? = key.also { key = null }
+}
+
+/** What a saved card says under its name: a session the viewer ended or the server refused needs signing in again. */
+internal fun accountCardStatus(account: app.pictureshow.core.Account): String? = when {
+    account.signedOut -> "Signed out · Sign in again"
+    account.expired || account.accessToken.isBlank() -> "Session ended · Sign in again"
+    else -> null
 }

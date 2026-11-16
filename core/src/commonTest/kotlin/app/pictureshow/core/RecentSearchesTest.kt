@@ -50,7 +50,7 @@ class RecentSearchesTest {
         store.clearSearches(first.key)
         assertTrue(store.snapshots.value.recentSearches[first.key].isNullOrEmpty())
         store.recordSearch(first.key, "new query")
-        store.signOut(first.key)
+        store.removeAccount(first.key)
         store.recordSearch(first.key, "late query")
         val restarted = AccountStore(disk)
         assertEquals(mapOf(second.key to listOf("second query")), restarted.load().recentSearches)

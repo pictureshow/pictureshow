@@ -372,7 +372,7 @@ class SignInAccountsTest {
         waitForText("Sign in to Screen room")
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitForText("Who’s watching?")
-        click("Viewer one on Screen room")
+        click("Viewer one on Screen room · Session ended · Sign in again")
         waitForText("Sign in to Screen room")
         compose.onNodeWithContentDescription("Username").assert(
             SemanticsMatcher.expectValue(

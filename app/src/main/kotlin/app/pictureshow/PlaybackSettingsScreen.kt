@@ -152,11 +152,16 @@ internal fun PlaybackSettingsScreen(
     onSwitchUser: () -> Unit = {},
     onSignOut: () -> Unit = {},
     signingOut: Boolean = false,
+    /** HOME-12: null hides the switch until the Home layout is read. */
+    separateNextUp: Boolean? = null,
+    onSeparateNextUp: (Boolean) -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
     val switchUserFocus = remember { FocusRequester() }
+    val signOutFocus = remember { FocusRequester() }
+    var confirmSignOut by rememberSaveable { mutableStateOf(false) }
     val thisTvFocus = remember { FocusRequester() }
     val aboutFocus = remember { FocusRequester() }
     val supportFocus = remember { FocusRequester() }
@@ -218,11 +223,32 @@ internal fun PlaybackSettingsScreen(
                 }
                 TvSettingsActionRow(
                     if (signingOut) "Signing out…" else "Sign out",
-                    Modifier.testTag("settings:sign-out"),
-                    supportingText = "Signs ${account.user} out of this TV.",
-                    enabled = !signingOut,
-                    onClick = onSignOut
-                )
+                    Modifier.focusRequester(signOutFocus).testTag("settings:sign-out"),
+                    supportingText = "Signs ${account.user} out of this TV. The account stays saved here.",
+                    enabled = !signingOut
+                ) { confirmSignOut = true }
+                if (confirmSignOut) {
+                    SignOutConfirmation(
+                        account.user,
+                        onCancel = {
+                            confirmSignOut = false
+                            signOutFocus.requestFocus()
+                        },
+                        onConfirm = {
+                            confirmSignOut = false
+                            onSignOut()
+                        }
+                    )
+                }
+            }
+            if (separateNextUp != null) {
+                TvSettingsSectionHeader("Home")
+                TvSettingsToggleRow(
+                    "Separate Next up row",
+                    separateNextUp,
+                    Modifier.testTag("settings:separate-next-up"),
+                    supportingText = separateNextUpSummary(separateNextUp)
+                ) { value -> onSeparateNextUp(value) }
             }
             TvSettingsSectionHeader("Playback & quality")
             group("Network quality", if (account == null) Modifier.focusRequester(first) else Modifier)

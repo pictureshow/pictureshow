@@ -427,11 +427,38 @@ class MusicHostTest {
         music.setRepeat("all")
         music.request(album("a", "b"))
         until("playing") { "start a" in log }
-        runBlocking { accounts.signOut(account.key) }
+        runBlocking { accounts.removeAccount(account.key) }
         until("the sign-out") { music.state.value.account == null }
         assertFalse(music.state.value.outputActive)
         assertNull(music.state.value.current)
         assertNull(runBlocking { MusicStore(context).load(account) })
+    }
+
+    /** AUTH-10: Sign out keeps the card but none of the viewer's private state, so their saved queue goes too. */
+    @Test fun signingOutKeepingTheCardEndsTheAudioAndForgetsTheQueue() {
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        until("playing") { "start a" in log }
+        runBlocking { accounts.signOutKeepingAccount(account.key) }
+        until("the sign-out") { music.state.value.account == null }
+        assertFalse(music.state.value.outputActive)
+        assertNull(runBlocking { MusicStore(context).load(account) })
+        assertTrue(accounts.snapshots.value.accounts.any { it.key == account.key && it.signedOut })
+    }
+
+    /** Signing another viewer out (their card kept) still deletes their saved queue, and leaves the current one's. */
+    @Test fun signingOutAnotherViewerKeepingTheCardDeletesTheirSavedQueue() {
+        val music = host()
+        ready(music)
+        music.append(account, tracks("a"))
+        until("the saved queue") { music.state.value.queue?.entries?.size == 1 }
+        switchTo(other, music)
+        music.append(other, tracks("x"))
+        until("the other queue") { music.state.value.queue?.entries?.size == 1 }
+        runBlocking { accounts.signOutKeepingAccount(account.key) }
+        until("the signed-out viewer's queue gone") { runBlocking { MusicStore(context).load(account) } == null }
+        assertNotNull(runBlocking { MusicStore(context).load(other) })
     }
 
     @Test fun aVideoStopsTheAudioOnceAndKeepsTheQueue() {

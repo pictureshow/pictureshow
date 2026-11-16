@@ -114,7 +114,17 @@ data class BrowseQuery(
     val filters: LibraryFilters = LibraryFilters()
 )
 
-data class HomeRow(val key: String, val title: String, val items: List<MediaItem>, val library: Boolean = false, val wide: Boolean = false)
+data class HomeRow(
+    val key: String,
+    val title: String,
+    val items: List<MediaItem>,
+    val library: Boolean = false,
+    val wide: Boolean = false,
+    /** Item id to the words that replace its "S1:E2" line, e.g. "Next · S1:E2" in the merged row (HOME-12). */
+    val captions: Map<String, String> = emptyMap(),
+    /** Item id to the library it is in, set only for titles also on Home from another library (HOME-13). */
+    val libraryNames: Map<String, String> = emptyMap()
+)
 
 /** Server view order is meaningful; unavailable or empty sections do not remove other rows. */
 fun assembleHome(
@@ -182,12 +192,41 @@ fun progress(item: MediaItem): Float {
     return (item.userData.playbackPositionTicks.toDouble() / duration).coerceIn(0.0, 1.0).toFloat()
 }
 
-/** Choose fresh, playable detail content. Callers withhold this while dependent reads or reports are pending. */
-fun detailPlayItem(item: MediaItem?, nextUp: List<MediaItem>, episodes: List<MediaItem>): MediaItem? = when (item?.type) {
-    "Series" -> nextUp.firstOrNull() ?: episodes.firstOrNull { !it.userData.played } ?: episodes.firstOrNull()
-    "Season" -> episodes.firstOrNull { !it.userData.played } ?: episodes.firstOrNull()
-    "Movie", "Episode", "Video" -> item
-    else -> null
+/**
+ * Choose fresh, playable detail content. Callers withhold this while dependent reads or reports are pending.
+ * An episode the library doesn't have (CAT-21) is never the target: Play starts the first one it has.
+ */
+fun detailPlayItem(item: MediaItem?, nextUp: List<MediaItem>, episodes: List<MediaItem>): MediaItem? {
+    val available = episodes.filterNot { it.isMissing }
+    return when (item?.type) {
+        "Series" -> nextUp.firstOrNull { !it.isMissing } ?: available.firstOrNull { !it.userData.played } ?: available.firstOrNull()
+        "Season" -> available.firstOrNull { !it.userData.played } ?: available.firstOrNull()
+        "Movie", "Episode", "Video" -> item.takeUnless { it.isMissing }
+        else -> null
+    }
+}
+
+/**
+ * CAT-21: Jellyfin lists an episode it knows of but has no file for with `LocationType: "Virtual"` (only for viewers
+ * whose "Display missing episodes" setting is on; the server applies that setting). Nothing can play, download or cast it.
+ */
+val MediaItem.isMissing: Boolean get() = locationType.equals("Virtual", ignoreCase = true)
+
+private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+/**
+ * What a missing episode says in place of its play actions (CAT-21): "Not in your library", with its air date when the
+ * server knows it ("Aired Mar 4, 2021", or "Airs" for one still to come). [today] is the viewer's local date,
+ * `yyyy-MM-dd`. Null for anything the library has.
+ */
+fun missingItemLabel(item: MediaItem, today: String): String? {
+    if (!item.isMissing) return null
+    val date = item.premiereDate?.take(10)?.takeIf { Regex("\\d{4}-\\d{2}-\\d{2}").matches(it) }
+    val month = date?.substring(5, 7)?.toIntOrNull()?.takeIf { it in 1..12 }
+    val day = date?.substring(8, 10)?.toIntOrNull()?.takeIf { it in 1..31 }
+    if (date == null || month == null || day == null) return "Not in your library"
+    val verb = if (date > today) "Airs" else "Aired"
+    return "Not in your library · $verb ${MONTHS[month - 1]} $day, ${date.take(4)}"
 }
 
 /**

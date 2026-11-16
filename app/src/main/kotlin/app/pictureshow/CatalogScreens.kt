@@ -143,6 +143,7 @@ import app.pictureshow.core.gridStripDetail
 import app.pictureshow.core.gridVerticalMove
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.isEmptyContainer
+import app.pictureshow.core.isMissing
 import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.runtimeLabel
@@ -253,6 +254,9 @@ fun CatalogHome(
     val profile = remember { FocusRequester() }
     val accountFocus = remember { FocusRequester() }
     var accountMenu by rememberSaveable { mutableStateOf(false) }
+    // AUTH-10: Sign out asks first; the opener ("account" chip or the "profile" button) gets focus back on Cancel.
+    var confirmSignOut by rememberSaveable { mutableStateOf<String?>(null) }
+    val signOutFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
     val customizeFocus = remember { FocusRequester() }
@@ -525,6 +529,7 @@ fun CatalogHome(
                                                 item = item,
                                                 account = account,
                                                 wide = row.wide || row.library || item.type == "Episode",
+                                                subtitle = homeRowSubtitle(row, item),
                                                 // A library's name sits inside its tile's top edge, so a row peeking at the
                                                 // bottom of the first screen still says what it is (T-15).
                                                 nameInArtwork = row.library,
@@ -599,18 +604,20 @@ fun CatalogHome(
                             }
                     ) { Text("Switch user") }
                     Button(
-                        onClick = onSignOut,
+                        onClick = { confirmSignOut = "profile" },
                         enabled = !state.busy,
-                        modifier = target(Modifier, false).testTag("home:sign-out").staysInRow(first = false, last = true).onFocusChanged {
-                            if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
-                        }.onPreviewKeyEvent {
-                            if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                moveRow(rows.lastIndex)
-                                true
-                            } else {
-                                false
+                        modifier = target(Modifier, false).focusRequester(signOutFocus).testTag("home:sign-out")
+                            .staysInRow(first = false, last = true)
+                            .onFocusChanged {
+                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
+                            }.onPreviewKeyEvent {
+                                if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                    moveRow(rows.lastIndex)
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
                     ) { Text(if (state.busy) "Please wait…" else "Sign out") }
                 }
             }
@@ -631,11 +638,30 @@ fun CatalogHome(
             },
             onSignOut = {
                 accountMenu = false
-                onSignOut()
+                confirmSignOut = "account"
             },
             onSettings = {
                 accountMenu = false
                 onSettings()
+            }
+        )
+    }
+    confirmSignOut?.let { opener ->
+        SignOutConfirmation(
+            user = account.user.name,
+            onCancel = {
+                confirmSignOut = null
+                scope.launch {
+                    if (opener == "account") {
+                        focusAction("header", 0, accountFocus)
+                    } else {
+                        focusAction("profile", rows.size + 1, signOutFocus)
+                    }
+                }
+            },
+            onConfirm = {
+                confirmSignOut = null
+                onSignOut()
             }
         )
     }
@@ -747,6 +773,40 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
                 modifier = Modifier.widthIn(max = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) 110.dp else 180.dp)
             )
             Text("▾", modifier = Modifier.clearAndSetSemantics {})
+        }
+    }
+}
+
+/** The words every Android sign-out question uses (AUTH-10); [device] is "TV", "phone" or "tablet". */
+internal fun signOutQuestion(user: String) = "Sign out of $user?"
+
+internal fun signOutConsequence(device: String) = "You'll need the password to sign in again. Your account stays saved on this $device."
+
+/** AUTH-10: Sign out asks first, starting on Cancel. Back is Cancel. */
+@Composable
+internal fun SignOutConfirmation(user: String, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    val cancel = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
+        Column(
+            Modifier.width(480.dp).background(Color(0xFF1B2130), RoundedCornerShape(16.dp)).padding(24.dp)
+                .testTag("sign-out:confirm"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(signOutQuestion(user), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+            Text(signOutConsequence("TV"), color = CatalogMuted)
+            Spacer(Modifier.height(4.dp))
+            Button(
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth().focusRequester(cancel).testTag("sign-out:cancel")
+            ) { Text("Cancel") }
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth().testTag("sign-out:confirm-button")
+            ) { Text("Sign out") }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            cancel.requestFocus()
         }
     }
 }
@@ -1614,7 +1674,7 @@ fun CatalogDetail(
     // capabilities; queued actions below continue to require the authoritative fresh state.
     val pendingItem = state.item ?: origin
     val pendingCanPlay = when (pendingItem?.type) {
-        "Movie", "Episode", "Video" -> true
+        "Movie", "Episode", "Video" -> pendingItem?.isMissing != true
         "Series" -> state.nextUp.isNotEmpty() || state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
         "Season" -> state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
         else -> false
@@ -2360,6 +2420,10 @@ fun CatalogDetail(
                                         ).joinToString(" · "),
                                         modifier = arrivalMetadataSemantics
                                     )
+                                }
+                                // CAT-21: an episode the library doesn't have says so, with its air date, and offers no Play.
+                                app.pictureshow.core.missingItemLabel(headerItem, localToday())?.let { missing ->
+                                    Text(missing, color = CatalogMuted, modifier = arrivalMetadataSemantics.testTag("detail:missing"))
                                 }
                                 // Format badges (4K, HDR10, Dolby Vision, 5.1, Atmos) follow the runtime, from the item's
                                 // default version as the server reported it (T-11).
@@ -3647,9 +3711,13 @@ internal fun CatalogCard(
     showProgress: Boolean = true,
     artworkOverlay: (@Composable BoxScope.() -> Unit)? = null,
     compact: Boolean = false,
-    nameInArtwork: Boolean = false
+    nameInArtwork: Boolean = false,
+    /** Replaces the line under the title: Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
+    subtitle: String? = null
 ) {
     var focused by remember { mutableStateOf(false) }
+    // A missing episode says so wherever its card appears (CAT-21).
+    val line = subtitle ?: app.pictureshow.core.missingItemLabel(item, localToday())
     val selection = Modifier.semantics {
         role = Role.Button
         if (selected != null) this.selected = selected
@@ -3696,7 +3764,9 @@ internal fun CatalogCard(
                 CatalogArtwork(item, account, false, Modifier.width(56.dp).height(84.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(item.name, style = MaterialTheme.typography.titleSmall)
-                    if (item.type ==
+                    if (line != null) {
+                        Text(line, style = MaterialTheme.typography.bodyMedium)
+                    } else if (item.type ==
                         "Episode"
                     ) {
                         Text(
@@ -3786,10 +3856,10 @@ internal fun CatalogCard(
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleSmall
                         )
-                        if (item.type == "Episode") {
+                        if (line != null || item.type == "Episode") {
                             Text(
                                 // The episode's length rides on the same line, so a series page says how long each one is (T-13).
-                                listOfNotNull(
+                                line ?: listOfNotNull(
                                     item.seriesName,
                                     episodeLabel(item),
                                     runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)

@@ -71,6 +71,8 @@ private fun spatialBadge(stream: MediaStream): String? {
  * Morning", "Resume S1:E2 · Arrivals"), so nobody has to guess; a movie or episode keeps "Play" or "Resume from 12:34".
  */
 fun detailPlayLabel(item: MediaItem, playItem: MediaItem?): String {
+    // CAT-21: nothing plays an episode the library doesn't have; the primary says why instead.
+    if (item.isMissing) return "Not in your library"
     val position = playItem?.userData?.playbackPositionTicks ?: 0
     if (playItem == null || item.type !in setOf("Series", "Season") || playItem.type != "Episode") {
         return if (position > 0) resumeLabel(position) else "Play"

@@ -39,7 +39,8 @@ data class HomePreferences(
     val order: List<String> = emptyList(),
     val hidden: Set<String> = emptySet(),
     val pins: List<HomePin> = emptyList(),
-    val mergeWatching: Boolean = false,
+    /** HOME-12: one "Continue watching" row by default (operator 2026-11-16); Settings turns Next up back into its own row. */
+    val mergeWatching: Boolean = true,
     val hiddenSeries: Set<String> = emptySet(),
     val landing: String = "home",
     val libraries: Map<String, LibraryDisplay> = emptyMap()
@@ -83,8 +84,10 @@ fun customizedHome(rows: List<HomeRow>, preferences: HomePreferences): List<Home
     val next = rows.firstOrNull { it.key == "nextup" }?.items.orEmpty().filterNot { it.seriesId in preferences.hiddenSeries }
     val prepared = if (preferences.mergeWatching) {
         val resumedSeries = resume.mapNotNull { it.seriesId }.toSet()
-        val combined = (resume + next.filterNot { it.seriesId in resumedSeries }).distinctBy { it.id }
-        listOf(HomeRow("watching", "Continue watching and next up", combined, wide = true)) +
+        val upcoming = next.filterNot { it.seriesId in resumedSeries || it.id in resume.map(MediaItem::id) }
+        val combined = (resume + upcoming).distinctBy { it.id }
+        val captions = upcoming.associate { it.id to nextCaption(it) }
+        listOf(HomeRow("watching", "Continue watching", combined, wide = true, captions = captions)) +
             rows.filterNot { it.key in listOf("resume", "nextup") }
     } else {
         rows.map { if (it.key == "nextup") it.copy(items = next) else it }
@@ -156,4 +159,36 @@ fun configuredHome(
             items.filterNot { hidePlayed && it.userData.played }
         }
     ).map { row -> if (row.library) row.copy(items = row.items.filterNot { it.id in excluded("MyMediaExcludes") }) else row }
+}
+
+/** A next episode in the merged row says so, "Next · S1:E2", so it isn't mistaken for one already started (HOME-12). */
+fun nextCaption(item: MediaItem): String = if (item.type == "Episode") "Next · ${episodeLabel(item)}" else "Next"
+
+private fun homeTitleKey(text: String?) = (text ?: "").trim().replace(Regex("\\s+"), " ").lowercase()
+
+/**
+ * HOME-13: ids of Home cards whose title is also on Home from another library, so the card names its library (two
+ * copies of a show in "Shows" and "Open Series", or a 4K and a 1080p library). An episode compares its series: two
+ * series ids under one series name. Anything else compares type, name and year across different ids.
+ */
+fun homeDuplicateIds(rows: List<HomeRow>): Set<String> {
+    val items = rows.filterNot { it.library }.flatMap { it.items }.distinctBy { it.id }
+    val episodes = items.filter { it.type == "Episode" && it.seriesId != null && homeTitleKey(it.seriesName).isNotEmpty() }
+        .groupBy { homeTitleKey(it.seriesName) }
+        .values.filter { group -> group.mapNotNull { it.seriesId }.distinct().size > 1 }.flatten()
+    val titles = items.filter { it.type != "Episode" && homeTitleKey(it.name).isNotEmpty() }
+        .groupBy { Triple(it.type, homeTitleKey(it.name), it.productionYear) }
+        .values.filter { group -> group.map { it.id }.distinct().size > 1 }.flatten()
+    return (episodes + titles).map { it.id }.toSet()
+}
+
+/**
+ * The line under a Home card's title. An episode reads "Series · Library · S1:E2", its library only when
+ * [homeDuplicateIds] flagged it and the caption standing in for "S1:E2" in the merged row ("Next · S1:E2").
+ * Anything else names only its library, or nothing.
+ */
+fun homeCardSubtitle(item: MediaItem, caption: String?, library: String?): String? = if (item.type == "Episode") {
+    listOfNotNull(item.seriesName?.takeIf(String::isNotBlank), library, caption ?: episodeLabel(item)).joinToString(" · ")
+} else {
+    listOfNotNull(caption, library).joinToString(" · ").takeIf(String::isNotEmpty)
 }

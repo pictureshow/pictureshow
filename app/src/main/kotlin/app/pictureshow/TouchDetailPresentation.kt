@@ -39,7 +39,9 @@ import app.pictureshow.core.detailReadyCue
 import app.pictureshow.core.detailRequestedActionLabel
 import app.pictureshow.core.detailUnavailableActionLabel
 import app.pictureshow.core.isEmptyContainer
+import app.pictureshow.core.isMissing
 import app.pictureshow.core.isWatched
+import app.pictureshow.core.missingItemLabel
 import app.pictureshow.core.offline.OfflineDetailSource
 import app.pictureshow.core.offline.OfflineServerReach
 import app.pictureshow.core.offline.offlineDetailPlaySource
@@ -174,7 +176,7 @@ internal fun rememberTouchDetailPresentation(
     // A new returning model deliberately clears stale data; the route still names what this page can do.
     val pendingItem = state.item ?: origin
     val pendingCanPlay = when (pendingItem?.type) {
-        "Movie", "Episode", "Video" -> true
+        "Movie", "Episode", "Video" -> pendingItem?.isMissing != true
         "Series" -> state.nextUp.isNotEmpty() || state.episodes.isNotEmpty() || !pendingItem.isEmptyContainer
         "Season" -> state.episodes.isNotEmpty() || !pendingItem.isEmptyContainer
         else -> false
@@ -726,7 +728,23 @@ internal fun rememberTouchDetailPresentation(
         status = status,
         cue = cue,
         additions = additions,
-        actions = actions,
+        // CAT-21: an episode the library doesn't have says so where Play would be, and offers no play, TV or queue action.
+        actions = header?.let { missingItemLabel(it, localToday()) }?.let { missing ->
+            actions.map { action ->
+                when (action.target) {
+                    "primary" -> action.copy(
+                        label = missing,
+                        reserve = listOf(missing),
+                        enabled = false,
+                        state = null,
+                        requested = false,
+                        icon = null
+                    )
+                    "played", "favorite" -> action
+                    else -> action.copy(visible = false)
+                }
+            }
+        } ?: actions,
         onRetry = {
             if (recoveryActive) {
                 if (!retryWorking) {

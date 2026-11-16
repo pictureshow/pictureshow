@@ -26,12 +26,14 @@
           {
             "id": "a",
             "token": "",
-            "expired": true
+            "expired": true,
+            "signedOut": true
           },
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": null,
@@ -69,12 +71,14 @@
           {
             "id": "a",
             "token": "",
-            "expired": true
+            "expired": true,
+            "signedOut": true
           },
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": "b",
@@ -119,12 +123,14 @@
           {
             "id": "a",
             "token": "",
-            "expired": true
+            "expired": true,
+            "signedOut": true
           },
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": null,
@@ -166,7 +172,8 @@
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": null,
@@ -211,12 +218,14 @@
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           },
           {
             "id": "a",
             "token": "fresh-a",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": "a",
@@ -254,12 +263,14 @@
           {
             "id": "a",
             "token": "token-a",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           },
           {
             "id": "b",
             "token": "token-b",
-            "expired": false
+            "expired": false,
+            "signedOut": false
           }
         ],
         "current": "b",
@@ -308,12 +319,14 @@
           {
             "id": "a",
             "token": "",
-            "expired": true
+            "expired": true,
+            "signedOut": true
           },
           {
             "id": "b",
             "token": "",
-            "expired": true
+            "expired": true,
+            "signedOut": true
           }
         ],
         "current": null,

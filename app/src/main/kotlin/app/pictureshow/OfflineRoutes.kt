@@ -24,6 +24,7 @@ import androidx.navigation.navArgument
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.isMissing
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResourceRole
@@ -67,6 +68,8 @@ private fun offlineViewingSettled(
 
 /** Movies and episodes download as themselves; a series offers the season on screen. */
 internal fun offlineOffersDownload(item: MediaItem): Boolean = item.type != "Recording" &&
+    // CAT-21: there is no file to download for an episode the library doesn't have.
+    !item.isMissing &&
     // A container offers episodes; its own file-download flag says nothing about those children.
     (item.type in listOf("Series", "Season") || item.canDownload != false) &&
     !app.pictureshow.core.offline.offlineRecordingIncomplete(item.isInProgress, item.recordingStatus)

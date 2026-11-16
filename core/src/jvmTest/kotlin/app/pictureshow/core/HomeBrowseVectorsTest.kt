@@ -28,6 +28,18 @@ class HomeBrowseVectorsTest {
 
     @Serializable private data class Row(val key: String, val title: String, val items: List<VectorItem>)
 
+    private val wire = Json { ignoreUnknownKeys = true }
+
+    /** Rows whose items are Jellyfin wire items (PascalCase), as the server sends them. */
+    private fun wireRows(input: JsonObject): List<HomeRow> = input.getValue("rows").jsonArray.map { row ->
+        val fields = row.jsonObject
+        HomeRow(
+            fields.getValue("key").jsonPrimitive.content,
+            fields.getValue("title").jsonPrimitive.content,
+            wire.decodeFromJsonElement<List<MediaItem>>(fields.getValue("items"))
+        )
+    }
+
     @Test fun vectors() = kotlinx.coroutines.test.runTest {
         val text = requireNotNull(javaClass.classLoader.getResourceAsStream("grid-vectors/home-browse.json")).bufferedReader().use {
             it.readText()
@@ -142,6 +154,46 @@ class HomeBrowseVectorsTest {
                         }
                     )
                 }
+                "home-rows-captioned" -> {
+                    val rows = wireRows(input)
+                    val preferences = Json.decodeFromJsonElement<HomePreferences>(input.getValue("preferences"))
+                    Json.encodeToJsonElement(
+                        customizedHome(rows, preferences).map { row ->
+                            buildJsonObject {
+                                put("key", row.key)
+                                put("title", row.title)
+                                put("ids", Json.encodeToJsonElement(row.items.map { it.id }))
+                                put("captions", Json.encodeToJsonElement(row.captions))
+                            }
+                        }
+                    )
+                }
+                "home-duplicate-ids" -> Json.encodeToJsonElement(
+                    wireRows(input).let { rows ->
+                        val duplicates = homeDuplicateIds(rows)
+                        rows.flatMap { it.items }.map { it.id }.distinct().filter { it in duplicates }
+                    }
+                )
+                "home-card-subtitle" -> Json.encodeToJsonElement(
+                    homeCardSubtitle(
+                        wire.decodeFromJsonElement<MediaItem>(input.getValue("item")),
+                        input["caption"]?.jsonPrimitive?.contentOrNull,
+                        input["library"]?.jsonPrimitive?.contentOrNull
+                    )
+                )
+                "detail-play-item" -> Json.encodeToJsonElement(
+                    detailPlayItem(
+                        wire.decodeFromJsonElement<MediaItem>(input.getValue("item")),
+                        wire.decodeFromJsonElement<List<MediaItem>>(input.getValue("nextUp")),
+                        wire.decodeFromJsonElement<List<MediaItem>>(input.getValue("episodes"))
+                    )?.id
+                )
+                "missing-item-label" -> Json.encodeToJsonElement(
+                    missingItemLabel(
+                        wire.decodeFromJsonElement<MediaItem>(input.getValue("item")),
+                        input.getValue("today").jsonPrimitive.content
+                    )
+                )
                 "home-user-configuration" -> {
                     val libraries = Json.decodeFromJsonElement<List<MediaItem>>(input.getValue("libraries"))
                     val latest = Json.decodeFromJsonElement<Map<String, List<MediaItem>>>(input.getValue("latest"))
@@ -207,7 +259,7 @@ class HomeBrowseVectorsTest {
                     })
                     val viewer = Account(Server("s", "Cinema", "https://media.example.test", "12.0.0"), User("v", "Viewer"), "fake")
                     accounts.remember(viewer)
-                    val remote = homePreferencesDocument(JsonObject(emptyMap()), HomePreferences(mergeWatching = true))
+                    val remote = homePreferencesDocument(JsonObject(emptyMap()), HomePreferences(mergeWatching = false))
                     val http = HttpClient(
                         MockEngine(
                             io.ktor.client.engine.mock.MockEngineConfig().apply {
@@ -291,7 +343,7 @@ class HomeBrowseVectorsTest {
                 )
                 "editor-move-sequence" -> {
                     val initial = Json.decodeFromJsonElement<List<String>>(input.getValue("visible"))
-                    val preferences = HomePreferences(order = Json.decodeFromJsonElement(input.getValue("order")))
+                    val preferences = HomePreferences(order = Json.decodeFromJsonElement(input.getValue("order")), mergeWatching = false)
                     val result = Json.decodeFromJsonElement<List<Int>>(input.getValue("deltas")).fold(preferences) { draft, delta ->
                         draft.copy(
                             order = moveHomeRow(
@@ -352,7 +404,16 @@ class HomeBrowseVectorsTest {
                 "queue-limit" -> JsonPrimitive(QUEUE_LIMIT)
                 else -> error("Unknown operation")
             }
-            assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)
+            if (case.getValue("operation").jsonPrimitive.content == "reset-home-layout") {
+                // A layout compares as a layout: the encoder may leave out a field that holds its default.
+                assertEquals(
+                    Json.decodeFromJsonElement<HomePreferences>(case.getValue("expected")),
+                    Json.decodeFromJsonElement<HomePreferences>(actual),
+                    case.getValue("id").jsonPrimitive.content
+                )
+            } else {
+                assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)
+            }
         }
     }
     private fun parameters(filters: LibraryFilters) =

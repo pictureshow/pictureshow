@@ -241,7 +241,7 @@ class RecreationTest {
     fun signedOutServerIsOfferedWithInitialFocusAfterRecreationAndOneOkOpensLogin() {
         discovered = listOf(app.pictureshow.core.DiscoveredServer("https://other.example.test", "other", "Other server"))
         launch(signedIn = true, activityRecreation = true)
-        compose.runOnIdle { runBlocking { accounts.signOut(account.key) } }
+        compose.runOnIdle { runBlocking { accounts.removeAccount(account.key) } }
         waitFor("Find your Jellyfin server")
         recreateActivity()
         compose.onNodeWithText("Other server · https://other.example.test").assertExists()
@@ -268,7 +268,7 @@ class RecreationTest {
         val other = account.copy(server = server.copy(id = "other", name = "Other server", url = "https://other.example.test"))
         runBlocking { accounts.remember(other) }
         launch(signedIn = true, activityRecreation = true)
-        compose.runOnIdle { runBlocking { accounts.signOut(account.key) } }
+        compose.runOnIdle { runBlocking { accounts.removeAccount(account.key) } }
         waitFor("Who’s watching?")
         compose.onNodeWithText("Viewer on Other server").assertExists()
         compose.onNodeWithText("Sign in another user on Screen room").assertIsFocused()
@@ -321,7 +321,7 @@ class RecreationTest {
         waitFor("Who’s watching?")
         recreateActivity()
         waitFor("Who’s watching?")
-        compose.runOnIdle { runBlocking { accounts.signOut(account.key) } }
+        compose.runOnIdle { runBlocking { accounts.removeAccount(account.key) } }
         waitFor("Find your Jellyfin server")
     }
 

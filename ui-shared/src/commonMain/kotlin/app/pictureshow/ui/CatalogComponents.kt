@@ -61,7 +61,9 @@ fun CatalogCard(
     tag: String = "touch:card:${item.id}",
     caption: (@Composable () -> Unit)? = null,
     artworkProgress: Float? = null,
-    showProgress: Boolean = true
+    showProgress: Boolean = true,
+    /** Replaces the default line under the title, e.g. Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
+    subtitle: String? = null
 ) {
     Card(
         onClick = onClick,
@@ -107,14 +109,14 @@ fun CatalogCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                val subtitle = if (item.type == "Episode") {
+                val line = subtitle ?: if (item.type == "Episode") {
                     listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
                 } else {
                     listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
                 }
-                if (reserveLines || subtitle.isNotBlank()) {
+                if (reserveLines || line.isNotBlank()) {
                     Text(
-                        subtitle,
+                        line,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

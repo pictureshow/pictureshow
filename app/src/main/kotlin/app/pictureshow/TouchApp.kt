@@ -216,6 +216,8 @@ internal fun TouchPictureshow(
                         }
                     }
 
+                    is ResolvedPlaybackEntry.Missing -> navigateMissingEntry(nav, resolved.item)
+
                     is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
                 }
             }
@@ -269,7 +271,7 @@ internal fun TouchPictureshow(
                     screen,
                     state.snapshot,
                     onSelect = { account ->
-                        if (account.expired && account.key == state.snapshot.currentKey) {
+                        if (account.expired || account.signedOut) {
                             nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}")
                         } else {
                             vm.select(account.key)
@@ -392,7 +394,10 @@ internal fun TouchPictureshow(
                                     editing = true
                                 }
                             },
-                            onWatchDownloads = watchDownloads
+                            onWatchDownloads = watchDownloads,
+                            serverLabel = state.snapshot.serverLabel(account.server),
+                            onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
+                            onSignOut = profile::signOut
                         )
                     }
                 }
@@ -627,6 +632,7 @@ internal fun TouchPictureshow(
                     }
                     val castStored by cast.castEnabled.collectAsStateWithLifecycle()
                     val settingsContext = LocalContext.current
+                    val separateNextUp = rememberSeparateNextUp(catalog, state.snapshot.currentAccount)
                     TouchSettings(
                         screen,
                         accepted,
@@ -645,7 +651,9 @@ internal fun TouchPictureshow(
                         onCastEnabled = cast::setEnabled,
                         onUpdateServices = settingsContext::openPlayServicesListing.takeIf {
                             castState.capability.state == "services-update-required"
-                        }
+                        },
+                        separateNextUp = separateNextUp.first,
+                        onSeparateNextUp = separateNextUp.second
                     )
                 }
             }
