@@ -431,3 +431,39 @@ shared `remote-*` reducers (196 remote vector cases pass); `RemoteAppTests` and 
 Persistent bar: on iOS 26.1+ the remote bar uses the system tab-bar accessory (`tabViewBottomAccessory`), with status on
 the first line and TV name on the second; iOS 18–26.0 get a 64 pt bar above the tab bar. Android's 64 dp bar is the
 reference; the accessory is the native Apple equivalent.
+
+## Watch together / SyncPlay (leg 155 item 4, 2026-11-16)
+
+Reference: [syncplay](../spec/features/syncplay.md). The shared reducers already ran 12 `sync-*` suites; the new
+`SyncSessionEngine` (PictureshowCore) adds the host engine and runs three more host suites through the real engine
+(`sync-socket-readiness`, `sync-membership-registration`, `sync-application`): 406 SyncPlay vector cases in 15 suites.
+`SyncSessionEngineTests` and `SyncPlayAppTests` (app socket, player routing, stay, sign-out, stale generation) cover the adapters.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| SYN-01 | Implemented | Title pages offer Watch together (not for live channels/programs); `WatchTogetherSheet` lists server groups, Join, Create (optionally "and watch this"), Refresh and Leave, gated by `Users/Me` `SyncPlayAccess` through the shared `SyncAccessPresentation` (unknown/failed fails closed). The sheet says other server users can see a group's name and members. Apple TV reaches the same sheet by focus; in the player, the transport bar's Watch together menu holds status, Wait for me and Leave. | VoiceOver/Siri Remote walk of the sheet not recorded. |
+| SYN-02/03/07 | Implemented | Membership, queue and command events go through the shared reducers; the opened viewing carries the membership generation and PlaylistItemId (`SyncStamp`). Play/pause/seek/next/previous from the iOS controls, the tvOS transport bar (rate/time-jump interception), Now Playing, remote commands and title Play become group requests; server commands apply to this player only and are never echoed. | — |
+| SYN-04/05 | Partial | Ready/Buffering from actual renderer facts; GetUtcTime calibration (5 samples) then Ping; drift is corrected by seeking only (>80 ms outside the cooldown rules of `SyncDrift`). | No 0.97/1.03 temporary rates: AVPlayer's output path for exact temporary rates is not qualified, so the engine advertises none (spec allows seek fallback). |
+| SYN-06 | Not qualified | Player chip and sheet show phase and this device's own estimate only. | No rendered-output timing measurement on Apple hardware. |
+| SYN-08 | Implemented | Closing the player keeps membership (`SetIgnoreWait` once) and shows "Still in {group} · Leave" (Watch when there is an entry) on Home, Libraries and title pages; sign-out sends Leave before the token is revoked; account change terminates the old engine; going to the background while video renders pauses and leaves once. Socket registration requires a valid ForceKeepAlive on the current connection. | — |
+| SYN-09 | Implemented | Auto segment-skip and the next-up countdown are off while grouped; natural end runs the shared completion policy (NextItem/SetPlaylistItem/stay). | `sync-completion-reporting` adapter cases are pending (covered by engine/app tests, not the vector adapter). |
+| SYN-10 | Deviation | AirPlay is disabled for a grouped viewing and the route button is hidden; an external route that still activates leaves the group (`EXTERNAL_ROUTE`). There is no "Leave group to AirPlay?" consent prompt yet (`sync-route-consent` pending). | — |
+| SYN-11 | Implemented | Live channels/programs don't offer Watch together; infinite and offline sources are ineligible renderers. | — |
+
+Pending vector suites on Apple, with reasons in `PendingSpecCaseManifest.swift`: `sync-route-consent` (no consent
+prompt, see SYN-10), `sync-rate-presentation` and `sync-speed-intent-origin` (Apple has no playback-speed selection),
+`sync-completion-reporting` (no adapter runner yet), and the `playback-start` SyncPlay case.
+
+Engine behavior beyond the vector text, each with a `SyncSessionEngineTests` case that fails without it (all found in
+the 2026-11-16 two-viewer live check on the demo server: iPhone simulator plus a scripted second viewer):
+- A seek the engine makes (a server command's position or a drift correction) reports only its landing (Ready), not
+  Buffering, unless it stays unready past 3 s. Reporting Buffering made a Waiting server answer with the same Pause,
+  whose seek reported Buffering again: a loop.
+- A paused player already within 1 ms of a commanded Pause position issues no seek (the spec's "aligned scheduled
+  command that issues no renderer seek"). A Paused server answers each Ready with a Pause at the group position, so
+  seeking for it looped Ready/Pause about four times a second.
+- An Unpause accepted for a prepared, aligned player applies without a seek even when its timer fires late.
+- Correction seeks learn a lead (half the residual lag after each landing, at most 0.5 s) so a renderer with seek-to-
+  output latency converges instead of re-seeking behind; the lead resets with each viewing.
+- The renderer reports buffering only for a real stall (empty buffer or AVPlayer waiting to minimise stalls), not
+  AVPlayer's brief "evaluating buffering rate" wait at every start.

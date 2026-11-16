@@ -16,6 +16,7 @@ struct LibrariesView: View {
                 MessageView(symbol: "wifi.exclamationmark", title: "Couldn't load your libraries", message: message, actionTitle: "Try again") { Task { await reload() } }
             case .loaded(let items):
                 ScrollView {
+                    SyncStayBanner(sync: app.syncPlay).padding(.top, 12)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: platformValue(tv: 420, touch: 300)), spacing: Theme.cardSpacing)], spacing: platformValue(tv: 56, touch: 16)) {
                         ForEach(items) { library in LibraryTile(library: library, width: platformValue(tv: 420, touch: nil)) }
                     }

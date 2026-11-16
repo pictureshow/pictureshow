@@ -36,6 +36,7 @@ import PictureshowCore
 
 struct RootView: View {
     @EnvironmentObject private var app: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -46,6 +47,14 @@ struct RootView: View {
             }
         }
         .pageBackground()
+        // SYN-08: video rendering in the background leaves the group once; with no player open the device stays.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background, let controller = app.activeController, let box = controller.syncRenderer,
+                  controller.grouped, controller.isUnpaused else { return }
+            controller.player.pause()
+            app.syncPlay.engine.closeViewing(box, reason: .BACKGROUND_RENDERING)
+            app.syncPlay.changed()
+        }
         .alert("Sign-in not saved", isPresented: Binding(get: { app.storageError != nil }, set: { if !$0 { app.storageError = nil } })) {
             Button("Try again") { app.persist() }
             Button("OK", role: .cancel) { app.storageError = nil }

@@ -96,6 +96,7 @@ struct HomeView: View {
         return ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: Theme.shelfSpacing) {
                 if let featured = featured(content) { HomeHero(item: featured) }
+                SyncStayBanner(sync: app.syncPlay)
                 ForEach(rows) { row in
                     if row.library {
                         LibraryShelf(libraries: row.items)
