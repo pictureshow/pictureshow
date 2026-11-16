@@ -46,6 +46,31 @@ final class RemoteAppTests: XCTestCase {
         XCTAssertEqual(seen, ["SyncPlayCommand"])
     }
 
+    func testAServersKeepAlivePeriodIsClampedSoItCannotCrashTheApp() throws {
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds(NSNumber(value: 60)), 30_000_000_000)
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds(NSNumber(value: Int64.max)), 1_800_000_000_000)
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds(NSNumber(value: 1e300)), 1_800_000_000_000)
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds(NSNumber(value: -5)), 2_500_000_000)
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds(NSNumber(value: Double.nan)), 30_000_000_000)
+        XCTAssertEqual(ServerSocket.keepAliveNanoseconds("sixty"), 30_000_000_000)
+        let app = try model()
+        app.socket.receiveForTesting(#"{"MessageType":"ForceKeepAlive","Data":1e300}"#)
+        app.socket.receiveForTesting(#"{"MessageType":"ForceKeepAlive","Data":99999999999999999999}"#)
+    }
+
+    #if os(iOS)
+    func testSigningOutClosesAChooserOpenedUnderTheOldAccount() throws {
+        let app = try model()
+        app.remote.choose()
+        XCTAssertTrue(app.remote.choosing)
+        app.remote.accountChanged()
+        XCTAssertTrue(app.remote.choosing, "the same account keeps its chooser")
+        app.signOut(try XCTUnwrap(app.account))
+        XCTAssertFalse(app.remote.choosing, "a chooser from the old account must not attach a TV under the new one")
+        XCTAssertNil(app.remote.pendingPlay)
+    }
+    #endif
+
     func testAnotherViewersCommandIsRefusedAndOpensNothing() throws {
         let app = try model()
         app.socket.receiveForTesting(message("Play", from: stranger, ["PlayCommand": "PlayNow", "ItemIds": [viewer]]))

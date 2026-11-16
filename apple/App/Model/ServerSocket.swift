@@ -76,14 +76,20 @@ final class ServerSocket: ObservableObject {
                 state = .open; delay = 1
                 log.info("socket open")
                 for hook in onOpen { await hook(account) }
+                // An account switch while the hooks ran cancelled this loop; a newer socket owns everything now.
+                guard !Task.isCancelled, task === socket else { socket.cancel(with: .goingAway, reason: nil); return }
                 deliver(first)
-                while !Task.isCancelled { deliver(try await socket.receive()) }
+                while !Task.isCancelled {
+                    let message = try await socket.receive()
+                    guard !Task.isCancelled, task === socket else { break }
+                    deliver(message)
+                }
             } catch {
                 log.info("socket closed: \(error.localizedDescription, privacy: .public)")
             }
+            guard !Task.isCancelled, task === socket else { socket.cancel(with: .goingAway, reason: nil); return }
             keepAlive?.cancel(); keepAlive = nil
-            if task === socket { task = nil }
-            guard !Task.isCancelled else { return }
+            task = nil
             state = .connecting
             try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
             delay = min(delay * 2, 30)
@@ -100,17 +106,25 @@ final class ServerSocket: ObservableObject {
         guard let data = text.data(using: .utf8), let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let type = object["MessageType"] as? String else { return }
         if type == "ForceKeepAlive" {
-            let seconds = max(5, (object["Data"] as? NSNumber)?.intValue ?? 60)
+            let interval = Self.keepAliveNanoseconds(object["Data"])
             keepAlive?.cancel()
             keepAlive = Task { [weak self] in
                 while !Task.isCancelled {
                     self?.send(type: "KeepAlive")
-                    try? await Task.sleep(nanoseconds: UInt64(seconds / 2) * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: interval)
                 }
             }
             return
         }
         for (types, handler) in handlers.values where types.contains(type) { handler(type, text, object) }
+    }
+
+    /// Half the server's keep-alive period, with the period clamped to 5 s…1 h: the value comes from the server, and an
+    /// unchecked huge or negative one would overflow the arithmetic and crash the app.
+    nonisolated static func keepAliveNanoseconds(_ data: Any?) -> UInt64 {
+        let raw = (data as? NSNumber)?.doubleValue ?? 60
+        let seconds = raw.isFinite ? min(max(5, raw), 3600) : 60
+        return UInt64(seconds / 2 * 1_000_000_000)
     }
 
     /// For tests: delivers a message as if it had arrived on the socket.

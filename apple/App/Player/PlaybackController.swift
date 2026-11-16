@@ -588,6 +588,8 @@ extension PlaybackController {
         player.replaceCurrentItem(with: nil)
         cueTask?.cancel()
         detachObservers()
+        nowPlaying.detach()
+        if app.activeController === self { app.activeController = nil }
         app.playLocal(next)
     }
 }

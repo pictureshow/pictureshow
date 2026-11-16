@@ -39,6 +39,7 @@ extension JellyfinClient {
         if let index { command["index"] = index }
         if let level { command["level"] = level }
         let wire = try RemoteReducers.request(target: target.reducerValue, command: command)
+        if let reason = wire["rejection"] as? String { throw RemoteCommandRefused(reason: reason) }
         guard let requestValue = wire["request"] as? [String: Any], let path = requestValue["path"] as? String, let method = requestValue["method"] as? String, let query = requestValue["query"] as? [String: String] else { throw ClientError.invalidResponse }
         var outcome: PlaybackHTTPOutcome?
         do {
@@ -50,6 +51,11 @@ extension JellyfinClient {
         guard let outcome else { throw ClientError.invalidResponse }
         return outcome
     }
+}
+
+/// The shared remote reducer refused a command before anything was sent (e.g. `unsupported`, an invalid index).
+public struct RemoteCommandRefused: Error, Equatable {
+    public let reason: String
 }
 
 extension JellyfinClient {

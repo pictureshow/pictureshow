@@ -24,14 +24,13 @@ final class RemoteControl: ObservableObject {
     private(set) var pendingPlay: (item: MediaItem, ticks: Int64?)?
 
     private weak var appModel: AppModel?
-    private var app: AppModel! { appModel }
     private var accountKey: String?
     private var session: String?
     private var device: String?
     private var poller: Task<Void, Never>?
     private var awaiting: (item: String, since: Date)?
 
-    init(app: AppModel) { self.appModel = app }
+    init(app: AppModel) { self.appModel = app; accountKey = app.account?.key }
 
     var now: [String: Any]? { target?.reducerValue["now"] as? [String: Any] }
     var commands: [String] { target?.reducerValue["commands"] as? [String] ?? [] }
@@ -55,18 +54,19 @@ final class RemoteControl: ObservableObject {
     }
 
     func targets() async throws -> [RemotePlaybackTarget] {
-        guard let account = app.account else { return [] }
+        guard let app = appModel, let account = app.account else { return [] }
         return try await app.client(for: account).remotePlaybackTargets(account: account)
     }
 
     func attach(_ chosen: RemotePlaybackTarget) {
-        guard let account = app.account else { return }
+        guard let app = appModel, let account = app.account else { return }
         accountKey = account.key
         session = chosen.id
         device = chosen.reducerValue["device"] as? String
         target = chosen
         link = .attached
         status = nil
+        awaiting = nil
         choosing = false
         startPolling()
         if let pending = pendingPlay {
@@ -85,7 +85,11 @@ final class RemoteControl: ObservableObject {
 
     /// Account switch or sign-out detaches at once (REM-07).
     func accountChanged() {
-        if link != .none, app.account?.key != accountKey || app.account?.isSignedIn != true { disconnect() }
+        guard appModel?.account?.key != accountKey || appModel?.account?.isSignedIn != true else { return }
+        // A chooser opened under the old account must not attach that account's TV under the new one.
+        choosing = false; pendingPlay = nil
+        if link != .none { disconnect() }
+        accountKey = appModel?.account?.key
     }
 
     // MARK: Commands
@@ -118,18 +122,22 @@ final class RemoteControl: ObservableObject {
     var supportsVolume: Bool { commands.contains("SetVolume") && !(now?["volume"] is NSNull) }
 
     private func send(_ op: String, itemID: String? = nil, ticks: Int64? = nil, index: Int? = nil, level: Int? = nil, sending: String? = nil) {
-        guard link == .attached, let target, let account = app.account else { return }
+        guard link == .attached, let target, let app = appModel, let account = app.account else { return }
         if let sending { status = sending }
-        let client = app.client(for: account), name = target.name
+        let client = app.client(for: account), name = target.name, sentTo = session
         Task {
+            let result: String?
             do {
                 let outcome = try await client.sendRemotePlayback(account: account, target: target, operation: op, itemID: itemID, ticks: ticks, index: index, level: level)
-                if !outcome.succeeded { status = "\(name) didn't take that\(outcome.status.map { " (\($0))" } ?? "")."; awaiting = nil }
-                else if awaiting == nil { status = nil }
+                result = outcome.succeeded ? nil : "\(name) didn't take that\(outcome.status.map { " (\($0))" } ?? "")."
+            } catch let refused as RemoteCommandRefused {
+                result = refused.reason == "unsupported" ? "\(name) can't do that." : "\(name) didn't take that (\(refused.reason))."
             } catch {
-                status = "Couldn't reach \(name). Check that Pictureshow is open on it."
-                awaiting = nil
+                result = "Couldn't reach \(name). Check that Pictureshow is open on it."
             }
+            // The viewer may have disconnected or picked another TV meanwhile; this result belongs to the old one.
+            guard link == .attached, session == sentTo else { return }
+            if let result { status = result; awaiting = nil } else if awaiting == nil { status = nil }
             try? await Task.sleep(nanoseconds: 600_000_000)
             await refresh()
         }

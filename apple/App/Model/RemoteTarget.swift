@@ -13,11 +13,12 @@ import PictureshowCore
 @MainActor
 final class RemoteTarget {
     private weak var appModel: AppModel?
-    private var app: AppModel! { appModel }
     private var state: [String: Any] = [:]
     private var subscription: ServerSocket.Subscription?
     private var ticker: Task<Void, Never>?
     private var socketWatch: Any?
+    /// Bumped by every open and stop, so a title fetched after a later Stop or Play is dropped, not opened.
+    private var openRequest = 0
     private let log = Logger(subsystem: "app.pictureshow", category: "remote")
 
     /// What this device obeys. Apple TV's volume belongs to the TV or receiver, so it isn't offered there.
@@ -47,7 +48,7 @@ final class RemoteTarget {
     }
 
     func accountChanged() {
-        guard let account = app.account, account.isSignedIn else { state = [:]; return }
+        guard let app = appModel, let account = app.account, account.isSignedIn else { state = [:]; return }
         let server = account.server.url.absoluteString
         if state.isEmpty {
             state = ["server": server, "viewer": account.userId, "connected": app.socket.state == .open]
@@ -65,12 +66,13 @@ final class RemoteTarget {
     private(set) var lastEffects: [String] = []
 
     private func opened(_ account: Account) async {
+        guard let app = appModel else { return }
         try? await app.client(for: account).postCapabilities(account: account, remoteEnabled: true, commands: Self.commands)
     }
 
     /// The viewing changed (opened, ready, paused, sought, closed): the reducer may release held commands.
     func viewingChanged() {
-        reduce(["op": "viewing", "viewing": Self.viewing(app.activeController) as Any? ?? NSNull(), "nowMs": Self.nowMs()])
+        reduce(["op": "viewing", "viewing": Self.viewing(appModel?.activeController) as Any? ?? NSNull(), "nowMs": Self.nowMs()])
     }
 
     static func viewing(_ c: PlaybackController?) -> [String: Any]? {
@@ -82,7 +84,7 @@ final class RemoteTarget {
     private func message(_ text: String) {
         guard let parsed = try? RemoteReducers.reduce(suite: "remote-wire", operation: "parse", state: [:], event: ["text": text]) else { return }
         // The reducer judges against the latest viewing, so refresh it first.
-        if let v = Self.viewing(app.activeController) { state["viewing"] = v }
+        if let v = Self.viewing(appModel?.activeController) { state["viewing"] = v }
         reduce(["op": "message", "message": parsed, "nowMs": Self.nowMs()])
     }
 
@@ -102,6 +104,7 @@ final class RemoteTarget {
 
     private func apply(_ effect: [String: Any]) {
         let op = effect["op"] as? String ?? ""
+        guard let app = appModel else { return }
         let controller = app.activeController
         let generation = effect["generation"] as? String ?? "0"
         switch op {
@@ -109,19 +112,26 @@ final class RemoteTarget {
             let items = effect["items"] as? [String] ?? [], index = effect["index"] as? Int ?? 0
             guard items.indices.contains(index), let account = app.account else { return }
             let ticks = (effect["ticks"] as? String).flatMap(Int64.init)
-            Task {
+            let client = app.client(for: account)
+            openRequest += 1
+            let request = openRequest
+            Task { [weak self, weak app] in
                 do {
-                    let item = try await app.client(for: account).item(account: account, id: items[index])
+                    let item = try await client.item(account: account, id: items[index])
+                    // A later Stop or Play, a reconnect, or an account switch while fetching makes this open stale.
+                    guard let self, let app, self.openRequest == request, self.state["generation"] as? String == generation,
+                          app.account?.key == account.key else { return }
                     app.activeController?.close()
                     app.player = PlayerRequest(account: account, item: item, fromStart: ticks == 0, startTicks: ticks)
                 } catch {
-                    reduce(["op": "resolved", "generation": generation, "ok": false])
+                    self?.reduce(["op": "resolved", "generation": generation, "ok": false])
                 }
             }
-        case "pause": controller?.player.pause(); controller?.reportNow()
-        case "unpause": controller?.player.play(); controller?.reportNow()
+        // The controller reports the new state when the player's status changes; reporting here would send the old one.
+        case "pause": controller?.player.pause()
+        case "unpause": controller?.player.play()
         case "report": controller?.reportNow()
-        case "stop": controller?.close(); app.player = nil
+        case "stop": openRequest += 1; controller?.close(); app.player = nil
         case "next": controller?.playNext()
         case "previous": controller?.seek(to: 0)
         case "seek":
