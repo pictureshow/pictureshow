@@ -8981,6 +8981,447 @@
         "nowMs": 5000
       },
       "expected": false
+    },
+    {
+      "id": "touch-back-sheet-first",
+      "operation": "touch-player-back",
+      "input": {
+        "sheetOpen": true,
+        "menuOpen": false
+      },
+      "expected": "close-sheet"
+    },
+    {
+      "id": "touch-back-menu-next",
+      "operation": "touch-player-back",
+      "input": {
+        "sheetOpen": false,
+        "menuOpen": true
+      },
+      "expected": "close-menu"
+    },
+    {
+      "id": "touch-back-controls-showing-exits",
+      "operation": "touch-player-back",
+      "input": {
+        "sheetOpen": false,
+        "menuOpen": false
+      },
+      "expected": "exit"
+    },
+    {
+      "id": "touch-pip-playing-video",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": true
+    },
+    {
+      "id": "touch-pip-never-on-tv",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": true,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-device-without-feature",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": false,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-no-video-yet",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": false,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-error-card",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": true,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-loading-next",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": true,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-leaving",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": true,
+        "atEnd": false,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-finished",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": true,
+        "handedOff": false
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-handed-off",
+      "operation": "touch-pip-allowed",
+      "input": {
+        "tvInterface": false,
+        "deviceSupports": true,
+        "hasVideo": true,
+        "error": false,
+        "switching": false,
+        "exiting": false,
+        "atEnd": false,
+        "handedOff": true
+      },
+      "expected": false
+    },
+    {
+      "id": "touch-pip-actions-playing",
+      "operation": "touch-pip-actions",
+      "input": {
+        "primary": "pause",
+        "canSeekBack": true,
+        "canSeekForward": true
+      },
+      "expected": [
+        {
+          "action": "back10",
+          "enabled": true
+        },
+        {
+          "action": "pause",
+          "enabled": true
+        },
+        {
+          "action": "forward10",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "touch-pip-actions-paused",
+      "operation": "touch-pip-actions",
+      "input": {
+        "primary": "play",
+        "canSeekBack": true,
+        "canSeekForward": true
+      },
+      "expected": [
+        {
+          "action": "back10",
+          "enabled": true
+        },
+        {
+          "action": "play",
+          "enabled": true
+        },
+        {
+          "action": "forward10",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "touch-pip-actions-live-no-timeshift",
+      "operation": "touch-pip-actions",
+      "input": {
+        "primary": null,
+        "canSeekBack": false,
+        "canSeekForward": false
+      },
+      "expected": [
+        {
+          "action": "back10",
+          "enabled": false
+        },
+        {
+          "action": "play",
+          "enabled": false
+        },
+        {
+          "action": "forward10",
+          "enabled": false
+        }
+      ]
+    },
+    {
+      "id": "touch-pip-actions-live-at-edge",
+      "operation": "touch-pip-actions",
+      "input": {
+        "primary": "pause",
+        "canSeekBack": true,
+        "canSeekForward": false
+      },
+      "expected": [
+        {
+          "action": "back10",
+          "enabled": true
+        },
+        {
+          "action": "pause",
+          "enabled": true
+        },
+        {
+          "action": "forward10",
+          "enabled": false
+        }
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-1080p",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 1920,
+        "height": 1080,
+        "pixelRatio": 1.0
+      },
+      "expected": [
+        16,
+        9
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-unknown",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 0,
+        "height": 0,
+        "pixelRatio": 1.0
+      },
+      "expected": [
+        16,
+        9
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-scope-clamped",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 2560,
+        "height": 1024,
+        "pixelRatio": 1.0
+      },
+      "expected": [
+        239,
+        100
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-tall-clamped",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 720,
+        "height": 1920,
+        "pixelRatio": 1.0
+      },
+      "expected": [
+        100,
+        239
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-anamorphic-dvd",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 720,
+        "height": 480,
+        "pixelRatio": 1.1851851851851851
+      },
+      "expected": [
+        853,
+        480
+      ]
+    },
+    {
+      "id": "touch-pip-aspect-4x3",
+      "operation": "touch-pip-aspect",
+      "input": {
+        "width": 1440,
+        "height": 1080,
+        "pixelRatio": 0
+      },
+      "expected": [
+        4,
+        3
+      ]
+    },
+    {
+      "id": "quick-connect-code-pasted-with-spaces",
+      "operation": "quick-connect-code",
+      "input": {
+        "input": " abc 123\n"
+      },
+      "expected": {
+        "normalized": "ABC123",
+        "valid": true
+      }
+    },
+    {
+      "id": "quick-connect-code-too-short",
+      "operation": "quick-connect-code",
+      "input": {
+        "input": "abc12"
+      },
+      "expected": {
+        "normalized": "ABC12",
+        "valid": false
+      }
+    },
+    {
+      "id": "quick-connect-code-too-long",
+      "operation": "quick-connect-code",
+      "input": {
+        "input": "ABC1234"
+      },
+      "expected": {
+        "normalized": "ABC1234",
+        "valid": false
+      }
+    },
+    {
+      "id": "quick-connect-code-punctuation-not-guessed",
+      "operation": "quick-connect-code",
+      "input": {
+        "input": "ABC-12"
+      },
+      "expected": {
+        "normalized": "ABC-12",
+        "valid": false
+      }
+    },
+    {
+      "id": "quick-connect-code-non-ascii-letter",
+      "operation": "quick-connect-code",
+      "input": {
+        "input": "ÄBC123"
+      },
+      "expected": {
+        "normalized": "ÄBC123",
+        "valid": false
+      }
+    },
+    {
+      "id": "quick-connect-approval-approved",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 200,
+        "approved": true
+      },
+      "expected": "APPROVED"
+    },
+    {
+      "id": "quick-connect-approval-server-said-no",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 200,
+        "approved": false
+      },
+      "expected": "WRONG_OR_EXPIRED"
+    },
+    {
+      "id": "quick-connect-approval-unknown-code",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 404,
+        "approved": null
+      },
+      "expected": "WRONG_OR_EXPIRED"
+    },
+    {
+      "id": "quick-connect-approval-token-refused",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 401,
+        "approved": null
+      },
+      "expected": "SIGN_IN_REQUIRED"
+    },
+    {
+      "id": "quick-connect-approval-server-error",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 500,
+        "approved": null
+      },
+      "expected": "FAILED"
+    },
+    {
+      "id": "quick-connect-approval-unreadable-body",
+      "operation": "quick-connect-approval-result",
+      "input": {
+        "status": 200,
+        "approved": null
+      },
+      "expected": "FAILED"
     }
   ]
 }

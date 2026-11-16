@@ -10,6 +10,7 @@ struct DetailContent {
     var seasons: [MediaItem] = []
     /// For a series: the next episode to watch.
     var nextUp: MediaItem?
+    var episodes: [MediaItem] = []
     /// Children of a collection.
     var children: [MediaItem] = []
     var similar: [MediaItem] = []
@@ -52,9 +53,13 @@ struct DetailView: View {
                 async let next = try? client.nextUp(account: account, seriesID: item.id)
                 result.seasons = try await seasons
                 result.nextUp = await next?.first
+                if result.nextUp?.isMissing != false {
+                    result.episodes = try await client.seriesEpisodes(account: account, seriesID: item.id)
+                }
             case "Season":
                 if let series = item.seriesId { result.seasons = (try? await client.seasons(account: account, seriesID: series)) ?? [item] }
                 else { result.seasons = [item] }
+                result.episodes = try await client.episodes(account: account, seriesID: item.seriesId ?? item.id, seasonID: item.id)
             case "BoxSet":
                 result.children = try await client.browsePage(account: account, parentID: item.id, limit: 200, sortBy: "PremiereDate,SortName").items
             default: break
@@ -74,6 +79,9 @@ struct DetailPage: View {
     @EnvironmentObject private var app: AppModel
     let content: DetailContent
     private var item: MediaItem { content.item }
+    /// True once the header has scrolled under the navigation bar: the bar then gets its material and the title,
+    /// so scrolled text never runs under the status bar unprotected.
+    @State private var pastHeader = false
 
     var body: some View {
         ScrollView {
@@ -91,13 +99,21 @@ struct DetailPage: View {
         }
         #if os(tvOS)
         .ignoresSafeArea(edges: .top)
+        #else
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 300 } action: { _, past in
+            withAnimation(.easeInOut(duration: 0.2)) { pastHeader = past }
+        }
+        .navigationTitle(pastHeader ? item.name : "")
+        .toolbarBackgroundVisibility(pastHeader ? .visible : .hidden, for: .navigationBar)
         #endif
     }
 
-    private var playable: Bool { ["Movie", "Episode", "Video", "MusicVideo"].contains(item.type) }
+    private var playable: Bool { CatalogPresentation.offersPlayback(item) }
 
     /// What the main button plays: the item itself, or for a series the next episode.
-    private var playTarget: MediaItem? { playable ? item : content.nextUp }
+    private var playTarget: MediaItem? {
+        Catalog.detailPlayItem(item: item, nextUp: content.nextUp.map { [$0] } ?? [], episodes: content.episodes)
+    }
 
     private var header: some View {
         ZStack(alignment: .bottomLeading) {
@@ -119,14 +135,19 @@ struct DetailPage: View {
                 if let overview = item.overview?.nilIfBlank {
                     Text(overview)
                         .font(platformValue(tv: .callout, touch: .subheadline))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(platformValue(tv: 4, touch: 6))
                         .frame(maxWidth: platformValue(tv: 1100, touch: 640), alignment: .leading)
+                }
+                if let missing = CatalogPresentation.missingLabel(item) {
+                    Text(missing).font(.headline).foregroundStyle(Theme.muted)
                 }
                 actions.padding(.top, 6)
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .heroScrim()
         }
     }
 
@@ -177,7 +198,7 @@ struct DetailPage: View {
                 .primaryAction()
             }
             HStack(spacing: 12) {
-                if playTarget != nil, playable, item.userData.playbackPositionTicks > 0 { restartButton }
+                if playTarget != nil, CatalogPresentation.offersRestart(item) { restartButton }
                 secondaryButtons
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -191,7 +212,7 @@ struct DetailPage: View {
                 Label(playLabel(target), systemImage: "play.fill")
             }
             .primaryAction()
-            if playable, item.userData.playbackPositionTicks > 0 { restartButton }
+            if CatalogPresentation.offersRestart(item) { restartButton }
         }
     }
 
@@ -201,6 +222,10 @@ struct DetailPage: View {
     }
 
     @ViewBuilder private var secondaryButtons: some View {
+        #if os(iOS)
+        if playable { DownloadControl(item: item) }
+        if let target = playTarget { PlayOnButton(remote: app.remote, item: target) }
+        #endif
         Button { Task { await toggleWatched() } } label: {
             Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
         }
@@ -214,13 +239,7 @@ struct DetailPage: View {
     }
 
     private func playLabel(_ target: MediaItem) -> String {
-        let resume = target.userData.playbackPositionTicks > 0
-        if target.id != item.id {
-            let label = Format.episode(target)
-            return (resume ? "Resume " : "Play ") + (label.isEmpty ? target.name : label)
-        }
-        if resume, let left = Format.remaining(target) { return "Resume · \(left)" }
-        return resume ? "Resume" : "Play"
+        CatalogPresentation.playLabel(container: item, target: target)
     }
 
     private func toggleWatched() async {
@@ -245,14 +264,23 @@ struct SeasonBrowser: View {
     @State private var selected: String?
     @State private var episodes: [MediaItem] = []
     @State private var loading = false
+    @State private var loadError: String?
+    @FocusState private var focusedSeason: String?
 
     var body: some View {
         if seasons.isEmpty { EmptyView() } else {
             VStack(alignment: .leading, spacing: 16) {
-                if seasons.count > 1 {
+                if seasons.count > 1 || series.type == "Series" {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(seasons) { season in
+                                #if os(tvOS)
+                                NavigationLink(value: Route.item(season)) { Text(season.name).font(.callout.weight(.semibold)) }
+                                    .buttonStyle(.bordered)
+                                    .focused($focusedSeason, equals: season.id)
+                                    .tint(season.id == current ? Theme.accent : nil)
+                                    .onChange(of: focusedSeason) { _, id in if let id { selected = id } }
+                                #else
                                 Button { selected = season.id } label: {
                                     Text(season.name).font(.callout.weight(.semibold))
                                         #if !os(tvOS)
@@ -268,6 +296,7 @@ struct SeasonBrowser: View {
                                 .buttonStyle(.plain)
                                 #endif
                                 .accessibilityAddTraits(season.id == current ? .isSelected : [])
+                                #endif
                             }
                         }
                         .padding(.horizontal, Theme.gutter)
@@ -282,7 +311,19 @@ struct SeasonBrowser: View {
                 } else if let only = seasons.first {
                     SectionHeader(title: only.name).padding(.horizontal, Theme.gutter)
                 }
-                if loading && episodes.isEmpty {
+                #if os(iOS)
+                if !loading, loadError == nil, let season = seasons.first(where: { $0.id == current }),
+                   let target = Catalog.detailPlayItem(item: season, nextUp: [], episodes: episodes) {
+                    Button { app.play(target) } label: {
+                        Label(CatalogPresentation.playLabel(container: season, target: target), systemImage: "play.fill")
+                    }
+                    .primaryAction()
+                    .padding(.horizontal, Theme.gutter)
+                }
+                #endif
+                if let loadError {
+                    MessageView(symbol: "exclamationmark.triangle", title: "Couldn't load episodes", message: loadError, actionTitle: "Try again") { Task { await load() } }
+                } else if loading && episodes.isEmpty {
                     ProgressView().padding(.horizontal, Theme.gutter)
                 } else {
                     episodeList
@@ -300,10 +341,19 @@ struct SeasonBrowser: View {
             HStack(alignment: .top, spacing: Theme.cardSpacing) {
                 ForEach(episodes) { episode in
                     VStack(alignment: .leading, spacing: 14) {
-                        Button { app.play(episode) } label: { WideArtworkOnly(item: episode, width: Theme.wideWidth) }
+                        Group {
+                            if CatalogPresentation.offersPlayback(episode) {
+                                Button { app.play(episode) } label: { WideArtworkOnly(item: episode, width: Theme.wideWidth) }
+                            } else {
+                                NavigationLink(value: Route.item(episode)) { WideArtworkOnly(item: episode, width: Theme.wideWidth) }
+                            }
+                        }
                             .buttonStyle(.card)
                             .contextMenu { ItemActions(item: episode) ; NavigationLink(value: Route.item(episode)) { Label("Details", systemImage: "info.circle") } }
                         CardCaption(item: episode, wide: true, width: Theme.wideWidth, compactTitle: true)
+                        if let missing = CatalogPresentation.missingLabel(episode) {
+                            Text(missing).font(.caption).foregroundStyle(Theme.muted).frame(width: Theme.wideWidth, alignment: .leading)
+                        }
                         if let overview = episode.overview?.nilIfBlank {
                             Text(overview).font(.caption2).foregroundStyle(Theme.muted).lineLimit(3).frame(width: Theme.wideWidth, alignment: .leading)
                         }
@@ -326,9 +376,20 @@ struct SeasonBrowser: View {
         guard let season = current, let account = app.account, let client = app.client else { return }
         let seriesID = series.type == "Series" ? series.id : (series.seriesId ?? series.id)
         loading = true
-        defer { loading = false }
-        if let list = try? await client.episodes(account: account, seriesID: seriesID, seasonID: season), !Task.isCancelled {
+        loadError = nil
+        episodes = []
+        do {
+            let list = try await client.episodes(account: account, seriesID: seriesID, seasonID: season)
+            guard !Task.isCancelled, current == season else { return }
             episodes = list
+            loading = false
+        } catch is CancellationError {
+        } catch ClientError.invalidCredentials {
+            app.expire(account)
+        } catch {
+            guard !Task.isCancelled, current == season else { return }
+            loadError = error.localizedDescription
+            loading = false
         }
     }
 }
@@ -339,15 +400,16 @@ struct EpisodeRow: View {
     let episode: MediaItem
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Button { app.play(episode) } label: {
-                ArtworkImage(url: app.account.flatMap { app.client?.artworkURL(account: $0, item: episode, kind: .wide, width: 480) }, placeholderSymbol: "tv")
-                    .frame(width: 168, height: 94.5)
-                    .overlay { Image(systemName: "play.fill").font(.title3).foregroundStyle(.white).shadow(radius: 4) }
-                    .overlay(alignment: .bottom) { if episode.progress > 0, !episode.isWatched { ProgressStrip(value: episode.progress).padding(6) } }
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Group {
+                if CatalogPresentation.offersPlayback(episode) {
+                    Button { app.play(episode) } label: { thumbnail }
+                        .accessibilityLabel("Play \(Format.episode(episode)) \(episode.name)")
+                } else {
+                    NavigationLink(value: Route.item(episode)) { thumbnail }
+                        .accessibilityLabel("Details for \(Format.episode(episode)) \(episode.name)")
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play \(Format.episode(episode)) \(episode.name)")
             NavigationLink(value: Route.item(episode)) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -356,7 +418,7 @@ struct EpisodeRow: View {
                         if episode.isWatched { Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(Theme.accent).accessibilityLabel("Watched") }
                     }
                     .lineLimit(2)
-                    if let detail = [Format.runtime(episode.runTimeTicks), Format.remaining(episode)].compactMap({ $0 }).first {
+                    if let detail = [CatalogPresentation.missingLabel(episode), Format.runtime(episode.runTimeTicks), Format.remaining(episode)].compactMap({ $0 }).first {
                         Text(detail).font(.caption).foregroundStyle(Theme.muted)
                     }
                     if let overview = episode.overview?.nilIfBlank {
@@ -370,6 +432,14 @@ struct EpisodeRow: View {
         }
         .contextMenu { ItemActions(item: episode) }
     }
+    private var thumbnail: some View {
+        ArtworkImage(url: app.account.flatMap { app.client?.artworkURL(account: $0, item: episode, kind: .wide, width: 480) }, placeholderSymbol: "tv")
+            .frame(width: 168, height: 94.5)
+            .overlay { if CatalogPresentation.offersPlayback(episode) { Image(systemName: "play.fill").font(.title3).foregroundStyle(.white).shadow(radius: 4) } }
+            .overlay(alignment: .bottom) { if episode.progress > 0, episode.isResumable { ProgressStrip(value: episode.progress).padding(6) } }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
 }
 
 /// Cast and crew with headshots.
@@ -440,6 +510,8 @@ struct CastShelf: View {
 /// File, video, audio and subtitle facts: what a viewer checks when something won't play well.
 struct MediaInfoSection: View {
     let item: MediaItem
+    @State private var showAllSubtitles = false
+    static let subtitlePreview = 4
     var body: some View {
         let source = item.mediaSources[0]
         let video = source.mediaStreams.first { $0.type == "Video" }
@@ -451,7 +523,24 @@ struct MediaInfoSection: View {
                 row("File", [source.container?.uppercased(), source.bitrate.map { String(format: "%.1f Mbps", Double($0) / 1_000_000) }].compactMap { $0 }.joined(separator: " · "))
                 if let video { row("Video", video.label) }
                 if !audio.isEmpty { row("Audio", audio.map(\.label).joined(separator: "\n")) }
-                if !subtitles.isEmpty { row("Subtitles", subtitles.map(\.label).joined(separator: "\n")) }
+                if !subtitles.isEmpty {
+                    // A file can carry dozens of subtitle tracks; list a few and offer the rest.
+                    let shown = showAllSubtitles ? subtitles : Array(subtitles.prefix(Self.subtitlePreview))
+                    row("Subtitles", shown.map(\.label).joined(separator: "\n"))
+                    if subtitles.count > Self.subtitlePreview {
+                        GridRow {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                            #if os(tvOS)
+                            // The section takes focus as one block on TV, so name the rest instead of a button.
+                            Text("and \(subtitles.count - Self.subtitlePreview) more").foregroundStyle(Theme.muted)
+                            #else
+                            Button(showAllSubtitles ? "Show fewer" : "Show all \(subtitles.count) subtitle tracks") { showAllSubtitles.toggle() }
+                                .font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                                .buttonStyle(.plain).frame(minHeight: 44)
+                            #endif
+                        }
+                    }
+                }
             }
             .font(.caption)
         }
@@ -513,3 +602,18 @@ struct PersonView: View {
         .task { await items.load(app: app) { account, client in try await client.personItems(account: account, personID: personID, limit: 200).items } }
     }
 }
+
+#if os(iOS)
+/// Starts this title on a TV (REM-03): the attached one, or one the viewer picks.
+private struct PlayOnButton: View {
+    @ObservedObject var remote: RemoteControl
+    let item: MediaItem
+    var body: some View {
+        Button { remote.playOn(item) } label: {
+            Label(remote.link == .attached ? "Play on \(remote.targetName)" : "Play on TV", systemImage: "tv")
+        }
+        .secondaryAction()
+        .accessibilityIdentifier("play-on")
+    }
+}
+#endif

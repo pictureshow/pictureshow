@@ -148,7 +148,7 @@ class TouchPlayerControlsTest {
     @Test fun hiddenControlsLeaveTheAccessibilityTree() {
         launch()
         compose.onNodeWithContentDescription("Back 10 seconds").assertExists()
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("touch:gestures").performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithContentDescription("Back 10 seconds", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithContentDescription("Forward 10 seconds", useUnmergedTree = true).assertDoesNotExist()
@@ -160,7 +160,7 @@ class TouchPlayerControlsTest {
     // Why a tree dump can list them: any accessibility client coming up, uiautomator too, brings the controls back on purpose.
     @Test fun anAccessibilityClientArrivingBringsHiddenControlsBack() {
         launch()
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("touch:gestures").performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithContentDescription("Back 10 seconds", useUnmergedTree = true).assertDoesNotExist()
         compose.runOnIdle {
@@ -332,14 +332,14 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:sheet:Chapters").assertDoesNotExist()
     }
 
-    @Test fun systemBackClosesSheetThenControlsThenExitsOnce() {
+    // TOUCH-11 (phone review P-4): a sheet takes Back first; with the controls showing, Back leaves rather than hiding them.
+    @Test fun systemBackClosesTheSheetThenLeavesWithTheControlsShowing() {
         launch()
         compose.onNodeWithTag("touch:open:Audio").performClick()
         back()
         compose.onNodeWithTag("touch:sheet:Audio").assertDoesNotExist()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, exits) }
-        back()
-        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
         back()
         back()
         compose.runOnIdle { assertEquals(1, exits) }
@@ -351,10 +351,25 @@ class TouchPlayerControlsTest {
         back()
         compose.onNodeWithTag("touch:sheet:Audio").assertDoesNotExist()
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
-        back()
-        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0, exits) }
         back()
+        compose.runOnIdle { assertEquals(1, exits) }
+    }
+
+    @Test fun systemBackWithTheControlsHiddenLeavesToo() {
+        launch()
+        compose.onNodeWithTag("touch:gestures").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        back()
+        compose.runOnIdle { assertEquals(1, exits) }
+    }
+
+    // P-4: the visible way out, first in the panel's title row, with a spoken name.
+    @Test fun theCloseArrowLeavesThePlayerOnce() {
+        launch()
+        compose.onNodeWithContentDescription("Close player").assertIsDisplayed().assertHasClickAction()
+        compose.onNodeWithTag("touch:close").performClick()
         compose.runOnIdle { assertEquals(1, exits) }
     }
 
@@ -2169,7 +2184,8 @@ class TouchPlayerControlsTest {
         assertEquals(input.getValue("heightDp").jsonPrimitive.float, (frame.bottom - frame.top).value, 1f)
         val expected = case.getValue("expected").jsonObject
         assertEquals(false, expected.getValue("syncEnabled").jsonPrimitive.boolean)
-        val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed().assertIsNotEnabled()
+        // P-5: unavailable Watch together stays tappable and says why, rather than a silent disabled icon.
+        val watch = compose.onNodeWithTag("touch:syncplay").assertIsDisplayed()
         watch.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watch together is unavailable for live streams."))
         val watchBox = watch.getBoundsInRoot()
         assertTrue((watchBox.right - watchBox.left).value >= expected.getValue("minimumTouchTargetDp").jsonPrimitive.float)
@@ -2178,10 +2194,15 @@ class TouchPlayerControlsTest {
         val row = bounds("touch:secondary")
         assertEquals(row.left, bounds("touch:open:Audio").left)
         assertEquals(row.right, bounds("touch:more").right)
-        assertEquals(row.left, bounds("touch:title").left)
+        // P-4: the Close player arrow leads the title row; the title follows it.
+        assertEquals(row.left, bounds("touch:close").left)
+        assertTrue(bounds("touch:close").right <= bounds("touch:title").left)
         assertEquals(row.right, bounds("touch:quality").right)
         val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(2, marks.size)
+        compose.onNodeWithTag("touch:syncplay").performClick()
+        compose.onNodeWithTag("touch:note").assertIsDisplayed()
+        compose.onNodeWithText("Watch together is unavailable for live streams.", useUnmergedTree = true).assertIsDisplayed()
         val toggle = compose.onNodeWithTag("touch:toggle")
         val scale = toggle.fetchSemanticsNode().layoutInfo.density.density
         val box = toggle.getBoundsInRoot()

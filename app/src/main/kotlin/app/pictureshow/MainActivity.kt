@@ -923,10 +923,7 @@ internal fun Pictureshow(
             LaunchedEffect(vm) { vm.start() }
             SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
             Page("Quick Connect · ${state.snapshot.serverLabel(server)}") {
-                Text(
-                    "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
-                        "and enter this code"
-                )
+                Text(androidx.compose.ui.res.stringResource(R.string.quick_connect_where_tv))
                 screen.code?.let { code -> QuickConnectCode(code) }
                 if (screen.renewed) StatusLine("The previous code is no longer valid. Enter this new code.")
                 if (screen.busy) {

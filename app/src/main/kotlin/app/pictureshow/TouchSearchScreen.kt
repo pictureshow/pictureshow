@@ -135,7 +135,15 @@ internal fun TouchSearchScreen(
                 }
             }
             items(state.rows, key = HomeRow::key) { row ->
-                TouchCatalogShelf(row.title, row.items, account, row.wide) {
+                // CAT-14a (phone review P-9): results that would show identical cards name their library, spoken too.
+                TouchCatalogShelf(
+                    row.title,
+                    row.items,
+                    account,
+                    row.wide,
+                    subtitle = { homeRowSubtitle(row, it) },
+                    announceSubtitle = row.libraryNames.isNotEmpty()
+                ) {
                     finishInput()
                     onOpen(it)
                 }

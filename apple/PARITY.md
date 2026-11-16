@@ -409,3 +409,25 @@ existing active catalog request contracts: Swift now requests hidden UserViews m
 ordinary parent-authorized Items browse query for Latest, matching main's Jellyfin 12 authority rule.
 Those contracts execute rather than being moved to pending. Round-four view composition, existing
 Continue watching artwork requests and the 58 shared track-label cases are unchanged by this transport update.
+
+## Remote control, Now Playing and AirPlay (leg 155 item 3, 2026-11-16)
+
+Reference: [remote](../spec/features/remote.md), [casting](../spec/features/casting.md). App adapters run the existing
+shared `remote-*` reducers (196 remote vector cases pass); `RemoteAppTests` and `RemoteSocketRequestTests` cover the adapters.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| REM-01 | Implemented (iPhone/iPad) | `RemoteControl.targets` → `remotePlaybackTargets` (controllable sessions, no activity window); `PlayOnSheet` lists them with the other viewer's name as a second line only when it differs. OBSERVED: iPhone listed a live same-viewer TV session and not itself. | Different-viewer and shared-device rows not exercised live. |
+| REM-02 | Implemented (Apple TV, iPhone, iPad) | `ServerSocket` (one per selected account, header auth, keep-alive from ForceKeepAlive, 1–30 s backoff) posts `Sessions/Capabilities/Full` on every open. OBSERVED: the Apple TV session advertised `SetAudioStreamIndex`, `SetSubtitleStreamIndex` with media `Video`. Jellyfin 12 refuses `api_key` in the socket query (403, measured); the token goes in the Authorization header. | — |
+| REM-03 | Partial | Detail's Play on starts the title on the attached TV or opens the chooser. Apple TV obeys PlayNow at the requested position (OBSERVED: opened at 60 s). | Play next / Add to queue are not offered from Apple, and an Apple TV target logs `queue-next`/`queue-add` without acting (no Apple play queue yet). |
+| REM-04 | Implemented | `RemoteScreen` shows only what the TV reports: Pause flips to Play after the TV reports paused; ±10/30 s are absolute seeks bounded by duration; tracks/volume appear only when advertised, with "Use the TV's own remote for volume" otherwise; the status line has a fixed height. OBSERVED phone→stand-in TV: PlayNow, Pause, Seek 50 s. OBSERVED server→Apple TV: Pause, repeated Pause stays paused, Seek 300 s, Unpause, Stop. | Audio/Subtitles pickers were not shown live (the stand-in session reported no track list); Dynamic Type layout not checked. |
+| REM-05 | Not offered | Apple advertises no D-pad or SendString (REM-PD03); a MoveUp is refused as `unsupported` (OBSERVED, and unit test). | — |
+| REM-06 | Implemented | A target that leaves the list or returns under a new session becomes `lost` and must be chosen again; nothing is queued. Disconnect sends nothing to the TV. OBSERVED: Disconnect sent no Stop; stopping the TV showed "isn't connected any more" in the remote and "Not connected" in the bar. | Reattach after a TV restart with the same session ID not exercised. |
+| REM-07 | Implemented | Account switch or sign-out detaches the controller; the Apple TV target runs the same-viewer policy (`other-viewer` refusal, unit test). | Server-side household rights not exercised live. |
+| REM-08 | Partial | Socket reconnect starts a new receive generation; held commands never replay. | Phone lock/rotation with a target attached, and SyncPlay forwarding (item 4), not exercised. |
+| REM-09 | Implemented (Apple TV) | Apple TV is a target; iPhone/iPad also register (volume commands included there). | No local receiver toggle in Settings yet (defaults to same-viewer). |
+| CAST-07 | Partial (iPhone/iPad) | Lock screen / Control Center Now Playing with artwork and play/pause/skip/scrub via `NowPlayingBridge` (iOS; AVPlayerViewController owns it on tvOS); the player shows "Playing on <receiver>" while AirPlay is active. | No real AirPlay receiver here: the route label, receiver controls and disconnect behaviour are unverified. Lock-screen controls were not exercised on the simulator. |
+
+Persistent bar: on iOS 26.1+ the remote bar uses the system tab-bar accessory (`tabViewBottomAccessory`), with status on
+the first line and TV name on the second; iOS 18–26.0 get a 64 pt bar above the tab bar. Android's 64 dp bar is the
+reference; the accessory is the native Apple equivalent.

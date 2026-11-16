@@ -40,11 +40,11 @@ the old `apple` branch and are skipped when absent.
 - **Sign in.** Server address (with or without scheme, port or reverse-proxy path), the server's
   public user list, password, Quick Connect, and several accounts on several servers with a switcher.
   Each account has its own device ID, so two viewers on one device keep separate sessions.
-- **Browse.** Home: a hero for what to watch next, Continue watching, Next up, library tiles and the
-  latest items per library. Library grids page through the server with sort (name, date added,
+- **Browse.** Home: a hero for what to watch next, Continue watching (including captioned Next up cards by default), library tiles and the
+  latest items per library. Settings can restore a separate Next up row; that account layout is saved to Jellyfin with a local fallback and retry after failed saves. Duplicate Home titles name their library. Library grids page through the server with sort (name, date added,
   release date, rating, runtime, random) and filters (unwatched, watched, in progress, favorites,
   genre), remembered per library.
-  Movie, series, season, episode, collection and person pages; seasons switch in place on a series.
+  Movie, series, season, episode, collection and person pages; seasons switch in place on a series. Apple TV opens a season page on selection; touch offers Play below the season picker. Season Play chooses the first unfinished available episode. Virtual episodes show their air date and “Not in your library”, with no playback or restart action.
   Search runs per kind (movies, shows, episodes, collections, people) as you type.
 - **Play.** Direct play when AVFoundation can play the file as it is (H.264 or qualified HEVC, SDR,
   in MP4/MOV with AAC, AC-3, E-AC-3, ALAC or MP3); otherwise the server makes an HLS stream that copies
@@ -66,7 +66,7 @@ the old `apple` branch and are skipped when absent.
 
 ## Account storage
 
-Accounts (server, user, access token, device ID) are stored in the Keychain. If a Keychain write fails,
+Accounts (server, user, access token, device ID, explicit sign-out state) are stored in the Keychain. If a Keychain write fails,
 the app falls back to a local copy only where the Keychain can't work at all: a build without the
 Keychain entitlement (`errSecMissingEntitlement`) or the simulator. Any other failure is surfaced as
 "Sign-in not saved" with a retry, and nothing is written in the clear. Leftover fallback copies are

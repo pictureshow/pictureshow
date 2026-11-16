@@ -84,6 +84,8 @@ struct ArtworkImage: View {
     var contentMode: ContentMode = .fill
     /// Shown instead of the grey placeholder (used for title logos, where a tile would look broken).
     var fallbackText: String?
+    /// Set when real art arrives, so a caller can drop a scrim that only makes sense over a picture.
+    var loaded: Binding<Bool>?
     @State private var image: UIImage?
 
     var body: some View {
@@ -119,10 +121,10 @@ struct ArtworkImage: View {
     }
 
     private func load() async {
-        guard let url, let account = app.account, let client = app.client else { image = nil; return }
-        if let cached = await ArtworkLoader.shared.cached(url) { image = cached; return }
-        let loaded = await ArtworkLoader.shared.image(url, account: account, client: client)
+        guard let url, let account = app.account, let client = app.client else { image = nil; loaded?.wrappedValue = false; return }
+        if let cached = await ArtworkLoader.shared.cached(url) { image = cached; loaded?.wrappedValue = true; return }
+        let result = await ArtworkLoader.shared.image(url, account: account, client: client)
         guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+        withAnimation(.easeOut(duration: 0.2)) { image = result; loaded?.wrappedValue = result != nil }
     }
 }

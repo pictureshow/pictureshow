@@ -15,6 +15,10 @@ struct DeviceInfoView: View {
     var body: some View {
         Form {
             if let report {
+                Section {
+                    // INFO "plain first": one sentence a viewer can act on before any table.
+                    Text(report.verdict).font(.body)
+                }
                 Section("Device") {
                     LabeledContent("Model", value: report.model)
                     LabeledContent("System", value: report.system)
@@ -37,7 +41,7 @@ struct DeviceInfoView: View {
                     Text("Anything else (MKV files, DTS or TrueHD sound, HDR on this device) is converted by the server, and Pictureshow says so when it happens.")
                 }
                 Section {
-                    Button(showProfile ? "Hide device profile" : "View device profile") { showProfile.toggle() }
+                    Button(showProfile ? "Hide technical details" : "Technical details") { showProfile.toggle() }
                     if showProfile {
                         // Chunks of lines keep a long report light to draw; on Apple TV each chunk takes focus
                         // so the remote can scroll through all of it.
@@ -80,6 +84,12 @@ struct DeviceReport {
     var hevcDecode: Bool
     var hevcTranscode: String
     var profileLines: [String]
+    var device: String
+    var verdict: String {
+        hevcDecode
+            ? "\(device) plays most videos directly, including HEVC. When a file is in a format it can't play, your server converts it, so it still plays."
+            : "\(device) plays most videos directly. When a file is in a format it can't play, such as HEVC here, your server converts it, so it still plays."
+    }
     var profileChunks: [String] { stride(from: 0, to: profileLines.count, by: 12).map { profileLines[$0..<min($0 + 12, profileLines.count)].joined(separator: "\n") } }
 
     @MainActor static func current(preferences: PlaybackPreferences, hevcCapabilities: DeviceCapabilities?) -> DeviceReport {
@@ -98,7 +108,8 @@ struct DeviceReport {
             hdr: AVPlayer.eligibleForHDRPlayback,
             hevcDecode: hevc,
             hevcTranscode: hevcCapabilities == nil ? "Asks for H.264" : "Asks for HEVC up to 1080p",
-            profileLines: json.components(separatedBy: "\n"))
+            profileLines: json.components(separatedBy: "\n"),
+            device: DeviceIdentity.thisDevice)
     }
 }
 
@@ -128,6 +139,31 @@ struct AboutView: View {
             }
         }
         .navigationTitle("About Pictureshow")
+        #if os(iOS)
+        .scrollContentBackground(.hidden)
+        .pageBackground()
+        #endif
+    }
+}
+
+/// INFO-06/08: what supporting means, said plainly, and that there is no way to become a supporter in this app
+/// yet. Apple has no authorised purchase path, so no price, store button or outside payment link is shown.
+struct SupportView: View {
+    var body: some View {
+        Form {
+            Section {
+                Text("Pictureshow is free and open source. Monthly supporters help pay for its development, and their feature requests are considered first.")
+                Text("Supporting doesn't promise a feature or a date. Watching stays free.")
+            }
+            Section {
+                Text("You can't become a supporter in this app yet").font(.headline)
+                Text("Everything here stays free.").foregroundStyle(Theme.muted)
+            }
+            #if os(tvOS)
+            .focusable()
+            #endif
+        }
+        .navigationTitle("Support Pictureshow")
         #if os(iOS)
         .scrollContentBackground(.hidden)
         .pageBackground()

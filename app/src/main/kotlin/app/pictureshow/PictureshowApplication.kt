@@ -340,6 +340,13 @@ internal class PersistentIdentityService(
             )
         }
     }
+    override suspend fun authorizeQuickConnect(account: Account, code: String): app.pictureshow.core.QuickConnectApprovalResult = try {
+        client(account.deviceId).authorizeQuickConnect(account, code)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        app.pictureshow.core.QuickConnectApprovalResult.FAILED
+    }
     override suspend fun me(account: Account) = call(account.deviceId) { it.me(account) }
     override suspend fun separateDevice(account: Account) = call(account.deviceId) {
         it.renewDevice(account, java.util.UUID.randomUUID().toString())

@@ -75,6 +75,8 @@ struct PosterCard: View {
     let item: MediaItem
     var width: CGFloat = Theme.posterWidth
     var showsText = true
+    var homeSubtitle: String?
+    var isHome = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -82,7 +84,7 @@ struct PosterCard: View {
             if showsText {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    if let subtitle = item.cardSubtitle { Text(subtitle).font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+                    if let subtitle = isHome ? homeSubtitle : item.cardSubtitle { Text(subtitle).font(.caption).foregroundStyle(Theme.muted).lineLimit(isHome ? 2 : 1) }
                 }
                 .frame(width: width, alignment: .leading)
             }
@@ -95,7 +97,7 @@ struct PosterCard: View {
             .frame(width: width, height: width * 1.5)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(8) }
             .overlay(alignment: .bottom) {
-                if item.progress > 0, !item.isWatched { ProgressStrip(value: item.progress).padding(8) }
+                if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(8) }
             }
         #if os(tvOS)
         image
@@ -118,13 +120,15 @@ struct WideCard: View {
     var width: CGFloat = Theme.wideWidth
     /// Episodes inside their own season don't need the series name repeated.
     var compactTitle = false
+    var homeSubtitle: String?
+    var isHome = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             artwork
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(Theme.muted).lineLimit(isHome ? 2 : 1) }
             }
             .frame(width: width, alignment: .leading)
         }
@@ -132,11 +136,12 @@ struct WideCard: View {
     }
 
     private var title: String {
-        if item.type == "Episode", !compactTitle, let series = item.seriesName { return series }
+        if !isHome, item.type == "Episode", !compactTitle, let series = item.seriesName { return series }
         return item.name
     }
 
     private var subtitle: String? {
+        if isHome { return homeSubtitle }
         if item.type == "Episode" {
             let label = Format.episode(item)
             let detail = compactTitle ? [label.nilIfBlank, Format.runtime(item.runTimeTicks)] : [label.nilIfBlank, item.name]
@@ -150,7 +155,7 @@ struct WideCard: View {
             .frame(width: width, height: width * 9 / 16)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(8) }
             .overlay(alignment: .bottom) {
-                if item.progress > 0, !item.isWatched { ProgressStrip(value: item.progress).padding(10) }
+                if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(10) }
             }
         #if os(tvOS)
         image
@@ -196,18 +201,20 @@ struct ItemCard: View {
     var wide = false
     var width: CGFloat?
     var compactTitle = false
+    var homeSubtitle: String?
+    var isHome = false
 
     var body: some View {
         #if os(tvOS)
         CardLink(route: item.route) {
             if wide { WideArtworkOnly(item: item, width: width ?? Theme.wideWidth) } else { PosterArtworkOnly(item: item, width: width ?? Theme.posterWidth) }
         } below: {
-            CardCaption(item: item, wide: wide, width: width ?? (wide ? Theme.wideWidth : Theme.posterWidth), compactTitle: compactTitle)
+            CardCaption(item: item, wide: wide, width: width ?? (wide ? Theme.wideWidth : Theme.posterWidth), compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome)
         }
         .contextMenu { ItemActions(item: item) }
         #else
         NavigationLink(value: item.route) {
-            if wide { WideCard(item: item, width: width ?? Theme.wideWidth, compactTitle: compactTitle) } else { PosterCard(item: item, width: width ?? Theme.posterWidth) }
+            if wide { WideCard(item: item, width: width ?? Theme.wideWidth, compactTitle: compactTitle, homeSubtitle: homeSubtitle, isHome: isHome) } else { PosterCard(item: item, width: width ?? Theme.posterWidth, homeSubtitle: homeSubtitle, isHome: isHome) }
         }
         .buttonStyle(.plain)
         .contextMenu { ItemActions(item: item) }
@@ -224,7 +231,7 @@ struct PosterArtworkOnly: View {
         ArtworkImage(url: app.account.flatMap { a in app.client?.artworkURL(account: a, item: item, kind: .poster, width: Int(width * 2)) }, placeholderSymbol: item.symbol)
             .frame(width: width, height: width * 1.5)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(10) }
-            .overlay(alignment: .bottom) { if item.progress > 0, !item.isWatched { ProgressStrip(value: item.progress).padding(12) } }
+            .overlay(alignment: .bottom) { if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(12) } }
     }
 }
 
@@ -236,7 +243,7 @@ struct WideArtworkOnly: View {
         ArtworkImage(url: app.account.flatMap { a in app.client?.artworkURL(account: a, item: item, kind: .wide, width: Int(width * 2)) }, placeholderSymbol: item.symbol)
             .frame(width: width, height: width * 9 / 16)
             .overlay(alignment: .topTrailing) { WatchBadge(item: item).padding(10) }
-            .overlay(alignment: .bottom) { if item.progress > 0, !item.isWatched { ProgressStrip(value: item.progress).padding(14) } }
+            .overlay(alignment: .bottom) { if item.progress > 0, item.isResumable { ProgressStrip(value: item.progress).padding(14) } }
     }
 }
 
@@ -245,15 +252,18 @@ struct CardCaption: View {
     let wide: Bool
     let width: CGFloat
     var compactTitle = false
+    var homeSubtitle: String?
+    var isHome = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption.weight(.semibold)).lineLimit(1)
-            if let subtitle { Text(subtitle).font(.caption2).foregroundStyle(Theme.muted).lineLimit(1) }
+            if let subtitle { Text(subtitle).font(.caption2).foregroundStyle(Theme.muted).lineLimit(isHome ? 2 : 1) }
         }
         .frame(width: width, alignment: .leading)
     }
-    private var title: String { (wide && item.type == "Episode" && !compactTitle) ? (item.seriesName ?? item.name) : item.name }
+    private var title: String { (wide && item.type == "Episode" && !compactTitle && !isHome) ? (item.seriesName ?? item.name) : item.name }
     private var subtitle: String? {
+        if isHome { return homeSubtitle }
         if wide && item.type == "Episode" {
             let label = Format.episode(item)
             return (compactTitle ? [label.nilIfBlank, Format.runtime(item.runTimeTicks)] : [label.nilIfBlank, item.name]).compactMap { $0 }.joined(separator: " · ").nilIfBlank
@@ -267,9 +277,9 @@ struct ItemActions: View {
     @EnvironmentObject private var app: AppModel
     let item: MediaItem
     var body: some View {
-        if ["Movie", "Episode", "Video"].contains(item.type) {
+        if CatalogPresentation.offersPlayback(item) {
             Button { app.play(item) } label: { Label(item.userData.playbackPositionTicks > 0 ? "Resume" : "Play", systemImage: "play.fill") }
-            if item.userData.playbackPositionTicks > 0 {
+            if CatalogPresentation.offersRestart(item) {
                 Button { app.play(item, fromStart: true) } label: { Label("Play from beginning", systemImage: "backward.end.fill") }
             }
         }
@@ -300,6 +310,9 @@ struct Shelf: View {
     let items: [MediaItem]
     var wide = false
     var compactTitle = false
+    var captions: [String: String] = [:]
+    var libraryNames: [String: String] = [:]
+    var isHome = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -308,7 +321,7 @@ struct Shelf: View {
                 // Plain HStack: inside a lazy vertical stack, a LazyHStack measured 0 tall before it had
                 // realised any card, so on Apple TV whole rows (Next up, Libraries) never appeared.
                 HStack(alignment: .top, spacing: Theme.cardSpacing) {
-                    ForEach(items) { item in ItemCard(item: item, wide: wide, compactTitle: compactTitle) }
+                    ForEach(items) { item in ItemCard(item: item, wide: wide, compactTitle: compactTitle, homeSubtitle: Catalog.homeCardSubtitle(item: item, caption: captions[item.id], library: libraryNames[item.id]), isHome: isHome) }
                 }
                 .padding(.horizontal, Theme.gutter)
                 #if os(tvOS)

@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
@@ -102,6 +103,7 @@ import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.ui.compose.ContentFrame
 import app.pictureshow.core.Account
@@ -112,7 +114,11 @@ import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.playback.ConversionNotice
+import app.pictureshow.core.playback.PictureInPictureState
+import app.pictureshow.core.playback.pictureInPictureAllowed
+import app.pictureshow.core.playback.touchPlayerBack
 import app.pictureshow.core.trickplayTile
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -144,19 +150,6 @@ internal class TouchControlsState {
 
     fun interact() {
         interaction++
-    }
-    fun back(exit: () -> Unit) {
-        when {
-            sheet != null -> sheet = null
-
-            visible -> {
-                visible = false
-                scrubMs = null
-            }
-
-            else -> exit()
-        }
-        interact()
     }
 }
 
@@ -307,19 +300,94 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
     // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
     var heldNoticeGap by remember(density.fontScale) { mutableStateOf(0.dp) }
     var playerTop by remember { mutableStateOf(0) }
-    val controlsVisible = ui.visible && ui.sheet == null && !qualityOpen && host.error == null && !host.switching
+    var playerNote by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(playerNote) {
+        if (playerNote != null) {
+            delay(4_000)
+            playerNote = null
+        }
+    }
+    val downloadLabel = stringResource(
+        R.string.player_playing_download,
+        touchDeviceNoun(LocalConfiguration.current.smallestScreenWidthDp)
+    )
+    // TOUCH-15: picture-in-picture follows the player's own state; its window shows only the picture and captions.
+    val context = LocalContext.current
+    var videoSize by remember(host.player) { mutableStateOf(host.player?.videoSize ?: VideoSize.UNKNOWN) }
+    DisposableEffect(host.player) {
+        val player = host.player
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(size: VideoSize) {
+                videoSize = size
+            }
+        }
+        player?.addListener(listener)
+        onDispose { player?.removeListener(listener) }
+    }
+    var playerBounds by remember { mutableStateOf<Rect?>(null) }
+    val pipCanSeek = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
+    val pipRequest = TouchPictureInPictureRequest(
+        PictureInPictureState(
+            tvInterface = usesTvInterface(context),
+            deviceSupports = context.supportsPictureInPicture(),
+            hasVideo = host.player != null && videoSize.width > 0,
+            error = host.error != null,
+            switching = host.switching,
+            exiting = host.exitRequested,
+            atEnd = atEnd,
+            handedOff = castUi?.let(::castIsCasting) == true
+        ),
+        primary = primaryAction.takeIf { !host.isLive || host.liveCanTimeShift },
+        canSeekBack = pipCanSeek,
+        canSeekForward = pipCanSeek && liveForwardSeekAllowed(host.isLive, host.liveWindow, host.position, host.liveBufferExpired),
+        videoWidth = videoSize.width,
+        videoHeight = videoSize.height,
+        pixelRatio = videoSize.pixelWidthHeightRatio.toDouble(),
+        sourceBounds = playerBounds?.let { touchPictureInPictureSource(it, videoSize) }
+    )
+    val pip = rememberTouchPictureInPicture(pipRequest, onAction = { action ->
+        when (action) {
+            "back10" -> host.seek(-TOUCH_SEEK_STEP_MS)
+            "forward10" -> host.seek(TOUCH_SEEK_STEP_MS)
+            else -> {
+                val pending = host.deferredNext
+                if (pending != null) host.finish(pending) else host.player?.performTouchPrimaryAction(host.sync)
+            }
+        }
+    }, onClosed = { host.finish(reason = "pip-closed") })
+    val pipAvailable = pictureInPictureAllowed(pipRequest.state)
+    LaunchedEffect(pip.active) {
+        if (pip.active) {
+            ui.sheet = null
+            moreOpen = false
+            qualityOpen = false
+            ui.scrubMs = null
+            ui.visible = false
+        } else if (!host.exitRequested) {
+            ui.visible = true
+            ui.interact()
+        }
+    }
+    val controlsVisible = ui.visible && ui.sheet == null && !qualityOpen && host.error == null && !host.switching && !pip.active
     val actionsVisible = ui.sheet == null && !qualityOpen && host.error == null && !host.switching
     val latestControlsVisible by rememberUpdatedState(controlsVisible)
+    // TOUCH-11 (phone review P-4): an open sheet or menu takes Back first; otherwise Back leaves, controls up or not.
     BackHandler {
         if (qualityOpen) {
             qualityOpen = false
-        } else if (moreOpen) {
-            moreOpen = false
         } else if (host.switching) {
             host.finish(reason = "back-during-next")
         } else {
-            ui.back { host.finish(reason = "back") }
+            when (touchPlayerBack(ui.sheet != null, moreOpen)) {
+                "close-sheet" -> ui.sheet = null
+                "close-menu" -> moreOpen = false
+                else -> {
+                    ui.scrubMs = null
+                    host.finish(reason = "back")
+                }
+            }
         }
+        ui.interact()
     }
     ControlsAutoHide(
         ui.visible,
@@ -343,6 +411,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
         Modifier.fillMaxSize().background(Color.Black).testTag("touch:player").onGloballyPositioned {
             playerTop = it.positionInRoot().y.toInt()
             playerLeft = it.positionInRoot().x.toInt()
+            playerBounds = it.boundsInWindow()
         }
     ) {
         val presentationPlayer = remember(host.player) { host.player?.let(::ListenerCleanupPlayer) }
@@ -357,6 +426,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             host.output.subtitleDiagnostics,
             onTopCues = { topCues = it }
         )
+        // In the picture-in-picture window nothing but the picture and its captions: the window's own actions control it.
+        if (pip.active) return@BoxWithConstraints
         // The gesture layer is below the buttons and slider. TalkBack gets an explicit show/hide action.
         Box(
             Modifier.fillMaxSize().testTag("touch:gestures").pointerInput(host) {
@@ -665,20 +736,34 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // P-4: a visible way out, first in the row, leaving through Stop's cleanup and report.
+                    IconButton(
+                        onClick = { host.finish(reason = "close-button") },
+                        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                        modifier = Modifier.size(48.dp).testTag("touch:close")
+                    ) {
+                        Icon(touchActionIcon("back"), stringResource(R.string.player_close))
+                    }
                     Text(
                         if (host.isLive) host.liveProgram?.name ?: host.item.name else host.item.name,
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f).testTag("touch:title")
                     )
-                    val syncUnavailable = if (host.isLive) stringResource(R.string.sync_live_unavailable) else null
+                    // P-5: a turned-off Watch together still answers a tap, saying why, and looks dimmed.
+                    val syncUnavailable = when {
+                        host.isLive -> stringResource(R.string.sync_live_unavailable)
+                        offlineQuality -> stringResource(R.string.sync_download_unavailable)
+                        else -> null
+                    }
                     IconButton(
                         onClick = {
-                            if (!host.isLive) host.sync?.show()
+                            if (syncUnavailable == null) host.sync?.show() else playerNote = syncUnavailable
                             ui.interact()
                         },
-                        enabled = !host.isLive,
-                        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = if (syncUnavailable == null) Color.White else Color.White.copy(alpha = .45f)
+                        ),
                         modifier = Modifier.size(48.dp).testTag("touch:syncplay").semantics {
                             syncUnavailable?.let { stateDescription = it }
                         }
@@ -691,7 +776,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                             ui.interact()
                         },
                         Modifier.widthIn(max = 180.dp).testTag("touch:quality").semantics {
-                            contentDescription = "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}"
+                            contentDescription = if (offlineQuality) downloadLabel else "Quality · ${host.qualityLabel}"
                             stateDescription = if (offlineQuality) "Quality is fixed for this download." else host.qualityLabel
                         },
                         enabled = !offlineQuality && !host.state.preparing && host.state.decision != null,
@@ -703,7 +788,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                         )
                     ) {
                         Text(
-                            "Quality · ${if (offlineQuality) "Download" else host.qualityLabel}",
+                            if (offlineQuality) downloadLabel else "Quality · ${host.qualityLabel}",
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
@@ -793,7 +878,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                     if (locksOrientation) {
                         PlayerIconButton(
                             if (landscape) "portrait" else "fullscreen",
-                            if (landscape) "Portrait" else "Landscape",
+                            stringResource(if (landscape) R.string.player_rotate_portrait else R.string.player_rotate_landscape),
                             Modifier.testTag("touch:orientation")
                         ) {
                             activity?.requestedOrientation = if (landscape) {
@@ -822,6 +907,16 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                         }
                                     )
                                 }
+                            }
+                            if (pipAvailable) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.player_pip)) },
+                                    modifier = Modifier.testTag("touch:pip"),
+                                    onClick = {
+                                        moreOpen = false
+                                        pip.enterNow()
+                                    }
+                                )
                             }
                             DropdownMenuItem(
                                 text = { Text("Stop") },
@@ -966,6 +1061,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             qualityOpen = false
             ui.interact()
         })
+    }
+    playerNote?.takeIf { !pip.active }?.let { note ->
+        TouchPlayerNote(note)
     }
     ui.sheet?.let { sheet ->
         TouchPlayerSheetContent(sheet, host, trackMenus, account, onDismiss = {
@@ -1301,6 +1399,41 @@ internal fun TouchConversionNoticeCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(notice.title, style = MaterialTheme.typography.titleMedium)
             Text(touchConversionNoticeLine(notice), fontSize = 16.sp)
+        }
+    }
+}
+
+/** The video's letterboxed rectangle inside the player, in window pixels: where the picture-in-picture window grows from. */
+internal fun touchPictureInPictureSource(player: Rect, video: VideoSize): android.graphics.Rect {
+    val ratio = if (video.width > 0 && video.height > 0) video.width * video.pixelWidthHeightRatio / video.height else 16f / 9f
+    val width = player.width
+    val height = player.height
+    val fitted = if (width / height > ratio) {
+        androidx.compose.ui.geometry.Size(height * ratio, height)
+    } else {
+        androidx.compose.ui.geometry.Size(width, width / ratio)
+    }
+    val left = player.left + (width - fitted.width) / 2
+    val top = player.top + (height - fitted.height) / 2
+    return android.graphics.Rect(
+        left.roundToInt(),
+        top.roundToInt(),
+        (left + fitted.width).roundToInt(),
+        (top + fitted.height).roundToInt()
+    )
+}
+
+/** A short spoken note over the player, for a control that can't act here (P-5). */
+@Composable
+private fun TouchPlayerNote(text: String) {
+    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            Modifier.widthIn(max = 480.dp).testTag("touch:note").semantics { liveRegion = LiveRegionMode.Polite },
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text(text, Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

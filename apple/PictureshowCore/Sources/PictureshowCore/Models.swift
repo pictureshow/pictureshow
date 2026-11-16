@@ -10,6 +10,8 @@ public struct Server: Codable, Equatable, Sendable {
     public init(url: URL, id: String = "", name: String = "Jellyfin", version: String = "") {
         self.url = url; self.id = id; self.name = name; self.version = version
     }
+    /// The server's own id. The app's `Identifiable` conformance shadows `id` with the URL, so app code reads this.
+    public var serverId: String { id }
 }
 
 public struct Account: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
@@ -18,9 +20,20 @@ public struct Account: Codable, Equatable, Sendable, CustomStringConvertible, Cu
     public var username: String
     public var accessToken: String
     public var deviceID: String
+    public var signedOut: Bool = false
     public init(server: Server, userId: String, username: String, accessToken: String, deviceID: String) {
         self.server = server; self.userId = userId; self.username = username
         self.accessToken = accessToken; self.deviceID = deviceID
+    }
+    enum CodingKeys: String, CodingKey { case server, userId, username, accessToken, deviceID, signedOut }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        server = try c.decode(Server.self, forKey: .server)
+        userId = try c.decode(String.self, forKey: .userId)
+        username = try c.decode(String.self, forKey: .username)
+        accessToken = try c.decode(String.self, forKey: .accessToken)
+        deviceID = try c.decode(String.self, forKey: .deviceID)
+        signedOut = try c.decodeIfPresent(Bool.self, forKey: .signedOut) ?? false
     }
     public var description: String { "Account(userId=\(userId), accessToken=REDACTED)" }
     public var debugDescription: String { description }
@@ -60,6 +73,10 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var type: String
+    public var locationType: String?
+    public var premiereDate: String?
+    public var isMissing: Bool { locationType?.lowercased() == "virtual" }
+    public var isResumable: Bool { userData.playbackPositionTicks > 0 }
     public var collectionType: String?
     public var isFolder: Bool
     public var childCount: Int?
@@ -92,6 +109,7 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         isFolder = false; genres = []; imageTags = [:]; backdropImageTags = []; parentBackdropImageTags = []; mediaSources = []; people = []; chapters = []; trickplay = [:]
     }
     enum CodingKeys: String, CodingKey {
+        case locationType = "LocationType", premiereDate = "PremiereDate"
         case id = "Id", name = "Name", type = "Type", collectionType = "CollectionType", isFolder = "IsFolder", childCount = "ChildCount", recursiveItemCount = "RecursiveItemCount", overview = "Overview", productionYear = "ProductionYear", officialRating = "OfficialRating", communityRating = "CommunityRating", runTimeTicks = "RunTimeTicks", genres = "Genres", seriesName = "SeriesName", seriesId = "SeriesId", seasonId = "SeasonId", indexNumber = "IndexNumber", parentIndexNumber = "ParentIndexNumber", imageTags = "ImageTags", backdropImageTags = "BackdropImageTags", parentBackdropItemId = "ParentBackdropItemId", parentBackdropImageTags = "ParentBackdropImageTags", seriesPrimaryImageTag = "SeriesPrimaryImageTag", parentThumbItemId = "ParentThumbItemId", parentThumbImageTag = "ParentThumbImageTag", userData = "UserData", mediaSources = "MediaSources", people = "People", chapters = "Chapters", trickplay = "Trickplay"
     }
     public init(from decoder: Decoder) throws {
@@ -99,6 +117,8 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Untitled"
         type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        locationType = try c.decodeIfPresent(String.self, forKey: .locationType)
+        premiereDate = try c.decodeIfPresent(String.self, forKey: .premiereDate)
         collectionType = try c.decodeIfPresent(String.self, forKey: .collectionType)
         isFolder = try c.decodeIfPresent(Bool.self, forKey: .isFolder) ?? false
         childCount = try c.decodeIfPresent(Int.self, forKey: .childCount)
@@ -160,10 +180,12 @@ public struct HomeRow: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let items: [MediaItem]
+    public let captions: [String: String]
+    public let libraryNames: [String: String]
     public let library: Bool
     public let wide: Bool
-    public init(id: String, title: String, items: [MediaItem], library: Bool = false, wide: Bool = false) {
-        self.id = id; self.title = title; self.items = items; self.library = library; self.wide = wide
+    public init(id: String, title: String, items: [MediaItem], library: Bool = false, wide: Bool = false, captions: [String: String] = [:], libraryNames: [String: String] = [:]) {
+        self.id = id; self.title = title; self.items = items; self.library = library; self.wide = wide; self.captions = captions; self.libraryNames = libraryNames
     }
 }
 

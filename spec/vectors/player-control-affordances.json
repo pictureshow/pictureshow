@@ -60,7 +60,7 @@
         "outerEndDp": 6,
         "minimumDesiredCorePixels": 8,
         "maximumOppositeCorePixels": 2,
-        "actionDescription": "Portrait",
+        "actionDescription": "Rotate to portrait",
         "cornerDirection": "inward"
       }
     },
@@ -91,7 +91,7 @@
         "outerEndDp": 6,
         "minimumDesiredCorePixels": 8,
         "maximumOppositeCorePixels": 2,
-        "actionDescription": "Landscape",
+        "actionDescription": "Rotate to landscape",
         "cornerDirection": "outward"
       }
     },
