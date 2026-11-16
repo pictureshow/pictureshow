@@ -93,8 +93,9 @@ final class SpecVectorTests:XCTestCase {
         let offlineSuites = Set(OfflineVectorRunner.operations.keys)
         let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites).union(offlineSuites)
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
+        let syncSuites = SyncVectorRunner.suites
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out"]).union(traceSuites).union(pendingSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out"]).union(traceSuites).union(pendingSuites).union(syncSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -125,7 +126,8 @@ final class SpecVectorTests:XCTestCase {
                     if learnedShape && (vector["operation"] != nil || suite == "live-source") { try PendingSpecCaseManifest.validateEnvelope(vector, suite: suite) }
                     continue
                 }
-                let operation = suite == "live-source" ? "observed-window" : (suite == "account-sign-out" ? "case" : try required(String.self,vector,"operation"))
+                // SyncPlay suites keep their reference shapes; cases without an operation are identified as "case".
+                let operation = suite == "live-source" ? "observed-window" : (suite == "account-sign-out" || (syncSuites.contains(suite) && vector["operation"] == nil) ? "case" : try required(String.self,vector,"operation"))
                 guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
                 try SpecCaseManifest.validate(id:id,suite:suite,operation:operation)
                 if traceSuites.contains(suite) {
@@ -151,7 +153,7 @@ final class SpecVectorTests:XCTestCase {
                     for step in steps {
                         guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
                     }
-                } else {
+                } else if !syncSuites.contains(suite) {
                     guard vector["input"] is [String:Any],vector["expected"] != nil else { throw NSError(domain:"Malformed vector \(id)",code:1) }
                 }
             }
@@ -176,6 +178,12 @@ final class SpecVectorTests:XCTestCase {
             for vector in cases {
                 if pendingIDs.contains(text(vector, "id")) { continue }
                 if let operations, !operations.contains(text(vector,"operation")) { continue }
+                if syncSuites.contains(suite) {
+                    // Executed from the exact-lexeme document so 64-bit ticks and quoted wire numbers stay as written.
+                    do { stepsBySuite[suite,default:0] += try SyncVectorRunner.run(suite:suite,id:text(vector,"id")) } catch { failures.append("\(text(vector,"id")): \(error)") }
+                    count+=1;counts[suite,default:0]+=1
+                    continue
+                }
                 if traceSuites.contains(suite), vector["steps"] != nil {
                     guard operations == nil else { continue }
                     let id=text(vector,"id")

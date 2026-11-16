@@ -3,6 +3,8 @@
 import Foundation
 
 public enum SeekSteps {
+    /// The seek preview shows the target only while feedback is shown; otherwise the previous preview stays.
+    public static func preview(previousMs: Int64?, targetMs: Int64, showFeedback: Bool) -> Int64? { showFeedback ? targetMs : previousMs }
     public static func target(positionMs: Int64, pendingMs: Int64?, deltaMs: Int64, durationMs: Int64) -> Int64 {
         let duration = max(0, durationMs)
         let base = min(duration, max(0, pendingMs ?? positionMs))
