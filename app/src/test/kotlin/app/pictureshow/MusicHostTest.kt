@@ -218,6 +218,8 @@ class MusicHostTest {
             }
     }
 
+    private var locked = false
+
     private fun host(): MusicHost {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scopes += scope
@@ -233,7 +235,8 @@ class MusicHostTest {
             newPlayer = ::player,
             startService = { services += 1 },
             seed = { 42 },
-            metered = { false }
+            metered = { false },
+            admitted = { !locked }
         ).also { hosts += it }
     }
 
@@ -364,6 +367,34 @@ class MusicHostTest {
         music.request(album("a", "b"))
         until("it to come round twice") { log.count { it == "start a" } >= 2 }
         assertFalse("start b" in log)
+        music.stop()
+        until("the stop") { !music.state.value.outputActive }
+    }
+
+    @Test fun aRelockStopsTheMusicAndNoControlStartsItUntilUnlocked() {
+        val music = host()
+        ready(music)
+        music.setRepeat("one")
+        music.request(album("a", "b"))
+        until("it to play") { "start a" in log && music.state.value.outputActive }
+        // Locked again after five minutes away: the sound, notification and session end; the queue stays.
+        locked = true
+        music.lockOut()
+        until("the stop") { !music.state.value.outputActive }
+        assertEquals(listOf("a", "b"), music.state.value.queue!!.entries.map { it.media })
+        // Play from the notification, a headset button or Assistant all come here, and are refused behind the lock.
+        val starts = log.count { it.startsWith("start") }
+        music.play()
+        repeat(50) {
+            ShadowLooper.idleMainLooper()
+            Thread.sleep(10)
+        }
+        assertFalse(music.state.value.outputActive)
+        assertEquals(starts, log.count { it.startsWith("start") })
+        // Unlocked: Play works again.
+        locked = false
+        music.play()
+        until("it to play again") { music.state.value.outputActive }
         music.stop()
         until("the stop") { !music.state.value.outputActive }
     }

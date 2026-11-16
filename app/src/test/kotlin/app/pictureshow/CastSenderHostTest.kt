@@ -675,6 +675,21 @@ class CastSenderHostTest {
         assertTrue(host.state.value.cast!!.owner.intent.paused)
     }
 
+    @Test fun behindTheProfileLockThePhoneCanPauseTheReceiverButNotStartIt() = runTest {
+        var locked = false
+        val host = host().also { it.admitted = { !locked } }
+        casting(host)
+        host.pause()
+        link.sink!!.onStatus(status("paused", generation = host.generation()))
+        locked = true
+        // The notification's Play (CastSessionPlayer) lands here.
+        host.play()
+        assertTrue(host.state.value.cast!!.owner.intent.paused)
+        locked = false
+        host.play()
+        assertFalse(host.state.value.cast!!.owner.intent.paused)
+    }
+
     @Test fun twoRapidAdvancesCannotReportAnOlderItemAfterTheNewest() = runTest {
         val host = host()
         host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "One"), CastPlayItem("two", "Two"), CastPlayItem("three", "Three"))))

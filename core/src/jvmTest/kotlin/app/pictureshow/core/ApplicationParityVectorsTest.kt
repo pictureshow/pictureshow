@@ -166,6 +166,9 @@ class ApplicationParityVectorsTest {
                             input.getValue("passwordProven").jsonPrimitive.boolean
                         )
                     )
+                    "profile-pin-proof" -> JsonPrimitive(
+                        profilePinProofKept(ProfilePinProofEvent.valueOf(input.getValue("event").jsonPrimitive.content))
+                    )
                     "access-refusal" -> JsonPrimitive(accessRefusal(input.getValue("signIn").jsonPrimitive.boolean).message)
                     "sync-group-list" -> app.pictureshow.core.sync.syncGroupList(
                         input.getValue("accessAllowed").jsonPrimitive.boolean,

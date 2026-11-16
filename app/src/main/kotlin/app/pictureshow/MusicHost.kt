@@ -226,7 +226,9 @@ internal class MusicHost(
     private val seed: () -> Long = { Random.nextLong(Long.MAX_VALUE) },
     private val metered: () -> Boolean = {
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).isActiveNetworkMetered
-    }
+    },
+    /** Whether the viewer is past its profile lock (AUTH-18); a locked one's music doesn't start from any control. */
+    private val admitted: (Account) -> Boolean = { true }
 ) {
     /** The Cast device in use. The touch interface sets this, because a TV must never load the sender. */
     var castAttached: () -> String? = { null }
@@ -793,12 +795,17 @@ internal class MusicHost(
         }
     }
 
+    private fun lockedOut(): Boolean = account?.let { !admitted(it) } ?: false
+
     fun play() {
+        // The notification, a Bluetooth button, Assistant or a remote command can't start music behind the lock.
+        if (lockedOut()) return
         remoteMusic()?.let {
             it.play()
             return
         }
         enqueue {
+            if (lockedOut()) return@enqueue
             if (groupTransport("play")) return@enqueue
             if (queue.committed.current == null) return@enqueue
             applySession("viewer-play")
@@ -986,6 +993,15 @@ internal class MusicHost(
             return@enqueue
         }
         if (!groupTransport("stop")) endOutput("stop")
+    }
+
+    /**
+     * Pictureshow locked again (AUTH-18): the sound, the notification and the media session end, so nothing can resume
+     * it until the viewer is unlocked. The position is saved and the queue stays. A Cast receiver is left alone: it is
+     * another screen, and the lock only stops it starting again from here.
+     */
+    fun lockOut() = enqueue {
+        if (lockedOut() && player != null) endOutput("stop")
     }
 
     /** Called before a video opens. Twice is harmless: the second finds nothing to stop. */
