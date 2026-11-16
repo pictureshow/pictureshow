@@ -19,7 +19,15 @@ fun validQuickConnectCode(input: String): Boolean = normalizeQuickConnectCode(in
 }
 
 /** Stable presentation keys: platforms supply localized copy, never raw HTTP or server bodies. */
-enum class QuickConnectApprovalResult { APPROVED, INVALID_INPUT, WRONG_OR_EXPIRED, DISABLED, OFFLINE, SIGN_IN_REQUIRED, FAILED }
+enum class QuickConnectApprovalResult {
+    APPROVED,
+    INVALID_INPUT,
+    WRONG_OR_EXPIRED,
+    DISABLED,
+    OFFLINE,
+    SIGN_IN_REQUIRED,
+    FAILED
+}
 
 fun quickConnectApprovalResult(status: Int, approved: Boolean?): QuickConnectApprovalResult = when {
     status in 200..299 && approved == true -> QuickConnectApprovalResult.APPROVED
@@ -33,11 +41,12 @@ class QuickConnectApprovalClient(private val http: HttpClient, private val ident
     suspend fun authorize(account: Account, input: String): QuickConnectApprovalResult {
         if (!validQuickConnectCode(input)) return QuickConnectApprovalResult.INVALID_INPUT
         if (account.expired) return QuickConnectApprovalResult.SIGN_IN_REQUIRED
+        val authorization = AuthorizationHeader.build(identity.forAccount(account), account.accessToken)
         return try {
             withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
                 suspend fun enabled(): Boolean? {
                     val response = http.request("${account.server.url.trimEnd('/')}/QuickConnect/Enabled") {
-                        headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
+                        headers.append(HttpHeaders.Authorization, authorization)
                     }
                     if (response.status.value !in 200..299) return null
                     return response.bodyAsText().trim().toBooleanStrictOrNull()
@@ -50,7 +59,7 @@ class QuickConnectApprovalClient(private val http: HttpClient, private val ident
                 val response = http.request("${account.server.url.trimEnd('/')}/QuickConnect/Authorize") {
                     method = HttpMethod.Post
                     url.parameters.append("code", normalizeQuickConnectCode(input))
-                    headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
+                    headers.append(HttpHeaders.Authorization, authorization)
                 }
                 // Jellyfin also answers 401 when Quick Connect is turned off between Enabled and Authorize.
                 if (response.status.value == 401 && enabled() == false) {
