@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
+import { audioTrackIndex } from "./audio-track-selection";
 import type { PlaybackHttpOutcome } from "./rc26";
 export type Server = { id: string; name: string; url: string; version: string };
 export type Account = {
@@ -445,8 +446,7 @@ export function canDirect(source: Source, probe: Probe, audioIndex?: number) {
     if (
         audioIndex != null &&
         audioIndex !==
-            (source.DefaultAudioStreamIndex ??
-                streams.find((s) => s.Type === "Audio")?.Index)
+            audioTrackIndex(streams, undefined, source.DefaultAudioStreamIndex)
     )
         return false;
     return probe(
@@ -824,6 +824,7 @@ export class Jellyfin {
         bitrateMbps: number | null = null,
         mediaSourceId?: string,
     ): Promise<Decision> {
+        audio = audio != null && audio >= 0 ? audio : undefined;
         const bitrate = [4, 10, 20, 40, 80, 120].includes(bitrateMbps ?? 0)
             ? bitrateMbps! * 1_000_000
             : 200_000_000;
@@ -935,6 +936,27 @@ export class Jellyfin {
                 "NO_COMPATIBLE_SOURCE",
                 "This video cannot be played in this browser.",
             );
+        if (audio == null && (source.DefaultAudioStreamIndex ?? 0) < 0) {
+            const fallback = audioTrackIndex(
+                source.MediaStreams ?? [],
+                undefined,
+                source.DefaultAudioStreamIndex,
+            );
+            if (fallback >= 0)
+                return this.prepare(
+                    item,
+                    probe,
+                    position,
+                    fallback,
+                    subtitle,
+                    forceHls,
+                    bitrateMbps,
+                    source.Id,
+                );
+        }
+        if (audio != null && (source.DefaultAudioStreamIndex ?? 0) < 0) {
+            source = { ...source, DefaultAudioStreamIndex: audio };
+        }
         // A user-scoped PlaybackInfo may return a newer remembered choice than
         // item metadata. Evaluate the negotiated subtitle before opening direct
         // media, and let the server decide its own default again if burn-in is needed.

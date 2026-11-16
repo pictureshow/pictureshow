@@ -494,7 +494,7 @@
       "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
     },
     {
-      "id": "audio.server-minus-one",
+      "id": "audio.server-minus-one-falls-back",
       "operation": "default-stream",
       "input": {
         "type": "Audio",
@@ -520,7 +520,7 @@
           }
         ]
       },
-      "expected": -1,
+      "expected": 2,
       "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
     },
     {
@@ -6910,6 +6910,1173 @@
           ]
         },
         "expected": null
+      },
+    {
+      "id": "audio-track-legacy-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": -1,
+        "serverDefault": 2
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-server-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": null,
+        "serverDefault": -1
+      },
+      "expected": 5,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-both-off",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": 5,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-first-audio",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          }
+        ],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-silent-file",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [],
+        "selected": -1,
+        "serverDefault": -1
+      },
+      "expected": -1,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-zero-is-valid",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 0
+          }
+        ],
+        "selected": 0,
+        "serverDefault": -1
+      },
+      "expected": 0,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-track-viewer-choice",
+      "operation": "audio-track-index",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "selected": 2,
+        "serverDefault": 5
+      },
+      "expected": 2,
+      "source": "PLAY-08; TrackSelection.audioIndex"
+    },
+    {
+      "id": "audio-default-off-uses-default-track",
+      "operation": "default-stream",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Codec": "aac"
+          },
+          {
+            "Type": "Audio",
+            "Index": 5,
+            "Codec": "eac3",
+            "IsDefault": true
+          }
+        ],
+        "type": "Audio",
+        "serverIndex": -1,
+        "preferredLanguage": "en"
+      },
+      "expected": 5,
+      "source": "PLAY-08; StreamDefaults.choose"
+    },
+      {
+        "id": "track-label-apple-handlers",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Audio"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Video"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Text"
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Subtitle"
+            },
+            {
+              "Type": "Audio",
+              "Index": 5,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Metadata"
+            },
+            {
+              "Type": "Audio",
+              "Index": 6,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Closed Caption"
+            }
+          ]
+        },
+        "expected": [
+          "AAC stereo · Track 1",
+          "AAC stereo · Track 2",
+          "AAC stereo · Track 3",
+          "AAC stereo · Track 4",
+          "AAC stereo · Track 5",
+          "AAC stereo · Track 6"
+        ]
+      },
+      {
+        "id": "track-label-ffmpeg-handlers",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "DataHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "PictureHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "VideoHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "SoundHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 5,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "ClosedCaptionHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 6,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "SubtitleHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 7,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "HintHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 8,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "TimeCodeHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 9,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GoPro MET"
+            },
+            {
+              "Type": "Audio",
+              "Index": 10,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "CAM meta"
+            },
+            {
+              "Type": "Audio",
+              "Index": 11,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "CAM dbgi"
+            }
+          ]
+        },
+        "expected": [
+          "AAC stereo · Track 1",
+          "AAC stereo · Track 2",
+          "AAC stereo · Track 3",
+          "AAC stereo · Track 4",
+          "AAC stereo · Track 5",
+          "AAC stereo · Track 6",
+          "AAC stereo · Track 7",
+          "AAC stereo · Track 8",
+          "AAC stereo · Track 9",
+          "AAC stereo · Track 10",
+          "AAC stereo · Track 11"
+        ]
+      },
+      {
+        "id": "track-label-gpac-handlers",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Video Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Auxiliary Video Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Picture Sequence Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Audio Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 5,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Hint Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 6,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC Timed MetaData Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 7,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 OD Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 8,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 OCR Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 9,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 Scene Description Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 10,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 MPEG-7 Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 11,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 OCI Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 12,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 IPMP Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 13,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG-4 MPEG-J Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 14,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC Streaming Text Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 15,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC MPEG Subtitle Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 16,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC DIMS Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 17,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC TMCD Handler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 18,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC IsoMedia Handler"
+            }
+          ]
+        },
+        "expected": [
+          "AAC stereo · Track 1",
+          "AAC stereo · Track 2",
+          "AAC stereo · Track 3",
+          "AAC stereo · Track 4",
+          "AAC stereo · Track 5",
+          "AAC stereo · Track 6",
+          "AAC stereo · Track 7",
+          "AAC stereo · Track 8",
+          "AAC stereo · Track 9",
+          "AAC stereo · Track 10",
+          "AAC stereo · Track 11",
+          "AAC stereo · Track 12",
+          "AAC stereo · Track 13",
+          "AAC stereo · Track 14",
+          "AAC stereo · Track 15",
+          "AAC stereo · Track 16",
+          "AAC stereo · Track 17",
+          "AAC stereo · Track 18"
+        ]
+      },
+      {
+        "id": "track-label-lavf-identifiers",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61.7.100"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf58.76.100"
+            }
+          ]
+        },
+        "expected": [
+          "AAC stereo · Track 1",
+          "AAC stereo · Track 2",
+          "AAC stereo · Track 3"
+        ]
+      },
+      {
+        "id": "track-label-handlers-case-insensitive-with-language",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cORE mEDIA aUDIO",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cORE mEDIA vIDEO",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cORE mEDIA tEXT",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cORE mEDIA sUBTITLE",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 5,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cORE mEDIA mETADATA",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 6,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "dATAhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 7,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "pICTUREhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 8,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "vIDEOhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 9,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "sOUNDhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 10,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cLOSEDcAPTIONhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 11,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "sUBTITLEhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 12,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "hINThANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 13,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "tIMEcODEhANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 14,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gOpRO met",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 15,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cam META",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 16,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cam DBGI",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 17,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iso vIDEO hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 18,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iso aUXILIARY vIDEO hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 19,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iso pICTURE sEQUENCE hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 20,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iso aUDIO hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 21,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iso hINT hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 22,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac tIMED mETAdATA hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 23,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 od hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 24,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 ocr hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 25,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 sCENE dESCRIPTION hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 26,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 mpeg-7 hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 27,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 oci hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 28,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 ipmp hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 29,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg-4 mpeg-j hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 30,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac sTREAMING tEXT hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 31,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac mpeg sUBTITLE hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 32,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac dims hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 33,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac tmcd hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 34,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "gpac iSOmEDIA hANDLER",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 35,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "lAVF",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 36,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "lAVF61.7.100",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 37,
+              "Language": "en",
+              "Codec": "srt",
+              "Title": "cOrE mEdIa ClOsEd CaPtIoN",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternal": true
+            }
+          ]
+        },
+        "expected": [
+          "English · SRT · Forced · SDH · External · Track 1",
+          "English · SRT · Forced · SDH · External · Track 2",
+          "English · SRT · Forced · SDH · External · Track 3",
+          "English · SRT · Forced · SDH · External · Track 4",
+          "English · SRT · Forced · SDH · External · Track 5",
+          "English · SRT · Forced · SDH · External · Track 6",
+          "English · SRT · Forced · SDH · External · Track 7",
+          "English · SRT · Forced · SDH · External · Track 8",
+          "English · SRT · Forced · SDH · External · Track 9",
+          "English · SRT · Forced · SDH · External · Track 10",
+          "English · SRT · Forced · SDH · External · Track 11",
+          "English · SRT · Forced · SDH · External · Track 12",
+          "English · SRT · Forced · SDH · External · Track 13",
+          "English · SRT · Forced · SDH · External · Track 14",
+          "English · SRT · Forced · SDH · External · Track 15",
+          "English · SRT · Forced · SDH · External · Track 16",
+          "English · SRT · Forced · SDH · External · Track 17",
+          "English · SRT · Forced · SDH · External · Track 18",
+          "English · SRT · Forced · SDH · External · Track 19",
+          "English · SRT · Forced · SDH · External · Track 20",
+          "English · SRT · Forced · SDH · External · Track 21",
+          "English · SRT · Forced · SDH · External · Track 22",
+          "English · SRT · Forced · SDH · External · Track 23",
+          "English · SRT · Forced · SDH · External · Track 24",
+          "English · SRT · Forced · SDH · External · Track 25",
+          "English · SRT · Forced · SDH · External · Track 26",
+          "English · SRT · Forced · SDH · External · Track 27",
+          "English · SRT · Forced · SDH · External · Track 28",
+          "English · SRT · Forced · SDH · External · Track 29",
+          "English · SRT · Forced · SDH · External · Track 30",
+          "English · SRT · Forced · SDH · External · Track 31",
+          "English · SRT · Forced · SDH · External · Track 32",
+          "English · SRT · Forced · SDH · External · Track 33",
+          "English · SRT · Forced · SDH · External · Track 34",
+          "English · SRT · Forced · SDH · External · Track 35",
+          "English · SRT · Forced · SDH · External · Track 36",
+          "English · SRT · Forced · SDH · External · Track 37"
+        ]
+      },
+      {
+        "id": "track-label-real-titles-and-near-matches",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Audio"
+            },
+            {
+              "Type": "Audio",
+              "Index": 2,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Video"
+            },
+            {
+              "Type": "Audio",
+              "Index": 3,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Text"
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Audio description"
+            },
+            {
+              "Type": "Audio",
+              "Index": 5,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Director's commentary"
+            },
+            {
+              "Type": "Audio",
+              "Index": 6,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Core Media Audio commentary"
+            },
+            {
+              "Type": "Audio",
+              "Index": 7,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "The SoundHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 8,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "SubtitleHandler SDH"
+            },
+            {
+              "Type": "Audio",
+              "Index": 9,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "GPAC ISO Audio Handler commentary"
+            },
+            {
+              "Type": "Audio",
+              "Index": 10,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf documentary"
+            },
+            {
+              "Type": "Audio",
+              "Index": 11,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61.7.100 commentary"
+            },
+            {
+              "Type": "Audio",
+              "Index": 12,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61"
+            },
+            {
+              "Type": "Audio",
+              "Index": 13,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61.7"
+            },
+            {
+              "Type": "Audio",
+              "Index": 14,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61.7.100.1"
+            },
+            {
+              "Type": "Audio",
+              "Index": 15,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61x7x100"
+            },
+            {
+              "Type": "Audio",
+              "Index": 16,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Stereo"
+            },
+            {
+              "Type": "Audio",
+              "Index": 17,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Surround"
+            },
+            {
+              "Type": "Audio",
+              "Index": 18,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "HandBrake"
+            },
+            {
+              "Type": "Audio",
+              "Index": 19,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "mkvmerge"
+            },
+            {
+              "Type": "Audio",
+              "Index": 20,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": " Core Media Audio "
+            },
+            {
+              "Type": "Audio",
+              "Index": 21,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "SoundHandler\n"
+            },
+            {
+              "Type": "Audio",
+              "Index": 22,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf61.7.100\n"
+            },
+            {
+              "Type": "Audio",
+              "Index": 23,
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Lavf\n"
+            }
+          ]
+        },
+        "expected": [
+          "Audio · AAC stereo · Track 1",
+          "Video · AAC stereo · Track 2",
+          "Text · AAC stereo · Track 3",
+          "Audio description · AAC stereo · Track 4",
+          "Director's commentary · AAC stereo · Track 5",
+          "Core Media Audio commentary · AAC stereo · Track 6",
+          "The SoundHandler · AAC stereo · Track 7",
+          "SubtitleHandler SDH · AAC stereo · Track 8",
+          "GPAC ISO Audio Handler commentary · AAC stereo · Track 9",
+          "Lavf documentary · AAC stereo · Track 10",
+          "Lavf61.7.100 commentary · AAC stereo · Track 11",
+          "Lavf61 · AAC stereo · Track 12",
+          "Lavf61.7 · AAC stereo · Track 13",
+          "Lavf61.7.100.1 · AAC stereo · Track 14",
+          "Lavf61x7x100 · AAC stereo · Track 15",
+          "Stereo · AAC stereo · Track 16",
+          "Surround · AAC stereo · Track 17",
+          "HandBrake · AAC stereo · Track 18",
+          "mkvmerge · AAC stereo · Track 19",
+          " Core Media Audio  · AAC stereo · Track 20",
+          "SoundHandler\n · AAC stereo · Track 21",
+          "Lavf61.7.100\n · AAC stereo · Track 22",
+          "Lavf\n · AAC stereo · Track 23"
+        ]
+      },
+      {
+        "id": "track-label-handler-fallback-retains-format-number-and-badges",
+        "operation": "track-labels",
+        "source": "PLAY-08; core/playback/TrackLabelPolicy.kt; spec/features/track-labels.md",
+        "input": {
+          "streams": [
+            {
+              "Type": "Audio",
+              "Index": 17,
+              "Codec": "eac3",
+              "Channels": 6,
+              "Title": "Core Media Audio",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 41,
+              "Title": "SubtitleHandler",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsExternalUrl": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 62,
+              "Language": "en",
+              "Codec": "subrip",
+              "Title": "SoundHandler"
+            },
+            {
+              "Type": "Audio",
+              "Index": 80,
+              "Language": "en",
+              "Codec": "aac",
+              "Channels": 2,
+              "Title": "Audio description"
+            }
+          ]
+        },
+        "expected": [
+          "E-AC-3 5.1 · Track 1 · Default",
+          "Unknown format · Track 2 · Forced · SDH · External",
+          "English · SRT",
+          "English · AAC stereo · Audio description"
+        ]
       },
       {
         "id": "track-label-forced",

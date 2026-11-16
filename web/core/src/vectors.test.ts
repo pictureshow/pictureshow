@@ -19,6 +19,7 @@ import {
     validateBitrate,
     validateMaxStreamingBitrate,
     defaultStream,
+    audioTrackIndex,
     captionLanguage,
     captionIndex,
     userConfiguration,
@@ -317,6 +318,13 @@ for (const file of files) {
                     return;
                 }
                 switch (c.operation) {
+                    case "audio-track-index":
+                        value = audioTrackIndex(
+                            i.streams,
+                            i.selected,
+                            i.serverDefault,
+                        );
+                        break;
                     case "track-labels":
                         value = playerTrackLabels(i.streams);
                         break;

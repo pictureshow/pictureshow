@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
+import { audioTrackIndex } from "../core/src/audio-track-selection";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { atNaturalEnd, playsNativeHls, trimSubFrameTail } from "./hls-end";
 import { PLAYER_SHORTCUTS, playerShortcut } from "./player-keys";
@@ -443,12 +444,11 @@ export function Player({
         >(undefined);
     const activeSource = decision?.source ?? viewing.current.decision?.source;
     const streams = activeSource?.MediaStreams ?? [];
-    const audioIndex =
-        viewing.current.audio ??
-        request.audio ??
-        activeSource?.DefaultAudioStreamIndex ??
-        streams.find((s) => s.Type === "Audio")?.Index ??
-        -1;
+    const audioIndex = audioTrackIndex(
+        streams,
+        viewing.current.audio ?? request.audio,
+        activeSource?.DefaultAudioStreamIndex,
+    );
     const subtitleIndex =
         viewing.current.subtitle ??
         request.subtitle ??
@@ -937,6 +937,7 @@ export function Player({
         )
             return;
         const audio = type === "Audio";
+        if (audio && index < 0) return;
         const currentStreams = d.source.MediaStreams ?? [];
         trackOrigins.current[audio ? "audio" : "subtitle"] = true;
         const current = audio
@@ -954,14 +955,7 @@ export function Player({
             if (!replacing.current) report("progress");
             return;
         }
-        if (audio && index === -1) {
-            if (video.current) video.current.muted = true;
-            viewing.current.audio = -1;
-            desired.current.audio = -1;
-            desired.current.sourceId = d.source.Id;
-            report("progress");
-            setNotice("Audio off");
-        } else if (
+        if (
             !audio &&
             (current < 0 ||
                 localText(
@@ -1112,17 +1106,6 @@ export function Player({
         if (!el) return;
         lastActivity.current = Date.now();
         el.muted = !el.muted;
-        // Unmuting after audio Off brings back the decoded track.
-        const d = viewing.current.decision;
-        if (!el.muted && viewing.current.audio === -1 && d) {
-            const index =
-                d.source.DefaultAudioStreamIndex ??
-                d.source.MediaStreams?.find((s) => s.Type === "Audio")?.Index;
-            if (index !== undefined) {
-                viewing.current.audio = index;
-                desired.current.audio = index;
-            }
-        }
         setNotice(el.muted ? "Muted" : "Sound on");
         if (!replacing.current) report("progress");
     }
@@ -1130,7 +1113,7 @@ export function Player({
     useEffect(() => {
         video.current?.focus({ preventScroll: true });
     }, []);
-    // The speaker button follows every route to silence: M, the button, audio Off.
+    // Muting is independent of the selected audio track.
     useEffect(() => {
         const el = video.current;
         if (!el) return;
@@ -1944,7 +1927,10 @@ export function Player({
                 detail.MediaSources?.[0];
             const sameSource =
                 !request.sourceId || source?.Id === request.sourceId;
-            let preparedAudio = sameSource ? request.audio : undefined;
+            let preparedAudio =
+                sameSource && request.audio != null && request.audio >= 0
+                    ? request.audio
+                    : undefined;
             let preparedSubtitle = sameSource
                 ? desired.current.subtitle
                 : undefined;
@@ -1982,13 +1968,13 @@ export function Player({
             viewing.current.decision = d;
             viewing.current.position = logicalStart();
             setPosition(viewing.current.position);
-            viewing.current.audio =
-                (trackOrigins.current.audio
+            viewing.current.audio = audioTrackIndex(
+                d.source.MediaStreams ?? [],
+                trackOrigins.current.audio
                     ? desired.current.audio
-                    : preparedAudio) ??
-                d.source.DefaultAudioStreamIndex ??
-                d.source.MediaStreams?.find((s) => s.Type === "Audio")?.Index ??
-                -1;
+                    : preparedAudio,
+                d.source.DefaultAudioStreamIndex,
+            );
             viewing.current.subtitle =
                 (trackOrigins.current.subtitle
                     ? desired.current.subtitle
@@ -1996,7 +1982,7 @@ export function Player({
                 d.source.DefaultSubtitleStreamIndex ??
                 -1;
             // Playback intent survives decoder changes independently of report provenance.
-            desired.current.audio ??= viewing.current.audio;
+            desired.current.audio = viewing.current.audio;
             desired.current.subtitle ??= viewing.current.subtitle;
             desired.current.sourceId = d.source.Id;
             console.info(
@@ -3793,24 +3779,16 @@ export function Player({
                     ) : null}
                     {(panel === "Audio" || panel === "Subtitles") && (
                         <div role="radiogroup" aria-label={`${panel} tracks`}>
-                            <button
-                                role="radio"
-                                aria-label="Off"
-                                aria-checked={
-                                    panel === "Audio"
-                                        ? video.current?.muted ||
-                                          audioIndex === -1
-                                        : subtitleIndex === -1
-                                }
-                                onClick={() =>
-                                    pickTrack(
-                                        panel as "Audio" | "Subtitles",
-                                        -1,
-                                    )
-                                }
-                            >
-                                Off
-                            </button>
+                            {panel === "Subtitles" && (
+                                <button
+                                    role="radio"
+                                    aria-label="Off"
+                                    aria-checked={subtitleIndex === -1}
+                                    onClick={() => pickTrack("Subtitles", -1)}
+                                >
+                                    Off
+                                </button>
+                            )}
                             {(panel === "Audio" ? audio : subtitles).map(
                                 (s, i) => (
                                     <button
@@ -3819,8 +3797,7 @@ export function Player({
                                         aria-label={labels[i]}
                                         aria-checked={
                                             panel === "Audio"
-                                                ? audioIndex === s.Index &&
-                                                  !video.current?.muted
+                                                ? audioIndex === s.Index
                                                 : subtitleIndex === s.Index
                                         }
                                         onClick={() =>

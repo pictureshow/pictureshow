@@ -11,7 +11,7 @@ object StreamDefaults {
         // A null server subtitle index means its user mode selected no subtitles (for example None).
         if (type == MediaStreamType.Subtitle) return serverIndex ?: -1
         val preferred = language(preferredLanguage)
-        return serverIndex ?: streams.firstOrNull { it.type == type && it.isDefault }?.index
+        return serverIndex?.takeIf { it >= 0 } ?: streams.firstOrNull { it.type == type && it.isDefault }?.index
             ?: streams.firstOrNull { it.type == type && preferred != null && language(it.language) == preferred }?.index
             ?: if (type == MediaStreamType.Audio) streams.firstOrNull { it.type == type }?.index ?: -1 else -1
     }

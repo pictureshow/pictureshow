@@ -70,6 +70,13 @@ class ApplicationParityVectorsTest {
                         Json.decodeFromJsonElement(input.getValue("nextUp")),
                         Json.decodeFromJsonElement(input.getValue("episodes"))
                     )?.id?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull
+                    "audio-track-index" -> JsonPrimitive(
+                        app.pictureshow.core.playback.TrackSelection.audioIndex(
+                            Json.decodeFromJsonElement(input.getValue("streams")),
+                            input["selected"]?.jsonPrimitive?.intOrNull,
+                            input["serverDefault"]?.jsonPrimitive?.intOrNull
+                        )
+                    )
                     "track-labels" -> JsonArray(
                         app.pictureshow.core.playback.trackLabels(
                             Json.decodeFromJsonElement(input.getValue("streams"))

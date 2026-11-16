@@ -81,6 +81,38 @@ class LivePlaybackClientTest {
         }
     }
 
+    @Test fun audioDiscoveredAfterOpeningUsesTheSameLiveSourceWithAnAudibleIndex() = runTest {
+        val requests = mutableListOf<Pair<String, String>>()
+        val live = """{"Id":"opened","LiveStreamId":"live-id","RequiresClosing":true,
+            "DefaultAudioStreamIndex":-1,"MediaStreams":[{"Type":"Audio","Index":2,"IsDefault":true}],
+            "TranscodingUrl":"/Videos/channel/master.m3u8?AudioStreamIndex=-1"}"""
+        val http = mockClient { request ->
+            requests += request.url.encodedPath to request.body.toByteArray().decodeToString()
+            val response = when (requests.size) {
+                1 -> initial
+                2 -> """{"MediaSource":$live}"""
+                else -> """{"PlaySessionId":"audible","MediaSources":[$live]}""".replace("AudioStreamIndex=-1", "AudioStreamIndex=2")
+            }
+            respond(response, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        try {
+            val result = PlaybackClient(http, identity).prepare(account, "channel", CapabilityFixtures.projector)
+            val decision = assertIs<PlayOutcome.Play>(assertIs<ClientResult.Success<PlayOutcome>>(result).value).decision
+            assertEquals(3, requests.size)
+            assertEquals(1, requests.count { it.first.endsWith("LiveStreams/Open") })
+            val repair = PlaybackJson.parseToJsonElement(requests.last().second).jsonObject
+            assertEquals("2", repair.getValue("AudioStreamIndex").jsonPrimitive.content)
+            assertEquals("opened", repair.getValue("MediaSourceId").jsonPrimitive.content)
+            assertEquals("live-id", repair.getValue("LiveStreamId").jsonPrimitive.content)
+            assertEquals(2, decision.mediaSource.defaultAudioStreamIndex)
+            assertEquals("live-id", decision.ownedLiveStreamId)
+            assertEquals("audible", decision.playSessionId)
+            assertTrue(decision.url.contains("AudioStreamIndex=2"))
+        } finally {
+            http.close()
+        }
+    }
+
     @Test fun returnedExistingLiveIdIsNotOpenedOrClaimed() = runTest {
         var requests = 0
         val http = mockClient(

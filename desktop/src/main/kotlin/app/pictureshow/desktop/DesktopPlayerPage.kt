@@ -222,9 +222,9 @@ fun PlayerPage(state: DesktopState, c: DesktopController, fullscreen: () -> Unit
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TrackMenu("Audio", "audio", DesktopGlyph.Audio,
-                            p.audioTracks.zip(trackLabels(p.audioTracks)).map { (track, label) -> track.index to label }, p.audioIndex,
-                            chipValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let(::shortTrackLabel) ?: "Off", note = null,
-                            open = menu == "audio", onOpen = { menu = "audio" }, onDismiss = { menu = null }, ceiling = seekTop, onChoose = c::selectAudio)
+                            desktopAudioChoices(p.audioTracks), p.audioIndex,
+                            chipValue = p.audioTracks.firstOrNull { it.index == p.audioIndex }?.let { trackLabel(it, showDefault = false) } ?: "No audio", note = null,
+                            open = menu == "audio", onOpen = { menu = "audio" }, onDismiss = { menu = null }, ceiling = seekTop, chipWidth = 240.dp, onChoose = c::selectAudio)
                         TrackMenu("Subtitles", "subtitles", DesktopGlyph.Subtitles,
                             listOf(-1 to "Off") + p.subtitleTracks.zip(trackLabels(p.subtitleTracks)).map { (track, label) -> track.index to label }, p.subtitleIndex,
                             chipValue = if (p.subtitleIndex == -1) "Off" else p.subtitleTracks.firstOrNull { it.index == p.subtitleIndex }?.let(::shortTrackLabel) ?: "Off",
@@ -323,13 +323,13 @@ private fun SeekBar(p: DesktopPlaybackState, c: DesktopController, modifier: Mod
  */
 @Composable
 private fun TrackMenu(label: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector, items: List<Pair<Int, String>>, selected: Int,
-                      chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, onChoose: (Int) -> Unit) {
+                      chipValue: String, note: String?, open: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit, ceiling: Int, chipWidth: Dp = 156.dp, onChoose: (Int) -> Unit) {
     val density = LocalDensity.current
     val opener = remember { FocusRequester() }
     val menuKeys = DesktopMenuRegistration(open, opener, onDismiss)
     Box {
         OutlinedButton(onClick = { if (open) onDismiss() else onOpen() }, contentPadding = PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.focusRequester(opener).controlFocus().width(156.dp).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
+            modifier = Modifier.focusRequester(opener).controlFocus().width(chipWidth).probe(tag).semantics { contentDescription = "$label: $chipValue${note?.let { ". $it" } ?: ""}" }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(chipValue, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = MaterialTheme.typography.labelLarge.fontWeight)

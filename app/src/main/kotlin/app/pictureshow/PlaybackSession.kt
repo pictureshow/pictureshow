@@ -127,6 +127,7 @@ internal data class PlaybackState(
 )
 
 /** Used on the player thread: network transitions are serialized; buffering feedback has its own deadline. */
+
 /** Tracks a viewer already chose before this session opened; a null index leaves that choice to the server. */
 internal data class PlaybackStartTracks(val mediaSourceId: String?, val audioIndex: Int?, val subtitleIndex: Int?)
 
@@ -364,10 +365,20 @@ internal class PlaybackSession(
         return true
     }
 
-    fun select(type: MediaStreamType, index: Int) = enqueue {
+    fun select(type: MediaStreamType, pickedIndex: Int) = enqueue {
         if (mutable.value.error != null) return@enqueue
         if (type !in listOf(MediaStreamType.Audio, MediaStreamType.Subtitle)) return@enqueue
         val current = decision ?: return@enqueue
+        val index = if (type == MediaStreamType.Audio) {
+            app.pictureshow.core.playback.TrackSelection.audioIndex(
+                current.mediaSource.mediaStreams,
+                pickedIndex,
+                current.mediaSource.defaultAudioStreamIndex
+            )
+        } else {
+            pickedIndex
+        }
+        if (type == MediaStreamType.Audio && index < 0) return@enqueue
         if (type == MediaStreamType.Audio) audioChosenByViewer = true else subtitleChosenByViewer = true
         capture()
         val activeIndex = if (type == MediaStreamType.Audio) mutable.value.audioIndex else mutable.value.subtitleIndex
@@ -687,7 +698,7 @@ internal class PlaybackSession(
                     val next = outcome.decision
                     decision = next
                     reportingDecision = next
-                    val audio = request.audioStreamIndex ?: PlaybackMedia.defaultStream(
+                    val audio = request.audioStreamIndex?.takeIf { it >= 0 } ?: PlaybackMedia.defaultStream(
                         next.mediaSource.mediaStreams,
                         MediaStreamType.Audio,
                         next.mediaSource.defaultAudioStreamIndex,

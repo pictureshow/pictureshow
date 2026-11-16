@@ -493,3 +493,5 @@ internal fun DesktopPageEntryFocus(state: DesktopState, pageKey: String, blocked
         }
     }
 }
+internal fun desktopAudioChoices(streams: List<MediaStream>): List<Pair<Int, String>> =
+    streams.zip(trackLabels(streams)).map { (track, label) -> track.index to label }
