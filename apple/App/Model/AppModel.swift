@@ -71,10 +71,12 @@ import PictureshowCore
 
     /// Ends the session on the server when it can, but never waits on it: a server that is
     /// unreachable must not keep a viewer signed in on this device.
+    /// A viewer whose session already expired is signed out too: its downloads and download token still go (OFF-09).
     func signOut(_ account: Account) {
-        guard account.isSignedIn else { return }
-        let client = client(for: account)
-        Task { try? await client.logout(account: account) }
+        if account.isSignedIn {
+            let client = client(for: account)
+            Task { try? await client.logout(account: account) }
+        }
         // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
         if player?.account.key == account.key { player = nil }
         downloads.removeViewer(account)
@@ -84,13 +86,13 @@ import PictureshowCore
 
     /// Forgets the viewer's card entirely, ending its session first if it still has one.
     func remove(_ account: Account) {
-        if account.isSignedIn { signOut(account) }
+        signOut(account)
         clients[account.key] = nil
         update(AccountBook.remove(account.key, from: snapshot))
     }
 
     func forget(_ server: Server) {
-        for account in snapshot.accounts where account.server.url == server.url && account.isSignedIn { signOut(account) }
+        for account in snapshot.accounts where account.server.url == server.url { signOut(account) }
         update(AccountBook.forget(server: server.url, from: snapshot))
     }
 

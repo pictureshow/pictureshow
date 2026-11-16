@@ -152,11 +152,19 @@ struct DownloadOptions {
         if started { pump(account.key); Task { await sync(account.key) } }
     }
 
+    /// OFF-09 at start-up: downloads and download tokens that belong to no viewer on this device (a removal cut short,
+    /// an older build) are cleared. A token still owed a revocation stays until that retry reaches its server.
     private func loadStoredViewers() {
-        // A viewer whose card was removed while signed out still owns files; their ledger stays until removal runs.
-        let dirs = (try? FileManager.default.contentsOfDirectory(atPath: OfflineFiles.base.path)) ?? []
-        for dir in dirs where dir.hasPrefix("v-") && !viewers.values.contains(where: { OfflineFiles.viewerDirectory(accountKey: $0.account.key) == dir }) {
-            log.notice("Downloads folder without a known viewer: \(dir, privacy: .public)")
+        let present = (try? FileManager.default.contentsOfDirectory(atPath: OfflineFiles.base.path)) ?? []
+        let knownDirs = Set(viewers.values.map { OfflineFiles.viewerDirectory(accountKey: $0.account.key) })
+        for dir in OfflineOrphans.folders(present: present, known: knownDirs) {
+            log.notice("Clearing downloads that belong to no viewer: \(dir, privacy: .public)")
+            try? FileManager.default.removeItem(at: OfflineFiles.base.appendingPathComponent(dir))
+        }
+        let knownDevices = Set(viewers.values.map { downloadDevice($0.account) })
+        let owed = Set(PendingRevocations.all().map(\.deviceID))
+        for device in OfflineOrphans.tokens(present: DownloadTokens.allDevices(), known: knownDevices, owed: owed) {
+            DownloadTokens.delete(device)
         }
     }
 
@@ -1099,6 +1107,16 @@ enum OriginalSupport {
 
 /// The download set's token, in the Keychain on a device; an unsigned simulator build has no Keychain,
 /// so there (only) it falls back to a protected file, as the account store does.
+/// What start-up may clear: per-viewer folders and download tokens no known viewer owns.
+enum OfflineOrphans {
+    static func folders(present: [String], known: Set<String>) -> [String] {
+        present.filter { $0.hasPrefix("v-") && !known.contains($0) }.sorted()
+    }
+    static func tokens(present: [String], known: Set<String>, owed: Set<String>) -> [String] {
+        present.filter { !known.contains($0) && !owed.contains($0) }.sorted()
+    }
+}
+
 enum DownloadTokens {
     private static func service(_ device: String) -> String { "app.pictureshow.offline-token." + device }
     private static func fallback(_ device: String) -> URL { OfflineFiles.base.appendingPathComponent(".t-" + device) }
@@ -1124,6 +1142,25 @@ enum DownloadTokens {
         #if os(iOS)
         try? Data(token.utf8).write(to: fallback(device), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         #endif
+    }
+
+    /// Every download-set device with a stored token, from the Keychain and the simulator fallback files.
+    static func allDevices() -> [String] {
+        var devices: Set<String> = []
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecReturnAttributes as String: true,
+                                    kSecMatchLimit as String: kSecMatchLimitAll]
+        var result: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] {
+            for item in items {
+                if let svc = item[kSecAttrService as String] as? String, svc.hasPrefix("app.pictureshow.offline-token.") {
+                    devices.insert(String(svc.dropFirst("app.pictureshow.offline-token.".count)))
+                }
+            }
+        }
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: OfflineFiles.base.path)) ?? [] where name.hasPrefix(".t-") {
+            devices.insert(String(name.dropFirst(3)))
+        }
+        return devices.sorted()
     }
 
     static func delete(_ device: String) {

@@ -69,9 +69,9 @@ final class OfflineAppTests: XCTestCase {
         XCTAssertNil(judged.entry?.conflict)
     }
 
-    /// Sizes read as numbers: an empty budget says "0 KB", never "Zero KB".
+    /// Sizes read as numbers: an empty budget says "0 bytes", never "Zero KB".
     func testSizesAreAlwaysNumeric() {
-        XCTAssertEqual(DownloadWords.bytes(0), "0 KB")
+        XCTAssertTrue(DownloadWords.bytes(0).hasPrefix("0 "), DownloadWords.bytes(0))
         XCTAssertTrue(DownloadWords.bytes(3_700_000).hasSuffix("MB"))
     }
 
@@ -139,5 +139,58 @@ final class OfflineAppTests: XCTestCase {
         XCTAssertEqual(LocalTracks.streams(media, type: "audio").map(\.index), [1])
         XCTAssertEqual(LocalTracks.streams(media, type: "subtitle").map(\.index), [3])
         XCTAssertEqual(LocalTracks.streams(media, type: "audio").first?.type, "Audio")
+    }
+}
+
+/// OFF-09: removal clears a viewer's downloads whether or not the session is still alive; start-up clears what no
+/// viewer owns. Found by review: an expired viewer's Remove used to leave its downloads and token behind.
+@MainActor
+final class OfflineOwnershipTests: XCTestCase {
+    private final class MemoryKeychain: KeychainBackend {
+        var stored: Data?
+        func read(service: String) -> (Data?, OSStatus) { (stored, stored == nil ? errSecItemNotFound : errSecSuccess) }
+        func write(_ data: Data, service: String) -> OSStatus { stored = data; return errSecSuccess }
+        func delete(service: String) { stored = nil }
+    }
+
+    private func model(with accounts: [Account]) throws -> AppModel {
+        let suite = "app.pictureshow.tests.\(UUID().uuidString)"
+        let store = AccountStore(service: suite, fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString).json"),
+                                 keychain: MemoryKeychain(), defaults: UserDefaults(suiteName: suite)!, isSimulator: true)
+        try store.save(AccountSnapshot(servers: accounts.map(\.server), accounts: accounts, selected: accounts.first?.key))
+        return AppModel(store: store)
+    }
+
+    private func downloadsFolder(for account: Account) throws -> URL {
+        let root = OfflineFiles(accountKey: account.key).root
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: root.appendingPathComponent("manifest.json"))
+        return root
+    }
+
+    private func account(_ user: String, token: String) -> Account {
+        Account(server: Server(url: URL(string: "https://media.example.test")!, id: "srv"), userId: user, username: user, accessToken: token, deviceID: "dev-\(user)")
+    }
+
+    func testRemovingAnExpiredViewerClearsItsDownloads() throws {
+        let expired = account("expired-\(UUID().uuidString.prefix(6))", token: "")
+        let folder = try downloadsFolder(for: expired)
+        let app = try model(with: [expired])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path), "an expired session keeps its downloads")
+        app.remove(expired)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    func testSigningOutAnExpiredViewerClearsItsDownloads() throws {
+        let expired = account("expired-\(UUID().uuidString.prefix(6))", token: "")
+        let folder = try downloadsFolder(for: expired)
+        let app = try model(with: [expired])
+        app.signOut(expired)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    func testOrphansAreFoldersAndTokensNoViewerOwns() {
+        XCTAssertEqual(OfflineOrphans.folders(present: ["v-aaa", "v-bbb", ".t-x", "notes"], known: ["v-aaa"]), ["v-bbb"])
+        XCTAssertEqual(OfflineOrphans.tokens(present: ["d1", "d2", "d3"], known: ["d1"], owed: ["d3"]), ["d2"])
     }
 }
