@@ -2915,7 +2915,7 @@ class CastSenderHostTest {
 @OptIn(ExperimentalCoroutinesApi::class)
 class CastSystemSessionTest {
     @Test fun musicUiProjectsReceiverOccurrenceAndItsControlsNeverStartALocalDecoder() = runTest {
-        val context = org.robolectric.RuntimeEnvironment.getApplication<android.app.Application>()
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
         java.io.File(context.filesDir, "music").deleteRecursively()
         val persistence = object : app.pictureshow.core.TextPersistence {
             var value: String? = null
