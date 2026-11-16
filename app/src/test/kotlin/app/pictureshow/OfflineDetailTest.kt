@@ -6,6 +6,7 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -206,15 +207,23 @@ class OfflineDetailTest {
         // A notice clears after six seconds, and an idle wait would run the clock past it.
         compose.mainClock.autoAdvance = false
         // "Play on TV" is the menu button for the TV's actions; its first item is the action that has to explain itself.
-        compose.onNodeWithText("Play on TV").assertIsEnabled().performClick()
-        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithTag("touch:detail:tv").assertIsEnabled().performScrollTo().performClick()
+        settle(400)
         compose.onNodeWithTag("touch:detail:on-tv").assertIsEnabled().performClick()
-        compose.mainClock.advanceTimeBy(500)
+        settle(400)
         compose.onNodeWithTag("touch:detail:status").assertTextEquals(DETAIL_TV_NEEDS_SERVER)
         compose.onNodeWithTag("touch:detail:offline:stream").performScrollTo().performClick()
-        compose.mainClock.advanceTimeBy(500)
+        settle(400)
         compose.onNodeWithTag("touch:detail:status").assertTextEquals(DETAIL_STREAM_NEEDS_SERVER)
         assertEquals(0, taps.streamed)
+    }
+
+    // A paused clock draws no frame for a write the snapshot system has not been told about yet.
+    private fun settle(millis: Long) {
+        Snapshot.sendApplyNotifications()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(millis)
+        compose.waitForIdle()
     }
 
     @Test fun streamingInsteadIsADeliberateChoiceThatStreams() {
