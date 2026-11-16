@@ -10,6 +10,8 @@ public struct Server: Codable, Equatable, Sendable {
     public init(url: URL, id: String = "", name: String = "Jellyfin", version: String = "") {
         self.url = url; self.id = id; self.name = name; self.version = version
     }
+    /// The server's own id. The app's `Identifiable` conformance shadows `id` with the URL, so app code reads this.
+    public var serverId: String { id }
 }
 
 public struct Account: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {

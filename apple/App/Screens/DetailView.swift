@@ -74,6 +74,9 @@ struct DetailPage: View {
     @EnvironmentObject private var app: AppModel
     let content: DetailContent
     private var item: MediaItem { content.item }
+    /// True once the header has scrolled under the navigation bar: the bar then gets its material and the title,
+    /// so scrolled text never runs under the status bar unprotected.
+    @State private var pastHeader = false
 
     var body: some View {
         ScrollView {
@@ -91,6 +94,12 @@ struct DetailPage: View {
         }
         #if os(tvOS)
         .ignoresSafeArea(edges: .top)
+        #else
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 300 } action: { _, past in
+            withAnimation(.easeInOut(duration: 0.2)) { pastHeader = past }
+        }
+        .navigationTitle(pastHeader ? item.name : "")
+        .toolbarBackgroundVisibility(pastHeader ? .visible : .hidden, for: .navigationBar)
         #endif
     }
 
@@ -119,7 +128,7 @@ struct DetailPage: View {
                 if let overview = item.overview?.nilIfBlank {
                     Text(overview)
                         .font(platformValue(tv: .callout, touch: .subheadline))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(platformValue(tv: 4, touch: 6))
                         .frame(maxWidth: platformValue(tv: 1100, touch: 640), alignment: .leading)
                 }
@@ -127,6 +136,8 @@ struct DetailPage: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .heroScrim()
         }
     }
 
@@ -201,6 +212,9 @@ struct DetailPage: View {
     }
 
     @ViewBuilder private var secondaryButtons: some View {
+        #if os(iOS)
+        if playable { DownloadControl(item: item) }
+        #endif
         Button { Task { await toggleWatched() } } label: {
             Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
         }
@@ -440,6 +454,8 @@ struct CastShelf: View {
 /// File, video, audio and subtitle facts: what a viewer checks when something won't play well.
 struct MediaInfoSection: View {
     let item: MediaItem
+    @State private var showAllSubtitles = false
+    static let subtitlePreview = 4
     var body: some View {
         let source = item.mediaSources[0]
         let video = source.mediaStreams.first { $0.type == "Video" }
@@ -451,7 +467,24 @@ struct MediaInfoSection: View {
                 row("File", [source.container?.uppercased(), source.bitrate.map { String(format: "%.1f Mbps", Double($0) / 1_000_000) }].compactMap { $0 }.joined(separator: " · "))
                 if let video { row("Video", video.label) }
                 if !audio.isEmpty { row("Audio", audio.map(\.label).joined(separator: "\n")) }
-                if !subtitles.isEmpty { row("Subtitles", subtitles.map(\.label).joined(separator: "\n")) }
+                if !subtitles.isEmpty {
+                    // A file can carry dozens of subtitle tracks; list a few and offer the rest.
+                    let shown = showAllSubtitles ? subtitles : Array(subtitles.prefix(Self.subtitlePreview))
+                    row("Subtitles", shown.map(\.label).joined(separator: "\n"))
+                    if subtitles.count > Self.subtitlePreview {
+                        GridRow {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                            #if os(tvOS)
+                            // The section takes focus as one block on TV, so name the rest instead of a button.
+                            Text("and \(subtitles.count - Self.subtitlePreview) more").foregroundStyle(Theme.muted)
+                            #else
+                            Button(showAllSubtitles ? "Show fewer" : "Show all \(subtitles.count) subtitle tracks") { showAllSubtitles.toggle() }
+                                .font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                                .buttonStyle(.plain).frame(minHeight: 44)
+                            #endif
+                        }
+                    }
+                }
             }
             .font(.caption)
         }

@@ -17,11 +17,15 @@ import PictureshowCore
 
     private let store: AccountStore
     private var clients: [String: JellyfinClient] = [:]
+    /// Downloads for offline viewing (iOS and iPadOS; a TV says it can't).
+    let downloads: Downloads
 
     init(store: AccountStore = AccountStore()) {
         self.store = store
         snapshot = store.load()
         preferences = Preferences.load()
+        downloads = Downloads(deviceName: DeviceIdentity.name, version: AppInfo.version)
+        downloads.start(accounts: snapshot.accounts)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
 
@@ -48,6 +52,7 @@ import PictureshowCore
     func signedIn(_ account: Account) {
         clients[account.key] = nil
         update(AccountBook.signIn(account, into: snapshot))
+        downloads.signedIn(account)
         addingAccount = false
         signingInAgain = nil
     }
@@ -70,6 +75,9 @@ import PictureshowCore
         guard account.isSignedIn else { return }
         let client = client(for: account)
         Task { try? await client.logout(account: account) }
+        // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
+        if player?.account.key == account.key { player = nil }
+        downloads.removeViewer(account)
         clients[account.key] = nil
         update(AccountBook.signOut(account.key, from: snapshot))
     }
@@ -94,10 +102,25 @@ import PictureshowCore
 
     func catalogChanged() { catalogRevision += 1 }
 
-    func play(_ item: MediaItem, fromStart: Bool = false) {
+    /// A title's own Play uses its ready download, online or not, unless the viewer chose to stream (OFF-04a).
+    func play(_ item: MediaItem, fromStart: Bool = false, stream: Bool = false) {
         guard let account else { return }
+        let ready = downloads.local(account, itemID: item.id)
+        if offlineDetailPlaySource(ready: ready != nil, server: .unknown, explicitStream: stream) == .local, let ready {
+            playLocal(ready, item: item, fromStart: fromStart)
+            return
+        }
         player = PlayerRequest(account: account, item: item, fromStart: fromStart)
     }
+
+    /// Plays a download from this device, whether or not the server is reachable (OFF-04a, OFF-11).
+    func playLocal(_ media: LocalMedia, item: MediaItem? = nil, fromStart: Bool = false) {
+        guard let account = accounts.first(where: { $0.key == media.accountKey }) ?? account else { return }
+        player = PlayerRequest(account: account, item: item ?? media.entry.offlineItem, fromStart: fromStart, local: media)
+    }
+
+    /// Opened from Home and Settings, and at a cold start with no network when there are downloads to watch.
+    @Published var showingDownloads = false
 
     /// Set when the sign-in couldn't be stored securely; the app shows it with a Retry.
     @Published var storageError: String?
@@ -118,6 +141,7 @@ struct PlayerRequest: Identifiable {
     let account: Account
     let item: MediaItem
     let fromStart: Bool
+    var local: LocalMedia? = nil
 }
 
 enum AppInfo {

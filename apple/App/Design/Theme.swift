@@ -222,3 +222,29 @@ private struct TVActionBody: View {
     }
 }
 #endif
+
+/// A veil in the page colour behind hero text (title, synopsis, actions) over artwork. It is anchored to the text
+/// block, not to a fraction of the art, so it covers the text at any hero height. At 0.9 the muted synopsis keeps
+/// at least 4.5:1 over the worst art: pure white under the dark theme (veil needs >= 0.74) or pure black under the
+/// light theme (>= 0.82).
+struct HeroScrim: ViewModifier {
+    var fade: CGFloat = platformValue(tv: 120, touch: 64)
+    func body(content: Content) -> some View {
+        content.background(alignment: .bottom) {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [Theme.background.opacity(0), Theme.background.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: fade)
+                Theme.background.opacity(0.9)
+            }
+            .padding(.top, -fade)
+            #if os(tvOS)
+            .ignoresSafeArea(edges: .horizontal)
+            #endif
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+extension View {
+    func heroScrim() -> some View { modifier(HeroScrim()) }
+}

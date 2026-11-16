@@ -33,7 +33,22 @@ struct HomeView: View {
             switch home.phase {
             case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
+                #if os(iOS)
+                if app.downloads.hasReady(app.account) {
+                    // Saved films come first when the server is out of reach: Watch downloads, then Retry.
+                    VStack(spacing: 12) {
+                        MessageView(symbol: "wifi.exclamationmark", title: "Could not reach the server. Your downloads still play.",
+                                    actionTitle: "Watch downloads") { app.showingDownloads = true }
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Try again") { Task { await reload() } }.secondaryAction()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    MessageView(symbol: "wifi.exclamationmark", title: "Couldn't load your home screen", message: message, actionTitle: "Try again") { Task { await reload() } }
+                }
+                #else
                 MessageView(symbol: "wifi.exclamationmark", title: "Couldn't load your home screen", message: message, actionTitle: "Try again") { Task { await reload() } }
+                #endif
             case .loaded(let content):
                 if content.rows.isEmpty {
                     MessageView(symbol: "film.stack", title: "Nothing here yet", message: "Your libraries are empty, or this account can't see any of them.")
@@ -109,7 +124,7 @@ struct HomeHero: View {
                     Text([Format.episode(shown).nilIfBlank, shown.name].compactMap { $0 }.joined(separator: " · ")).font(.headline)
                 }
                 if let overview = shown.overview?.nilIfBlank {
-                    Text(overview).font(platformValue(tv: .callout, touch: .subheadline)).foregroundStyle(.secondary).lineLimit(platformValue(tv: 3, touch: 2)).frame(maxWidth: platformValue(tv: 900, touch: 560), alignment: .leading)
+                    Text(overview).font(platformValue(tv: .callout, touch: .subheadline)).foregroundStyle(Theme.muted).lineLimit(platformValue(tv: 3, touch: 2)).frame(maxWidth: platformValue(tv: 900, touch: 560), alignment: .leading)
                 }
                 HStack(spacing: 14) {
                     Button { app.play(shown) } label: {
@@ -126,6 +141,8 @@ struct HomeHero: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.bottom, platformValue(tv: 40, touch: 20))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .heroScrim()
         }
         .task(id: item.id) {
             guard let account = app.account, let client = app.client else { return }
@@ -186,6 +203,7 @@ struct LibraryShelf: View {
 }
 
 struct LibraryTile: View {
+    @State private var hasArt = false
     @EnvironmentObject private var app: AppModel
     let library: MediaItem
     /// Fixed width in a shelf; nil fills the grid column.
@@ -202,11 +220,13 @@ struct LibraryTile: View {
     private var tile: some View {
         tileBase
             .overlay {
-                ArtworkImage(url: app.account.flatMap { app.client?.artworkURL(account: $0, item: library, kind: .wide, width: Int((width ?? 400) * 2)) }, placeholderSymbol: library.symbol)
+                ArtworkImage(url: app.account.flatMap { app.client?.artworkURL(account: $0, item: library, kind: .wide, width: Int((width ?? 400) * 2)) }, placeholderSymbol: library.symbol, loaded: $hasArt)
             }
-            .overlay { LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .center, endPoint: .bottom) }
+            // The dark scrim keeps a white name readable over a picture; on the plain placeholder it only muddied
+            // the tile (grey into black under the light theme), so the name then uses the text colour instead.
+            .overlay { if hasArt { LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .center, endPoint: .bottom) } }
             .overlay(alignment: .bottomLeading) {
-                Text(library.name).font(.headline).foregroundStyle(.white).padding(platformValue(tv: 20, touch: 12))
+                Text(library.name).font(.headline).foregroundStyle(hasArt ? Color.white : Color.primary).padding(platformValue(tv: 20, touch: 12))
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(library.name)

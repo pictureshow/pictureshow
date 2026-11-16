@@ -34,6 +34,11 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     let account: Account
     let client: JellyfinClient
     private let fromStart: Bool
+    /// Set when this viewing plays a download from this device: nothing is asked of the server, and the
+    /// place goes to the download's outbox to be brought back later (OFF-07, OFF-11).
+    private(set) var local: LocalMedia?
+    private var localAudio: Int?
+    private var localSubtitle = -1
 
     private var segments: [MediaSegment] = []
     private var autoSkipped: Set<String> = []
@@ -56,6 +61,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         self.client = app.client(for: request.account)
         self.item = request.item
         self.fromStart = request.fromStart
+        self.local = request.local
         player.allowsExternalPlayback = true
         player.appliesMediaSelectionCriteriaAutomatically = false
         attachObservers()
@@ -64,10 +70,16 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     // MARK: Tracks
 
     var source: MediaSource? { decision?.source ?? item.mediaSources.first }
-    var audioStreams: [MediaStream] { source?.mediaStreams.filter { $0.type == "Audio" } ?? [] }
-    var subtitleStreams: [MediaStream] { source?.mediaStreams.filter { $0.type == "Subtitle" } ?? [] }
-    var selectedAudio: Int? { decision?.audioIndex ?? source?.defaultAudioStreamIndex }
-    var selectedSubtitle: Int { decision?.subtitleIndex ?? -1 }
+    var audioStreams: [MediaStream] {
+        if let local { return LocalTracks.streams(local, type: "audio") }
+        return source?.mediaStreams.filter { $0.type == "Audio" } ?? []
+    }
+    var subtitleStreams: [MediaStream] {
+        if let local { return LocalTracks.streams(local, type: "subtitle") }
+        return source?.mediaStreams.filter { $0.type == "Subtitle" } ?? []
+    }
+    var selectedAudio: Int? { local != nil ? localAudio : (decision?.audioIndex ?? source?.defaultAudioStreamIndex) }
+    var selectedSubtitle: Int { local != nil ? localSubtitle : (decision?.subtitleIndex ?? -1) }
 
     /// Labels come from the whole chooser list, so untitled tracks get their menu number and duplicates stay distinct.
     func label(_ stream: MediaStream) -> String {
@@ -81,6 +93,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     func start() async {
         guard !started else { return }
         started = true
+        if let local { await startLocal(local); return }
         do {
             let full = try await client.item(account: account, id: item.id)
             item = full
@@ -153,12 +166,22 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         cueTask?.cancel(); countdownTask?.cancel()
         detachObservers()
         let account = self.account, client = self.client, app = self.app
+        if let local {
+            let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
+            if durationMs > 0 && ms == durationMs { app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId) }
+            else { app.downloads.recordViewing(local.accountKey, itemID: local.entry.itemId, positionTicks: ms * 10_000) }
+            app.player = nil
+            Task { await app.downloads.sync(local.accountKey); app.catalogChanged() }
+            return
+        }
+        let itemID = item.id
         Task {
             if let decision {
                 let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
                 try? await client.reportStopped(account: account, decision: decision, positionTicks: ms * 10_000)
                 try? await client.stopEncoding(account: account, decision: decision)
             }
+            app.downloads.onlineViewingStopped(account: account, itemID: itemID)
             app.catalogChanged()
         }
         app.player = nil
@@ -191,11 +214,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     func selectAudio(_ index: Int) {
         guard index != selectedAudio else { return }
+        if local != nil { selectLocalAudio(index); return }
         Task { await renegotiate(audio: index, subtitle: selectedSubtitle) }
     }
 
     func selectSubtitle(_ index: Int) {
-        guard index != selectedSubtitle, let decision else { return }
+        guard index != selectedSubtitle else { return }
+        if let local { localSubtitle = index; loadLocalCues(local); return }
+        guard let decision else { return }
         let current = subtitleStreams.first { $0.index == selectedSubtitle }
         let next = subtitleStreams.first { $0.index == index }
         let currentLocal = current.map(Captions.isText) ?? true
@@ -225,6 +251,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     func playNext() {
+        if local != nil { playNextLocal(); return }
         guard let next = nextEpisode else { return }
         countdownTask?.cancel()
         let decision = self.decision
@@ -382,10 +409,22 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     private func reachedEnd() {
+        if let local {
+            app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId)
+            // Read again at the end, so an episode that finished downloading during this one follows it.
+            if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { close() }
+            return
+        }
         if nextEpisode != nil, app.preferences.autoplayNextEpisode, !nextCardDismissed { playNext() } else { close() }
     }
 
     private func reportProgress(force: Bool) {
+        if let local {
+            guard !finished, force || Date().timeIntervalSince(lastReport) >= 10 else { return }
+            lastReport = Date()
+            app.downloads.recordViewing(local.accountKey, itemID: local.entry.itemId, positionTicks: Ticks.from(seconds: currentSeconds))
+            return
+        }
         guard let decision, !finished else { return }
         guard force || Date().timeIntervalSince(lastReport) >= 10 else { return }
         lastReport = Date()
@@ -458,5 +497,83 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         case .transcode: return "Converted by the server"
         case nil: return ""
         }
+    }
+}
+
+// MARK: - Playing a download
+
+extension PlaybackController {
+    fileprivate func startLocal(_ media: LocalMedia) async {
+        let account = self.account
+        let ticks = fromStart ? 0 : offlineDetailStartTicks(fromStart: false, outbox: app.downloads.outbox(account, media.entry.itemId),
+                                                             lastKnown: app.downloads.lastKnown(account, media.entry.itemId), server: nil)
+        localAudio = media.entry.tracks.first { $0.type == "audio" && $0.available && $0.isDefault }?.serverIndex
+            ?? media.entry.tracks.first { $0.type == "audio" && $0.available }?.serverIndex
+        localSubtitle = media.subtitles.first { sub in media.entry.tracks.contains { $0.serverIndex == sub.serverIndex && ($0.isDefault || $0.isForced) } }?.serverIndex ?? -1
+        notice = nil
+        let asset = AVURLAsset(url: media.url)
+        let playerItem = AVPlayerItem(asset: asset)
+        playerItem.externalMetadata = metadata()
+        applySubtitleStyle(playerItem)
+        let seconds = Ticks.seconds(ticks)
+        pendingSeek = seconds > 1 ? seconds : nil
+        observe(playerItem)
+        player.replaceCurrentItem(with: playerItem)
+        player.play()
+        lastReport = Date()
+        loadLocalCues(media)
+        nextEpisode = app.downloads.next(after: media)?.entry.offlineItem
+    }
+
+    fileprivate func loadLocalCues(_ media: LocalMedia) {
+        cueTask?.cancel()
+        cues = []; cue = nil
+        guard localSubtitle >= 0, let file = media.subtitles.first(where: { $0.serverIndex == localSubtitle }) else { return }
+        cueTask = Task { [weak self] in
+            guard let data = try? Data(contentsOf: file.url), let parsed = try? TextSubtitles.parse(data: data, format: "vtt"), !Task.isCancelled else { return }
+            self?.cues = parsed
+        }
+    }
+
+    /// An Original keeps its own audio tracks; the player's audible group lists them in the file's order.
+    fileprivate func selectLocalAudio(_ index: Int) {
+        guard let local, let playerItem = player.currentItem else { return }
+        let order = local.entry.tracks.filter { $0.type == "audio" && $0.available }.map(\.serverIndex)
+        guard let position = order.firstIndex(of: index) else { return }
+        localAudio = index
+        Task {
+            guard let group = try? await playerItem.asset.loadMediaSelectionGroup(for: .audible), position < group.options.count else { return }
+            playerItem.select(group.options[position], in: group)
+        }
+    }
+
+    /// The next title opens its own local player, from its own place; an episode that isn't here ends the viewing.
+    fileprivate func playNextLocal() {
+        guard let current = local, let next = app.downloads.next(after: current) else { close(); return }
+        app.downloads.recordCompleted(current.accountKey, itemID: current.entry.itemId)
+        countdownTask?.cancel()
+        finished = true
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        cueTask?.cancel()
+        detachObservers()
+        app.playLocal(next)
+    }
+}
+
+/// Track rows for a download, in the shape the player menus already draw.
+enum LocalTracks {
+    static func streams(_ media: LocalMedia, type: String) -> [MediaStream] {
+        let tracks = media.entry.tracks.filter { track in track.type == type && track.available && (type == "audio" || media.subtitles.contains { s in s.serverIndex == track.serverIndex }) }
+        let rows: [[String: Any]] = tracks.map { track in
+            var row: [String: Any] = ["Index": track.serverIndex, "Type": type == "audio" ? "Audio" : "Subtitle", "DisplayTitle": track.label,
+                                      "IsDefault": track.isDefault, "IsForced": track.isForced, "IsExternal": type == "subtitle",
+                                      "IsTextSubtitleStream": type == "subtitle"]
+            if let language = track.language { row["Language"] = language }
+            if let codec = track.codec { row["Codec"] = codec }
+            return row
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: rows) else { return [] }
+        return (try? JSONDecoder().decode([MediaStream].self, from: data)) ?? []
     }
 }

@@ -38,6 +38,12 @@ struct SettingsView: View {
             Section {
                 NavigationLink("About Pictureshow") { AboutView() }
                 NavigationLink(DeviceIdentity.thisDevice) { DeviceInfoView() }
+                NavigationLink("Support Pictureshow") { SupportView() }
+                #if os(iOS)
+                NavigationLink("Downloads") { DownloadsView() }
+                #else
+                NavigationLink("Downloads") { DownloadsUnsupportedView() }
+                #endif
             } header: {
                 Text("Pictureshow")
             } footer: {

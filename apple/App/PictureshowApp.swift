@@ -19,7 +19,18 @@ import PictureshowCore
                 .environmentObject(app)
                 .tint(Theme.accent)
                 .preferredColorScheme(app.preferences.appearance.scheme)
+                #if DEBUG && os(iOS)
+                .task { await DebugOrientation.applyFromEnvironment() }
+                #endif
+                #if DEBUG
+                .task(id: app.account?.key) { await DebugLaunch.playFromEnvironment(app) }
+                #endif
         }
+        #if os(iOS)
+        // A transfer that finished while the app was gone wakes it; the engine's sessions take the events.
+        .backgroundTask(.urlSession("app.pictureshow.downloads.files")) {}
+        .backgroundTask(.urlSession("app.pictureshow.downloads.hls")) {}
+        #endif
     }
 }
 
@@ -64,7 +75,7 @@ struct RootView: View {
     }
 }
 
-enum MainTab: Hashable { case home, libraries, search, settings }
+enum MainTab: Hashable { case home, libraries, search, downloads, settings }
 
 /// Tab bar on iPhone and Apple TV; on iPad the same tabs adapt into a sidebar.
 struct MainShell: View {
@@ -82,12 +93,23 @@ struct MainShell: View {
             Tab(value: MainTab.search, role: .search) {
                 RoutedStack { SearchView() }
             }
+            #if os(iOS)
+            Tab("Downloads", systemImage: "arrow.down.circle", value: MainTab.downloads) {
+                RoutedStack { DownloadsView() }
+            }
+            #endif
             Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
                 RoutedStack { SettingsView() }
             }
         }
         #if os(iOS)
         .tabViewStyle(.sidebarAdaptable)
+        // With no network at all, a cold start goes straight to what still plays (OFF-04).
+        .task {
+            try? await Task.sleep(for: .milliseconds(400))
+            if !app.downloads.networkUp, app.downloads.hasReady(app.account) { tab = .downloads }
+        }
+        .onChange(of: app.showingDownloads) { _, show in if show { tab = .downloads; app.showingDownloads = false } }
         #endif
     }
 }
@@ -108,3 +130,38 @@ struct RoutedStack<Root: View>: View {
         }
     }
 }
+
+#if DEBUG && os(iOS)
+/// Test seam for headless simulators, which have no rotate menu: launching with PICTURESHOW_ORIENTATION=landscape
+/// (simctl: SIMCTL_CHILD_PICTURESHOW_ORIENTATION) turns the window. Debug builds only.
+enum DebugOrientation {
+    @MainActor static func applyFromEnvironment() async {
+        guard let wanted = ProcessInfo.processInfo.environment["PICTURESHOW_ORIENTATION"] else { return }
+        let mask: UIInterfaceOrientationMask = wanted == "landscape" ? .landscapeRight : .portrait
+        // The request is honoured only once the scene is in the foreground.
+        for _ in 0..<20 {
+            if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in NSLog("PICTURESHOW_ORIENTATION refused: %@", error.localizedDescription) }
+                scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+}
+#endif
+
+#if DEBUG
+/// Test seam: launching with PICTURESHOW_PLAY=<item id> (simctl: SIMCTL_CHILD_PICTURESHOW_PLAY) plays that item for
+/// the signed-in viewer, so a headless Apple TV can reach a given file without typing a search. Debug builds only.
+enum DebugLaunch {
+    private static var done = false
+    @MainActor static func playFromEnvironment(_ app: AppModel) async {
+        guard !done, let id = ProcessInfo.processInfo.environment["PICTURESHOW_PLAY"],
+              let account = app.account, let client = app.client,
+              let item = try? await client.item(account: account, id: id) else { return }
+        done = true
+        app.play(item, fromStart: ProcessInfo.processInfo.environment["PICTURESHOW_FROM_START"] == "1")
+    }
+}
+#endif
