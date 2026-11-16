@@ -17,15 +17,6 @@ final class PendingSpecVectorTests: XCTestCase {
         throw XCTSkip("\(suite): \(metadata.count) known pending cases. \(metadata.reason)")
     }
     func testPendingFrameRateMatch6Cases() throws { try pending("frame-rate-match") }
-    func testPendingOfflineBudget40Cases() throws { try pending("offline-budget") }
-    func testPendingOfflineFmp443Cases() throws { try pending("offline-fmp4") }
-    func testPendingOfflineJob283Cases() throws { try pending("offline-job") }
-    func testPendingOfflineManifest98Cases() throws { try pending("offline-manifest") }
-    func testPendingOfflineNext14Cases() throws { try pending("offline-next") }
-    func testPendingOfflineOutbox83Cases() throws { try pending("offline-outbox") }
-    func testPendingOfflinePlan58Cases() throws { try pending("offline-plan") }
-    func testPendingOfflineReconnect16Cases() throws { try pending("offline-reconnect") }
-    func testPendingOfflineResume78Cases() throws { try pending("offline-resume") }
     func testPendingPlaybackSettingsLayout7Cases() throws { try pending("playback-settings-layout") }
     func testPendingPlaybackSettings68Cases() throws { try pending("playback-settings") }
     func testPendingPlaybackStart4Cases() throws { try pending("playback-start") }

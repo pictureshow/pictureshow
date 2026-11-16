@@ -90,7 +90,8 @@ final class SpecVectorTests:XCTestCase {
         let musicSuites:Set<String>=["music-catalog","music-playlists","music-quality","music-queue","music-reports","music-session"]
         let castSuites:Set<String>=["cast-capability","cast-session","cast-handoff"]
         let remoteSuites:Set<String>=["remote-wire","remote-targets","remote-receive","remote-reconnect","remote-queue"]
-        let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites)
+        let offlineSuites = Set(OfflineVectorRunner.operations.keys)
+        let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites).union(offlineSuites)
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         var discoveredPendingSuites = Set<String>()
         let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation"]).union(traceSuites).union(pendingSuites)
@@ -140,12 +141,12 @@ final class SpecVectorTests:XCTestCase {
                         "remote-wire":["request","cap-note","parse","capabilities","advertised","socket-url","targets-path","relay-rights"],
                         "remote-targets":["targets","track-selected"], "remote-receive":["receive"], "remote-reconnect":["controller"], "remote-queue":["queue"]
                     ]
-                    guard allowedOperations[suite]?.contains(operation) == true else { throw NSError(domain:"Unknown operation \(suite)/\(operation)",code:1) }
+                    guard (allowedOperations[suite] ?? OfflineVectorRunner.operations[suite])?.contains(operation) == true else { throw NSError(domain:"Unknown operation \(suite)/\(operation)",code:1) }
                     if musicSuites.contains(suite), !["queue", "session", "report", "playlist"].contains(operation) {
                         guard vector["input"] is [String:Any],vector["expected"] != nil,vector["steps"] == nil,vector["state"] == nil else { throw NSError(domain:"Malformed music vector \(id)",code:1) }
                         continue
                     }
-                    guard vector["state"] is [String:Any], let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
+                    guard vector["state"] is [String:Any] || (suite == "offline-outbox" && operation == "outbox" && vector["state"] is NSNull), let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
                           vector["input"] == nil, vector["expected"] == nil else { throw NSError(domain:"Malformed control vector \(id) or unknown operation \(operation)",code:1) }
                     for step in steps {
                         guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
@@ -180,7 +181,8 @@ final class SpecVectorTests:XCTestCase {
                     let id=text(vector,"id")
                     do {
                         let steps: Int
-                        if musicSuites.contains(suite) { steps = try MusicVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
+                        if offlineSuites.contains(suite) { steps = try OfflineVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"]!,steps:vector["steps"] as! [[String:Any]]) }
+                        else if musicSuites.contains(suite) { steps = try MusicVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else if castSuites.contains(suite) { steps = try CastVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else if remoteSuites.contains(suite) { steps = try RemoteVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else { steps = try ControlTraceRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
