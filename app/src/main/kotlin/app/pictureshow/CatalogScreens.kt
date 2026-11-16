@@ -3317,7 +3317,8 @@ private fun DetailActions(
                 }
         }
         if (compact) {
-            recordingDetailActionOrder(offersFromStart && (stableLayout || position > 0), onDownload != null && pending == null).forEach { target ->
+            val showsFromStart = offersFromStart && (stableLayout || position > 0)
+            recordingDetailActionOrder(showsFromStart, onDownload != null && pending == null).forEach { target ->
                 key(target) {
                     when (target) {
                         "primary" -> {

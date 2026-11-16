@@ -89,7 +89,14 @@ class SeasonPlayTest {
         compose.setContent {
             PictureshowTheme {
                 CatalogDetail(
-                    CatalogDetailState(account, season2, loading = false, selectedSeasonId = "s2", episodes = episodes, readSucceeded = true),
+                    CatalogDetailState(
+                        account,
+                        season2,
+                        loading = false,
+                        selectedSeasonId = "s2",
+                        episodes = episodes,
+                        readSucceeded = true
+                    ),
                     {},
                     {},
                     {},
@@ -105,7 +112,8 @@ class SeasonPlayTest {
     }
 
     @Config(qualifiers = "w600dp-h3000dp-port-xhdpi")
-    @Test fun touchOffersPlayForTheChosenSeasonOnceItsEpisodesLoad() {
+    @Test
+    fun touchOffersPlayForTheChosenSeasonOnceItsEpisodesLoad() {
         val state = CatalogDetailState(
             account,
             series,

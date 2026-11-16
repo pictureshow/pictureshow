@@ -4,12 +4,12 @@
 package app.pictureshow
 
 import android.app.Application
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.activity.ComponentActivity
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server

@@ -191,7 +191,8 @@ class PlaybackEntryTest {
                 dispatcher = StandardTestDispatcher(testScheduler)
                 addHandler { request ->
                     val body = when {
-                        request.url.encodedPath.endsWith("/Episodes") -> Json.encodeToString(app.pictureshow.core.ItemPage(listOf(episodes[1]), 1))
+                        request.url.encodedPath.endsWith("/Episodes") ->
+                            Json.encodeToString(app.pictureshow.core.ItemPage(listOf(episodes[1]), 1))
                         request.url.parameters["ids"] != null -> """{"Items":[${Json.encodeToString(season)}]}"""
                         else -> Json.encodeToString(season)
                     }
