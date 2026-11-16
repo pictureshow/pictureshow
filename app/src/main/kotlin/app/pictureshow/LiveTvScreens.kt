@@ -6,6 +6,7 @@ package app.pictureshow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -414,7 +418,13 @@ internal fun LiveTvScreen(
             val tabs = listOf("Channels", "Guide", "Recordings", "Schedules")
             val navigation: @Composable () -> Unit = {
                 if (tv) {
-                    androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
+                    // T-6: Up from a full-width channel row entered the tabs wherever geometry chose (often Schedules),
+                    // so two viewers landed on the wrong tab. Entering the row focuses the selected tab.
+                    val tabFocus = remember { tabs.associateWith { FocusRequester() } }
+                    androidx.tv.material3.TabRow(
+                        tabs.indexOf(tab),
+                        modifier = Modifier.focusProperties { onEnter = { tabFocus[tab]?.requestFocus() } }.focusGroup()
+                    ) {
                         tabs.forEach { next ->
                             TvTab(
                                 tab == next,
@@ -425,7 +435,7 @@ internal fun LiveTvScreen(
                                 },
                                 modifier = Modifier.height(
                                     (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
-                                ).testTag("live:tab:$next"),
+                                ).focusRequester(tabFocus.getValue(next)).testTag("live:tab:$next"),
                                 colors = androidx.tv.material3.TabDefaults.pillIndicatorTabColors(inactiveContentColor = LiveMuted)
                             ) {
                                 Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
