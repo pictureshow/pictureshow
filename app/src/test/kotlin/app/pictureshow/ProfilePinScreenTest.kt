@@ -7,6 +7,7 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import app.pictureshow.core.JvmProfilePinHasher
@@ -62,5 +63,23 @@ class ProfilePinScreenTest {
         assertEquals("parent", store.unlocked.value)
         compose.onNodeWithTag("pin:switch").performClick()
         compose.runOnIdle { assertEquals(1, switched) }
+    }
+
+    @Test
+    fun afterTenWrongTriesOnlyThePasswordRouteIsLeft() {
+        val hasher = JvmProfilePinHasher(rounds = 1_000)
+        val locks = mapOf("parent" to app.pictureshow.core.ProfileLock(hasher.create("2468"), failures = 10, failedAt = 5))
+        val store = ProfileLockStore(Memory(kotlinx.serialization.json.Json.encodeToString(locks)), hasher)
+        runBlocking { store.load() }
+        var password = 0
+        compose.setContent {
+            app.pictureshow.ui.PictureshowTheme {
+                ProfileLockScreen(store, "parent", "Parent", tv = false, onUnlocked = {}, onSwitch = {}, onPassword = { password++ })
+            }
+        }
+        waitUntil { compose.onAllNodesWithTag("pin:key:1").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("pin:note").assertTextContains("the PIN is off", substring = true)
+        compose.onNodeWithTag("pin:password").performClick()
+        compose.runOnIdle { assertEquals(1, password) }
     }
 }

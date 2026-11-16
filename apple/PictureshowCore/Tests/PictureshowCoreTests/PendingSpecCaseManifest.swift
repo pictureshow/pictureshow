@@ -10,7 +10,7 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "application": Suite(count: 124, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 131, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
         "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
@@ -1510,11 +1510,18 @@ enum PendingSpecCaseManifest {
         profile-pin-needed-start-off|application/profile-pin-needed
         profile-pin-needed-start-already-unlocked|application/profile-pin-needed
         profile-pin-attempt-first-wrong|application/profile-pin-attempt
-        profile-pin-attempt-fifth-wrong-waits|application/profile-pin-attempt
+        profile-pin-attempt-fourth-wrong-no-wait|application/profile-pin-attempt
+        profile-pin-attempt-fifth-wrong-waits-30s|application/profile-pin-attempt
+        profile-pin-attempt-wait-ending-keeps-the-count|application/profile-pin-attempt
+        profile-pin-attempt-seventh-wrong-waits-5min|application/profile-pin-attempt
+        profile-pin-attempt-eighth-wrong-waits-15min|application/profile-pin-attempt
+        profile-pin-attempt-ninth-wrong-waits-1h|application/profile-pin-attempt
+        profile-pin-attempt-tenth-wrong-locks-out|application/profile-pin-attempt
+        profile-pin-attempt-locked-out-right-pin-refused|application/profile-pin-attempt
         profile-pin-attempt-right-clears|application/profile-pin-attempt
         profile-pin-attempt-during-wait-not-counted|application/profile-pin-attempt
-        profile-pin-attempt-after-wait-checked|application/profile-pin-attempt
-        profile-pin-attempt-clock-backwards-capped|application/profile-pin-attempt
+        profile-pin-attempt-restart-begins-the-wait-again|application/profile-pin-attempt
+        profile-pin-attempt-restart-wait-served-since-boot|application/profile-pin-attempt
         access-refusal-sign-in|application/access-refusal
         access-refusal-in-session|application/access-refusal
         sync-group-list-loading|application/sync-group-list

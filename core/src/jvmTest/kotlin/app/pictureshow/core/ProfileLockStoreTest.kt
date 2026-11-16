@@ -44,19 +44,46 @@ class ProfileLockStoreTest {
         assertNull(store.unlocked.value)
         assertEquals(ProfilePinResult.UNLOCKED, store.verify("parent", "2468", 31_000))
         assertEquals("parent", store.unlocked.value)
+        assertEquals(0, store.lock("parent")?.failures)
     }
 
     @Test
-    fun theWaitSurvivesARestartButTheUnlockDoesNot() = runTest {
+    fun theCountSurvivesEachWaitAndTheWaitsGrowUntilOnlyThePasswordWorks() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = true)
+        store.markUnlocked(null)
+        var now = 1_000L
+        repeat(4) { assertEquals(ProfilePinResult.WRONG, store.verify("parent", "0000", now)) }
+        val waits = listOf(30_000L, 60_000L, 300_000L, 900_000L, 3_600_000L)
+        for (wait in waits) {
+            assertEquals(ProfilePinResult.WAIT, store.verify("parent", "0000", now))
+            assertEquals(wait, profilePinCooldown(store.lock("parent")!!, now), "wait after ${store.lock("parent")!!.failures} tries")
+            now += wait
+        }
+        // Ten wrong in a row: the PIN is off, even the right one, however long anyone waits.
+        assertEquals(ProfilePinResult.LOCKED_OUT, store.verify("parent", "0000", now))
+        assertEquals(PROFILE_PIN_HARD_LIMIT, store.lock("parent")!!.failures)
+        assertEquals(ProfilePinResult.LOCKED_OUT, store.verify("parent", "2468", now + 365L * 24 * 3_600_000))
+        assertNull(store.unlocked.value)
+        // The password sign-in unlocks the viewer, and a new PIN starts the count again.
+        store.markUnlocked("parent")
+        store.set("parent", "1357", askOnStart = true)
+        assertEquals(0, store.lock("parent")!!.failures)
+    }
+
+    @Test
+    fun aRestartBeginsTheWaitAgainInsteadOfEndingIt() = runTest {
         val memory = Memory()
         val store = ProfileLockStore(memory, hasher)
         store.set("parent", "2468", askOnStart = true)
-        repeat(5) { store.verify("parent", "1111", 5_000) }
+        repeat(5) { store.verify("parent", "1111", 5_000_000) }
+        // Rebooted: the monotonic clock starts again near zero, far below the saved failure time.
         val restarted = ProfileLockStore(memory, hasher)
         restarted.load()
         assertNull(restarted.unlocked.value)
         assertTrue(restarted.needed("parent", ProfileUnlockReason.START))
-        assertEquals(ProfilePinResult.WAIT, restarted.verify("parent", "2468", 6_000))
+        assertEquals(ProfilePinResult.WAIT, restarted.verify("parent", "2468", 10_000))
+        assertEquals(ProfilePinResult.UNLOCKED, restarted.verify("parent", "2468", 30_000))
         assertFalse("2468" in memory.text.orEmpty())
     }
 

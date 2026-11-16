@@ -9569,89 +9569,207 @@
       "operation": "profile-pin-attempt",
       "input": {
         "failures": 0,
-        "blockedUntil": 0,
+        "failedAt": 0,
         "now": 1000,
         "correct": false
       },
       "expected": {
         "failures": 1,
-        "blockedUntil": 0,
-        "cooldownMs": 0
+        "failedAt": 1000,
+        "cooldownMs": 0,
+        "lockedOut": false
       }
     },
     {
-      "id": "profile-pin-attempt-fifth-wrong-waits",
+      "id": "profile-pin-attempt-fourth-wrong-no-wait",
       "operation": "profile-pin-attempt",
       "input": {
-        "failures": 4,
-        "blockedUntil": 0,
+        "failures": 3,
+        "failedAt": 900,
         "now": 1000,
         "correct": false
       },
       "expected": {
-        "failures": 0,
-        "blockedUntil": 31000,
-        "cooldownMs": 30000
+        "failures": 4,
+        "failedAt": 1000,
+        "cooldownMs": 0,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-fifth-wrong-waits-30s",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 4,
+        "failedAt": 900,
+        "now": 1000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 5,
+        "failedAt": 1000,
+        "cooldownMs": 30000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-wait-ending-keeps-the-count",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 5,
+        "failedAt": 1000,
+        "now": 31000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 6,
+        "failedAt": 31000,
+        "cooldownMs": 60000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-seventh-wrong-waits-5min",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 6,
+        "failedAt": 0,
+        "now": 60000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 7,
+        "failedAt": 60000,
+        "cooldownMs": 300000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-eighth-wrong-waits-15min",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 7,
+        "failedAt": 0,
+        "now": 300000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 8,
+        "failedAt": 300000,
+        "cooldownMs": 900000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-ninth-wrong-waits-1h",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 8,
+        "failedAt": 0,
+        "now": 900000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 9,
+        "failedAt": 900000,
+        "cooldownMs": 3600000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-tenth-wrong-locks-out",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 9,
+        "failedAt": 0,
+        "now": 3600000,
+        "correct": false
+      },
+      "expected": {
+        "failures": 10,
+        "failedAt": 3600000,
+        "cooldownMs": null,
+        "lockedOut": true
+      }
+    },
+    {
+      "id": "profile-pin-attempt-locked-out-right-pin-refused",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 10,
+        "failedAt": 0,
+        "now": 99000000,
+        "correct": true
+      },
+      "expected": {
+        "failures": 10,
+        "failedAt": 0,
+        "cooldownMs": null,
+        "lockedOut": true
       }
     },
     {
       "id": "profile-pin-attempt-right-clears",
       "operation": "profile-pin-attempt",
       "input": {
-        "failures": 3,
-        "blockedUntil": 0,
-        "now": 1000,
+        "failures": 7,
+        "failedAt": 0,
+        "now": 400000,
         "correct": true
       },
       "expected": {
         "failures": 0,
-        "blockedUntil": 0,
-        "cooldownMs": 0
+        "failedAt": 0,
+        "cooldownMs": 0,
+        "lockedOut": false
       }
     },
     {
       "id": "profile-pin-attempt-during-wait-not-counted",
       "operation": "profile-pin-attempt",
       "input": {
-        "failures": 0,
-        "blockedUntil": 31000,
+        "failures": 5,
+        "failedAt": 1000,
         "now": 11000,
         "correct": true
       },
       "expected": {
-        "failures": 0,
-        "blockedUntil": 31000,
-        "cooldownMs": 20000
+        "failures": 5,
+        "failedAt": 1000,
+        "cooldownMs": 20000,
+        "lockedOut": false
       }
     },
     {
-      "id": "profile-pin-attempt-after-wait-checked",
+      "id": "profile-pin-attempt-restart-begins-the-wait-again",
       "operation": "profile-pin-attempt",
       "input": {
-        "failures": 0,
-        "blockedUntil": 31000,
-        "now": 31000,
+        "failures": 6,
+        "failedAt": 500000,
+        "now": 10000,
+        "correct": true
+      },
+      "expected": {
+        "failures": 6,
+        "failedAt": 500000,
+        "cooldownMs": 50000,
+        "lockedOut": false
+      }
+    },
+    {
+      "id": "profile-pin-attempt-restart-wait-served-since-boot",
+      "operation": "profile-pin-attempt",
+      "input": {
+        "failures": 6,
+        "failedAt": 500000,
+        "now": 70000,
         "correct": true
       },
       "expected": {
         "failures": 0,
-        "blockedUntil": 0,
-        "cooldownMs": 0
-      }
-    },
-    {
-      "id": "profile-pin-attempt-clock-backwards-capped",
-      "operation": "profile-pin-attempt",
-      "input": {
-        "failures": 0,
-        "blockedUntil": 31000,
-        "now": -500000,
-        "correct": false
-      },
-      "expected": {
-        "failures": 0,
-        "blockedUntil": 31000,
-        "cooldownMs": 30000
+        "failedAt": 0,
+        "cooldownMs": 0,
+        "lockedOut": false
       }
     },
     {

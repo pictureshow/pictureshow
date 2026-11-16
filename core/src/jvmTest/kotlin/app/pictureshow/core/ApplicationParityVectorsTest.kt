@@ -138,16 +138,18 @@ class ApplicationParityVectorsTest {
                             ProfileLock(
                                 "hash",
                                 failures = input.getValue("failures").jsonPrimitive.int,
-                                blockedUntil = input.getValue("blockedUntil").jsonPrimitive.long
+                                failedAt = input.getValue("failedAt").jsonPrimitive.long
                             ),
                             now,
                             input.getValue("correct").jsonPrimitive.boolean
                         )
+                        val lockedOut = profilePinLockedOut(next)
                         JsonObject(
                             mapOf(
                                 "failures" to JsonPrimitive(next.failures),
-                                "blockedUntil" to JsonPrimitive(next.blockedUntil),
-                                "cooldownMs" to JsonPrimitive(profilePinCooldown(next, now))
+                                "failedAt" to JsonPrimitive(next.failedAt),
+                                "cooldownMs" to if (lockedOut) JsonNull else JsonPrimitive(profilePinCooldown(next, now)),
+                                "lockedOut" to JsonPrimitive(lockedOut)
                             )
                         )
                     }

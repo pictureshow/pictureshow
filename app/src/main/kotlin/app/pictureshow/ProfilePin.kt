@@ -5,6 +5,7 @@ package app.pictureshow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,19 +80,23 @@ internal fun ProfilePinPad(
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
     clearSignal: Int = 0,
+    /** Ten wrong tries: the pad goes away and only the actions (the password route) remain. */
+    lockedOut: Boolean = false,
     actions: @Composable () -> Unit = {}
 ) {
     var pin by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
     LaunchedEffect(clearSignal) { pin = "" }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    LaunchedEffect(lockedOut) { runCatching { first.requestFocus() } }
     fun type(digit: Char) {
-        if (!busy && pin.length < PROFILE_PIN_MAX) pin += digit
+        if (!busy && !lockedOut && pin.length < PROFILE_PIN_MAX) pin += digit
     }
     fun submit() {
-        if (!busy && pin.isNotEmpty()) onSubmit(pin)
+        if (!busy && !lockedOut && pin.isNotEmpty()) onSubmit(pin)
     }
     val noteText = when {
+        lockedOut -> stringResource(R.string.pin_locked_out)
+        waitSeconds >= 60 -> stringResource(R.string.pin_wait_minutes, (waitSeconds + 59) / 60)
         waitSeconds > 0 -> stringResource(R.string.pin_wait, waitSeconds)
         note == PinPadNote.WRONG -> stringResource(R.string.pin_wrong)
         note == PinPadNote.TOO_SHORT -> stringResource(R.string.pin_rule, PROFILE_PIN_MIN, PROFILE_PIN_MAX)
@@ -138,6 +143,14 @@ internal fun ProfilePinPad(
             textAlign = TextAlign.Center,
             modifier = Modifier.heightIn(min = 24.dp).testTag("pin:note").semantics { liveRegion = LiveRegionMode.Polite }
         )
+        if (lockedOut) {
+            Column(
+                Modifier.focusRequester(first).focusGroup(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) { actions() }
+            return@Column
+        }
         val rows = listOf("123", "456", "789")
         rows.forEachIndexed { index, keys ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -209,6 +222,7 @@ internal class PinCheck {
     var note by mutableStateOf(PinPadNote.NONE)
     var waitSeconds by mutableStateOf(0)
     var tries by mutableStateOf(0)
+    var lockedOut by mutableStateOf(false)
 }
 
 @Composable
@@ -218,12 +232,16 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
     LaunchedEffect(key) {
         // A wait carried over from a restart shows straight away.
         val lock = store.lock(key) ?: return@LaunchedEffect
-        tickWait(check) { app.pictureshow.core.profilePinCooldown(store.lock(key) ?: lock, System.currentTimeMillis()) }
+        if (app.pictureshow.core.profilePinLockedOut(lock)) {
+            check.lockedOut = true
+            return@LaunchedEffect
+        }
+        tickWait(check) { app.pictureshow.core.profilePinCooldown(store.lock(key) ?: lock, android.os.SystemClock.elapsedRealtime()) }
     }
     val submit: (String) -> Unit = { pin ->
         scope.launch {
             check.busy = true
-            val result = withContext(Dispatchers.Default) { store.verify(key, pin, System.currentTimeMillis()) }
+            val result = withContext(Dispatchers.Default) { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }
             check.busy = false
             check.tries++
             when (result) {
@@ -232,9 +250,10 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
                     onUnlocked()
                 }
                 ProfilePinResult.WRONG -> check.note = PinPadNote.WRONG
+                ProfilePinResult.LOCKED_OUT -> check.lockedOut = true
                 ProfilePinResult.WAIT -> {
                     check.note = PinPadNote.WAIT
-                    tickWait(check) { store.lock(key)?.let { app.pictureshow.core.profilePinCooldown(it, System.currentTimeMillis()) } ?: 0 }
+                    tickWait(check) { store.lock(key)?.let { app.pictureshow.core.profilePinCooldown(it, android.os.SystemClock.elapsedRealtime()) } ?: 0 }
                 }
             }
         }
@@ -280,7 +299,8 @@ internal fun ProfilePinDialog(
                 check.note,
                 check.waitSeconds,
                 submit,
-                clearSignal = check.tries
+                clearSignal = check.tries,
+                lockedOut = check.lockedOut
             ) {
                 PinTextAction(stringResource(R.string.pin_use_password), tv, Modifier.testTag("pin:password"), onPassword)
                 PinTextAction(stringResource(R.string.pin_cancel), tv, Modifier.testTag("pin:cancel"), onCancel)
@@ -317,7 +337,8 @@ internal fun ProfileLockScreen(
             check.note,
             check.waitSeconds,
             submit,
-            clearSignal = check.tries
+            clearSignal = check.tries,
+            lockedOut = check.lockedOut
         ) {
             PinTextAction(stringResource(R.string.pin_switch_viewer), tv, Modifier.testTag("pin:switch"), onSwitch)
             PinTextAction(stringResource(R.string.pin_use_password), tv, Modifier.testTag("pin:password"), onPassword)

@@ -189,6 +189,8 @@
     <string name="pin_lock_subtitle">This viewer has a PIN on this device.</string>
     <string name="pin_wrong">That PIN didn\'t match. Try again.</string>
     <string name="pin_wait">Too many tries. Try again in %1$d s.</string>
+    <string name="pin_wait_minutes">Too many tries. Try again in %1$d min.</string>
+    <string name="pin_locked_out">Too many wrong PINs, so the PIN is off. Sign in with the password, then set a new PIN in Settings.</string>
     <string name="pin_rule">A PIN is %1$d to %2$d digits.</string>
     <string name="pin_mismatch">Those PINs didn\'t match. Type the new PIN again.</string>
     <string name="pin_entered">%1$d digits entered</string>
