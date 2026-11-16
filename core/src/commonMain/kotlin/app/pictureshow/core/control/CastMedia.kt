@@ -43,7 +43,7 @@ object CastReceiverFormats {
     const val SUBTITLE_FORMAT = "vtt"
 }
 
-fun castDeviceProfile(): DeviceProfile = with(CastReceiverFormats) {
+fun castDeviceProfile(music: Boolean = false): DeviceProfile = with(CastReceiverFormats) {
     DeviceProfile(
         name = "Pictureshow Cast receiver",
         maxStreamingBitrate = MAX_BITRATE,
@@ -55,7 +55,14 @@ fun castDeviceProfile(): DeviceProfile = with(CastReceiverFormats) {
                 videoCodec = directVideoCodecs.joinToString(","),
                 type = DlnaProfileType.Video
             )
-        ),
+        ) +
+            if (music) {
+                listOf(
+                    DirectPlayProfile(container = "mp3,m4a,aac,mp4", audioCodec = "aac,mp3", type = DlnaProfileType.Audio)
+                )
+            } else {
+                emptyList()
+            },
         transcodingProfiles = listOf(
             TranscodingProfile(
                 container = transcodeContainer,
@@ -68,7 +75,17 @@ fun castDeviceProfile(): DeviceProfile = with(CastReceiverFormats) {
                 minSegments = 1,
                 breakOnNonKeyFrames = true
             )
-        ),
+        ) + if (music) {
+            listOf(
+                TranscodingProfile(
+                    container = "ts", type = DlnaProfileType.Audio, videoCodec = "", audioCodec = "aac",
+                    protocol = MediaStreamProtocol.Hls, context = EncodingContext.Streaming, maxAudioChannels = MAX_AUDIO_CHANNELS,
+                    minSegments = 1, breakOnNonKeyFrames = true
+                )
+            )
+        } else {
+            emptyList()
+        },
         codecProfiles = listOf(
             CodecProfile(
                 type = CodecType.Video,

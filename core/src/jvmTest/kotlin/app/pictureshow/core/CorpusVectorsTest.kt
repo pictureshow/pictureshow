@@ -48,6 +48,7 @@ class CorpusVectorsTest {
                     "cast-capability",
                     "cast-handoff",
                     "cast-session",
+                    "cast-queue",
                     "music-catalog",
                     "music-playlists",
                     "music-quality",

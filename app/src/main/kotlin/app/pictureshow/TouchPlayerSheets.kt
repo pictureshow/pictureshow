@@ -145,6 +145,11 @@ private fun TouchTrackChoices(
         Text("Waiting for playback information…", Modifier.heightIn(min = 48.dp))
         return
     }
+    menu.emptyNotice?.let {
+        // PLAY-08: nothing to pick, and no delay controls for subtitles that don't exist.
+        Text(it, Modifier.heightIn(min = 48.dp).testTag("touch:track-empty"))
+        return
+    }
     val selectedIndex = if (type == MediaStreamType.Audio) host.state.audioIndex else host.state.subtitleIndex
     val first = menu.choices.indexOfFirst { it.first == selectedIndex }.coerceAtLeast(0)
     LazyColumn(Modifier.selectableGroup(), state = rememberLazyListState(initialFirstVisibleItemIndex = first)) {

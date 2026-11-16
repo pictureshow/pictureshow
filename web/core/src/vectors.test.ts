@@ -60,6 +60,7 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    "cast-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
@@ -180,6 +181,17 @@ const pendingApplicationCases = new Map([
     ["placeholder-kind-unknown-library", "catalog-placeholder-kind"],
     ["placeholder-kind-boxset", "catalog-placeholder-kind"],
     ["placeholder-kind-title", "catalog-placeholder-kind"],
+    // PLAY-03 last focused action on D-pad re-show (Android TV review T-3): web TV-mode port owed.
+    ["controls-last-action-soon", "controls-restore-last-action"],
+    ["controls-last-action-at-window", "controls-restore-last-action"],
+    ["controls-last-action-too-late", "controls-restore-last-action"],
+    ["controls-last-action-never-hidden", "controls-restore-last-action"],
+    ["controls-last-action-clock-backwards", "controls-restore-last-action"],
+    // PLAY-08 empty track menus (Android TV review T-10): web port owed.
+    ["track-menu-empty-no-subtitles", "track-menu-empty"],
+    ["track-menu-empty-no-audio", "track-menu-empty"],
+    ["track-menu-empty-subtitles-present", "track-menu-empty"],
+    ["track-menu-empty-audio-present", "track-menu-empty"],
     // Detail media badges and the series Play label (Android TV review T-11/T-13): web port owed.
     ["media-badges-uhd-hdr10-51", "media-badges"],
     ["media-badges-sdr-stereo-empty", "media-badges"],

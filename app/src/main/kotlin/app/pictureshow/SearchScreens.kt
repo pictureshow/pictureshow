@@ -594,7 +594,9 @@ fun SearchScreen(
                                                                     else -> false
                                                                 }
                                                             }
-                                                        }
+                                                        },
+                                                    // CAT-14a: two results with the same card text name their library (TV review T-12).
+                                                    subtitle = homeRowSubtitle(row, item)
                                                 )
                                             }
                                         }

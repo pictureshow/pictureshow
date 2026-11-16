@@ -528,6 +528,40 @@ class PlaybackSessionTest {
         runCurrent()
     }
 
+    @Test
+    fun aRouteChangeQueuedBehindATrackSwitchIsServedByItsPreparation() = runTest {
+        val gateway = Gateway().apply {
+            repeat(4) { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }
+        }
+        val output = Output().apply { locallySwitchable = false }
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        // Hold the queue in one route change's preparation, then queue a server-side audio switch and a second route
+        // change behind it. The switch's preparation starts after the second change was asked for, so it already reads
+        // that route: the second change must not prepare the stream again.
+        val held = CompletableDeferred<Unit>()
+        gateway.gate = held
+        session.routeChanged()
+        runCurrent()
+        assertEquals(2, gateway.requests.size)
+        session.select(MediaStreamType.Audio, 1)
+        session.routeChanged()
+        gateway.gate = null
+        held.complete(Unit)
+        runCurrent()
+        assertEquals(3, gateway.requests.size)
+        assertEquals(1, gateway.requests.last().audioStreamIndex)
+        // A change asked for after that preparation still runs.
+        session.routeChanged()
+        runCurrent()
+        assertEquals(4, gateway.requests.size)
+        session.close()
+        runCurrent()
+    }
+
     @Test fun everyCloseMarksProgressPendingBeforeNavigationAndReportCompletion() = runTest {
         for (failure in listOf(false, true)) {
             val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }

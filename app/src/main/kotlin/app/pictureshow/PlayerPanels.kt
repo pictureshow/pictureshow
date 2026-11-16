@@ -561,3 +561,20 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
         }
     }
 }
+
+/**
+ * PLAY-08: a track panel with nothing to pick (T-10). The line says why, and Close takes the panel's focus so the remote
+ * always has somewhere to land and Back or OK leaves.
+ */
+@Composable
+internal fun EmptyTrackPanel(notice: String, onClose: () -> Unit) {
+    val close = remember { FocusRequester() }
+    Column(
+        Modifier.background(Color(0xF510131C)).padding(32.dp).testTag("player:track-empty"),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(notice, style = MaterialTheme.typography.titleMedium)
+        Button(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
+    }
+    LaunchedEffect(Unit) { runCatching { close.requestFocus() } }
+}

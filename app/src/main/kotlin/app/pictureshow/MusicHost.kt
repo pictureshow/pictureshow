@@ -230,6 +230,89 @@ internal class MusicHost(
 ) {
     /** The Cast device in use. The touch interface sets this, because a TV must never load the sender. */
     var castAttached: () -> String? = { null }
+    private var castHost: CastSenderHost? = null
+    private var castUpdates: Job? = null
+    private fun remoteMusic(): CastSenderHost? = castHost?.takeIf { host ->
+        val ui = host.state.value
+        ui.cast?.owner?.owner?.kind == "cast" &&
+            ui.queue.any { it.music && it.entry == (ui.cast.observed?.entry ?: ui.cast.owner.intent.entry) }
+    }
+
+    internal fun castDestination(): String? = remoteMusic()?.state?.value?.deviceName
+
+    fun bindCast(host: CastSenderHost) {
+        if (castHost === host) return
+        castHost = host
+        castAttached = { host.state.value.deviceName.takeIf { host.state.value.cast?.owner?.owner?.kind == "cast" } }
+        castUpdates?.cancel()
+        castUpdates = scope.launch { host.state.collect { publish() } }
+    }
+
+    fun openCastChooser() {
+        val sender = castHost ?: return
+        val ui = mutable.value
+        val q = ui.queue ?: return
+        val entries = q.order.mapNotNull { entry ->
+            val media = q.entries.firstOrNull { it.id == entry }?.media ?: return@mapNotNull null
+            val track = ui.tracks[media] ?: return@mapNotNull null
+            CastPlayItem(
+                track.id,
+                track.title,
+                track.artUrl,
+                track.durationTicks?.div(MS_TO_TICKS),
+                music = true,
+                artist = track.artist,
+                album = track.album,
+                entry = entry
+            )
+        }
+        val index = entries.indexOfFirst { it.entry == q.current }.takeIf { it >= 0 } ?: return
+        sender.openChooser(
+            CastPlayRequest(
+                entries,
+                index,
+                positionMs(),
+                paused = q.paused,
+                repeat = q.repeat,
+                shuffled = q.shuffled,
+                continueEpisodes = false,
+                local = if (remoteMusic() != null) {
+                    null
+                } else {
+                    object : CastLocalOutput {
+                        private var pausedAtTransfer = q.paused
+                        override suspend fun pauseAndRead(): CastLocalMoment {
+                            val answer = kotlinx.coroutines.CompletableDeferred<CastLocalMoment>()
+                            enqueue {
+                                val moment = CastLocalMoment(positionMs(), player?.playWhenReady != true)
+                                pausedAtTransfer = moment.paused
+                                player?.pause()
+                                answer.complete(moment)
+                            }
+                            return answer.await()
+                        }
+                        override fun release() {
+                            enqueue { endOutput("video-start", (player?.currentPosition ?: 0) * MS_TO_TICKS) }
+                        }
+                        override fun resume() {
+                            if (!pausedAtTransfer) play()
+                        }
+                    }
+                }
+            )
+        )
+    }
+
+    fun resumeCast(returning: CastLocalStart) = enqueue {
+        val owner = account ?: return@enqueue
+        val rows = returning.items.map {
+            MusicTrack(it.itemId, it.title.orEmpty(), artist = it.artist, album = it.album, artUrl = it.imageUrl)
+        }
+        start(MusicPlay(owner.key, rows, returning.items.indexOfFirst { it.entry == returning.entry }.coerceAtLeast(0), null, null, false))
+        commit { QueueEvent("repeat", revision = it.revision, generation = it.generation, repeat = returning.repeat) }
+        commit { QueueEvent("position", revision = it.revision, generation = it.generation, ticks = returning.positionMs * MS_TO_TICKS) }
+        if (returning.paused) commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+    }
 
     /** Bound by the application graph; both OS and in-app controls take the same group path. */
     var syncHost: () -> SyncPlayHost? = { null }
@@ -594,6 +677,24 @@ internal class MusicHost(
     }
 
     private fun add(owner: Account, items: List<MusicTrack>, op: String) = enqueueFor(owner.key) {
+        remoteMusic()?.let { host ->
+            host.append(
+                items.map {
+                    CastPlayItem(
+                        it.id,
+                        it.title,
+                        it.artUrl,
+                        it.durationTicks?.div(MS_TO_TICKS),
+                        music = true,
+                        artist = it.artist,
+                        album = it.album
+                    )
+                },
+                next =
+                op == "play-next"
+            )
+            return@enqueueFor
+        }
         if (groupEdit {
                 items.take(MUSIC_QUEUE_LIMIT).takeIf { it.isNotEmpty() }?.let {
                     syncEnqueue(it.map(MusicTrack::id), op == "play-next")
@@ -631,17 +732,29 @@ internal class MusicHost(
     fun append(owner: Account, items: List<MusicTrack>) = add(owner, items, "append")
 
     fun remove(entry: String) = enqueue {
+        remoteMusic()?.let {
+            it.remove(listOf(entry))
+            return@enqueue
+        }
         if (groupEdit { host -> groupEntry(host, entry)?.let { syncRemove(listOf(it)) } }) return@enqueue
         commit { QueueEvent("remove", revision = it.revision, generation = it.generation, entry = entry) }
         if (queue.committed.current == null) endOutput("stop-clear")
     }
 
     fun move(entry: String, index: Int) = enqueue {
+        remoteMusic()?.let {
+            it.move(entry, index)
+            return@enqueue
+        }
         if (groupEdit { host -> groupEntry(host, entry)?.let { syncMove(it, index.coerceAtLeast(0)) } }) return@enqueue
         commit { QueueEvent("move", revision = it.revision, generation = it.generation, entry = entry, index = index) }
     }
 
     fun clearUpcoming() = enqueue {
+        remoteMusic()?.let {
+            it.clearUpcoming()
+            return@enqueue
+        }
         if (groupEdit { host ->
                 host.membership.queue?.let { shared ->
                     val ids = shared.entries.drop(shared.currentIndex + 1).map { it.playlistItemId }
@@ -655,6 +768,7 @@ internal class MusicHost(
     }
 
     fun clear() = enqueue {
+        remoteMusic()?.stop()
         if (groupEdit { syncRemove(emptyList(), clearPlaylist = true, clearPlayingItem = true) }) return@enqueue
         applySession("queue-clear")
         commit { QueueEvent("clear-all", revision = it.revision, generation = it.generation) }
@@ -663,73 +777,123 @@ internal class MusicHost(
         contextName = null
     }
 
-    fun jump(entry: String, positionMs: Long = 0) = enqueue {
-        if (groupEdit { host -> groupEntry(host, entry)?.let(::syncSelect) }) return@enqueue
-        activate()
-        val jumped = commit { QueueEvent("jump", revision = it.revision, generation = it.generation, entry = entry) }
-        if (jumped && positionMs > 0) {
-            val ticks = positionMs * Ticks.PER_MILLISECOND
-            commit { QueueEvent("position", revision = it.revision, generation = it.generation, ticks = ticks) }
+    fun jump(entry: String, positionMs: Long = 0) {
+        remoteMusic()?.let {
+            it.jump(entry)
+            return
+        }
+        enqueue {
+            if (groupEdit { host -> groupEntry(host, entry)?.let(::syncSelect) }) return@enqueue
+            activate()
+            val jumped = commit { QueueEvent("jump", revision = it.revision, generation = it.generation, entry = entry) }
+            if (jumped && positionMs > 0) {
+                val ticks = positionMs * Ticks.PER_MILLISECOND
+                commit { QueueEvent("position", revision = it.revision, generation = it.generation, ticks = ticks) }
+            }
         }
     }
 
-    fun play() = enqueue {
-        if (groupTransport("play")) return@enqueue
-        if (queue.committed.current == null) return@enqueue
-        applySession("viewer-play")
-        val fromIdle = player == null
-        activate()
-        val existing = player
-        commit { QueueEvent("play", revision = it.revision, generation = it.generation) }
-        if (!fromIdle && existing?.playbackState == Player.STATE_IDLE) existing.prepare()
+    fun play() {
+        remoteMusic()?.let {
+            it.play()
+            return
+        }
+        enqueue {
+            if (groupTransport("play")) return@enqueue
+            if (queue.committed.current == null) return@enqueue
+            applySession("viewer-play")
+            val fromIdle = player == null
+            activate()
+            val existing = player
+            commit { QueueEvent("play", revision = it.revision, generation = it.generation) }
+            if (!fromIdle && existing?.playbackState == Player.STATE_IDLE) existing.prepare()
+        }
     }
 
-    fun pause() = enqueue {
-        if (groupTransport("pause")) return@enqueue
-        applySession("viewer-pause")
-        savePosition()
-        commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+    fun pause() {
+        remoteMusic()?.let {
+            it.pause()
+            return
+        }
+        enqueue {
+            if (groupTransport("pause")) return@enqueue
+            applySession("viewer-pause")
+            savePosition()
+            commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+        }
     }
 
     fun toggle() {
+        remoteMusic()?.let {
+            if (it.state.value.cast?.observed?.playerState == "paused") it.play() else it.pause()
+            return
+        }
         // A group Leave pauses the actual renderer before its local paused-resume save finishes.
         val intendsPlay = player?.playWhenReady ?: (mutable.value.outputActive && mutable.value.queue?.paused == false)
         if (mutable.value.isPlaying || intendsPlay) pause() else play()
     }
 
-    fun next() = enqueue {
-        if (groupTransport("next")) return@enqueue
-        activateIfPlaying()
-        commit { QueueEvent("next", revision = it.revision, generation = it.generation, completion = it.completion) }
-    }
-
-    fun previous() = enqueue {
-        if (groupTransport("previous")) return@enqueue
-        val at = player?.currentPosition
-        if (at != null) {
-            commit {
-                QueueEvent("position", revision = it.revision, generation = it.generation, ticks = at * Ticks.PER_MILLISECOND)
-            }
+    fun next() {
+        remoteMusic()?.let {
+            it.next()
+            return
         }
-        val before = queue.committed.current
-        commit { QueueEvent("previous", revision = it.revision, generation = it.generation) }
-        if (queue.committed.current == before) player?.seekTo(0)
+        enqueue {
+            if (groupTransport("next")) return@enqueue
+            activateIfPlaying()
+            commit { QueueEvent("next", revision = it.revision, generation = it.generation, completion = it.completion) }
+        }
     }
 
-    fun seekTo(positionMs: Long) = enqueue {
-        if (groupTransport("seek", positionMs.coerceAtLeast(0))) return@enqueue
-        val target = positionMs.coerceAtLeast(0)
-        val running = player
-        if (running != null) {
-            running.seekTo(target)
-        } else {
-            commit {
-                QueueEvent("position", revision = it.revision, generation = it.generation, ticks = target * Ticks.PER_MILLISECOND)
+    fun previous() {
+        remoteMusic()?.let {
+            it.previous()
+            return
+        }
+        enqueue {
+            if (groupTransport("previous")) return@enqueue
+            val at = player?.currentPosition
+            if (at != null) {
+                commit {
+                    QueueEvent("position", revision = it.revision, generation = it.generation, ticks = at * Ticks.PER_MILLISECOND)
+                }
+            }
+            val before = queue.committed.current
+            commit { QueueEvent("previous", revision = it.revision, generation = it.generation) }
+            if (queue.committed.current == before) player?.seekTo(0)
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        remoteMusic()?.let {
+            it.seekTo(positionMs * MS_TO_TICKS)
+            return
+        }
+        enqueue {
+            if (groupTransport("seek", positionMs.coerceAtLeast(0))) return@enqueue
+            val target = positionMs.coerceAtLeast(0)
+            val running = player
+            if (running != null) {
+                running.seekTo(target)
+            } else {
+                commit {
+                    QueueEvent("position", revision = it.revision, generation = it.generation, ticks = target * Ticks.PER_MILLISECOND)
+                }
             }
         }
     }
 
     fun cycleRepeat() = enqueue {
+        remoteMusic()?.let { host ->
+            host.setRepeat(
+                when (host.state.value.repeat) {
+                    "off" -> "all"
+                    "all" -> "one"
+                    else -> "off"
+                }
+            )
+            return@enqueue
+        }
         if (groupEdit { host ->
                 syncRepeat(
                     when (host.state.value.repeat) {
@@ -750,40 +914,56 @@ internal class MusicHost(
         commit { QueueEvent("repeat", revision = it.revision, generation = it.generation, repeat = next) }
     }
 
-    fun setRepeat(mode: String) = enqueue {
-        if (groupEdit {
-                syncRepeat(
-                    when (mode) {
-                        "one" -> "RepeatOne"
-                        "all" -> "RepeatAll"
-                        else -> "RepeatNone"
-                    }
-                )
-            }
-        ) {
-            return@enqueue
+    fun setRepeat(mode: String) {
+        remoteMusic()?.let {
+            it.setRepeat(mode)
+            return
         }
-        commit { QueueEvent("repeat", revision = it.revision, generation = it.generation, repeat = mode) }
+        enqueue {
+            if (groupEdit {
+                    syncRepeat(
+                        when (mode) {
+                            "one" -> "RepeatOne"
+                            "all" -> "RepeatAll"
+                            else -> "RepeatNone"
+                        }
+                    )
+                }
+            ) {
+                return@enqueue
+            }
+            commit { QueueEvent("repeat", revision = it.revision, generation = it.generation, repeat = mode) }
+        }
     }
 
-    fun toggleShuffle() = setShuffle(group()?.state?.value?.shuffle?.let { it != "Shuffle" } ?: !queue.committed.shuffled)
+    fun toggleShuffle() = setShuffle(
+        remoteMusic()?.state?.value?.shuffled?.not() ?: group()?.state?.value?.shuffle?.let {
+            it != "Shuffle"
+        } ?: !queue.committed.shuffled
+    )
 
-    fun setShuffle(on: Boolean) = enqueue {
-        if (groupEdit { syncShuffle(on) }) return@enqueue
-        val q = queue.committed
-        if (on == q.shuffled) return@enqueue
-        if (on) {
-            val upcoming = musicUpcoming(q).filter { it !in q.visited }
-            commit {
-                QueueEvent(
-                    "shuffle",
-                    revision = it.revision,
-                    generation = it.generation,
-                    permutation = musicPermutation(upcoming, seed())
-                )
+    fun setShuffle(on: Boolean) {
+        remoteMusic()?.let {
+            it.setShuffle(on)
+            return
+        }
+        enqueue {
+            if (groupEdit { syncShuffle(on) }) return@enqueue
+            val q = queue.committed
+            if (on == q.shuffled) return@enqueue
+            if (on) {
+                val upcoming = musicUpcoming(q).filter { it !in q.visited }
+                commit {
+                    QueueEvent(
+                        "shuffle",
+                        revision = it.revision,
+                        generation = it.generation,
+                        permutation = musicPermutation(upcoming, seed())
+                    )
+                }
+            } else {
+                commit { QueueEvent("unshuffle", revision = it.revision, generation = it.generation) }
             }
-        } else {
-            commit { QueueEvent("unshuffle", revision = it.revision, generation = it.generation) }
         }
     }
 
@@ -800,7 +980,13 @@ internal class MusicHost(
     }
 
     /** Stop means the sound, the notification and the session end. The queue stays, ready to play. */
-    fun stop() = enqueue { if (!groupTransport("stop")) endOutput("stop") }
+    fun stop() = enqueue {
+        remoteMusic()?.let {
+            it.stop()
+            return@enqueue
+        }
+        if (!groupTransport("stop")) endOutput("stop")
+    }
 
     /** Called before a video opens. Twice is harmless: the second finds nothing to stop. */
     fun beforeVideo() {
@@ -815,9 +1001,12 @@ internal class MusicHost(
         return session.effect == "accept"
     }
 
-    fun positionMs(): Long = player?.currentPosition ?: (queue.committed.positionTicks / Ticks.PER_MILLISECOND)
+    fun positionMs(): Long =
+        remoteMusic()?.state?.value?.cast?.let { (it.observed?.ticks ?: it.owner.intent.ticks) / MS_TO_TICKS } ?: player?.currentPosition
+            ?: (queue.committed.positionTicks / Ticks.PER_MILLISECOND)
 
     fun durationMs(): Long? {
+        remoteMusic()?.let { return it.state.value.cast?.observed?.durationTicks?.div(MS_TO_TICKS) }
         val known = player?.duration?.takeIf { it != C.TIME_UNSET && it > 0 }
         if (known != null) return known
         val media = queue.committed.entries.firstOrNull { it.id == queue.committed.current }?.media
@@ -883,6 +1072,37 @@ internal class MusicHost(
     }
 
     private inline fun publish(change: (MusicUi) -> MusicUi = { it }) {
+        val cast = remoteMusic()?.state?.value
+        if (cast != null) {
+            val observed = cast.cast?.observed
+            val entries = cast.queue.map { QueueEntry(it.entry, it.itemId) }
+            val q = queue.committed.copy(
+                entries = entries,
+                order = entries.map { it.id },
+                current =
+                observed?.entry ?: cast.cast?.owner?.intent?.entry,
+                positionTicks = observed?.ticks ?: 0,
+                paused = observed?.playerState != "playing",
+                repeat = cast.repeat,
+                shuffled = cast.shuffled
+            )
+            val remoteTracks = cast.queue.associate {
+                it.itemId to
+                    MusicTrack(it.itemId, it.title.orEmpty(), artist = it.artist, album = it.album, artUrl = it.imageUrl)
+            }
+            mutable.update {
+                change(it).copy(
+                    account = account,
+                    queue = q,
+                    tracks = tracks + remoteTracks,
+                    outputActive = cast.cast?.owner?.phase == "active",
+                    isPlaying = observed?.playerState == "playing",
+                    buffering = observed?.playerState in listOf("loading", "buffering"),
+                    output = MusicOutput("Playing on ${cast.deviceName.orEmpty()}", false, false)
+                )
+            }
+            return
+        }
         val running = player
         val shared = group()?.state?.value
         val q = queue.committed.let {
@@ -1416,7 +1636,7 @@ internal class MusicHost(
         controller?.let(MediaController::releaseFuture)
         controller = null
         running.release()
-        context.stopService(Intent(context, MusicPlaybackService::class.java))
+        if (remoteMusic() == null) context.stopService(Intent(context, MusicPlaybackService::class.java))
         prepared.clear()
         publish { it.copy(output = null) }
     }
@@ -1442,11 +1662,13 @@ internal class MusicHost(
 
     internal fun appContext(): Context = context
 
-    internal fun hasNext(): Boolean = group()?.membership?.queue?.let {
-        it.currentIndex + 1 < it.entries.size || it.repeatMode == "RepeatAll"
-    } ?: queue.committed.let { q ->
-        q.current != null && (musicUpcoming(q).isNotEmpty() || q.repeat == "all")
-    }
+    internal fun hasNext(): Boolean =
+        remoteMusic()?.state?.value?.let { it.queue.lastOrNull()?.entry != it.cast?.observed?.entry || it.repeat == "all" }
+            ?: group()?.membership?.queue?.let {
+                it.currentIndex + 1 < it.entries.size || it.repeatMode == "RepeatAll"
+            } ?: queue.committed.let { q ->
+            q.current != null && (musicUpcoming(q).isNotEmpty() || q.repeat == "all")
+        }
 
     internal val remoteBridge = object : RemotePlayerBridge {
         override fun pause() = this@MusicHost.pause()

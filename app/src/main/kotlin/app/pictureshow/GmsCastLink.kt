@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.net.toUri
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
+import com.google.android.gms.cast.Cast
 import com.google.android.gms.cast.CastMediaControlIntent
 import com.google.android.gms.cast.CastStatusCodes
 import com.google.android.gms.cast.MediaInfo
@@ -54,7 +55,7 @@ class CastOptionsProvider : OptionsProvider {
         .setResumeSavedSession(true)
         .setEnableReconnectionService(false)
         .setStopReceiverApplicationWhenEndingSession(false)
-        // Media3's session stays the only media session; the SDK adds no notification of its own.
+        // The app-owned remote Media3 session routes every system command through CastSenderHost.
         .setCastMediaOptions(CastMediaOptions.Builder().setNotificationOptions(null).setMediaSessionEnabled(false).build())
         .build()
 
@@ -105,10 +106,15 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     private val mediaCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() = publishStatus()
         override fun onQueueStatusUpdated() = publishStatus()
+        override fun onMetadataUpdated() = publishStatus()
     }
 
-    private val progress = RemoteMediaClient.ProgressListener { progressMs, _ ->
-        if (watched?.hasMediaSession() == true) listener?.onProgress(progressMs)
+    private val progress = RemoteMediaClient.ProgressListener { _, _ ->
+        // Queue progression can precede a status callback: bind the clock to its item first.
+        if (watched?.hasMediaSession() == true) {
+            publishIfItemChanged()
+            watched?.takeIf { it.hasMediaSession() }?.approximateStreamPosition?.let { listener?.onProgress(it) }
+        }
     }
 
     private val sessions = object : SessionManagerListener<CastSession> {
@@ -153,7 +159,13 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
             }
     }
 
+    private val deviceCallback = object : Cast.Listener() {
+        override fun onVolumeChanged() = publishStatus()
+    }
+
     private fun connected(session: CastSession) {
+        session.removeCastListener(deviceCallback)
+        session.addCastListener(deviceCallback)
         newest.note(session)
         watch(session.remoteMediaClient)
         listener?.onConnected(session.castDevice?.friendlyName)
@@ -190,6 +202,11 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     private fun addRouterCallback() {
         router.addCallback(selector, routerCallback, MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN)
         publishRoutes()
+    }
+
+    private fun publishIfItemChanged() {
+        val data = strings(watched?.mediaStatus?.mediaInfo?.customData)
+        if (data["entry"] != lastStatus?.customData?.get("entry") || data["nonce"] != lastStatus?.customData?.get("nonce")) publishStatus()
     }
 
     private fun publishStatus(answer: Boolean = false) {
@@ -233,6 +250,13 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
             customData = strings(media?.customData ?: status.customData),
             activeTracks = status.activeTrackIds?.map(Long::toInt).orEmpty(),
             queue = status.queueItems.mapNotNull { strings(it.customData)["entry"] ?: strings(it.media?.customData)["entry"] },
+            volume = castContext?.sessionManager?.currentCastSession?.volume,
+            muted = castContext?.sessionManager?.currentCastSession?.isMute == true,
+            repeat = when (status.queueRepeatMode) {
+                MediaStatus.REPEAT_MODE_REPEAT_ALL -> "all"
+                MediaStatus.REPEAT_MODE_REPEAT_SINGLE -> "one"
+                else -> "off"
+            },
             commands = buildList {
                 if (status.isMediaCommandSupported(MediaStatus.COMMAND_PAUSE)) {
                     add("pause")
@@ -303,7 +327,68 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     override fun setActiveTracks(ids: List<Long>, onResult: (Boolean) -> Unit) =
         watched?.setActiveMediaTracks(ids.toLongArray()).answer(onResult)
 
-    override fun positionMs(): Long? = watched?.takeIf { it.hasMediaSession() }?.approximateStreamPosition
+    override fun setVolume(volume: Double, onResult: (Boolean) -> Unit) {
+        val session = castContext?.sessionManager?.currentCastSession ?: return onResult(false)
+        onResult(runCatching { session.volume = volume.coerceIn(0.0, 1.0) }.isSuccess)
+        publishStatus()
+    }
+
+    override fun setMuted(muted: Boolean, onResult: (Boolean) -> Unit) {
+        val session = castContext?.sessionManager?.currentCastSession ?: return onResult(false)
+        onResult(runCatching { session.isMute = muted }.isSuccess)
+        publishStatus()
+    }
+
+    override fun queueJump(entry: String, onResult: (Boolean) -> Unit) {
+        val item = watched?.mediaStatus?.queueItems?.firstOrNull {
+            (strings(it.customData)["entry"] ?: strings(it.media?.customData)["entry"]) == entry
+        } ?: return onResult(false)
+        watched?.queueJumpToItem(item.itemId, null).answer(onResult)
+    }
+
+    override fun setRepeat(mode: String, onResult: (Boolean) -> Unit) =
+        watched?.queueSetRepeatMode(castRepeatMode(mode), null).answer(onResult)
+
+    override fun reorder(entries: List<String>, onResult: (Boolean) -> Unit) {
+        val queue = watched?.mediaStatus?.queueItems.orEmpty()
+        val ids = entries.map { entry ->
+            queue.firstOrNull {
+                (strings(it.customData)["entry"] ?: strings(it.media?.customData)["entry"]) == entry
+            }?.itemId ?: return onResult(false)
+        }.toIntArray()
+        watched?.queueReorderItems(ids, MediaQueueItem.INVALID_ITEM_ID, null).answer(onResult)
+    }
+
+    override fun remove(entries: List<String>, onResult: (Boolean) -> Unit) {
+        val queue = watched?.mediaStatus?.queueItems.orEmpty()
+        val ids = entries.map { entry ->
+            queue.firstOrNull {
+                (strings(it.customData)["entry"] ?: strings(it.media?.customData)["entry"]) == entry
+            }?.itemId ?: return onResult(false)
+        }.toIntArray()
+        watched?.queueRemoveItems(ids, null).answer(onResult)
+    }
+
+    override fun insert(items: List<CastLoadItem>, before: String?, onResult: (Boolean) -> Unit) {
+        val queue = watched?.mediaStatus?.queueItems.orEmpty()
+        val beforeId = if (before == null) {
+            MediaQueueItem.INVALID_ITEM_ID
+        } else {
+            queue.firstOrNull {
+                (strings(it.customData)["entry"] ?: strings(it.media?.customData)["entry"]) == before
+            }?.itemId ?: return onResult(false)
+        }
+        val media = items.map {
+            MediaQueueItem.Builder(mediaInfo(it)).setCustomData(JSONObject(it.customData))
+                .setAutoplay(true).setActiveTrackIds(it.activeTracks.toLongArray()).build()
+        }.toTypedArray()
+        watched?.queueInsertItems(media, beforeId, null).answer(onResult)
+    }
+
+    override fun positionMs(): Long? {
+        publishIfItemChanged()
+        return watched?.takeIf { it.hasMediaSession() }?.approximateStreamPosition
+    }
 
     override fun requestStatus() {
         val client = watched ?: return
@@ -316,8 +401,9 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 internal fun castLoadData(request: CastLoadRequest): MediaLoadRequestData {
     val builder = MediaLoadRequestData.Builder()
         .setAutoplay(request.autoplay)
+        .setActiveTrackIds(request.items.getOrNull(request.startIndex)?.activeTracks?.toLongArray())
     if (request.items.getOrNull(request.startIndex)?.live != true) builder.setCurrentTime(request.startMs)
-    if (request.items.size == 1) {
+    if (request.items.size == 1 && request.repeat == "off" && !request.items.single().music) {
         builder.setMediaInfo(mediaInfo(request.items.single()))
     } else {
         builder.setQueueData(
@@ -327,9 +413,11 @@ internal fun castLoadData(request: CastLoadRequest): MediaLoadRequestData {
                         MediaQueueItem.Builder(mediaInfo(it))
                             .setCustomData(JSONObject(it.customData))
                             .setAutoplay(true)
+                            .setActiveTrackIds(it.activeTracks.toLongArray())
                             .build()
                     }
                 )
+                .setRepeatMode(castRepeatMode(request.repeat))
                 .setStartIndex(request.startIndex)
                 .apply { if (request.items.getOrNull(request.startIndex)?.live != true) setStartTime(request.startMs) }
                 .build()
@@ -338,8 +426,16 @@ internal fun castLoadData(request: CastLoadRequest): MediaLoadRequestData {
     return builder.build()
 }
 
+private fun castRepeatMode(mode: String) = when (mode) {
+    "all" -> MediaStatus.REPEAT_MODE_REPEAT_ALL
+    "one" -> MediaStatus.REPEAT_MODE_REPEAT_SINGLE
+    else -> MediaStatus.REPEAT_MODE_REPEAT_OFF
+}
+
 private fun mediaInfo(item: CastLoadItem): MediaInfo {
-    val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
+    val metadata = MediaMetadata(if (item.music) MediaMetadata.MEDIA_TYPE_MUSIC_TRACK else MediaMetadata.MEDIA_TYPE_MOVIE)
+    item.artist?.let { metadata.putString(MediaMetadata.KEY_ARTIST, it) }
+    item.album?.let { metadata.putString(MediaMetadata.KEY_ALBUM_TITLE, it) }
     metadata.putString(MediaMetadata.KEY_TITLE, item.title)
     item.imageUrl?.let { metadata.addImage(WebImage(it.toUri())) }
     val builder = MediaInfo.Builder(item.url)

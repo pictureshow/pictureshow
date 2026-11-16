@@ -76,7 +76,14 @@ data class CastViewedItem(
     val url: String = "",
     /** Live ownership is private sender state, never receiver custom data. */
     val liveStreamId: String? = null,
-    val ownedLiveStreamId: String? = null
+    val ownedLiveStreamId: String? = null,
+    val title: String? = null,
+    val imageUrl: String? = null,
+    val music: Boolean = false,
+    val artist: String? = null,
+    val album: String? = null,
+    val audioStreamIndex: Int? = null,
+    val tracks: List<CastTrack> = emptyList()
 )
 
 /**
@@ -98,7 +105,15 @@ data class CastViewingRecord(
     val generation: Long,
     val items: List<CastViewedItem>,
     val title: String? = null,
-    val deviceName: String? = null
+    val deviceName: String? = null,
+    /** A LOAD awaiting confirmation retains its previous private binding for a rejected/unknown load and process death. */
+    val previous: CastViewingRecord? = null,
+    val order: List<String> = items.map { it.entry },
+    val shuffled: Boolean = false,
+    val repeat: String = "off",
+    val currentEntry: String? = null,
+    val ticks: Long = 0,
+    val paused: Boolean = false
 )
 
 @Serializable
@@ -140,7 +155,8 @@ data class CastReattach(
  * match still reports only what's stored, and nothing is ever taken from the receiver.
  */
 fun castReattach(input: CastReattachInput): CastReattach {
-    val record = input.record ?: return CastReattach("foreign", "no-record")
+    val stored = input.record ?: return CastReattach("foreign", "no-record")
+    val record = stored.previous?.takeIf { it.nonce == input.customData["nonce"] } ?: stored
     if (record.server != input.server || record.viewer != input.viewer) return CastReattach("foreign", "other-account")
     // A missing value on either side is never a match, so empty can't equal empty.
     if (record.route.isBlank() || input.route != record.route) return CastReattach("foreign", "route")

@@ -21,15 +21,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,11 +49,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
@@ -438,8 +447,9 @@ internal fun castSwitchState(capability: CastCapability, stored: Boolean): Boole
     else -> stored
 }
 
-/** Only a Pictureshow TV takes a queue today, so Cast holding this viewing leaves nothing to send one to unless a TV is attached. */
-internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = tvAttached || ui.cast?.owner?.owner?.kind != "cast"
+/** Queue actions may discover a Pictureshow TV even while a Cast receiver is playing. */
+@Suppress("UNUSED_PARAMETER")
+internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = true
 
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */
 @Composable
@@ -515,7 +525,7 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
     }
 }
 
-/** The controls for what the receiver is playing. Every value on it comes from the receiver's last status. */
+/** The controls for what the receiver is playing. Every value comes from its last accepted status. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Unit) {
@@ -524,101 +534,241 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
     val observed = cast?.observed
     val controls = ui.controls
     val device = ui.deviceName ?: "Cast device"
-    val ready = cast?.owner?.owner?.kind == "cast" && cast.owner.phase == "active" && cast.commands?.fresh == true
+    val active = cast?.owner?.owner?.kind == "cast" && cast.owner.phase == "active"
+    val ready = active && cast?.commands?.fresh == true
     val paused = observed?.playerState == "paused"
     val returning = cast?.owner?.phase == "returning"
-    // Stop, Close and Forget all end here, and there's nothing on this screen without a viewing: back to where it began.
     LaunchedEffect(cast == null) { if (cast == null) onBack() }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("touch:cast"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 560.dp)
+            .verticalScroll(rememberScrollState()).padding(16.dp).testTag("touch:cast"),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back") }
-        Text(device, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        ui.title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-        when {
-            cast == null -> Text("Nothing is casting.")
-
-            cast.owner.phase == "disconnected" -> {
-                Text(castNoticeMessage(cast.notice, device) ?: "This device isn't connected to $device.")
-                if (castOn) {
-                    Button(
-                        onClick = host::reconnect,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("cast:reconnect")
-                    ) { Text("Reconnect") }
-                } else {
-                    Text("Turn Google Cast on in Settings to reconnect.")
-                }
-                TextButton(onClick = host::dismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Forget it") }
-            }
-
-            observed == null -> Text("Checking what $device is doing…")
-
-            else -> {
-                val position = remoteClock(observed.ticks)
-                val line = when {
-                    controls?.timeline == "live" -> "Live"
-                    observed.durationTicks != null -> "$position of ${remoteClock(observed.durationTicks ?: 0)}"
-                    else -> position
-                }
-                Text(line, modifier = Modifier.testTag("cast:position"))
-                when (observed.playerState) {
-                    "buffering", "loading" -> Text("Loading…")
-                    "paused" -> Text("Paused")
-                }
-            }
-        }
-        if (cast?.commands?.pending?.result == "rejected") {
-            Text("$device didn't accept that.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        }
-        if (cast?.commands?.pending?.result == "unknown") {
-            Text("Couldn't confirm that on $device.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        }
-        if (cast?.owner?.owner?.kind == "cast" && cast.owner.phase == "active") {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { if (paused) host.play() else host.pause() },
-                    enabled = ready && controls?.pause == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:toggle")
-                ) { Text(if (paused) "Play" else "Pause") }
-                OutlinedButton(
-                    onClick = { host.seekBy(-TEN_SECONDS_TICKS) },
-                    enabled = ready && controls?.seek == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:back10")
-                ) { Text("Back 10 s") }
-                OutlinedButton(
-                    onClick = { host.seekBy(THIRTY_SECONDS_TICKS) },
-                    enabled = ready && controls?.seek == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:forward30")
-                ) { Text("Forward 30 s") }
-            }
-            controls?.tracks?.takeIf { it.isNotEmpty() }?.let { tracks ->
-                Text("Subtitles", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { host.setSubtitle(null) }, enabled = ready, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(if (tracks.none { it.selected }) "Off (on)" else "Off")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TouchBack(onBack)
+            Text(device, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+            ui.title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+            when {
+                cast == null -> Text("Nothing is casting.")
+                cast.owner.phase == "disconnected" -> {
+                    Text(castNoticeMessage(cast.notice, device) ?: "This device isn't connected to $device.")
+                    if (castOn) {
+                        Button(onClick = host::reconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:reconnect")) {
+                            Text("Reconnect")
+                        }
+                    } else {
+                        Text("Turn Google Cast on in Settings to reconnect.")
                     }
-                    tracks.forEach { track ->
-                        OutlinedButton(
-                            onClick = { host.setSubtitle(track.id) },
-                            enabled = ready && track.selectable,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) { Text(if (track.selected) "${track.label} (on)" else track.label) }
+                    TextButton(onClick = host::dismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Forget it") }
+                }
+                observed == null -> Text("Checking what $device is doing…")
+                else -> {
+                    val position = remoteClock(observed.ticks)
+                    val line = when {
+                        controls?.timeline == "live" -> "Live"
+                        observed.durationTicks != null -> "$position of ${remoteClock(observed.durationTicks ?: 0)}"
+                        else -> position
+                    }
+                    Text(line, modifier = Modifier.testTag("cast:position"))
+                    when (observed.playerState) {
+                        "buffering", "loading" -> Text("Loading…")
+                        "paused" -> Text("Paused")
                     }
                 }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = host::stop, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:stop")) {
-                    Text("Stop casting")
+            if (active &&
+                !ready
+            ) {
+                Text(
+                    stringResource(R.string.cast_waiting, device),
+                    modifier = Modifier.testTag("cast:waiting").semantics {
+                        liveRegion =
+                            LiveRegionMode.Polite
+                    }
+                )
+            }
+            if (ui.queueError) Text(stringResource(R.string.cast_queue_failed))
+            if (cast?.commands?.pending?.result == "rejected") {
+                Text("$device didn't accept that.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+            if (cast?.commands?.pending?.result == "unknown") {
+                Text("Couldn't confirm that on $device.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+        }
+        if (active) {
+            if (LocalDensity.current.fontScale > 1.2f) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CastTransportButtons(
+                        host,
+                        paused,
+                        ready && controls?.pause == true,
+                        ready && controls?.seek == true,
+                        Modifier.fillMaxWidth()
+                    )
                 }
-                OutlinedButton(onClick = host::playHere, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:play-here")) {
-                    Text("Play here")
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CastTransportButtons(
+                        host,
+                        paused,
+                        ready && controls?.pause == true,
+                        ready && controls?.seek == true,
+                        Modifier.weight(1f)
+                    )
                 }
-                OutlinedButton(onClick = host::disconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:disconnect")) {
-                    Text("Disconnect")
+            }
+            val volumeLabel = stringResource(R.string.cast_volume_device, device)
+            val muteLabel = stringResource(R.string.cast_mute)
+            val volumePercent = ((ui.volume ?: 0.0) * 100).toInt()
+            val percentage = pluralStringResource(R.plurals.cast_volume_percent, volumePercent, volumePercent)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("cast:volume")) {
+                Text(volumeLabel, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                if (controls?.volume == false) {
+                    Text(
+                        stringResource(R.string.cast_fixed_volume),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("cast:volume-reason")
+                    )
+                }
+                Slider(
+                    value = (ui.volume ?: 0.0).toFloat(),
+                    onValueChange = { host.setVolume(it.toDouble()) },
+                    enabled = ready && controls?.volume == true && ui.volume != null,
+                    modifier = Modifier.fillMaxWidth().testTag("cast:volume-slider").semantics {
+                        contentDescription = volumeLabel
+                        stateDescription = percentage
+                    }
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(muteLabel, style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = ui.muted,
+                        onCheckedChange = host::setMuted,
+                        enabled = ready && controls?.volume == true,
+                        modifier = Modifier.testTag("cast:mute").semantics { contentDescription = muteLabel }
+                    )
+                }
+            }
+            if (ui.changingTrack) Text(stringResource(R.string.cast_changing_audio))
+            ui.trackError?.let {
+                Text(stringResource(R.string.cast_audio_failed), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+            listOf("audio", "subtitle").forEach { type ->
+                val tracks = controls?.tracks.orEmpty().filter { it.type == type }
+                if (tracks.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(if (type == "audio") R.string.cast_audio else R.string.cast_subtitles),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.semantics { heading() }
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (type == "subtitle") {
+                                FilterChip(
+                                    selected = tracks.none { it.selected },
+                                    onClick = { host.setSubtitle(null) },
+                                    enabled = ready && !ui.changingTrack && observed?.commands?.contains("tracks") == true,
+                                    label = {
+                                        Text(stringResource(R.string.cast_subtitles_off))
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                )
+                            }
+                            tracks.forEach { track ->
+                                FilterChip(
+                                    selected = track.selected && !ui.changingTrack,
+                                    onClick = { if (type == "audio") host.setAudio(track.id) else host.setSubtitle(track.id) },
+                                    enabled = ready && !ui.changingTrack && track.selectable,
+                                    label = { Text(track.label) },
+                                    leadingIcon = if (track.selected && !ui.changingTrack) ({ Text("✓") }) else null,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("cast:track:${track.id}")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (ui.queue.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.cast_queue),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    ui.queue.forEach { item ->
+                        val enabled = ready && !ui.changingTrack
+                        val alpha = if (enabled) 1f else 0.38f
+                        Column(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .selectable(
+                                    selected = item.entry == observed?.entry,
+                                    enabled = enabled,
+                                    role = Role.Button,
+                                    onClick = { host.jump(item.entry) }
+                                )
+                                .padding(vertical = 8.dp).testTag("cast:queue:${item.entry}"),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(item.title.orEmpty(), color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+                            if (item.entry == observed?.entry) {
+                                Text(
+                                    stringResource(R.string.cast_now_playing),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            HorizontalDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = host::stop, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:stop")) {
+                    Text(stringResource(R.string.cast_stop))
+                }
+                OutlinedButton(
+                    onClick = host::playHere,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:play-here")
+                ) {
+                    Text(stringResource(R.string.cast_play_here))
+                }
+                TextButton(
+                    onClick = host::disconnect,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:disconnect")
+                ) {
+                    Text(stringResource(R.string.cast_leave_playing, device))
                 }
             }
         }
         if (returning) Text("Stopping on $device…")
+    }
+}
+
+@Composable
+private fun CastTransportButtons(host: CastSenderHost, paused: Boolean, canPause: Boolean, canSeek: Boolean, modifier: Modifier) {
+    val back = stringResource(R.string.cast_rewind_long)
+    val forward = stringResource(R.string.cast_forward)
+    val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    Button(
+        onClick = { if (paused) host.play() else host.pause() },
+        enabled = canPause,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:toggle")
+    ) { Text(if (paused) "Play" else "Pause") }
+    OutlinedButton(
+        onClick = { host.seekBy(-TEN_SECONDS_TICKS) },
+        enabled = canSeek,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:back10").semantics { contentDescription = back }
+    ) {
+        Text(stringResource(R.string.cast_rewind))
+    }
+    OutlinedButton(
+        onClick = { host.seekBy(THIRTY_SECONDS_TICKS) },
+        enabled = canSeek,
+        contentPadding = padding,
+        modifier = modifier.heightIn(min = 48.dp).testTag("cast:forward30").semantics { contentDescription = forward }
+    ) {
+        Text(stringResource(R.string.cast_forward_short))
     }
 }

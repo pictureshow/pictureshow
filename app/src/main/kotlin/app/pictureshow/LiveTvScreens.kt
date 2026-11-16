@@ -6,6 +6,7 @@ package app.pictureshow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -200,9 +204,11 @@ internal fun LiveTvScreen(
         }
     }
 
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state.fetchedAt) {
         while (true) {
             now = System.currentTimeMillis()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) vm.quietRefreshIfDue(now)
             delay(1_000)
         }
     }
@@ -296,14 +302,16 @@ internal fun LiveTvScreen(
                         Modifier.weight(1f).fillMaxHeight().testTag("live:guide-preview"),
                         verticalArrangement = Arrangement.Center
                     ) {
+                        // T-15: the title stays "Live TV" on every tab; the focused programme sits under it.
                         androidx.tv.material3.Text(
-                            preview?.name ?: focusedChannel?.name ?: "Live TV guide",
+                            "Live TV",
                             Modifier.semantics { heading() },
                             style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         if (preview == null && focusedChannel != null) {
+                            LiveText(focusedChannel.name, true, small = true, maxLines = 1)
                             LiveText(
                                 liveChannelIdleLabel(
                                     state.programs.any { it.channelId == focusedChannel.id },
@@ -315,15 +323,24 @@ internal fun LiveTvScreen(
                         }
                         preview?.let { show ->
                             LiveText(
-                                "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +
-                                    time.range(show.startDate, show.endDate) +
+                                app.pictureshow.core.livetv.liveGuidePreviewLine(
+                                    show,
+                                    show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name,
+                                    now
+                                ),
+                                true,
+                                small = true,
+                                maxLines = 1,
+                                modifier = Modifier.testTag("live:preview-line")
+                            )
+                            LiveText(
+                                time.range(show.startDate, show.endDate) +
                                     liveProgramEpisodeLabel(show)?.let { " · $it" }.orEmpty() +
                                     show.episodeTitle?.let { " · $it" }.orEmpty(),
                                 true,
                                 small = true,
                                 maxLines = 1
                             )
-                            show.overview?.let { LiveText(it, true, small = true, maxLines = 1) }
                         }
                     }
                 } else {
@@ -401,7 +418,13 @@ internal fun LiveTvScreen(
             val tabs = listOf("Channels", "Guide", "Recordings", "Schedules")
             val navigation: @Composable () -> Unit = {
                 if (tv) {
-                    androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
+                    // T-6: Up from a full-width channel row entered the tabs wherever geometry chose (often Schedules),
+                    // so two viewers landed on the wrong tab. Entering the row focuses the selected tab.
+                    val tabFocus = remember { tabs.associateWith { FocusRequester() } }
+                    androidx.tv.material3.TabRow(
+                        tabs.indexOf(tab),
+                        modifier = Modifier.focusProperties { onEnter = { tabFocus[tab]?.requestFocus() } }.focusGroup()
+                    ) {
                         tabs.forEach { next ->
                             TvTab(
                                 tab == next,
@@ -412,7 +435,7 @@ internal fun LiveTvScreen(
                                 },
                                 modifier = Modifier.height(
                                     (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
-                                ).testTag("live:tab:$next"),
+                                ).focusRequester(tabFocus.getValue(next)).testTag("live:tab:$next"),
                                 colors = androidx.tv.material3.TabDefaults.pillIndicatorTabColors(inactiveContentColor = LiveMuted)
                             ) {
                                 Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {

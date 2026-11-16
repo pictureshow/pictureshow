@@ -10,13 +10,17 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
+        "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
+        "cast-session": Suite(count: 1, reason: "Pending audio reload reattachment awaits the Apple sender port."),
+        "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
+        "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
         "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
-        "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
         "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
-        "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
+        "live-guide": Suite(count: 25, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-source": Suite(count: 11, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "offline-budget": Suite(count: 40, reason: "The merged offline policy and its Apple runtime integration are not ported."),
@@ -76,6 +80,21 @@ enum PendingSpecCaseManifest {
     ]
     static let contracts: [String: String] = {
         let rows = """
+        cast-capability.audio-reload-does-not-need-text-edit-command|cast-capability/controls
+        cast-session.pending-audio-load-retains-previous-confirmed-binding|cast-session/reattach
+        cast-handoff.system-pause-updates-intent-through-app-command|cast-handoff/cast
+        cast-handoff.receiver-queue-and-pause-update-return-intent|cast-handoff/cast
+        cast-queue.duplicate-media-keeps-entry-identity|cast-queue/cast-queue
+        cast-queue.receiver-order-wins-on-reattach|cast-queue/cast-queue
+        cast-queue.natural-end-wraps-only-repeat-all|cast-queue/cast-queue
+        cast-queue.repeat-one-is-a-receiver-mode-not-a-second-advance|cast-queue/cast-queue
+        cast-queue.foreign-order-cannot-invent-media|cast-queue/cast-queue
+        cast-queue.missing-entry-never-falls-back-to-first-item|cast-queue/cast-queue
+        cast-queue.paused-audio-reload-keeps-observed-moment|cast-queue/track-reload
+        cast-queue.unavailable-audio-cannot-load|cast-queue/track-reload
+        cast-queue.audio-reload-clamps-to-duration|cast-queue/track-reload
+        cast-queue.music-uses-receiver-audio-profile|cast-queue/profile-music
+        cast-queue.single-song-retains-queue-identity-for-repeat|cast-queue/cast-queue
         detail-primary-next|application/detail-play-item
         detail-primary-unplayed|application/detail-play-item
         detail-primary-all-played|application/detail-play-item
@@ -251,6 +270,17 @@ enum PendingSpecCaseManifest {
         live-dvr.semantic-status-tones|live-dvr/status-tones
         live-guide.exact-half-open-overlap-dedupe-denied-channel|live-guide/guide
         live-guide.dst-fold-offsets-are-different-instants|live-guide/guide
+        live-guide.quiet-refresh-young|live-guide/quiet-refresh
+        live-guide.quiet-refresh-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-stale-still-due|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-while-refreshing|live-guide/quiet-refresh
+        live-guide.quiet-refresh-not-offline|live-guide/quiet-refresh
+        live-guide.quiet-refresh-clock-backwards|live-guide/quiet-refresh
+        live-guide.quiet-refresh-never-fetched|live-guide/quiet-refresh
+        live-guide.preview-line-now|live-guide/preview-line
+        live-guide.preview-line-later|live-guide/preview-line
+        live-guide.preview-line-earlier|live-guide/preview-line
+        live-guide.preview-line-no-channel|live-guide/preview-line
         live-guide.natural-subchannels-and-missing-number|live-guide/sort
         live-guide.future-cannot-tune|live-guide/tune
         live-guide.current-at-exact-start|live-guide/tune
@@ -2186,6 +2216,15 @@ enum PendingSpecCaseManifest {
         detail-play-label-movie|application/detail-play-label
         detail-play-label-movie-resume|application/detail-play-label
         detail-play-label-series-nothing-to-play|application/detail-play-label
+        track-menu-empty-no-subtitles|application/track-menu-empty
+        track-menu-empty-no-audio|application/track-menu-empty
+        track-menu-empty-subtitles-present|application/track-menu-empty
+        track-menu-empty-audio-present|application/track-menu-empty
+        controls-last-action-soon|application/controls-restore-last-action
+        controls-last-action-at-window|application/controls-restore-last-action
+        controls-last-action-too-late|application/controls-restore-last-action
+        controls-last-action-never-hidden|application/controls-restore-last-action
+        controls-last-action-clock-backwards|application/controls-restore-last-action
         home-notice-unreachable-keeps-page-and-names-server|home-browse/home-notice
         home-notice-unreachable-keeps-page-offers-downloads|home-browse/home-notice
         home-notice-unnamed-server|home-browse/home-notice
@@ -2298,16 +2337,16 @@ enum PendingSpecCaseManifest {
                   vector["expected"] is [String: Any] else {
                 throw NSError(domain: "Malformed pending observed live-window vector", code: 1)
             }
-        } else if suite.hasPrefix("offline-") {
+        } else if suite.hasPrefix("offline-") || ["cast-capability", "cast-session", "cast-handoff", "cast-queue"].contains(suite) {
             let permitsNoRecord = suite == "offline-outbox" && (vector["operation"] as? String) == "outbox"
             guard vector["state"] is [String: Any] || (permitsNoRecord && vector["state"] is NSNull),
                   let steps = vector["steps"] as? [[String: Any]], !steps.isEmpty,
                   vector["input"] == nil, vector["expected"] == nil else {
-                throw NSError(domain: "Malformed pending offline vector", code: 1)
+                throw NSError(domain: "Malformed pending trace vector", code: 1)
             }
             for step in steps {
                 guard step["event"] is [String: Any], let expected = step["expected"] as? [String: Any], !expected.isEmpty else {
-                    throw NSError(domain: "Malformed pending offline vector step", code: 1)
+                    throw NSError(domain: "Malformed pending trace vector step", code: 1)
                 }
             }
         } else {

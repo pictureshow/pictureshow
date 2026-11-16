@@ -50,6 +50,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -413,12 +414,41 @@ class TouchPlayerControlsTest {
 
     @Test fun subtitleDelayIsBoundedAndResettable() {
         launch()
-        decided(PlayMethod.DirectPlay)
+        compose.runOnIdle {
+            val source = MediaSourceInfo(
+                id = "source",
+                mediaStreams = listOf(
+                    app.pictureshow.core.playback.MediaStream(
+                        type = app.pictureshow.core.playback.MediaStreamType.Subtitle,
+                        index = 3,
+                        language = "en",
+                        codec = "srt"
+                    )
+                )
+            )
+            host.stateSource = androidx.compose.runtime.mutableStateOf(
+                PlaybackState(
+                    preparing = false,
+                    decision = PlayDecision("movie", source, PlayMethod.DirectPlay, "https://example.test/video", emptyMap(), "session")
+                )
+            )
+        }
+        compose.waitForIdle()
         compose.onNodeWithTag("touch:open:Subtitles").performClick()
         compose.onNodeWithText("Later").performClick()
         compose.runOnIdle { assertEquals(100, host.subtitleDelayMs) }
         compose.onNodeWithText("Reset").performClick()
         compose.runOnIdle { assertEquals(0, host.subtitleDelayMs) }
+    }
+
+    // PLAY-08 (T-10): no subtitles at all reads as such, with no lone Off and no delay controls.
+    @Test fun aVideoWithoutSubtitlesSaysSoInsteadOfOfferingDelay() {
+        launch()
+        decided(PlayMethod.DirectPlay)
+        compose.onNodeWithTag("touch:open:Subtitles").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("This video has no subtitles.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Later").assertDoesNotExist()
+        compose.onNodeWithText("Off").assertDoesNotExist()
     }
 
     @Test fun talkBackCanShowControlsAndReachEveryActionWithoutAutoHide() {

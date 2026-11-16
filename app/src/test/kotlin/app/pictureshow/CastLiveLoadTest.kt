@@ -5,9 +5,13 @@ package app.pictureshow
 
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.MediaQueueData
+import com.google.android.gms.cast.MediaStatus
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,6 +46,38 @@ class CastLiveLoadTest {
         assertEquals(1, data.queueData!!.startIndex)
         assertEquals(MediaQueueData.Builder().build().startTime, data.queueData!!.startTime)
         assertEquals(MediaInfo.STREAM_TYPE_LIVE, data.queueData!!.items!![1].media?.streamType)
+    }
+
+    @Test fun musicQueuePreservesInitialPauseButEveryRepeatedItemAutoplays() {
+        fun song(entry: String) = CastLoadItem(
+            "https://example.test/song.mp3", "audio/mpeg", "Song", "https://example.test/art.jpg",
+            60_000, false, emptyList(), mapOf("entry" to entry), music = true, artist = "Artist", album = "Album", activeTracks = listOf(4)
+        )
+        val data = castLoadData(CastLoadRequest(listOf(song("first"), song("duplicate")), 1, 45_000, false, "all"))
+        assertFalse(data.autoplay!!)
+        assertEquals(45_000L, data.currentTime)
+        val queue = data.queueData!!
+        assertEquals(1, queue.startIndex)
+        assertEquals(MediaStatus.REPEAT_MODE_REPEAT_ALL, queue.repeatMode)
+        assertTrue(queue.items!!.all { it.autoplay })
+        val loaded = queue.items!![1]
+        assertEquals("duplicate", loaded.media!!.customData!!.getString("entry"))
+        assertEquals(MediaMetadata.MEDIA_TYPE_MUSIC_TRACK, loaded.media!!.metadata!!.mediaType)
+        assertEquals("Artist", loaded.media!!.metadata!!.getString(MediaMetadata.KEY_ARTIST))
+        assertEquals("Album", loaded.media!!.metadata!!.getString(MediaMetadata.KEY_ALBUM_TITLE))
+        assertEquals(1, loaded.media!!.metadata!!.images.size)
+        assertEquals(listOf(4L), loaded.activeTrackIds!!.toList())
+    }
+
+    @Test fun aSingleSongStillLoadsARealQueueSoRepeatCanChangeLater() {
+        val song = CastLoadItem(
+            "https://example.test/song.mp3", "audio/mpeg", "Song", null,
+            60_000, false, emptyList(), mapOf("entry" to "song"), music = true
+        )
+        val data = castLoadData(CastLoadRequest(listOf(song), 0, 3_000, true))
+        assertNull(data.mediaInfo)
+        assertEquals(1, data.queueData!!.items!!.size)
+        assertEquals(3_000L, data.currentTime)
     }
 
     @Test fun onDemandStillLoadsRequestedPosition() {

@@ -60,10 +60,33 @@ internal class LiveTvViewModel(
     private var load: Job? = null
     private var generation = 0L
 
-    fun refresh(start: Long = mutable.value.windowStart) {
+    private var quietAttemptAt: Long? = null
+
+    /**
+     * LIVE-11 (TV review T-5): called each second while the guide is on screen; refreshes quietly at four minutes so the
+     * snapshot never turns stale under a viewer who is just watching the grid. A failed attempt waits a minute.
+     */
+    fun quietRefreshIfDue(at: Long) {
+        val current = mutable.value
+        if (load?.isActive == true || current.writing) return
+        val due = LiveGuideCache(
+            "",
+            0,
+            emptySet(),
+            fetchedAtMillis = current.fetchedAt,
+            offline = current.offline,
+            refreshing = current.loading
+        ).quietRefreshDue(at)
+        if (!due || quietAttemptAt?.let { at - it in 0 until 60_000 } == true) return
+        quietAttemptAt = at
+        refresh(quiet = true)
+    }
+
+    fun refresh(start: Long = mutable.value.windowStart, quiet: Boolean = false) {
         load?.cancel()
         val version = ++generation
-        mutable.value = mutable.value.copy(loading = true, error = null, windowStart = start)
+        // A quiet refresh leaves the fresh snapshot, and its actions, in place until the new one lands.
+        mutable.value = if (quiet) mutable.value else mutable.value.copy(loading = true, error = null, windowStart = start)
         load = viewModelScope.launch {
             try {
                 val policy = api.policy(account).required()
@@ -148,6 +171,8 @@ internal class LiveTvViewModel(
                             listOf(401, 403)
                         ) {
                             LiveTvState(loading = false, policy = LivePolicy(), windowStart = start, error = failure.message)
+                        } else if (quiet) {
+                            mutable.value
                         } else {
                             mutable.value.copy(loading = false, offline = true, error = failure.message)
                         }

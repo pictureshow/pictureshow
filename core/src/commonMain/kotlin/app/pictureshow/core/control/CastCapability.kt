@@ -115,7 +115,7 @@ fun castControls(input: CastControlsInput): CastControls {
                 track.id,
                 track.type,
                 track.label,
-                selectable = track.available && "tracks" in input.commands,
+                selectable = track.available && (track.type == "audio" || "tracks" in input.commands),
                 selected = track.available && track.id in input.activeTracks
             )
         }
