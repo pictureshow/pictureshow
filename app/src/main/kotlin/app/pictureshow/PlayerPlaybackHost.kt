@@ -120,6 +120,32 @@ internal class PlaybackHostState(
     /** Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself. */
     val reportScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     var sync: SyncPlayHost? = null
+
+    /** PLAY-60: this title's engine pick from the player menu, over Settings' choice until the viewing ends. */
+    var engineOverride by mutableStateOf<app.pictureshow.core.playback.PlaybackEngineChoice?>(null)
+        private set
+    val engineChoice get() = engineOverride ?: localPreferences.tuning.engine
+    val mpvAvailable get() = MpvAvailability.available
+
+    /** The player menu's engine pick: reopens this viewing at its position with the new engine. */
+    fun chooseEngine(choice: app.pictureshow.core.playback.PlaybackEngineChoice) {
+        if (choice == engineChoice) return
+        engineOverride = choice
+        controller?.routeChanged()
+    }
+
+    /** Whether the player offers the per-title switch: mpv loaded and this viewing is one it may play. */
+    val engineSwitchable get() = !localCopy &&
+        engineContext().copy(choice = app.pictureshow.core.playback.PlaybackEngineChoice.Mpv).mpvEligible &&
+        state.decision?.isLive != true
+
+    fun engineContext() = app.pictureshow.core.playback.PlaybackEngineContext(
+        choice = engineChoice,
+        mpvAvailable = MpvAvailability.available,
+        live = item.type == "TvChannel",
+        offline = localCopy,
+        syncPlay = sync?.participating == true
+    )
     var onSyncEnded: ((PlayDecision) -> Boolean)? = null
     var localPreferences by mutableStateOf(PlaybackPreferences())
     val initialPositionMs get() = app.pictureshow.core.playback.PlaybackStartPosition.of(startMs, startOrigin, localPreferences.tuning)
@@ -588,6 +614,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 output.passthroughEnabled = localPreferences.passthrough && !localPreferences.tuning.downmix
                 output.matchFrameRate = localPreferences.tuning.matchFrameRate
                 output.disabledPassthrough = localPreferences.tuning.disabledPassthrough
+                output.mpvSubtitles = localPreferences.appearance
                 val activeProbe = DeviceCapabilityProbe(context, effectiveSettings)
                 probe = activeProbe
                 val clientIdentity =
@@ -625,7 +652,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         val snapshot = activeProbe.capture()
                         capabilityChanges.prepared(snapshot.revision)
                         snapshot.capabilities.copy(settings = settings)
-                    }, captionLanguage) {
+                    }, captionLanguage, { engineContext() }, PlaybackDiagnostics::write) {
                         catalog.completePlayback(account, item.id, report)
                     }.let { server ->
                         handoff?.gateway?.invoke(server) ?: offlineAwareGateway(context, account, item.id, identity, server)

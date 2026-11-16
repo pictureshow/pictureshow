@@ -20,14 +20,22 @@ class PlayDecision(
     /** Why the server transcodes, from the transcoding URL's `TranscodeReasons` (empty unless [method] is Transcode). */
     val transcodeReasons: List<String> = emptyList(),
     /** Only a source this negotiation opened (or asked PlaybackInfo to auto-open) may be closed. */
-    val ownedLiveStreamId: String? = null
+    val ownedLiveStreamId: String? = null,
+    /** PLAY-60: the player this decision was negotiated for; its device profile is the one the server answered. */
+    val engine: PlaybackEngine = PlaybackEngine.Media3
 ) {
+    fun withEngine(engine: PlaybackEngine): PlayDecision = if (engine == this.engine) {
+        this
+    } else {
+        PlayDecision(itemId, mediaSource, method, url, headers, playSessionId, transcodeReasons, ownedLiveStreamId, engine)
+    }
+
     val mediaSourceId: String? get() = mediaSource.id
     val isLive: Boolean get() = mediaSource.isInfiniteStream || mediaSource.liveStreamId != null
 
     override fun toString(): String = "PlayDecision(itemId=$itemId, mediaSourceId=$mediaSourceId, method=$method, " +
         "url=${Redaction.url(url)}, headers=${Redaction.headers(headers)}, playSessionId=$playSessionId, " +
-        "transcodeReasons=$transcodeReasons)"
+        "transcodeReasons=$transcodeReasons, engine=$engine)"
 }
 
 sealed interface PlayOutcome {

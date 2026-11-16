@@ -45,40 +45,41 @@ internal object PlaybackMedia {
     /** Network interceptors run again for redirect hops; default request properties cannot enforce origin.
      * [nativeHlsMedia] is false for playlists and external subtitles, which may wait for encoder startup.
      */
-    fun httpFactory(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpDataSource.Factory {
-        val client = transport.newBuilder()
-            .apply {
-                if (nativeHlsMedia &&
-                    decision.method == PlayMethod.Transcode &&
-                    decision.mediaSource.transcodingSubProtocol == app.pictureshow.core.playback.MediaStreamProtocol.Hls &&
-                    !TranscodeSeek.required(decision)
-                ) {
-                    // A rendition has one sequential loader. Repeated 20-second reads can consume
-                    // the session's 45-second buffering budget before Media3 gets a useful retry.
-                    // Bound silent reads AND bodies that dribble forever. OkHttp retires a failed
-                    // exchange; Media3 owns retry/backoff and resuming the partially read chunk.
-                    readTimeout(8, TimeUnit.SECONDS)
-                    callTimeout(15, TimeUnit.SECONDS)
-                }
+    fun httpFactory(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpDataSource.Factory =
+        OkHttpDataSource.Factory(httpClient(server, decision, nativeHlsMedia))
+
+    /** The scoped client behind [httpFactory]; the mpv loopback proxy uses it directly (PLAY-60). */
+    fun httpClient(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpClient = transport.newBuilder()
+        .apply {
+            if (nativeHlsMedia &&
+                decision.method == PlayMethod.Transcode &&
+                decision.mediaSource.transcodingSubProtocol == app.pictureshow.core.playback.MediaStreamProtocol.Hls &&
+                !TranscodeSeek.required(decision)
+            ) {
+                // A rendition has one sequential loader. Repeated 20-second reads can consume
+                // the session's 45-second buffering budget before Media3 gets a useful retry.
+                // Bound silent reads AND bodies that dribble forever. OkHttp retires a failed
+                // exchange; Media3 owns retry/backoff and resuming the partially read chunk.
+                readTimeout(8, TimeUnit.SECONDS)
+                callTimeout(15, TimeUnit.SECONDS)
             }
-            .addNetworkInterceptor { chain ->
-                val incoming = chain.request()
-                val cleanUrl = Redaction.stripApiKey(incoming.url.toString())
-                val request = incoming.newBuilder().url(cleanUrl)
-                // Required headers may themselves be credentials. Scope the entire map, including every redirect.
-                (
-                    decision.headers.keys +
-                        listOf("Authorization", "X-Emby-Authorization", "ApiKey", "api_key", "X-Emby-Token", "X-MediaBrowser-Token")
-                    )
-                    .forEach(request::removeHeader)
-                if (PlayDecisions.isSameOrigin(server, cleanUrl)) {
-                    decision.headers.forEach { (name, value) -> request.header(name, value) }
-                }
-                chain.proceed(request.build())
+        }
+        .addNetworkInterceptor { chain ->
+            val incoming = chain.request()
+            val cleanUrl = Redaction.stripApiKey(incoming.url.toString())
+            val request = incoming.newBuilder().url(cleanUrl)
+            // Required headers may themselves be credentials. Scope the entire map, including every redirect.
+            (
+                decision.headers.keys +
+                    listOf("Authorization", "X-Emby-Authorization", "ApiKey", "api_key", "X-Emby-Token", "X-MediaBrowser-Token")
+                )
+                .forEach(request::removeHeader)
+            if (PlayDecisions.isSameOrigin(server, cleanUrl)) {
+                decision.headers.forEach { (name, value) -> request.header(name, value) }
             }
-            .build()
-        return OkHttpDataSource.Factory(client)
-    }
+            chain.proceed(request.build())
+        }
+        .build()
 
     /** Child playlists may carry legacy ApiKey parameters too; sanitize at the final request boundary. */
     fun dataSourceFactory(

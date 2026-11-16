@@ -70,6 +70,8 @@ const pendingPortSuites = new Set([
     // CAT-30..32, PHOTO-01/02, PLAY-30, SAVER-01 detail discovery (Android leg 160): web port owed.
     "discovery",
     "frame-rate-match",
+    // PLAY-60 player engine choice (Android leg 164): web has one engine; owed only if it gains a second.
+    "playback-engine",
     "playback-start",
     "playback-settings",
     "player-quality",

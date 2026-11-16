@@ -12,6 +12,10 @@ import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.playback.PlaybackEngine
+import app.pictureshow.core.playback.PlaybackEngineChoice
+import app.pictureshow.core.playback.PlaybackEngineContext
+import app.pictureshow.core.playback.PlaybackEngineRule
 import app.pictureshow.core.playback.PlaybackHttpOutcome
 import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackReportFailure
@@ -61,10 +65,49 @@ internal class ServerPlaybackGateway(
     private val itemId: String,
     private val capabilities: suspend () -> DeviceCapabilities,
     private val captionLanguage: String? = null,
+    /** PLAY-60: the viewer's engine choice and what may rule mpv out; read at every preparation. */
+    private val engine: () -> PlaybackEngineContext = { PlaybackEngineContext(PlaybackEngineChoice.Automatic, mpvAvailable = false) },
+    /** Where the engine choice is logged; the player passes PlaybackDiagnostics, tests nothing. */
+    private val diagnostic: (String) -> Unit = {},
     private val markPlayed: suspend () -> ClientResult<Unit>
 ) : PlaybackGateway {
     override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
         val snapshot = capabilities()
+        val context = engine().let { it.copy(audio = it.audio || request.audio) }
+        val first = PlaybackEngineRule.first(context)
+        val prepared = prepare(snapshot, request.copy(engine = first))
+        if (first == PlaybackEngine.Mpv) return prepared
+        val decision = ((prepared as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return prepared
+        val retry = context.copy(live = context.live || decision.isLive)
+        if (!PlaybackEngineRule.retryWithMpv(retry, decision.method, decision.transcodeReasons)) {
+            if (decision.method == PlayMethod.Transcode) {
+                diagnostic(
+                    PlaybackDiagnostics.line(
+                        decision,
+                        "engine",
+                        "choice=${context.choice} eligible=${retry.mpvEligible} reasons=${decision.transcodeReasons.joinToString(
+                            ","
+                        )} retry=false"
+                    )
+                )
+            }
+            return prepared
+        }
+        // The first answer opened nothing (no stream URL was requested), so asking again starts no second encoder.
+        val mpv = prepare(snapshot, request.copy(engine = PlaybackEngine.Mpv))
+        val mpvDecision = ((mpv as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return prepared
+        val keep = PlaybackEngineRule.keepMpv(mpvDecision.method)
+        diagnostic(
+            PlaybackDiagnostics.line(
+                mpvDecision,
+                "engine",
+                "choice=${context.choice} retry=true mpvMethod=${mpvDecision.method} keepMpv=$keep"
+            )
+        )
+        return if (keep) mpv else prepared
+    }
+
+    private suspend fun prepare(snapshot: DeviceCapabilities, request: PlaybackRequest): ClientResult<PlayOutcome> {
         val prepared = client.prepare(account, itemId, snapshot, request)
         // Explicit player choices, including Off, survive seeks, route changes and decoder fallback.
         if (captionLanguage == null || request.subtitleStreamIndex != null) return prepared

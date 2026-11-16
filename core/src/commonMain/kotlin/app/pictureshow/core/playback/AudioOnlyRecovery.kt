@@ -50,7 +50,8 @@ object AudioOnlyRecovery {
                 decision.headers,
                 decision.playSessionId,
                 decision.transcodeReasons,
-                decision.ownedLiveStreamId
+                decision.ownedLiveStreamId,
+                decision.engine
             )
         )
     }

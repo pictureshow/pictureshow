@@ -104,6 +104,7 @@ class ReferenceParityVectorsTest {
                         "settings-presentation",
                         "playback-settings-layout",
                         "frame-rate-match",
+                        "playback-engine",
                         "playback-start",
                         // SeerrVectorsTest executes the Seerr request rules.
                         "seerr"
