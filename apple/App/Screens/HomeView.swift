@@ -66,17 +66,41 @@ struct HomeView: View {
         .refreshable { await reload() }
     }
 
-    private func reload() async { await home.load(app: app) { account, client in try await client.homeContent(account: account) } }
+    private func reload() async {
+        await home.load(app: app) { account, client in
+            await app.loadHomeLayout(account: account, client: client)
+            let content = try await client.homeContent(account: account)
+            let duplicates = Catalog.homeDuplicateIds(rows: content.rows)
+            let libraries = content.rows.filter(\.library).flatMap(\.items)
+            var names: [String: String] = [:]
+            for item in content.rows.filter({ !$0.library }).flatMap(\.items) where duplicates.contains(item.id) && names[item.id] == nil {
+                if let ancestors = try? await client.ancestors(account: account, itemID: item.id),
+                   let library = ancestors.first(where: { ancestor in libraries.contains { $0.id == ancestor.id } }) {
+                    names[item.id] = library.name
+                }
+            }
+            let rows = content.rows.map { row in
+                HomeRow(id: row.id, title: row.title, items: row.items, library: row.library, wide: row.wide,
+                        captions: row.captions, libraryNames: names.filter { id, _ in row.items.contains { $0.id == id } })
+            }
+            return HomeContent(rows: rows, warnings: content.warnings)
+        }
+    }
 
     private func rows(_ content: HomeContent) -> some View {
-        ScrollView(.vertical) {
+        let named = content.rows.reduce(into: [String: String]()) { $0.merge($1.libraryNames) { first, _ in first } }
+        let rows = Catalog.customizedHome(rows: content.rows, preferences: app.homeLayout).map { row in
+            HomeRow(id: row.id, title: row.title, items: row.items, library: row.library, wide: row.wide,
+                    captions: row.captions, libraryNames: named)
+        }
+        return ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: Theme.shelfSpacing) {
                 if let featured = featured(content) { HomeHero(item: featured) }
-                ForEach(content.rows) { row in
+                ForEach(rows) { row in
                     if row.library {
                         LibraryShelf(libraries: row.items)
                     } else {
-                        Shelf(title: row.title, items: row.items, wide: row.wide)
+                        Shelf(title: row.title, items: row.items, wide: row.wide, captions: row.captions, libraryNames: row.libraryNames, isHome: true)
                     }
                 }
             }
@@ -127,10 +151,10 @@ struct HomeHero: View {
                     Text(overview).font(platformValue(tv: .callout, touch: .subheadline)).foregroundStyle(Theme.muted).lineLimit(platformValue(tv: 3, touch: 2)).frame(maxWidth: platformValue(tv: 900, touch: 560), alignment: .leading)
                 }
                 HStack(spacing: 14) {
-                    Button { app.play(shown) } label: {
+                    if CatalogPresentation.offersPlayback(shown) { Button { app.play(shown) } label: {
                         Label(shown.userData.playbackPositionTicks > 0 ? "Resume" : "Play", systemImage: "play.fill")
                     }
-                    .primaryAction()
+                    .primaryAction() }
                     NavigationLink(value: shown.route) { Label("Details", systemImage: "info.circle") }
                         .secondaryAction()
                 }
@@ -246,6 +270,7 @@ struct LibraryTile: View {
 /// Account switcher in the iPhone/iPad toolbar.
 struct AccountMenu: View {
     @EnvironmentObject private var app: AppModel
+    @State private var signOutAccount: Account?
     var body: some View {
         Menu {
             ForEach(app.accounts, id: \.key) { account in
@@ -258,11 +283,12 @@ struct AccountMenu: View {
             Divider()
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
             if let current = app.account {
-                Button(role: .destructive) { app.signOut(current) } label: { Label("Sign out of \(current.username)", systemImage: "rectangle.portrait.and.arrow.right") }
+                Button(role: .destructive) { signOutAccount = current } label: { Label("Sign out of \(current.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
         } label: {
             Image(systemName: "person.crop.circle").font(.title3)
                 .accessibilityLabel("Accounts")
         }
+        .confirmSignOut(account: $signOutAccount)
     }
 }

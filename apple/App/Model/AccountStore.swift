@@ -131,7 +131,9 @@ enum AccountBook {
     static func signIn(_ account: Account, into snapshot: AccountSnapshot) -> AccountSnapshot {
         var next = snapshot
         next.accounts.removeAll { $0.key == account.key }
-        next.accounts.append(account)
+        var fresh = account
+        fresh.signedOut = false
+        next.accounts.append(fresh)
         next.servers.removeAll { $0.url == account.server.url }
         next.servers.insert(account.server, at: 0)
         next.selected = account.key
@@ -148,6 +150,16 @@ enum AccountBook {
     /// AUTH-10: signing out clears the token and the selection but keeps the viewer's card, so signing
     /// back in is choosing the card and typing the password. Repeating it, or naming no saved viewer, changes nothing.
     static func signOut(_ key: String, from snapshot: AccountSnapshot) -> AccountSnapshot {
+        var next = snapshot
+        guard let index = next.accounts.firstIndex(where: { $0.key == key }) else { return snapshot }
+        next.accounts[index].accessToken = ""
+        next.accounts[index].signedOut = true
+        if next.selected == key { next.selected = nil }
+        return next
+    }
+
+    /// AUTH-12 retains private state; only voluntary sign-out marks the card signed out.
+    static func expire(_ key: String, from snapshot: AccountSnapshot) -> AccountSnapshot {
         var next = snapshot
         guard let index = next.accounts.firstIndex(where: { $0.key == key }) else { return snapshot }
         next.accounts[index].accessToken = ""

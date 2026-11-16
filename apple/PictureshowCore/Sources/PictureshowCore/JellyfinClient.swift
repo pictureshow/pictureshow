@@ -125,6 +125,24 @@ public final class JellyfinClient: @unchecked Sendable {
     public func logout(account: Account) async throws {
         _ = try await request(account: account, path: "Sessions/Logout", method: "POST")
     }
+    public func seriesEpisodes(account: Account, seriesID: String) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Shows/\(ServerURLs.encode(seriesID))/Episodes", query: [URLQueryItem(name: "fields", value: fields)])).items
+    }
+    public func ancestors(account: Account, itemID: String) async throws -> [MediaItem] {
+        try decoder.decode([MediaItem].self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/Ancestors"))
+    }
+    public func homePreferencesDocument(account: Account) async throws -> [String: JSONValue] {
+        try decoder.decode([String: JSONValue].self, from: await request(account: account, path: "DisplayPreferences/usersettings", query: [URLQueryItem(name: "client", value: "pictureshow")]))
+    }
+    public func saveHomePreferencesDocument(account: Account, document: [String: JSONValue]) async throws {
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(document)) as! [String: Any]
+        _ = try await request(account: account, path: "DisplayPreferences/usersettings", method: "POST", query: [URLQueryItem(name: "client", value: "pictureshow")], body: body)
+    }
+    /// Metadata endpoints require a parent authorization check before enumerating its facets.
+    public func catalogMetadata(account: Account, kind: String, parentID: String) async throws -> Data {
+        _ = try await request(account: account, path: "Items/\(ServerURLs.encode(parentID))")
+        return try await request(account: account, path: kind == "facets" ? "Items/Filters" : kind.capitalized, query: [URLQueryItem(name: "parentId", value: parentID)])
+    }
     public func views(account: Account) async throws -> [MediaItem] { try await page(account: account, path: "UserViews", query: [URLQueryItem(name: "includeHidden", value: "true")]).items }
     public func resume(account: Account) async throws -> [MediaItem] {
         try await page(account: account, path: "UserItems/Resume", query: [URLQueryItem(name: "mediaTypes", value: "Video"), URLQueryItem(name: "limit", value: "24")]).items

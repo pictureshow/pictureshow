@@ -10,11 +10,9 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "account-sign-out": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; the account store lives in the app, whose AccountBookTests.testAccountSignOutVectors executes all seven."),
         "application": Suite(count: 53, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "catalog-return": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "frame-rate-match": Suite(count: 6, reason: "Display-mode policy and native display qualification are not ported to Apple."),
-        "home-browse": Suite(count: 174, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-dvr": Suite(count: 22, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-guide": Suite(count: 14, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
         "live-presentation": Suite(count: 366, reason: "Newly merged main policy or presentation contracts are not ported to Apple; native acceptance remains owed."),
@@ -75,148 +73,6 @@ enum PendingSpecCaseManifest {
         catalog-announcement-season-count|application/catalog-announcement
         catalog-announcement-empty|application/catalog-announcement
         catalog-announcement-resume|application/catalog-announcement
-        home-order-hide-stable|home-browse/home-rows
-        home-merge-resume-wins|home-browse/home-rows
-        home-remove-nextup-no-history-write|home-browse/home-rows
-        home-merge-hide-combined|home-browse/home-rows
-        home-empty-never-pin-cache|home-browse/home-rows
-        filter-clear-omits-all|home-browse/library-filter-parameters
-        filter-all-facets-intersect|home-browse/library-filter-parameters
-        filter-width-sd|home-browse/library-filter-parameters
-        filter-width-hd|home-browse/library-filter-parameters
-        filter-width-full_hd|home-browse/library-filter-parameters
-        filter-width-uhd|home-browse/library-filter-parameters
-        home-pin-collection|home-browse/home-pin-query
-        home-pin-playlist|home-browse/home-pin-query
-        home-pin-favorites|home-browse/home-pin-query
-        home-pin-genre|home-browse/home-pin-query
-        home-pin-studio|home-browse/home-pin-query
-        home-preferences-preserve-and-roundtrip|home-browse/home-preferences-document
-        access-facets-denied|home-browse/catalog-parent-guard
-        access-facets-allowed|home-browse/catalog-parent-guard
-        access-genres-denied|home-browse/catalog-parent-guard
-        access-genres-allowed|home-browse/catalog-parent-guard
-        access-studios-denied|home-browse/catalog-parent-guard
-        access-studios-allowed|home-browse/catalog-parent-guard
-        access-persons-denied|home-browse/catalog-parent-guard
-        access-persons-allowed|home-browse/catalog-parent-guard
-        access-latest-uses-authorized-browse|home-browse/catalog-latest-authority
-        home-config-independent-exclusions|home-browse/home-user-configuration
-        home-config-default-keeps-server-order-and-played|home-browse/home-user-configuration
-        home-views-retain-display-hidden-libraries|home-browse/catalog-views-display-hidden
-        home-server-layout-survives-device-cache-failure|home-browse/home-preferences-local-failure
-        home-acknowledged-save-survives-local-sync-marker-failure|home-browse/home-preferences-local-failure
-        home-landing-waits-for-preferences|home-browse/home-landing
-        home-landing-applies-only-once|home-browse/home-landing
-        home-landing-explicit-home|home-browse/home-landing
-        home-landing-libraries-route|home-browse/home-landing
-        home-landing-permitted-library|home-browse/home-landing
-        home-landing-denied-library-fallback|home-browse/home-landing
-        home-landing-unknown-choice-fallback|home-browse/home-landing
-        home-editor-pin-label-fresh|home-browse/home-editor-pin-label
-        home-editor-pin-label-empty|home-browse/home-editor-pin-label
-        home-editor-pin-label-unavailable|home-browse/home-editor-pin-label
-        editor-combined-only|home-browse/editor-visible-rows
-        editor-separate-only-retains-hidden|home-browse/editor-visible-rows
-        editor-sort-dedupe|home-browse/editor-visible-rows
-        move-retains-dormant|home-browse/editor-move-row
-        move-up-boundary|home-browse/editor-move-row
-        move-down-boundary|home-browse/editor-move-row
-        move-unknown|home-browse/editor-move-row
-        move-new-keys|home-browse/editor-move-row
-        move-bottom-clamped|home-browse/editor-move-row
-        filter-chip-remove-genre|home-browse/filter-presentation
-        filter-chip-remove-year|home-browse/filter-presentation
-        filter-chip-remove-rating|home-browse/filter-presentation
-        filter-chip-remove-unwatched|home-browse/filter-presentation
-        filter-chip-remove-favorite|home-browse/filter-presentation
-        filter-chip-remove-resolution|home-browse/filter-presentation
-        filter-chip-remove-person|home-browse/filter-presentation
-        filter-chip-remove-studio|home-browse/filter-presentation
-        filter-empty-tvshows|home-browse/filter-presentation
-        filter-empty-music|home-browse/filter-presentation
-        filter-empty-other|home-browse/filter-presentation
-        filter-count-ignores-blank|home-browse/filter-presentation
-        picker-current-outside-page|home-browse/named-picker-choices
-        picker-current-deduplicated|home-browse/named-picker-choices
-        picker-search-does-not-inject-saved|home-browse/named-picker-choices
-        picker-next-page-does-not-inject-saved|home-browse/named-picker-choices
-        editor-hint-true-true-false|home-browse/editor-row-hint
-        editor-hint-true-false-false|home-browse/editor-row-hint
-        editor-hint-true-true-true|home-browse/editor-row-hint
-        editor-hint-true-false-true|home-browse/editor-row-hint
-        editor-hint-false-true-false|home-browse/editor-row-hint
-        editor-hint-false-false-false|home-browse/editor-row-hint
-        editor-hint-false-true-true|home-browse/editor-row-hint
-        editor-hint-false-false-true|home-browse/editor-row-hint
-        restore-all-none|home-browse/restore-all-series
-        restore-all-one-visible|home-browse/restore-all-series
-        restore-all-one-absent|home-browse/restore-all-series
-        restore-all-two-visible|home-browse/restore-all-series
-        restore-all-one-absent-among-visible|home-browse/restore-all-series
-        nextup-hint-false|home-browse/next-up-series-hint
-        nextup-hint-true|home-browse/next-up-series-hint
-        home-pin-support-False-None|home-browse/home-pin-picker-support
-        home-pin-support-True-None|home-browse/home-pin-picker-support
-        home-pin-support-False-2|home-browse/home-pin-picker-support
-        home-pin-support-True-2|home-browse/home-pin-picker-support
-        reset-home-false|home-browse/reset-home-layout
-        reset-home-true|home-browse/reset-home-layout
-        title-count-1|home-browse/title-count-label
-        title-count-2|home-browse/title-count-label
-        resolution-summary-ANY|home-browse/resolution-summary
-        resolution-summary-SD|home-browse/resolution-summary
-        resolution-summary-HD|home-browse/resolution-summary
-        resolution-summary-FULL_HD|home-browse/resolution-summary
-        resolution-summary-UHD|home-browse/resolution-summary
-        named-focus-False-False-False|home-browse/named-picker-focus-target
-        named-focus-False-False-True|home-browse/named-picker-focus-target
-        named-focus-False-True-False|home-browse/named-picker-focus-target
-        named-focus-False-True-True|home-browse/named-picker-focus-target
-        named-focus-True-False-False|home-browse/named-picker-focus-target
-        named-focus-True-False-True|home-browse/named-picker-focus-target
-        named-focus-True-True-False|home-browse/named-picker-focus-target
-        named-focus-True-True-True|home-browse/named-picker-focus-target
-        named-editing-focus-False-False-False|home-browse/named-picker-focus-target
-        named-editing-focus-False-False-True|home-browse/named-picker-focus-target
-        named-editing-focus-False-True-False|home-browse/named-picker-focus-target
-        named-editing-focus-False-True-True|home-browse/named-picker-focus-target
-        named-editing-focus-True-False-False|home-browse/named-picker-focus-target
-        named-editing-focus-True-False-True|home-browse/named-picker-focus-target
-        named-editing-focus-True-True-False|home-browse/named-picker-focus-target
-        named-editing-focus-True-True-True|home-browse/named-picker-focus-target
-        sort-direction-ascending|home-browse/sort-direction-label
-        sort-direction-descending|home-browse/sort-direction-label
-        home-editor-pending-read-blocks-default-layout|home-browse/home-editor-entry
-        home-editor-ready-server-or-local-layout-opens|home-browse/home-editor-entry
-        editor-repeated-down-up-drop-retains-exact-order|home-browse/editor-move-sequence
-        command-has-no-selection|home-browse/control-selection
-        unselected-radio-retains-selection-state|home-browse/control-selection
-        selected-radio-retains-selection-state|home-browse/control-selection
-        person-chip-name|home-browse/filter-constraint-label
-        person-chip-missing-name|home-browse/filter-constraint-label
-        person-name-alone-is-not-a-filter|home-browse/filter-constraint-label
-        resolution-chip-compact|home-browse/filter-constraint-label
-        rating-chip-value|home-browse/filter-constraint-label
-        person-display-name-never-enters-query|home-browse/library-filter-parameters
-        remove-person-clears-id-and-display-name|home-browse/library-filter-remove
-        display-name-alone-does-not-count|home-browse/filter-presentation
-        home-save-tv-idle|home-browse/home-save-presentation
-        home-save-tv-saving|home-browse/home-save-presentation
-        home-save-tv-failed|home-browse/home-save-presentation
-        home-save-touch-idle|home-browse/home-save-presentation
-        home-save-touch-saving-is-not-a-notice|home-browse/home-save-presentation
-        home-save-touch-failed-is-actionable|home-browse/home-save-presentation
-        home-save-touch-retry-hides-stale-failure|home-browse/home-save-presentation
-        home-save-failure-needs-a-message|home-browse/home-save-presentation
-        home-recovery-open-ready-0-pending-0-saving-0|home-browse/home-retry-on-open
-        home-recovery-open-ready-0-pending-0-saving-1|home-browse/home-retry-on-open
-        home-recovery-open-ready-0-pending-1-saving-0|home-browse/home-retry-on-open
-        home-recovery-open-ready-0-pending-1-saving-1|home-browse/home-retry-on-open
-        home-recovery-open-ready-1-pending-0-saving-0|home-browse/home-retry-on-open
-        home-recovery-open-ready-1-pending-0-saving-1|home-browse/home-retry-on-open
-        home-recovery-open-ready-1-pending-1-saving-0|home-browse/home-retry-on-open
-        home-recovery-open-ready-1-pending-1-saving-1|home-browse/home-retry-on-open
         live-dvr.oneoff-projects-series-defaults-with-provider-common-fields|live-dvr/draft
         live-dvr.series-keeps-unrecognized-provider-defaults|live-dvr/draft
         live-dvr.edit-does-not-replace-unedited-defaults|live-dvr/edit
@@ -820,13 +676,6 @@ enum PendingSpecCaseManifest {
         settings-presentation.subtitle-label.Outline.6|settings-presentation/subtitle-label
         settings-presentation.subtitle-label.Small.1|settings-presentation/subtitle-label
         settings-presentation.subtitle-label.System.0|settings-presentation/subtitle-label
-        auth10.current-sign-out-keeps-card|account-sign-out/case
-        auth10.other-sign-out-preserves-current|account-sign-out/case
-        auth10.repeat-sign-out-is-idempotent|account-sign-out/case
-        auth10.remove-forgets-signed-out-card|account-sign-out/case
-        auth10.sign-in-replaces-kept-card|account-sign-out/case
-        auth10.missing-sign-out-keeps-everything|account-sign-out/case
-        auth10.both-sign-out-retain-both-cards|account-sign-out/case
         runtime-label-under-minute|application/runtime-label
         runtime-label-tiny|application/runtime-label
         runtime-label-just-under-minute|application/runtime-label
@@ -856,24 +705,6 @@ enum PendingSpecCaseManifest {
         local-stop|catalog-return/progress
         local-rewatch|catalog-return/progress
         local-negative|catalog-return/progress
-        browse-scope-movies|home-browse/library-browse-scope
-        browse-scope-tvshows|home-browse/library-browse-scope
-        browse-scope-boxsets|home-browse/library-browse-scope
-        browse-scope-homevideos-keeps-folders|home-browse/library-browse-scope
-        browse-scope-mixed-keeps-folders|home-browse/library-browse-scope
-        letter-jump-ascending|home-browse/letter-jump
-        letter-jump-number-sign|home-browse/letter-jump
-        letter-jump-absent-letter|home-browse/letter-jump
-        letter-jump-descending-reads-given-order|home-browse/letter-jump
-        letter-jump-symbol-and-blank|home-browse/letter-jump
-        play-scope-box-set|home-browse/collection-play-scope
-        play-scope-movies-library|home-browse/collection-play-scope
-        play-scope-shows-library-not-offered|home-browse/collection-play-scope
-        play-scope-folder-not-offered|home-browse/collection-play-scope
-        play-queue-limit|home-browse/queue-limit
-        home-browse.title-count.inexact-0|home-browse/title-count-label
-        home-browse.title-count.inexact-1|home-browse/title-count-label
-        home-browse.title-count.inexact-35|home-browse/title-count-label
         range-HDR10|playback-formats/range
         range-HDR10Plus|playback-formats/range
         range-HLG|playback-formats/range
@@ -1463,20 +1294,6 @@ enum PendingSpecCaseManifest {
         detail-play-label-movie|application/detail-play-label
         detail-play-label-movie-resume|application/detail-play-label
         detail-play-label-series-nothing-to-play|application/detail-play-label
-        home-notice-unreachable-keeps-page-and-names-server|home-browse/home-notice
-        home-notice-unreachable-keeps-page-offers-downloads|home-browse/home-notice
-        home-notice-unnamed-server|home-browse/home-notice
-        home-notice-empty-page-downloads-first|home-browse/home-notice
-        home-notice-empty-page-no-downloads-is-the-error|home-browse/home-notice
-        home-notice-refusal-is-not-out-of-reach|home-browse/home-notice
-        home-notice-healthy-says-nothing|home-browse/home-notice
-        home-row-destination-libraries|home-browse/home-row-destination
-        home-row-destination-latest-movies-1|home-browse/home-row-destination
-        home-row-destination-latest-empty|home-browse/home-row-destination
-        home-row-destination-resume|home-browse/home-row-destination
-        home-row-destination-nextup|home-browse/home-row-destination
-        home-row-destination-watching|home-browse/home-row-destination
-        home-row-destination-pin-collection-c1|home-browse/home-row-destination
         playback-info-reasons.unreported-scaling|playback-info-reasons/case
         playback-info-reasons.server-covers-scaling|playback-info-reasons/case
         playback-info-reasons.named-video-codec|playback-info-reasons/case

@@ -79,6 +79,7 @@ final class AccountBookTests: XCTestCase {
             XCTAssertEqual(book.accounts.map(\.userId), accounts.map { $0["id"] as? String ?? "" }, id)
             XCTAssertEqual(book.accounts.map(\.accessToken), accounts.map { $0["token"] as? String ?? "" }, id)
             XCTAssertEqual(book.accounts.map { !$0.isSignedIn }, accounts.map { $0["expired"] as? Bool ?? false }, id)
+            XCTAssertEqual(book.accounts.map(\.signedOut), accounts.map { $0["signedOut"] as? Bool ?? false }, id)
             XCTAssertEqual(AccountBook.selected(in: book)?.userId, expected["current"] as? String, id)
         }
     }

@@ -14,6 +14,11 @@ import PictureshowCore
     /// Set while the viewer is adding another account, so the sign-in flow shows over the app.
     @Published var addingAccount = false
     @Published var player: PlayerRequest?
+    @Published var homeLayouts: [String: HomePreferences] = HomeLayoutCache.load()
+    var homeLayoutGeneration = 0
+    @Published var homeLayoutPending: Set<String> = HomeLayoutCache.pending()
+    @Published var homeLayoutSaving = false
+    @Published var homeLayoutError: String?
 
     private let store: AccountStore
     private var clients: [String: JellyfinClient] = [:]
@@ -80,6 +85,11 @@ import PictureshowCore
         // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
         if player?.account.key == account.key { player = nil }
         downloads.removeViewer(account)
+        homeLayoutGeneration += 1
+        homeLayouts.removeValue(forKey: account.key)
+        homeLayoutPending.remove(account.key)
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         clients[account.key] = nil
         update(AccountBook.signOut(account.key, from: snapshot))
     }
@@ -88,25 +98,42 @@ import PictureshowCore
     func remove(_ account: Account) {
         signOut(account)
         clients[account.key] = nil
+        homeLayoutGeneration += 1
+        homeLayouts.removeValue(forKey: account.key)
+        homeLayoutPending.remove(account.key)
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         update(AccountBook.remove(account.key, from: snapshot))
     }
 
     func forget(_ server: Server) {
         for account in snapshot.accounts where account.server.url == server.url { signOut(account) }
+        homeLayoutGeneration += 1
+        for account in snapshot.accounts where account.server.url == server.url {
+            homeLayouts.removeValue(forKey: account.key)
+            homeLayoutPending.remove(account.key)
+        }
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         update(AccountBook.forget(server: server.url, from: snapshot))
     }
 
     /// The server rejected a token: drop it, keeping the card, so the viewer signs in again instead of seeing empty screens.
     func expire(_ account: Account) {
+        guard accounts.contains(where: { $0 == account }) else { return }
         clients[account.key] = nil
-        update(AccountBook.signOut(account.key, from: snapshot))
+        update(AccountBook.expire(account.key, from: snapshot))
     }
 
     func catalogChanged() { catalogRevision += 1 }
 
     /// A title's own Play uses its ready download, online or not, unless the viewer chose to stream (OFF-04a).
     func play(_ item: MediaItem, fromStart: Bool = false, stream: Bool = false) {
-        guard let account else { return }
+        guard let account, !item.isMissing else { return }
+        if ["Season", "Series"].contains(item.type) {
+            Task { await playContainer(item, account: account, fromStart: fromStart, stream: stream) }
+            return
+        }
         let ready = downloads.local(account, itemID: item.id)
         if offlineDetailPlaySource(ready: ready != nil, server: .unknown, explicitStream: stream) == .local, let ready {
             playLocal(ready, item: item, fromStart: fromStart)
