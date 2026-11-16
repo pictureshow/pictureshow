@@ -3,7 +3,7 @@
 import Foundation
 
 public enum ClientError: Error, LocalizedError, Equatable {
-    case invalidAddress, notJellyfin, unsupportedVersion, invalidCredentials, network, invalidResponse, server(Int), serverRefused, noCompatibleSource, sourceNotFound, unsafeStreamURL, quickConnectDisabled
+    case invalidAddress, notJellyfin, unsupportedVersion, invalidCredentials, network, invalidResponse, server(Int), serverRefused, noCompatibleSource, sourceNotFound, unsafeStreamURL, quickConnectDisabled, accessRefusedAtSignIn
     public var errorDescription: String? {
         switch self {
         case .invalidAddress: return "Enter an HTTP or HTTPS server address without credentials, a query or fragment."
@@ -12,13 +12,22 @@ public enum ClientError: Error, LocalizedError, Equatable {
         case .invalidCredentials: return "The server did not accept this sign-in. Sign in again."
         case .network: return "Could not reach the server. Check your connection and try again."
         case .invalidResponse: return "The server returned an unreadable response."
+        case .server(403): return Self.accessRefusal(signIn: false)
         case .server(let status): return "The server could not complete the request (\(status))."
         case .serverRefused: return "The server refused playback."
         case .noCompatibleSource: return "This video cannot be played on this device."
         case .sourceNotFound: return "The server did not return the chosen version."
         case .unsafeStreamURL: return "The server returned a stream outside its origin."
         case .quickConnectDisabled: return "Quick Connect is disabled on this server. Use your username and password."
+        case .accessRefusedAtSignIn: return Self.accessRefusal(signIn: true)
         }
+    }
+    /// AUTH-17: a 403 is the server refusing this account, never a wrong password. At sign-in Jellyfin answers a
+    /// disabled account and one outside its viewing hours with the same 403, so the copy names both.
+    public static func accessRefusal(signIn: Bool) -> String {
+        signIn
+            ? "The server turned this account away. It may be outside its allowed viewing hours, or turned off. Ask your server administrator."
+            : "The server didn't allow this for your account. If it has viewing hours, this may be outside them. Ask your server administrator."
     }
 }
 
