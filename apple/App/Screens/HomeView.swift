@@ -197,9 +197,7 @@ struct LibraryTile: View {
     }
 
     private var tile: some View {
-        Color.clear
-            .frame(width: width)
-            .aspectRatio(16 / 9, contentMode: .fit)
+        tileBase
             .overlay {
                 ArtworkImage(url: app.account.flatMap { app.client?.artworkURL(account: $0, item: library, kind: .wide, width: Int((width ?? 400) * 2)) }, placeholderSymbol: library.symbol)
             }
@@ -210,6 +208,15 @@ struct LibraryTile: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(library.name)
             .accessibilityAddTraits(.isButton)
+    }
+
+    /// Fixed 16:9 size in a shelf; in a grid, the column width at 16:9.
+    @ViewBuilder private var tileBase: some View {
+        if let width {
+            Color.clear.frame(width: width, height: width * 9 / 16)
+        } else {
+            Color.clear.aspectRatio(16 / 9, contentMode: .fit).frame(maxWidth: .infinity)
+        }
     }
 }
 

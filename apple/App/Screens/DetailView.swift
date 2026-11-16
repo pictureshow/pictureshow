@@ -37,6 +37,10 @@ struct DetailView: View {
         .task(id: app.catalogRevision) { await reload() }
     }
 
+    private static func titleKey(_ item: MediaItem) -> String {
+        "\(item.name.lowercased())|\(item.productionYear.map(String.init) ?? "")"
+    }
+
     private func reload() async {
         let seed = seed
         await content.load(app: app) { account, client in
@@ -56,7 +60,10 @@ struct DetailView: View {
             default: break
             }
             if ["Movie", "Series"].contains(item.type) {
-                result.similar = (try? await client.similar(account: account, itemID: item.id)) ?? []
+                let similar = (try? await client.similar(account: account, itemID: item.id)) ?? []
+                // A server with the same film in two libraries returns it (and its neighbours) twice.
+                var seen: Set<String> = [Self.titleKey(item)]
+                result.similar = similar.filter { seen.insert(Self.titleKey($0)).inserted }
             }
             return result
         }
@@ -142,31 +149,65 @@ struct DetailPage: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 14) {
+        #if os(tvOS)
+        HStack(spacing: 14) { playButtons; secondaryButtons }
+            .focusSection()
+        #else
+        // One row when it fits; on a phone the play button takes its own full-width row, and the
+        // secondary buttons drop their words before they would push the page wider than the screen.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) { playButtons; secondaryButtons }
+                .fixedSize(horizontal: true, vertical: false)
+            stackedActions.labelStyle(.titleAndIcon)
+            stackedActions.labelStyle(.iconOnly)
+        }
+        #endif
+    }
+
+    #if !os(tvOS)
+    private var stackedActions: some View {
+        VStack(alignment: .leading, spacing: 12) {
             if let target = playTarget {
                 Button { app.play(target) } label: {
-                    Label(playLabel(target), systemImage: "play.fill")
+                    Label(playLabel(target), systemImage: "play.fill").labelStyle(.titleAndIcon).frame(maxWidth: .infinity)
                 }
                 .primaryAction()
-                if playable, item.userData.playbackPositionTicks > 0 {
-                    Button { app.play(item, fromStart: true) } label: { Label("From the beginning", systemImage: "backward.end.fill") }
-                        .secondaryAction()
-                }
             }
-            Button { Task { await toggleWatched() } } label: {
-                Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
+            HStack(spacing: 12) {
+                if playTarget != nil, playable, item.userData.playbackPositionTicks > 0 { restartButton }
+                secondaryButtons
             }
-            .secondaryAction()
-            .accessibilityLabel(item.isWatched ? "Mark as unwatched" : "Mark as watched")
-            Button { Task { await toggleFavorite() } } label: {
-                Image(systemName: item.userData.isFavorite ? "heart.fill" : "heart")
-            }
-            .secondaryAction()
-            .accessibilityLabel(item.userData.isFavorite ? "Remove from favorites" : "Add to favorites")
+            .fixedSize(horizontal: true, vertical: false)
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
+    }
+    #endif
+
+    @ViewBuilder private var playButtons: some View {
+        if let target = playTarget {
+            Button { app.play(target) } label: {
+                Label(playLabel(target), systemImage: "play.fill")
+            }
+            .primaryAction()
+            if playable, item.userData.playbackPositionTicks > 0 { restartButton }
+        }
+    }
+
+    private var restartButton: some View {
+        Button { app.play(item, fromStart: true) } label: { Label("From the beginning", systemImage: "backward.end.fill") }
+            .secondaryAction()
+    }
+
+    @ViewBuilder private var secondaryButtons: some View {
+        Button { Task { await toggleWatched() } } label: {
+            Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
+        }
+        .secondaryAction()
+        .accessibilityLabel(item.isWatched ? "Mark as unwatched" : "Mark as watched")
+        Button { Task { await toggleFavorite() } } label: {
+            Image(systemName: item.userData.isFavorite ? "heart.fill" : "heart")
+        }
+        .secondaryAction()
+        .accessibilityLabel(item.userData.isFavorite ? "Remove from favorites" : "Add to favorites")
     }
 
     private func playLabel(_ target: MediaItem) -> String {
@@ -332,12 +373,34 @@ struct EpisodeRow: View {
 struct CastShelf: View {
     @EnvironmentObject private var app: AppModel
     let people: [PersonCredit]
+
+    /// One card per person: a director who also wrote appears once as "Director, Writer".
+    /// (Duplicate ids in a ForEach left a blank gap in the row.)
+    private var merged: [PersonCredit] {
+        var order: [String] = []
+        var byID: [String: PersonCredit] = [:]
+        for person in people {
+            let role = person.role?.nilIfBlank ?? person.type ?? ""
+            if var existing = byID[person.id] {
+                let current = existing.role?.nilIfBlank ?? existing.type ?? ""
+                if !role.isEmpty, !current.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }).contains(role) {
+                    existing.role = current.isEmpty ? role : current + ", " + role
+                }
+                byID[person.id] = existing
+            } else {
+                order.append(person.id)
+                byID[person.id] = person
+            }
+        }
+        return order.prefix(30).compactMap { byID[$0] }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Cast & crew").padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: platformValue(tv: 40, touch: 16)) {
-                    ForEach(people.prefix(30)) { person in
+                    ForEach(merged) { person in
                         NavigationLink(value: Route.person(id: person.id, name: person.name)) {
                             VStack(spacing: 8) {
                                 ArtworkImage(url: app.account.flatMap { app.client?.image(account: $0, id: person.id, type: "Primary", tag: nil, width: 300) }, placeholderSymbol: "person")

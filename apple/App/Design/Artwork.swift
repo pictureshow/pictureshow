@@ -87,6 +87,23 @@ struct ArtworkImage: View {
     @State private var image: UIImage?
 
     var body: some View {
+        // A filled image reports its overflowing size to the layout, which widened whole screens
+        // (the Home hero ran off the iPhone). Filling a clear base keeps the size the caller proposed.
+        // .clipped() trims the drawing but not touches or the accessibility frame, so a filled
+        // poster also claimed taps meant for its neighbour. The overflow is decorative: no touches,
+        // no VoiceOver frame; the clear base is the shape that takes the tap.
+        Color.clear
+            .overlay(alignment: contentMode == .fit ? .leading : .center) {
+                content
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(contentMode == .fill)
+            }
+            .clipped()
+            .contentShape(Rectangle())
+            .task(id: url) { await load() }
+    }
+
+    @ViewBuilder private var content: some View {
         ZStack {
             if let image {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
@@ -99,8 +116,6 @@ struct ArtworkImage: View {
                 Image(systemName: placeholderSymbol).font(.system(size: 28, weight: .light)).foregroundStyle(Theme.muted.opacity(0.6))
             }
         }
-        .clipped()
-        .task(id: url) { await load() }
     }
 
     private func load() async {

@@ -229,19 +229,29 @@ struct PasswordView: View {
     let server: Server
     @State var username: String
     let deviceID: String
+    /// The name picked from the user list; nil when the viewer types one, so the field stays editable.
+    private let pickedName: String?
     @State private var password = ""
     @State private var working = false
     @State private var error: String?
     @FocusState private var field: Field?
     enum Field { case username, password }
 
+    init(server: Server, username: String, deviceID: String) {
+        self.server = server
+        self._username = State(initialValue: username)
+        self.deviceID = deviceID
+        self.pickedName = username.isEmpty ? nil : username
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text(username.isEmpty ? "Sign in" : "Sign in as \(username)").font(.largeTitle.weight(.bold))
+                Text(pickedName.map { "Sign in as \($0)" } ?? "Sign in").font(.largeTitle.weight(.bold))
                 Text(server.name).font(.headline).foregroundStyle(Theme.muted)
-                if username.isEmpty || field == .username {
+                if pickedName == nil {
                     TextField("Username", text: $username)
+                        .accessibilityLabel("Username")
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         #if os(iOS)
@@ -253,6 +263,7 @@ struct PasswordView: View {
                         .onSubmit { field = .password }
                 }
                 SecureField("Password", text: $password)
+                    .accessibilityLabel("Password")
                     .textContentType(.password)
                     #if os(iOS)
                     .padding(14).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface))

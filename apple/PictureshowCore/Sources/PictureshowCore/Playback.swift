@@ -199,7 +199,9 @@ public enum AppleProfile {
         ]]
         let audio: [String:Any] = ["Type": "VideoAudio", "Codec": "aac,mp3,alac,ac3,eac3", "Conditions": [condition("LessThanEqual", "AudioChannels", "6")]]
         let direct: [String:Any] = ["Container": "mp4,m4v,mov", "Type": "Video", "VideoCodec": supportsHEVC ? "h264,hevc" : "h264", "AudioCodec": "aac,mp3,alac,ac3,eac3"]
-        let transcode: [String:Any] = ["Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Protocol": "hls", "Context": "Streaming", "MaxAudioChannels": "2", "MinSegments": 2, "SegmentLength": 6, "EnableSubtitlesInManifest": false, "BreakOnNonKeyFrames": false]
+        // AVFoundation plays AAC, AC-3 and E-AC-3 up to 5.1 inside HLS, so the server can copy a
+        // film's surround track instead of folding it to stereo AAC.
+        let transcode: [String:Any] = ["Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac,ac3,eac3", "Protocol": "hls", "Context": "Streaming", "MaxAudioChannels": "6", "MinSegments": 2, "SegmentLength": 6, "EnableSubtitlesInManifest": false, "BreakOnNonKeyFrames": false]
         // AVFoundation can demux embedded MP4 timed text even when subtitles are Off.
         // Advertising it avoids Jellyfin rejecting the entire direct-play container.
         // Positive subtitle selections still explicitly negotiate server burn-in.

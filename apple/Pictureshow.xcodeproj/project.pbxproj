@@ -9,8 +9,10 @@
 /* Begin PBXBuildFile section */
 		01217037B07D1AF498719ECB /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95005E06BDB9445CEF5DEFF1 /* AccountStore.swift */; };
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
+		14686C297522480289D64071 /* AppleHEVCQualificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */; };
 		14A69ADF3187990585F5A419 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208DC253481C07A7F4E487B8 /* SettingsView.swift */; };
 		175E543AA4A8ACB0C4BB07D6 /* AppleHEVCQualification.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC50B346E9AE355D6918A23 /* AppleHEVCQualification.swift */; };
+		1947ED6B1E7FC0EEFB4C6C48 /* AppleHEVCQualificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */; };
 		1B57AA94CC938BEFD309468C /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF5DDDE279B32FAA39F91BA /* SearchView.swift */; };
 		2315B71227D493238750EE59 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		2A0AED94255972166321661F /* Artwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B219333841A679C0E18D37B /* Artwork.swift */; };
@@ -80,6 +82,7 @@
 		2F2DDEAB754F5ED386E56980 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		2F8E5103DB47A19B32019DE1 /* PictureshowCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowCore; path = PictureshowCore; sourceTree = SOURCE_ROOT; };
 		34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-tvOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHEVCQualificationTests.swift; sourceTree = "<group>"; };
 		78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerScreen.swift; sourceTree = "<group>"; };
 		7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MPL-2.0.txt"; sourceTree = "<group>"; };
 		88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -212,6 +215,7 @@
 			isa = PBXGroup;
 			children = (
 				A863BDF89C97DC08A9A73EB5 /* AccountBookTests.swift */,
+				4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */,
 			);
 			path = UnitTests;
 			sourceTree = "<group>";
@@ -388,6 +392,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5D9256A70B2E0B1BB6385C24 /* AccountBookTests.swift in Sources */,
+				1947ED6B1E7FC0EEFB4C6C48 /* AppleHEVCQualificationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,6 +447,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8752B7400AB9B01866F68CED /* AccountBookTests.swift in Sources */,
+				14686C297522480289D64071 /* AppleHEVCQualificationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

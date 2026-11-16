@@ -140,7 +140,7 @@ struct NextEpisodeCard: View {
     var body: some View {
         HStack(spacing: 16) {
             ArtworkImage(url: app.client?.artworkURL(account: controller.account, item: next, kind: .wide, width: 480), placeholderSymbol: "tv")
-                .frame(width: platformValue(tv: 280, touch: 140), height: platformValue(tv: 158, touch: 79))
+                .frame(width: platformValue(tv: 280, touch: 112), height: platformValue(tv: 158, touch: 63))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
                 Text(countdownText).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent)
@@ -152,6 +152,8 @@ struct NextEpisodeCard: View {
                     Button("Hide") { controller.dismissNextCard() }
                         .secondaryAction()
                 }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.top, 4)
             }
         }
