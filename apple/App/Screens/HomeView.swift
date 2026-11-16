@@ -99,6 +99,9 @@ struct HomeHero: View {
                     LinearGradient(colors: [Theme.background.opacity(0.85), .clear], startPoint: .leading, endPoint: .center)
                 )
                 .accessibilityHidden(true)
+                #if os(tvOS)
+                .ignoresSafeArea(edges: .horizontal) // full-bleed art past the TV safe area
+                #endif
             VStack(alignment: .leading, spacing: platformValue(tv: 18, touch: 10)) {
                 Text(eyebrow(shown)).font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(Theme.accent).tracking(1.2)
                 TitleLogo(item: shown.type == "Episode" ? nil : shown, fallback: shown.type == "Episode" ? (shown.seriesName ?? shown.name) : shown.name)
@@ -166,7 +169,7 @@ struct LibraryShelf: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Libraries").padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
+                HStack(spacing: Theme.cardSpacing) {
                     ForEach(libraries) { library in LibraryTile(library: library) }
                 }
                 .padding(.horizontal, Theme.gutter)

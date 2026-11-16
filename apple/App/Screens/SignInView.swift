@@ -151,6 +151,18 @@ struct UserPickerView: View {
                     Text("Who's watching?").font(.largeTitle.weight(.bold))
                     Text(server.name).font(.headline).foregroundStyle(Theme.muted)
                 }
+                VStack(alignment: .leading, spacing: 14) {
+                    if quickConnect {
+                        NavigationLink { QuickConnectView(server: server, deviceID: deviceID) } label: {
+                            Label("Use Quick Connect", systemImage: "qrcode").frame(maxWidth: platformValue(tv: 520, touch: .infinity))
+                        }
+                        .primaryAction()
+                    }
+                    Button { credentialsUser = nil; showCredentials = true } label: {
+                        Label("Sign in with username", systemImage: "person.badge.key").frame(maxWidth: platformValue(tv: 520, touch: .infinity))
+                    }
+                    .secondaryAction()
+                }
                 if !users.isEmpty {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: platformValue(tv: 220, touch: 104)), spacing: platformValue(tv: 48, touch: 20))], alignment: .leading, spacing: 28) {
                         ForEach(users) { user in
@@ -165,24 +177,12 @@ struct UserPickerView: View {
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: 14) {
-                    if quickConnect {
-                        NavigationLink { QuickConnectView(server: server, deviceID: deviceID) } label: {
-                            Label("Use Quick Connect", systemImage: "qrcode").frame(maxWidth: platformValue(tv: 520, touch: .infinity))
-                        }
-                        .primaryAction()
-                    }
-                    Button { credentialsUser = nil; showCredentials = true } label: {
-                        Label("Sign in with username", systemImage: "person.badge.key").frame(maxWidth: platformValue(tv: 520, touch: .infinity))
-                    }
-                    .secondaryAction()
-                }
                 if loaded && users.isEmpty {
                     Text("This server doesn't list its users. Sign in with your username, or approve this device with Quick Connect from another app where you're signed in.")
                         .font(.callout).foregroundStyle(Theme.muted)
                 }
             }
-            .frame(maxWidth: 900, alignment: .leading)
+            .frame(maxWidth: platformValue(tv: 1500, touch: 900), alignment: .leading)
             .padding(.horizontal, Theme.gutter).padding(.vertical, 32)
             .frame(maxWidth: .infinity)
         }
@@ -214,6 +214,7 @@ struct UserAvatar: View {
             }
             .frame(width: platformValue(tv: 180, touch: 84), height: platformValue(tv: 180, touch: 84))
             #if os(tvOS)
+            .contentShape(.hoverEffect, Circle())
             .hoverEffect(.highlight)
             #endif
             Text(user.name).font(.callout.weight(.medium)).lineLimit(1)

@@ -305,7 +305,9 @@ struct Shelf: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: title).padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+                // Plain HStack: inside a lazy vertical stack, a LazyHStack measured 0 tall before it had
+                // realised any card, so on Apple TV whole rows (Next up, Libraries) never appeared.
+                HStack(alignment: .top, spacing: Theme.cardSpacing) {
                     ForEach(items) { item in ItemCard(item: item, wide: wide, compactTitle: compactTitle) }
                 }
                 .padding(.horizontal, Theme.gutter)

@@ -107,6 +107,9 @@ struct DetailPage: View {
                 .overlay(LinearGradient(stops: [.init(color: .clear, location: 0.2), .init(color: Theme.background.opacity(0.75), location: 0.62), .init(color: Theme.background, location: 1)], startPoint: .top, endPoint: .bottom))
                 .overlay(LinearGradient(colors: [Theme.background.opacity(0.9), .clear], startPoint: .leading, endPoint: .center))
                 .accessibilityHidden(true)
+                #if os(tvOS)
+                .ignoresSafeArea(edges: .horizontal) // full-bleed art past the TV safe area
+                #endif
             VStack(alignment: .leading, spacing: platformValue(tv: 18, touch: 12)) {
                 if item.type == "Episode", let series = item.seriesName {
                     Text(series).font(.headline).foregroundStyle(Theme.accent)
@@ -294,7 +297,7 @@ struct SeasonBrowser: View {
     @ViewBuilder private var episodeList: some View {
         #if os(tvOS)
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+            HStack(alignment: .top, spacing: Theme.cardSpacing) {
                 ForEach(episodes) { episode in
                     VStack(alignment: .leading, spacing: 14) {
                         Button { app.play(episode) } label: { WideArtworkOnly(item: episode, width: Theme.wideWidth) }
@@ -399,7 +402,7 @@ struct CastShelf: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Cast & crew").padding(.horizontal, Theme.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: platformValue(tv: 40, touch: 16)) {
+                HStack(alignment: .top, spacing: platformValue(tv: 40, touch: 16)) {
                     ForEach(merged) { person in
                         NavigationLink(value: Route.person(id: person.id, name: person.name)) {
                             VStack(spacing: 8) {

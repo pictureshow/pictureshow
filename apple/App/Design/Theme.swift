@@ -82,7 +82,7 @@ extension View {
     /// Main action button: native bordered-prominent focus on tvOS, accent capsule on touch.
     @ViewBuilder func primaryAction() -> some View {
         #if os(tvOS)
-        self.buttonStyle(.borderedProminent)
+        self.buttonStyle(TVActionStyle(prominent: true))
         #else
         self.buttonStyle(PrimaryActionStyle())
         #endif
@@ -90,7 +90,7 @@ extension View {
 
     @ViewBuilder func secondaryAction() -> some View {
         #if os(tvOS)
-        self.buttonStyle(.bordered)
+        self.buttonStyle(TVActionStyle(prominent: false))
         #else
         self.buttonStyle(SecondaryActionStyle())
         #endif
@@ -192,3 +192,33 @@ import PictureshowCore
 extension String {
     var nilIfBlank: String? { trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self }
 }
+
+#if os(tvOS)
+/// Apple TV action button. The system bordered styles took the app tint for both fill and label, so a
+/// secondary button's words vanished on the dark theme. Focus is white with dark text and a lift, as
+/// in the system apps; unfocused, primary is the accent and secondary a translucent pill.
+struct TVActionStyle: ButtonStyle {
+    var prominent: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        TVActionBody(configuration: configuration, prominent: prominent)
+    }
+}
+
+private struct TVActionBody: View {
+    let configuration: ButtonStyleConfiguration
+    let prominent: Bool
+    @Environment(\.isFocused) private var focused
+
+    var body: some View {
+        configuration.label
+            .font(.headline)
+            .lineLimit(1)
+            .padding(.horizontal, 36).padding(.vertical, 18)
+            .foregroundStyle(focused ? Color.black : (prominent ? Theme.onAccent : Color.white))
+            .background(Capsule().fill(focused ? Color.white : (prominent ? Theme.accent : Color.white.opacity(0.16))))
+            .scaleEffect(configuration.isPressed ? 0.97 : (focused ? 1.08 : 1))
+            .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 20, y: 12)
+            .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+#endif
