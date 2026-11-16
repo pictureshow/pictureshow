@@ -285,7 +285,8 @@ public protocol ProfileLockPersistence {
     /// Ends a one-change permission unused: the new-PIN screen was cancelled or left (AUTH-19).
     public func dropChangeGrant() { changeGrant = nil }
 
-    /// A password or Quick Connect sign-in: the viewer is open and may set a new PIN without the old one.
+    /// A password or Quick Connect sign-in: the viewer is open and may make one PIN change without the old PIN, until
+    /// that change, another viewer becoming current, or a relock.
     public func provenByPassword(_ key: String) {
         passwordKey = key
         unlocked = key
@@ -303,6 +304,7 @@ public protocol ProfileLockPersistence {
         if !openedSeen { opened = key; openedSeen = true }
         // A change permission belongs to the viewer it was typed for; becoming anyone else ends it.
         if changeGrant != nil && changeGrant != key { changeGrant = nil }
+        if passwordKey != nil && passwordKey != key { passwordKey = nil }
         if key == nil || unlocked == key { admitted = key; return false }
         // Unlocking another viewer happens just before it becomes current, so the open one stays open through that
         // moment instead of flashing its own lock screen.
@@ -401,8 +403,10 @@ public protocol ProfileLockPersistence {
         if unlocked == key { unlocked = nil }
     }
 
-    /// A change uses up the PIN typed for it; a password proof lasts until Pictureshow locks again.
+    /// A change uses up its permission, whether a typed PIN or a password sign-in allowed it: one change each, so a
+    /// password proved once doesn't leave the PIN open to whoever picks the device up next (AUTH-19).
     private func useChangePermission(_ key: String) {
         if changeGrant == key { changeGrant = nil }
+        if passwordKey == key { passwordKey = nil }
     }
 }

@@ -136,6 +136,44 @@ import PictureshowCore
         XCTAssertFalse(app.pins.hasPin(parent.key))
     }
 
+    // MARK: Nothing plays behind the lock
+
+    /// The player cover shows nothing for a locked viewer, whatever route set the request.
+    func testPlayerIsNotShownBehindTheLock() async throws {
+        let pins = FakeKeychain()
+        pins.items[ProfileLockKeychain.service(viewer.key)] = try savedLock("1234")
+        let app = try model(pins: pins)
+        app.player = PlayerRequest(account: viewer, item: MediaItem(id: "m1", type: "Movie"), fromStart: false)
+        XCTAssertFalse(app.pastPinGate(viewer))
+        XCTAssertNil(app.shownPlayer, "a request set while locked is not presented")
+        let r = await app.pins.verify(viewer.key, pin: "1234", now: 10)
+        XCTAssertEqual(r, .unlocked)
+        XCTAssertNotNil(app.shownPlayer)
+        XCTAssertFalse(app.pastPinGate(parent), "only the current viewer plays")
+    }
+
+    /// A remote's Play on a locked viewer is refused before anything is fetched or opened.
+    func testRemoteOpenIsRefusedWhileLocked() throws {
+        let hex = "0123456789abcdef0123456789abcdef"
+        let kid = Account(server: viewer.server, userId: hex, username: "kid", accessToken: "t3", deviceID: "dev-3")
+        let pins = FakeKeychain()
+        pins.items[ProfileLockKeychain.service(kid.key)] = try savedLock("1234")
+        let suite = "app.pictureshow.tests.\(UUID().uuidString)"
+        let store = AccountStore(service: suite, fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString).json"),
+                                 keychain: FakeKeychain(), defaults: UserDefaults(suiteName: suite)!, isSimulator: true)
+        try store.save(AccountSnapshot(servers: [kid.server], accounts: [kid], selected: kid.key))
+        let app = AppModel(store: store, pinKeychain: pins)
+        app.socket.stop()
+        app.remoteTarget.socketChanged(open: true)
+        XCTAssertTrue(app.pinGateNeeded(kid))
+        let body: [String: Any] = ["MessageType": "Play", "MessageId": "m-1",
+                                   "Data": ["ControllingUserId": hex, "PlayCommand": "PlayNow", "ItemIds": ["fedcba9876543210fedcba9876543210"]]]
+        app.socket.receiveForTesting(String(data: try JSONSerialization.data(withJSONObject: body), encoding: .utf8)!)
+        XCTAssertEqual(app.remoteTarget.lastEffects, ["open"])
+        XCTAssertEqual(app.remoteTarget.refusedWhileLocked, 1)
+        XCTAssertNil(app.player)
+    }
+
     // MARK: AUTH-18 relock on the scene phase
 
     func testFiveMinutesInTheBackgroundLocksAgainAndClosesTheViewing() async throws {

@@ -59,10 +59,25 @@ extension AppModel {
         guard pins.backgroundedAt != nil else { return false }
         pins.retryUnreadable()
         guard pins.foregrounded(now: now) else { return false }
-        if let account, pins.needed(account.key, reason: .START) { player = nil }
+        if let account, pins.needed(account.key, reason: .START) {
+            // Nothing plays behind the lock: the viewing closes and a watch-together group is left (not paused), since
+            // following a group would start the next entry behind the lock.
+            if syncPlay.participating { syncPlay.leave() }
+            player = nil
+        }
         return true
     }
 
     /// Whether the app-wide lock covers the current viewer instead of the app.
     func pinGateNeeded(_ account: Account) -> Bool { pins.gateNeeded(account.key) }
+
+    /// Whether playback may start for this viewer: it is the current one and past the PIN gate. The remote, SyncPlay
+    /// and the player cover all ask, so no route starts a viewing behind the lock.
+    func pastPinGate(_ account: Account) -> Bool {
+        guard let current = self.account, current.key == account.key else { return false }
+        return pins.unlocked == account.key || !pinGateNeeded(account)
+    }
+
+    /// The viewing the player cover shows: none while its viewer is behind the lock, whatever route set the request.
+    var shownPlayer: PlayerRequest? { player.flatMap { pastPinGate($0.account) ? $0 : nil } }
 }

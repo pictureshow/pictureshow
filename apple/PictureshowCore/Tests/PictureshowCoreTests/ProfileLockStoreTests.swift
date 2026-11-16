@@ -178,6 +178,35 @@ import XCTest
         XCTAssertTrue(pins.changeNeedsPin("a"), "becoming another viewer ends it")
     }
 
+    /// AUTH-19: a password sign-in allows one change without the old PIN, not an open window until relock.
+    func testPasswordProofAllowsOneChangeOnly() async throws {
+        let pins = store()
+        try await pins.set("a", pin: "1234", askOnStart: true)
+        _ = pins.gateNeeded("a")
+        pins.provenByPassword("a")
+        XCTAssertFalse(pins.changeNeedsPin("a"), "the Forgot PIN path")
+        try pins.setAskOnStart("a", false)
+        XCTAssertTrue(pins.changeNeedsPin("a"), "the proof is used up by one change")
+        XCTAssertThrowsError(try pins.remove("a")) { XCTAssertEqual($0 as? ProfilePinError, .currentPinNeeded) }
+        do { try await pins.set("a", pin: "5678", askOnStart: true); XCTFail("changed without the PIN") } catch { XCTAssertEqual(error as? ProfilePinError, .currentPinNeeded) }
+
+        pins.provenByPassword("a")
+        try pins.remove("a")
+        try await pins.set("a", pin: "2468", askOnStart: true)
+        XCTAssertTrue(pins.changeNeedsPin("a"), "turning off then setting a first PIN doesn't bring the proof back")
+
+        pins.provenByPassword("a")
+        _ = pins.gateNeeded("b")
+        pins.markUnlocked("a"); _ = pins.gateNeeded("a")
+        XCTAssertTrue(pins.changeNeedsPin("a"), "another viewer becoming current ends the proof")
+
+        pins.provenByPassword("a")
+        pins.backgrounded(now: 0)
+        pins.foregrounded(now: ProfilePin.relockAfterMs)
+        pins.markUnlocked("a")
+        XCTAssertTrue(pins.changeNeedsPin("a"), "a relock ends the proof")
+    }
+
     /// AUTH-16: the opened viewer follows its opening choice; any other that becomes current asks like a switch.
     func testGateStartVersusSwitch() async throws {
         let memory = Memory()

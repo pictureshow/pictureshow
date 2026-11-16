@@ -86,14 +86,19 @@ struct RootView: View {
                 .environmentObject(app)
         }
         #if os(tvOS)
-        .fullScreenCover(item: $app.player) { request in
+        .fullScreenCover(item: lockedPlayer) { request in
             PlayerScreen(request: request).environmentObject(app)
         }
         #else
-        .fullScreenCover(item: $app.player) { request in
+        .fullScreenCover(item: lockedPlayer) { request in
             PlayerScreen(request: request).environmentObject(app)
         }
         #endif
+    }
+
+    /// AUTH-16: the player is shown only for the viewer past the PIN gate, whatever route set the request.
+    private var lockedPlayer: Binding<PlayerRequest?> {
+        Binding(get: { app.shownPlayer }, set: { app.player = $0 })
     }
 }
 
