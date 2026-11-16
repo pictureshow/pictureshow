@@ -120,7 +120,8 @@ struct DownloadOptions {
     func start(accounts: [Account]) {
         guard Self.supported, !started else { return }
         started = true
-        for account in accounts { _ = viewer(for: account) }
+        // A viewer who signed out owns nothing here; one whose session expired keeps its downloads (OFF-09).
+        for account in accounts where !account.signedOut { _ = viewer(for: account) }
         loadStoredViewers()
         #if os(iOS)
         let files = URLSessionConfiguration.background(withIdentifier: "app.pictureshow.downloads.files")
@@ -477,7 +478,10 @@ struct DownloadOptions {
         syncing.insert(key); defer { syncing.remove(key) }
         let account = v.account
         guard (try? await api.sameViewer(account)) == true else { return }
+        // Each await can outlast the sign-in: a viewer who signed out (or in again as someone new) sends nothing more.
+        func stillOwned() -> Bool { viewers[key]?.account.accessToken == account.accessToken }
         for itemID in v.outbox.keys.sorted() {
+            guard stillOwned() else { return }
             guard var entry = viewers[key]?.outbox[itemID] else { continue }
             var event = OfflineOutboxEvent(op: entry.phase == "writing" ? "process-restart" : "reconnect", server: account.server.url.absoluteString, viewer: account.userId)
             var steps = 0
@@ -498,6 +502,7 @@ struct DownloadOptions {
                     guard let d = try? await api.userData(account, itemID: itemID) else { return }
                     event = OfflineOutboxEvent(op: entry.phase == "writing" ? "readback" : "server-state", current: Self.core(d))
                 case "write":
+                    guard stillOwned() else { return }
                     let write = result.write ?? OfflineUserDataWrite()
                     guard let status = try? await api.writeUserData(account, itemID: itemID, positionTicks: write.positionTicks, played: write.played) else { return }
                     log.info("outbox write status \(status, privacy: .public)")
@@ -910,15 +915,26 @@ struct DownloadOptions {
         if let token = DownloadTokens.read(device) { return token }
         guard try await api.quickConnectEnabled(account.server, deviceID: device) else { throw TokenError.needsPassword }
         let token = try await api.issueByQuickConnect(account, deviceID: device)
-        DownloadTokens.write(token, device)
+        guard settleIssuedToken(token, account: account, device: device) else { throw CancellationError() }
         return token
+    }
+
+    /// A token can arrive after its viewer signed out (the request was in flight): it isn't kept, and the server is
+    /// asked to end it, so a removed viewer leaves no download sign-in behind (OFF-09/10).
+    @discardableResult
+    func settleIssuedToken(_ token: String, account: Account, device: String) -> Bool {
+        if viewers[account.key] != nil { DownloadTokens.write(token, device); return true }
+        log.notice("A download token arrived after its viewer signed out; ending it")
+        PendingRevocations.add(.init(server: account.server.url.absoluteString, deviceID: device))
+        Task { await revoke(server: account.server, deviceID: device, token: token) }
+        return false
     }
 
     /// The viewer typed their password because Quick Connect is off; it's used once, for the token, and not kept.
     func providePassword(_ account: Account, _ password: String) async -> Bool {
         let device = downloadDevice(account)
-        guard let token = try? await api.issueByPassword(account, deviceID: device, password: password) else { return false }
-        DownloadTokens.write(token, device)
+        guard let token = try? await api.issueByPassword(account, deviceID: device, password: password),
+              settleIssuedToken(token, account: account, device: device) else { return false }
         passwordNeeded.remove(account.key)
         for entry in entries(account) where entry.job.phase == .failed && entry.job.failure == "needs-password" { retry(account, entry.id) }
         return true

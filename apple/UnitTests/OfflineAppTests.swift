@@ -189,6 +189,24 @@ final class OfflineOwnershipTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
     }
 
+    func testASignedOutViewersLeftoverDownloadsAreClearedAtStart() throws {
+        var gone = account("gone-\(UUID().uuidString.prefix(6))", token: "")
+        gone.signedOut = true
+        let folder = try downloadsFolder(for: gone)
+        _ = try model(with: [gone])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path), "a signed-out viewer owns no downloads")
+    }
+
+    func testATokenThatArrivesAfterSignOutIsNotKept() throws {
+        let gone = account("late-\(UUID().uuidString.prefix(6))", token: "")
+        let app = try model(with: [])
+        let device = "pictureshow-dl-test-\(UUID().uuidString)"
+        defer { DownloadTokens.delete(device); PendingRevocations.remove(device) }
+        XCTAssertFalse(app.downloads.settleIssuedToken("issued-late", account: gone, device: device))
+        XCTAssertNil(DownloadTokens.read(device))
+        XCTAssertTrue(PendingRevocations.all().contains { $0.deviceID == device }, "the server is asked to end it")
+    }
+
     func testOrphansAreFoldersAndTokensNoViewerOwns() {
         XCTAssertEqual(OfflineOrphans.folders(present: ["v-aaa", "v-bbb", ".t-x", "notes"], known: ["v-aaa"]), ["v-bbb"])
         XCTAssertEqual(OfflineOrphans.tokens(present: ["d1", "d2", "d3"], known: ["d1"], owed: ["d3"]), ["d2"])
