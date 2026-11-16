@@ -331,6 +331,21 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         catch { self.error = error.localizedDescription }
     }
 
+    /// SUB-DL-04: a subtitle downloaded mid-viewing. The server renumbers streams when it adds an external file, so
+    /// the controller takes the refreshed list and reopens at the current place with the remapped audio and new track.
+    func adoptDownloadedSubtitle(_ adopted: AdoptedSubtitle, streams: [MediaStream]) {
+        guard local == nil, var updated = decision else { return }
+        updated.source.mediaStreams = streams
+        decision = updated
+        Task { await renegotiate(audio: adopted.audioIndex >= 0 ? adopted.audioIndex : selectedAudio, subtitle: adopted.subtitleIndex) }
+    }
+
+    /// What the subtitle panel searches for from the player: only server playback, never a download or live channel.
+    var subtitleDownloadTarget: RemoteSubtitleTarget {
+        RemoteSubtitleTarget(itemID: item.id, itemType: item.type, playable: local == nil && !["TvChannel", "Program"].contains(item.type) && decision != nil,
+                             mediaSourceID: source?.id, streams: source?.mediaStreams ?? [], selectedAudio: selectedAudio ?? -1)
+    }
+
     func retry() {
         error = nil
         Task { await renegotiate(audio: selectedAudio, subtitle: selectedSubtitle) }

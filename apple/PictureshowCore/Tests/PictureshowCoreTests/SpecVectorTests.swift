@@ -55,6 +55,9 @@ final class SpecVectorTests:XCTestCase {
     func testRC29DetailPolicyVectors() async throws {
         try await runVectors(operations: ["detail-completion-may-apply", "detail-pending-feedback", "detail-pending-plain-label", "catalog-arrival-animation"])
     }
+    func testPlayerExtrasVectors() async throws {
+        try await runVectors(operations: ["track-menu-empty", "controls-restore-last-action", "touch-player-back", "quick-connect-code", "quick-connect-approval-result", "access", "failure", "initial-language", "language-choices", "order", "details", "title", "adopt"])
+    }
     func testPlaybackInformationVectors() async throws {
         try await runVectors(operations: ["reason", "method", "subtitle", "bitrate", "speed"])
     }
@@ -95,7 +98,7 @@ final class SpecVectorTests:XCTestCase {
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         let syncSuites = SyncVectorRunner.suites
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation"]).union(traceSuites).union(pendingSuites).union(syncSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","discovery","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out","catalog-return","search-presentation","subtitle-download"]).union(traceSuites).union(pendingSuites).union(syncSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -205,6 +208,7 @@ final class SpecVectorTests:XCTestCase {
                     if suite == "discovery" { result = try DiscoveryVectorRunner.execute(operation: text(vector,"operation"), input: vector["input"] as! [String:Any]) }
                     else if ["catalog-return","search-presentation"].contains(suite) || (suite == "application" && CatalogPresentationVectorRunner.applicationOperations.contains(text(vector,"operation"))) { result = try CatalogPresentationVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any]) }
                     else if suite == "home-browse" { result = try await executeHome(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
+                    else if suite == "subtitle-download" { result = try SubtitleDownloadVectors.execute(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
                     else if suite == "account-sign-out" { result = try AccountCatalogState.execute(input: vector["input"] as! [String:Any]) }
                     else if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
                     else { result = try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
@@ -392,6 +396,11 @@ final class SpecVectorTests:XCTestCase {
         case "http":return try await http(i,account:account,identity:identity)
         case "seek-required","seek-start","seek-url","audio-encodes","preserve-video":let v=i["decision"] as! [String:Any];let d=PlayDecision(itemID:text(v,"itemId"),url:URL(string:text(v,"url"))!,headers:v["headers"] as! [String:String],method:PlayMethod(rawValue:text(v,"method"))!,source:try decode(MediaSource.self,v["source"]!),playSessionId:v["playSessionId"] as? String,startTicks:0,transcodeReasons:v["transcodeReasons"] as! [String]);switch operation{case "seek-required":return PlaybackRecovery.serverSeekRequired(d);case "seek-start":return PlaybackRecovery.serverSeekStart(d,targetMs:integer(i,"targetMs"));case "seek-url":return parts(PlaybackRecovery.serverSeekURL(d,startMs:integer(i,"startMs")));case "audio-encodes":return PlaybackRecovery.audioAlreadyEncodes(d);default:return PlaybackRecovery.preserveVideo(d,subtitleIndex:optionalInt(i,"subtitleStreamIndex")).map{decisionJSON($0,urlParts:true)} ?? ["unplayable":"NO_COMPATIBLE_SOURCE"]}
         case "prepare-preserve-video":return try await prepareRecovery(i,context:context,account:account,identity:identity)
+        case "track-menu-empty":return TrackMenuNotice.empty(type:try required(String.self,i,"type"),tracks:try required(Int.self,i,"tracks")) as Any? ?? NSNull()
+        case "controls-restore-last-action":return ControlsLastAction.restores(hiddenAtMs:try required(Int64?.self,i,"hiddenAtMs"),nowMs:try required(Int64.self,i,"nowMs"))
+        case "touch-player-back":return TouchPlayerBack.action(sheetOpen:try required(Bool.self,i,"sheetOpen"),menuOpen:try required(Bool.self,i,"menuOpen"))
+        case "quick-connect-code":let input=try required(String.self,i,"input");return ["normalized":QuickConnectApproval.normalize(input),"valid":QuickConnectApproval.valid(input)]
+        case "quick-connect-approval-result":return QuickConnectApproval.result(status:try required(Int.self,i,"status"),approved:try required(Bool?.self,i,"approved")).rawValue
         default:throw NSError(domain:"Unknown vector operation \(operation)",code:1)
         }
     }

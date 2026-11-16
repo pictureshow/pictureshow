@@ -359,7 +359,10 @@ struct QuickConnectView: View {
                     #if os(iOS)
                     .textSelection(.enabled)
                     #endif
-                Text("On a device where you're already signed in to \(server.name), open Settings, choose Quick Connect and enter this code.")
+                // AUTH-05: name where the code goes, in Pictureshow first and then in any other Jellyfin app.
+                Text(platformValue(
+                    tv: "On a phone signed in to this server, open Pictureshow → Settings → Approve a TV sign-in. Or in another Jellyfin app, open Settings → Quick Connect. Then enter this code.",
+                    touch: "On another device signed in to this server, open Pictureshow → Settings → Approve a TV sign-in, or Settings → Quick Connect in another Jellyfin app, and enter this code."))
                     .font(.body).foregroundStyle(Theme.muted).multilineTextAlignment(.center).frame(maxWidth: 640)
                 ProgressView().padding(.top, 8)
                 Text("Waiting for approval…").font(.callout).foregroundStyle(Theme.muted)

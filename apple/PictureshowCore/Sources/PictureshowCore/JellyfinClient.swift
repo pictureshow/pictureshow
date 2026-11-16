@@ -433,10 +433,10 @@ public final class JellyfinClient: @unchecked Sendable {
     public func stopEncoding(account: Account, playSessionID: String) async throws {
         _ = try await request(account: account, path: "Videos/ActiveEncodings", method: "DELETE", query: [URLQueryItem(name: "deviceId", value: account.deviceID), URLQueryItem(name: "playSessionId", value: playSessionID)], includeUserID: false)
     }
-    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+    func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
         try await request(server: account.server, path: path, method: method, query: query + (includeUserID ? [URLQueryItem(name: "userId", value: account.userId)] : []), body: body, token: account.accessToken, identity: account.deviceID, receipt: receipt)
     }
-    private func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+    func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
         let url = try ServerURLs.endpoint(server, path: path, query: query)
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method

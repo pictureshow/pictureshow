@@ -36,7 +36,6 @@ enum PendingSpecCaseManifest {
         "seerr": "Seerr requests (leg 163, Android) are not ported to Apple: client, account-bound encrypted store and request screens.",
         "reference": "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute.",
         "settings-presentation": "The merged advanced playback setting labels and consequences are not ported to Apple.",
-        "subtitle-download": "Subtitle search and download through the server (leg 163, Android) is not ported to Apple.",
         "sync-completion-reporting": "Merged on main after the Apple core was last synced; core ported, needs the Apple playback host's report pipeline (Android TouchPlaybackHostTest).",
         "sync-group-social-summary-and-picker-role": "Merged on main after the Apple core was last synced; core ported, needs native measured layout, paint and focus of the Watch together surfaces.",
         "sync-phone-player-chrome": "Merged on main after the Apple core was last synced; core ported, needs native iPhone player chrome rendering.",
