@@ -151,7 +151,7 @@ private fun pictureInPictureParams(context: Context, request: TouchPictureInPict
     val builder = PictureInPictureParams.Builder()
         .setAspectRatio(Rational(width, height))
         .setActions(actions.take(maxActions).mapIndexed { index, action -> remoteAction(context, action, index) })
-    request.sourceBounds?.takeIf { !it.isEmpty }?.let(builder::setSourceRectHint)
+    request.sourceBounds?.takeIf { !it.isEmpty }?.let { builder.setSourceRectHint(it) }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         builder.setAutoEnterEnabled(autoEnter)
         // Video content: a seamless resize would stretch frames while the window animates.
