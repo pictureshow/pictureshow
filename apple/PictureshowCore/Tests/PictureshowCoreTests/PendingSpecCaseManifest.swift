@@ -35,36 +35,24 @@ enum PendingSpecCaseManifest {
         "reference": Suite(count: 25, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "search-presentation": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "settings-presentation": Suite(count: 65, reason: "The merged advanced playback setting labels and consequences are not ported to Apple."),
-        "sync-application": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-chip-name": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-clock": Suite(count: 98, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-completion": Suite(count: 25, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-completion-reporting": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-departure": Suite(count: 18, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-drift": Suite(count: 26, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-group-social-summary-and-picker-role": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-local-display": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-membership-registration": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-phone-player-chrome": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-phone-quality-cue": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-phone-remote-chrome": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-phone-remote-search": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-phone-surfaces": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-player-intent-presentation": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-presentation": Suite(count: 57, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-queue": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-rate-presentation": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-route-consent": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-socket-readiness": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-source": Suite(count: 21, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-speed-intent-origin": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-state": Suite(count: 64, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-stay": Suite(count: 29, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-tv-attention": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-tv-player-coherence": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-tv-rhythm": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-tv-structure-discovery": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
-        "sync-tv-surfaces": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
+        "sync-application": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple player host: deferred seek, readiness while unpaused and pause feedback run against a real player (Android PlaybackSeekFeedbackTest, PlayerControlsTest)."),
+        "sync-completion-reporting": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple playback host's report pipeline (Android TouchPlaybackHostTest)."),
+        "sync-group-social-summary-and-picker-role": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; core ported, needs native measured layout, paint and focus of the Watch together surfaces."),
+        "sync-membership-registration": Suite(count: 12, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple SyncPlay host binding the socket, membership and player (Android SyncPlayHostTest)."),
+        "sync-phone-player-chrome": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; core ported, needs native iPhone player chrome rendering."),
+        "sync-phone-quality-cue": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; core ported, needs native iPhone quality-cue rendering."),
+        "sync-phone-remote-chrome": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; core ported, needs native iPhone remote chrome rendering."),
+        "sync-phone-remote-search": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; core ported, needs native iPhone remote search rendering."),
+        "sync-phone-surfaces": Suite(count: 7, reason: "Merged on main after the Apple core was last synced; core ported, needs native iPhone Watch together surfaces."),
+        "sync-rate-presentation": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple player's viewer-speed state fed by real rate reports (Android PlaybackSpeedTest)."),
+        "sync-route-consent": Suite(count: 10, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple SyncPlay host's route-consent script (Android SyncPlayHostTest); vectors carry no inputs."),
+        "sync-socket-readiness": Suite(count: 5, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple ServerSocket host's registration and renewal (Android RemoteTargetHostTest)."),
+        "sync-speed-intent-origin": Suite(count: 4, reason: "Merged on main after the Apple core was last synced; core ported, needs the Apple player's speed-intent origin tracking."),
+        "sync-tv-attention": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; core ported, needs native tvOS rendering and focus."),
+        "sync-tv-player-coherence": Suite(count: 6, reason: "Merged on main after the Apple core was last synced; core ported, needs native tvOS player rendering."),
+        "sync-tv-rhythm": Suite(count: 3, reason: "Merged on main after the Apple core was last synced; core ported, needs native tvOS layout measurement."),
+        "sync-tv-structure-discovery": Suite(count: 11, reason: "Merged on main after the Apple core was last synced; core ported, needs native tvOS focus and structure."),
+        "sync-tv-surfaces": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; core ported, needs native tvOS Watch together surfaces."),
         "touch-player-director-clearance-paint-edges": Suite(count: 13, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
     ]
     static let contracts: [String: String] = {
@@ -790,189 +778,12 @@ enum PendingSpecCaseManifest {
         sync-application.pause-feedback-solo-viewer|sync-application/pause-feedback
         sync-application.pause-feedback-group-remote|sync-application/pause-feedback
         sync-application.pause-feedback-solo-remote|sync-application/pause-feedback
-        whole-short-name-allowed|sync-chip-name/case
-        whole-long-name-preferred|sync-chip-name/case
-        longest-proven-original-prefix|sync-chip-name/case
-        six-complete-graphemes-accepted|sync-chip-name/case
-        three-letter-stub-rejected|sync-chip-name/case
-        five-letter-stub-rejected|sync-chip-name/case
-        count-only-if-no-prefix-fits|sync-chip-name/case
-        api23-unproven-segmentation-count-only|sync-chip-name/case
-        unproven-segmentation-whole-name-still-safe|sync-chip-name/case
-        complete-extended-grapheme-prefix|sync-chip-name/case
-        clock-processing-positive|sync-clock/case
-        clock-negative-offset|sync-clock/case
-        clock-half-ms|sync-clock/case
-        clock-negative-rtt|sync-clock/case
-        clock-too-slow|sync-clock/case
-        clock-max-rtt|sync-clock/case
-        clock-backward-server|sync-clock/case
-        clock-overflow|sync-clock/case
-        target-future|sync-clock/case
-        target-late-playing|sync-clock/case
-        target-late-paused|sync-clock/case
-        target-bounds|sync-clock/case
-        target-fractional-future|sync-clock/case
-        scheduled-zero|sync-clock/case
-        scheduled-ahead80|sync-clock/case
-        scheduled-behind80|sync-clock/case
-        scheduled-ahead-outside|sync-clock/case
-        scheduled-behind-outside|sync-clock/case
-        scheduled-pause-small|sync-clock/case
-        scheduled-seek-small|sync-clock/case
-        scheduled-invalid-current|sync-clock/case
-        scheduled-large-ticks|sync-clock/case
-        scheduled-large-target|sync-clock/case
-        timeline-paused-seek|sync-clock/case
-        timeline-playing-seek|sync-clock/case
-        timeline-unpause|sync-clock/case
-        timeline-pause|sync-clock/case
-        scheduled-mode-playing|sync-clock/case
-        scheduled-mode-waiting|sync-clock/case
-        scheduled-mode-paused|sync-clock/case
-        scheduled-mode-no-authority-playing|sync-clock/case
-        scheduled-mode-no-authority-waiting|sync-clock/case
-        unpause-echo-new-emission-same-timeline|sync-clock/case
-        unpause-echo-not-yet-applied|sync-clock/case
-        unpause-echo-changed-group|sync-clock/case
-        unpause-echo-changed-entry|sync-clock/case
-        unpause-echo-changed-when|sync-clock/case
-        unpause-echo-changed-position|sync-clock/case
-        unpause-echo-changed-command|sync-clock/case
-        unpause-echo-previous-pause|sync-clock/case
-        unpause-echo-missing-position|sync-clock/case
-        seek-feedback-automatic-no-preview|sync-clock/case
-        seek-feedback-automatic-preserves-deliberate-preview|sync-clock/case
-        seek-feedback-viewer-starts-preview|sync-clock/case
-        seek-feedback-viewer-replaces-preview|sync-clock/case
-        correction-execution-native-catches-up-with-moving-target|sync-clock/case
-        correction-execution-positive-80ms-equality|sync-clock/case
-        correction-execution-negative-80ms-equality|sync-clock/case
-        correction-execution-positive-80ms-plus-tick|sync-clock/case
-        correction-execution-native-millisecond-resolution|sync-clock/case
-        correction-execution-target-still-advances-at-execution|sync-clock/case
-        correction-execution-paused-fractional-native-target|sync-clock/case
-        correction-execution-paused-real-position-change|sync-clock/case
-        correction-execution-clock-reversed|sync-clock/case
-        correction-execution-invalid-resolution|sync-clock/case
-        correction-execution-duration-clamp-without-overflow|sync-clock/case
-        correction-execution-native-duration-end|sync-clock/case
-        unpause-echo-exact-wire-when|sync-clock/case
-        unpause-echo-changed-one-tick-when|sync-clock/case
-        pcm-rate-known-software-pcm|sync-clock/case
-        pcm-rate-encoded|sync-clock/case
-        pcm-rate-unknown|sync-clock/case
-        pcm-rate-unknown-renderer|sync-clock/case
-        pcm-rate-command-unavailable|sync-clock/case
-        replay-active-fast|sync-clock/case
-        replay-active-slow|sync-clock/case
-        replay-last-active-ms|sync-clock/case
-        replay-deadline|sync-clock/case
-        replay-expired|sync-clock/case
-        replay-different-timeline|sync-clock/case
-        replay-held-mode|sync-clock/case
-        replay-lost-rate-capability|sync-clock/case
-        replay-no-start|sync-clock/case
-        replay-clock-reversed|sync-clock/case
-        replay-clock-overflow|sync-clock/case
-        replay-unsupported-rate|sync-clock/case
-        future-unpause-prepared-submillisecond|sync-clock/case
-        future-unpause-late-receipt|sync-clock/case
-        future-unpause-not-ready|sync-clock/case
-        future-unpause-buffering|sync-clock/case
-        future-unpause-already-unpaused|sync-clock/case
-        future-unpause-pending-position|sync-clock/case
-        future-unpause-other-command|sync-clock/case
-        future-unpause-aligned-positive-boundary|sync-clock/case
-        future-unpause-aligned-negative-boundary|sync-clock/case
-        future-unpause-past-positive-boundary|sync-clock/case
-        future-unpause-past-negative-boundary|sync-clock/case
-        future-unpause-invalid-current|sync-clock/case
-        future-unpause-invalid-base|sync-clock/case
-        clock-refresh-null-no-completion|sync-clock/case
-        clock-refresh-null-before|sync-clock/case
-        clock-refresh-null-exact|sync-clock/case
-        clock-refresh-null-after|sync-clock/case
-        clock-refresh-null-backward|sync-clock/case
-        clock-refresh-anchor-before|sync-clock/case
-        clock-refresh-anchor-exact|sync-clock/case
-        clock-refresh-null-positive-overflow|sync-clock/case
-        clock-refresh-null-negative-overflow|sync-clock/case
         sync-completion-reporting.current-decision|sync-completion-reporting/video-completion
         sync-completion-reporting.obsolete-decision|sync-completion-reporting/video-completion
         sync-completion-reporting.earlier-current-decision|sync-completion-reporting/video-completion
         sync-completion-reporting.earlier-obsolete-decision|sync-completion-reporting/video-completion
         sync-completion-reporting.repeat-one-current-decision|sync-completion-reporting/video-completion
         sync-completion-reporting.repeat-one-obsolete-decision|sync-completion-reporting/video-completion
-        sync-completion.RepeatNone-first|sync-completion/natural-completion
-        sync-completion.RepeatNone-middle|sync-completion/natural-completion
-        sync-completion.RepeatNone-last|sync-completion/natural-completion
-        sync-completion.RepeatNone-single|sync-completion/natural-completion
-        sync-completion.RepeatOne-first|sync-completion/natural-completion
-        sync-completion.RepeatOne-middle|sync-completion/natural-completion
-        sync-completion.RepeatOne-last|sync-completion/natural-completion
-        sync-completion.RepeatOne-single|sync-completion/natural-completion
-        sync-completion.RepeatAll-first|sync-completion/natural-completion
-        sync-completion.RepeatAll-middle|sync-completion/natural-completion
-        sync-completion.RepeatAll-last|sync-completion/natural-completion
-        sync-completion.RepeatAll-single|sync-completion/natural-completion
-        sync-completion.RepeatNone-without-snapshot|sync-completion/natural-completion
-        sync-completion.RepeatNone-without-matches|sync-completion/natural-completion
-        sync-completion.RepeatNone-without-unpaused|sync-completion/natural-completion
-        sync-completion.RepeatOne-without-snapshot|sync-completion/natural-completion
-        sync-completion.RepeatOne-without-matches|sync-completion/natural-completion
-        sync-completion.RepeatOne-without-unpaused|sync-completion/natural-completion
-        sync-completion.RepeatAll-without-snapshot|sync-completion/natural-completion
-        sync-completion.RepeatAll-without-matches|sync-completion/natural-completion
-        sync-completion.RepeatAll-without-unpaused|sync-completion/natural-completion
-        sync-completion.empty|sync-completion/natural-completion
-        sync-completion.negative-index|sync-completion/natural-completion
-        sync-completion.past-end-index|sync-completion/natural-completion
-        sync-completion.unknown-repeat|sync-completion/natural-completion
-        hidden-stop-dismissal-without-presentation-retains|sync-departure/case
-        visible-matching-dismiss-consumes-exactly-once|sync-departure/case
-        wrong-scope-id-session-cannot-consume|sync-departure/case
-        newer-presentation-rejects-old-session-acks|sync-departure/case
-        new-record-survives-old-layout-and-close|sync-departure/case
-        scope-change-drops-private-name-keeps-id-monotonic|sync-departure/case
-        same-scope-rebind-is-not-a-reset|sync-departure/case
-        accepted-membership-clears-only-matching-scope|sync-departure/case
-        wrong-scope-record-cannot-replace-fact|sync-departure/case
-        blank-known-name-becomes-null-never-group-id|sync-departure/case
-        unknown-name-stays-null|sync-departure/case
-        known-name-retained-verbatim|sync-departure/case
-        truthful-cause-manual_leave|sync-departure/case
-        truthful-cause-playback_stopped|sync-departure/case
-        truthful-cause-playback_ended|sync-departure/case
-        truthful-cause-playback_closed|sync-departure/case
-        truthful-cause-external_route|sync-departure/case
-        truthful-cause-membership_lost|sync-departure/case
-        drift--251|sync-drift/case
-        drift--250|sync-drift/case
-        drift--81|sync-drift/case
-        drift--80|sync-drift/case
-        drift-0|sync-drift/case
-        drift-80|sync-drift/case
-        drift-81|sync-drift/case
-        drift-250|sync-drift/case
-        drift-251|sync-drift/case
-        no-exact-rate|sync-drift/case
-        source-refuses-rate|sync-drift/case
-        rate-five-second-cap|sync-drift/case
-        rate-before-cap|sync-drift/case
-        rate-restore-in-tolerance|sync-drift/case
-        seek-cooldown-before|sync-drift/case
-        seek-cooldown-equality|sync-drift/case
-        paused-small-seek|sync-drift/case
-        paused-aligned|sync-drift/case
-        scheduled-seek-cooldown-before-boundary|sync-drift/case
-        scheduled-seek-cooldown-equality|sync-drift/case
-        paused-scheduled-seek-retains-cooldown|sync-drift/case
-        scheduled-seek-already-aligned|sync-drift/case
-        aligned-unpause-keeps-expired-seek-deadline|sync-drift/case
-        aligned-unpause-keeps-active-seek-deadline|sync-drift/case
-        aligned-unpause-keeps-exact-seek-deadline|sync-drift/case
-        aligned-unpause-restores-normal-rate|sync-drift/case
         phone-empty-one-person|sync-group-social-summary-and-picker-role/case
         phone-empty-two-people-large-font|sync-group-social-summary-and-picker-role/case
         remote-only-picker|sync-group-social-summary-and-picker-role/case
@@ -988,10 +799,6 @@ enum PendingSpecCaseManifest {
         native-direction-none-last|sync-group-social-summary-and-picker-role/case
         native-direction-one-single|sync-group-social-summary-and-picker-role/case
         native-direction-all-single|sync-group-social-summary-and-picker-role/case
-        joined-empty-cannot-claim-preparing|sync-local-display/case
-        joined-empty-cannot-claim-ready|sync-local-display/case
-        selected-unavailable-remains-visible|sync-local-display/case
-        selected-buffering-remains-visible|sync-local-display/case
         join-ready|sync-membership-registration/case
         join-leave|sync-membership-registration/case
         join-timeout|sync-membership-registration/case
@@ -1033,85 +840,6 @@ enum PendingSpecCaseManifest {
         compact-shorter-window-no-notice-font13|sync-phone-surfaces/case
         compact-initial-reveal-defers-actionable-recovery|sync-phone-surfaces/case
         compact-initial-reveal-does-not-repeat-for-same-group|sync-phone-surfaces/case
-        group-playing-local-True|sync-player-intent-presentation/case
-        group-playing-local-False|sync-player-intent-presentation/case
-        group-paused-local-True|sync-player-intent-presentation/case
-        group-paused-local-False|sync-player-intent-presentation/case
-        group-waiting-local-True|sync-player-intent-presentation/case
-        group-waiting-local-False|sync-player-intent-presentation/case
-        standalone-local-True|sync-player-intent-presentation/case
-        standalone-local-False|sync-player-intent-presentation/case
-        group-unavailable-False-1|sync-player-intent-presentation/case
-        group-unavailable-True-0|sync-player-intent-presentation/case
-        speed-selection-grouped-True|sync-player-intent-presentation/case
-        speed-selection-grouped-False|sync-player-intent-presentation/case
-        current-ready-estimate|sync-presentation/case
-        boundary-estimate|sync-presentation/case
-        clock-unavailable|sync-presentation/case
-        renderer-unready|sync-presentation/case
-        unapplied-command|sync-presentation/case
-        unknown-error|sync-presentation/case
-        unknown-uncertainty|sync-presentation/case
-        uncertain-clock|sync-presentation/case
-        catching-up|sync-presentation/case
-        catching-up-boundary|sync-presentation/case
-        out-of-sync|sync-presentation/case
-        overflow-distance|sync-presentation/case
-        title-current|sync-presentation/case
-        title-account-replaced|sync-presentation/case
-        title-membership-replaced|sync-presentation/case
-        title-queue-replaced|sync-presentation/case
-        title-revision-changed-with-retained-entry|sync-presentation/case
-        title-entry-removed|sync-presentation/case
-        title-no-requested-entry|sync-presentation/case
-        waiting-buffer-is-group|sync-presentation/case
-        waiting-ready-not-all-ready|sync-presentation/case
-        waiting-seek|sync-presentation/case
-        playing-not-qualification|sync-presentation/case
-        unknown-phase|sync-presentation/case
-        names-capped-without-inferred-you-or-ready|sync-presentation/case
-        empty-group-no-transport|sync-presentation/case
-        usable-single-entry-transport|sync-presentation/case
-        usable-many-entry-transport|sync-presentation/case
-        unusable-group-no-transport|sync-presentation/case
-        unusable-empty-no-transport|sync-presentation/case
-        invalid-negative-count-no-transport|sync-presentation/case
-        panel-warning-banner-owns-recovery|sync-presentation/case
-        panel-recovery-hides-catchup|sync-presentation/case
-        panel-recovery-hides-healthy-estimate|sync-presentation/case
-        panel-unknown-stays-unknown|sync-presentation/case
-        panel-no-recovery-keeps-warning|sync-presentation/case
-        panel-no-recovery-keeps-healthy|sync-presentation/case
-        chip-quality-unknown|sync-presentation/case
-        chip-quality-in-sync|sync-presentation/case
-        chip-quality-catching-up|sync-presentation/case
-        chip-quality-out-of-sync|sync-presentation/case
-        direction-none-single|sync-presentation/case
-        direction-none-first|sync-presentation/case
-        direction-none-middle|sync-presentation/case
-        direction-none-last|sync-presentation/case
-        direction-one-single|sync-presentation/case
-        direction-all-single|sync-presentation/case
-        direction-unknown-repeat-retains-general|sync-presentation/case
-        direction-null-repeat-retains-general|sync-presentation/case
-        direction-missing-authority-retains-general|sync-presentation/case
-        direction-missing-current-retains-general|sync-presentation/case
-        direction-ambiguous-current-retains-general|sync-presentation/case
-        direction-current-not-in-queue-retains-general|sync-presentation/case
-        direction-authority-size-mismatch-retains-general|sync-presentation/case
-        direction-unusable-still-disabled|sync-presentation/case
-        direction-empty-still-disabled|sync-presentation/case
-        direction-blank-entry-retains-general|sync-presentation/case
-        sync-queue.duplicate-media-has-distinct-entry-identities|sync-queue/membership
-        sync-queue.duplicate-entry-identities-are-invalid|sync-queue/membership
-        sync-queue.older-revision-requires-recovery|sync-queue/membership
-        sync-queue.equal-revision-preserves-server-order|sync-queue/membership
-        sync-queue.repeat-shuffle-are-authoritative|sync-queue/membership
-        sync-queue.ticks-retain-signed64-precision|sync-queue/membership
-        sync-queue.stale-command-cannot-revive-prior-queue|sync-queue/membership
-        sync-queue.missing-playlist-needs-snapshot|sync-queue/membership
-        sync-queue.out-of-range-current-index-is-invalid|sync-queue/membership
-        sync-queue.empty-authoritative-queue-remains-stopped|sync-queue/membership
         temporary-slow|sync-rate-presentation/case
         temporary-fast|sync-rate-presentation/case
         restore-viewer-choice|sync-rate-presentation/case
@@ -1131,95 +859,10 @@ enum PendingSpecCaseManifest {
         invalid-registration|sync-socket-readiness/case
         closed-session|sync-socket-readiness/case
         new-session-needs-new-registration|sync-socket-readiness/case
-        positive-duration-one-tick|sync-source/case
-        positive-duration-long-max|sync-source/case
-        unknown-zero-duration|sync-source/case
-        negative-duration|sync-source/case
-        negative-duration-long-min|sync-source/case
-        finite-seekable-server-vod-or-audio|sync-source/case
-        finite-looking-live|sync-source/case
-        finite-looking-infinite|sync-source/case
-        finite-looking-offline|sync-source/case
-        live-and-infinite|sync-source/case
-        live-and-offline|sync-source/case
-        infinite-and-offline|sync-source/case
-        live-infinite-and-offline|sync-source/case
-        finite-nonseekable|sync-source/case
-        nonseekable-live|sync-source/case
-        nonseekable-infinite|sync-source/case
-        nonseekable-offline|sync-source/case
-        nonseekable-live-infinite|sync-source/case
-        nonseekable-live-offline|sync-source/case
-        nonseekable-infinite-offline|sync-source/case
-        nonseekable-live-infinite-offline|sync-source/case
         grouped-audio-output-maintenance|sync-speed-intent-origin/case
         grouped-viewer|sync-speed-intent-origin/case
         standalone-audio-output-maintenance|sync-speed-intent-origin/case
         standalone-viewer|sync-speed-intent-origin/case
-        sync-state.join-then-queue-is-paused-until-snapshot|sync-state/membership
-        sync-state.queue-then-join-is-equivalent|sync-state/membership
-        sync-state.playing-group-still-needs-authoritative-queue|sync-state/membership
-        sync-state.leave-invalidates-old-generation|sync-state/membership
-        sync-state.rejoin-rejects-old-membership|sync-state/membership
-        sync-state.foreign-group-never-replaces-current|sync-state/membership
-        sync-state.duplicate-message-id-is-idempotent|sync-state/membership
-        sync-state.equal-command-time-preserves-socket-order|sync-state/membership
-        sync-state.old-command-after-new-command-requires-paused-recovery|sync-state/membership
-        sync-state.command-without-snapshot-requires-recovery|sync-state/membership
-        sync-state.command-for-previous-queue-entry-requires-recovery|sync-state/membership
-        sync-state.unknown-event-is-recoverable|sync-state/membership
-        sync-state.malformed-seek-is-recoverable|sync-state/membership
-        sync-state.library-denial-retains-way-to-leave|sync-state/membership
-        sync-state.legacy-CreateGroupDenied|sync-state/membership
-        sync-state.legacy-JoinGroupDenied|sync-state/membership
-        sync-state.server-left-invalidates-membership|sync-state/membership
-        sync-state.participants-use-server-names|sync-state/membership
-        sync-state.state-wait-and-resume-are-server-facts|sync-state/membership
-        sync-state.unrelated-socket-message-is-not-syncplay|sync-state/membership
-        sync-state.empty-idle-group-stop-is-a-real-server-snapshot|sync-state/membership
-        sync-state.same-group-rejoin-rejects-valid-old-membership-events|sync-state/membership
-        sync-state.readiness-idle-new-queue-without-stop-reports-ready|sync-state/readiness
-        sync-state.readiness-idle-explicitly-stopped-entry-does-not-restart|sync-state/readiness
-        sync-state.readiness-idle-new-entry-after-stop-reports-ready|sync-state/readiness
-        sync-state.readiness-paused-entry-reports-readiness|sync-state/readiness
-        sync-state.readiness-waiting-entry-reports-readiness|sync-state/readiness
-        sync-state.readiness-playing-entry-reports-readiness|sync-state/readiness
-        sync-state.renderer-readiness-no-pending-entry-needs-no-renderer-entry-id|sync-state/renderer-readiness
-        sync-state.renderer-readiness-same-media-old-playlist-entry-still-waits|sync-state/renderer-readiness
-        sync-state.renderer-readiness-pending-entry-without-renderer-acknowledgment-waits|sync-state/renderer-readiness
-        sync-state.renderer-readiness-pending-entry-matches-actual-renderer-entry|sync-state/renderer-readiness
-        sync-state.renderer-bind-exact-open-matches-current-membership-entry-and-media|sync-state/renderer-bind
-        sync-state.renderer-bind-stale-generation-cannot-bind|sync-state/renderer-bind
-        sync-state.renderer-bind-newer-wrong-generation-cannot-bind|sync-state/renderer-bind
-        sync-state.renderer-bind-same-media-wrong-playlist-entry-cannot-bind|sync-state/renderer-bind
-        sync-state.renderer-bind-same-entry-wrong-media-cannot-bind|sync-state/renderer-bind
-        sync-state.renderer-bind-missing-current-entry-cannot-bind|sync-state/renderer-bind
-        sync-state.access-initial-unknown|sync-state/access-presentation
-        sync-state.access-lookup-in-flight|sync-state/access-presentation
-        sync-state.access-lookup-failed|sync-state/access-presentation
-        sync-state.access-confirmed-denied-can-refresh|sync-state/access-presentation
-        sync-state.access-confirmed-join-only|sync-state/access-presentation
-        sync-state.access-confirmed-create-and-join|sync-state/access-presentation
-        sync-state.access-stale-allowed-is-not-confirmed|sync-state/access-presentation
-        sync-state.access-failed-lookup-invalidates-old-allowed|sync-state/access-presentation
-        sync-state.access-unknown-server-policy-fails-closed|sync-state/access-presentation
-        sync-state.future-unpause-replaces-paused-seek-before-output-time|sync-state/membership
-        sync-state.readiness-cache-short-buffer-between-samples-needs-new-ready|sync-state/readiness-cache
-        sync-state.readiness-cache-long-buffer-reports-unready-then-ready-once|sync-state/readiness-cache
-        sync-state.readiness-cache-aligned-no-seek-retains-ready-acknowledgement|sync-state/readiness-cache
-        sync-state.readiness-cache-unchanged-waiting-observations-do-not-rearm-ready|sync-state/readiness-cache
-        sync-state.readiness-cache-new-entry-needs-independent-acknowledgement|sync-state/readiness-cache
-        sync-state.readiness-cache-new-membership-or-binding-resets-old-acknowledgement|sync-state/readiness-cache
-        sync-state.readiness-cache-unready-after-seek-is-not-a-ready-acknowledgement|sync-state/readiness-cache
-        sync-state.deferred-native-completion-sub-tick-buffer|sync-state/readiness-cache
-        sync-state.deferred-native-completion-long-buffer|sync-state/readiness-cache
-        sync-state.native-completion-same-decoder-same-media-retired-entry|sync-state/renderer-bind
-        sync-state.native-completion-retired-membership|sync-state/renderer-bind
-        sync-state.older-identical-pause-preserves-snapshot|sync-state/membership
-        sync-state.older-identical-unpause-preserves-snapshot|sync-state/membership
-        sync-state.older-identical-seek-preserves-snapshot|sync-state/membership
-        sync-state.snapshot-loss-never-enables-local-replacement|sync-state/membership
-        sync-state.older-pause-changed-one-tick-when-requires-recovery|sync-state/membership
         create-quiet-rest-focus-font10|sync-tv-attention/case
         create-quiet-rest-focus-font13|sync-tv-attention/case
         cold-empty-access-resolves-before-input|sync-tv-attention/case
@@ -1327,35 +970,6 @@ enum PendingSpecCaseManifest {
         quality-auto-floor.unknown-source-not-a-measured-rate|quality-auto-floor/stream-bitrate
         quality-auto-floor.remux-may-omit-audio-tracks|quality-auto-floor/stream-bitrate
         quality-auto-floor.audio-conversion-copied-video-bound|quality-auto-floor/stream-bitrate
-        sync-stay.close.back-stays-and-stops-holding-the-wait|sync-stay/case
-        sync-stay.close.close-button-stays-and-stops-holding-the-wait|sync-stay/case
-        sync-stay.close.stop-button-stays-and-stops-holding-the-wait|sync-stay/case
-        sync-stay.close.error-back-stays-and-stops-holding-the-wait|sync-stay/case
-        sync-stay.close.natural-end-stays-and-stops-holding-the-wait|sync-stay/case
-        sync-stay.close.back-after-earlier-stay-sends-nothing-new|sync-stay/case
-        sync-stay.close.not-participating-is-untouched|sync-stay/case
-        sync-stay.close.background-on-home-keeps-membership|sync-stay/case
-        sync-stay.close.background-while-rendering-keeps-leave-once|sync-stay/case
-        sync-stay.close.cast-handoff-leaves|sync-stay/case
-        sync-stay.close.explicit-leave-leaves|sync-stay/case
-        sync-stay.close.sign-out-leaves-without-a-retained-fact|sync-stay/case
-        sync-stay.reminder.stayed-with-queue-offers-watch-and-leave|sync-stay/case
-        sync-stay.reminder.playing-group-offers-watch|sync-stay/case
-        sync-stay.reminder.open-player-has-the-chip-instead|sync-stay/case
-        sync-stay.reminder.no-membership-shows-nothing|sync-stay/case
-        sync-stay.reminder.group-ended-by-server-clears|sync-stay/case
-        sync-stay.reminder.blank-name-falls-back|sync-stay/case
-        sync-stay.reminder.empty-queue-offers-leave-only|sync-stay/case
-        sync-stay.reminder.disconnected-offers-leave-only|sync-stay/case
-        sync-stay.reminder.reconnecting-offers-leave-only|sync-stay/case
-        sync-stay.reminder.error-offers-leave-only|sync-stay/case
-        sync-stay.reminder.unconfirmed-leave-stays-visible|sync-stay/case
-        sync-stay.denial.not-in-group-ends-stayed-membership|sync-stay/case
-        sync-stay.denial.missing-group-ends-stayed-membership|sync-stay/case
-        sync-stay.denial.open-player-keeps-its-recovery|sync-stay/case
-        sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
-        sync-stay.open.following-opens-new-entries|sync-stay/case
-        sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
         track-menu-empty-no-subtitles|application/track-menu-empty
         track-menu-empty-no-audio|application/track-menu-empty
         track-menu-empty-subtitles-present|application/track-menu-empty
