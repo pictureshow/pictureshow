@@ -182,6 +182,18 @@ public final class JellyfinClient: @unchecked Sendable {
         }
         return try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: query))
     }
+    /// One page of a library grid with the viewer's sort and filters.
+    public func libraryPage(account: Account, query: LibraryQuery, startIndex: Int = 0, limit: Int = 100) async throws -> ItemPage {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: query.queryItems(startIndex: startIndex, limit: limit, fields: fields)))
+    }
+    /// Genre names present under a library, for the filter menu.
+    public func genres(account: Account, parentID: String) async throws -> [String] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Genres", query: [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "sortBy", value: "SortName")])).items.map(\.name)
+    }
+    /// Titles like this one, for the detail page.
+    public func similar(account: Account, itemID: String, limit: Int = 16) async throws -> [MediaItem] {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/Similar", query: [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "fields", value: fields)])).items
+    }
     public func search(account: Account, query: String, kind: SearchKind) async throws -> ItemPage {
         let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard term.count >= 2 else { return try decoder.decode(ItemPage.self, from: Data("{}".utf8)) }

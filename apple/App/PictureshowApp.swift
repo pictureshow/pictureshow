@@ -1,677 +1,97 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import SwiftUI
+import AVFoundation
 import PictureshowCore
-import Security
-import VideoToolbox
-import CryptoKit
 
 @main struct PictureshowApp: App {
-    @StateObject private var model = AppModel()
-    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.focusTint).controlSize(.large).minimumTouchListRows().pictureshowTestDynamicType() } }
-}
+    @StateObject private var app = AppModel()
 
-enum Theme {
-    static let background = DesignTokens.background
-    static let surface = DesignTokens.surface
-    static let muted = DesignTokens.muted
-    static let accent = DesignTokens.accent
-    #if os(tvOS)
-    static let focusTint = Color.white
-    static let secondaryButtonText = Color.white
-    static let gutter: CGFloat = 48
-    static let cardWidth: CGFloat = 288
-    static let wideCardWidth: CGFloat = 480
-    #else
-    static let focusTint = accent
-    static let secondaryButtonText = muted
-    static let gutter: CGFloat = 20
-    static let cardWidth: CGFloat = 136
-    static let wideCardWidth: CGFloat = 244
-    #endif
-}
-
-extension Account {
-    var localKey: String { server.url.absoluteString + "|" + userId }
-}
-
-struct AccountSnapshot: Codable {
-    var accounts: [Account] = []
-    var selected: String?
-    var servers: [Server] = []
-}
-
-@MainActor final class AppModel: ObservableObject {
-    @Published var account: Account?
-    // A target belongs to one server/viewer. Every queue dispatch revalidates its
-    // exact session with the server; remembering it is never permission evidence.
-    @Published private(set) var remoteAttachments: [String: RemotePlaybackTarget] = [:]
-    func attachedRemote(for account: Account) -> RemotePlaybackTarget? { remoteAttachments[account.localKey] }
-    func attachRemote(_ target: RemotePlaybackTarget, for account: Account) {
-        guard self.account?.localKey == account.localKey else { return }
-        remoteAttachments[account.localKey] = target
-    }
-    @Published var snapshot = AccountSnapshot()
-    @Published var storageError: String?
-    @Published var signInServer: Server?
-    @Published var signInUsername = ""
-    @Published var showSignIn = false
-    @Published var sessionEnded = false
-    @Published var rows: [HomeRow] = []
-    @Published var homeError: String?
-    @Published var loading = false
-    @Published var player: PlaybackSession?
-    private var activePlayback: PlaybackSession?
-    private var dismissingPlayback: PlaybackSession?
-    private var pendingPlaybackSave: PlaybackSession?
-    @Published var playbackError: String?
-    @Published var preparing = false
-    @Published var playbackSaving = false
-    @Published var playbackSaveError: String?
-    @Published var refreshID = UUID()
-    @Published private(set) var catalogRevision: Int64 = 0
-    private var loadedHomeRevision: Int64?
-    private var loadedHomeAccount: String?
-    private var loadingHomeRevision: Int64?
-    private var loadingHomeAccount: String?
-    private var detailReadRevision: Int64 = 0
-    private struct ReadOwner { let account: String; let generation: Int; let item: String }
-    private var detailReadOwners: [Int64: ReadOwner] = [:]
-    private struct CompletionRead {
-        let id: UUID
-        let account: String
-        let generation: Int
-        let item: String
-        let read: Int64
-        let continuation: CheckedContinuation<Void, Never>
-        var transport: Task<Void, Never>?
-    }
-    private var completionRead: CompletionRead?
-    private struct PlayedProjection { let owner: UUID; let choiceRevision: Int64; var active: Set<UUID>; var raw: Bool; var failed = false; var awaitingReport = true }
-    private var playedChoiceRevisions: [String: Int64] = [:]
-    private var sessionPlayedOwners: [UUID: [String: UUID]] = [:]
-    @Published private var playedProjections: [String: PlayedProjection] = [:]
-    func presented(_ item: MediaItem) -> MediaItem {
-        guard let projection = playedProjections[item.id] else { return item }
-        var shown = item; shown.userData.played = projection.failed ? projection.raw : true
-        return shown
-    }
-    @discardableResult func beginPlayedProjection(_ itemID: String, rawPlayed: Bool, choiceRevision: Int64? = nil) -> UUID {
-        let token = UUID(); var active = playedProjections[itemID]?.active ?? []; active.insert(token)
-        playedProjections[itemID] = PlayedProjection(owner: token, choiceRevision: choiceRevision ?? playedChoiceRevisions[itemID] ?? 0, active: active, raw: playedProjections[itemID]?.raw ?? rawPlayed)
-        return token
-    }
-    func acceptedPlayedChoice(itemID: String) {
-        playedChoiceRevisions[itemID, default: 0] += 1
-    }
-    func playedChoiceRevision(for itemID: String) -> Int64 { playedChoiceRevisions[itemID] ?? 0 }
-    func completionMayApply(itemID: String, owner: UUID) -> Bool {
-        guard let projection = playedProjections[itemID], projection.owner == owner else { return true }
-        return DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
-    }
-    func finishPlayedProjection(_ itemID: String, owner: UUID, success: Bool) {
-        guard var projection = playedProjections[itemID], projection.active.remove(owner) != nil else { return }
-        if projection.owner == owner {
-            projection.failed = !success || !DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
-        }
-        playedProjections[itemID] = projection
-    }
-    func finishPlayedReport(_ itemID: String, owner: UUID, success: Bool) {
-        guard var projection = playedProjections[itemID], projection.owner == owner else { return }
-        projection.awaitingReport = false
-        projection.failed = !success || !DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
-        playedProjections[itemID] = projection
-    }
-    func withdrawPlayedProjection(_ itemID: String, owner: UUID) {
-        guard var projection = playedProjections[itemID], projection.owner == owner else { return }
-        projection.failed = true; playedProjections[itemID] = projection
-    }
-    func settlePlayedProjection(_ item: MediaItem, reporting: Bool) {
-        guard var projection = playedProjections[item.id] else { return }
-        projection.raw = item.userData.played
-        if !reporting && !projection.awaitingReport && projection.active.isEmpty { playedProjections[item.id] = nil }
-        else { playedProjections[item.id] = projection }
-    }
-    @Published var externalDetailID: String?
-    let preferences = AppPreferences()
-    let signInFlow = SignInFlow()
-    private var accountGeneration = 0
-    private var homeGeneration = 0
-    private var migrationTask: Task<Void, Never>?
-    private var authenticatedClient: JellyfinClient
-    private let installationID: String
-    var client: JellyfinClient { authenticatedClient }
     init() {
-        let defaults = UserDefaults.standard
-        let deviceID = defaults.string(forKey: "deviceID") ?? UUID().uuidString
-        defaults.set(deviceID, forKey: "deviceID"); installationID = deviceID
-        authenticatedClient = JellyfinClient(deviceID: deviceID, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC), hevcTranscodeCapabilities: { await AppleHEVCQualification.shared.capabilities() })
-        restore()
-        Task { await AppleHEVCQualification.shared.warmUp() }
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        #endif
     }
-    /// An injected client exercises the same account/read ownership without storage,
-    /// renderer preparation or hardware qualification in hosted tests.
-    init(client: JellyfinClient, account: Account) {
-        installationID = UUID().uuidString
-        authenticatedClient = client
-        self.account = account
-    }
-    func restore() {
-        do {
-            snapshot = try AccountVault.loadSnapshot()
-            account = snapshot.accounts.first { $0.localKey == snapshot.selected && !$0.accessToken.isEmpty }
-            if let account { authenticatedClient = makeClient(account.deviceID) }
-            else if let expired = snapshot.accounts.first(where: { $0.localKey == snapshot.selected && $0.accessToken.isEmpty }) { beginSignIn(server: expired.server, username: expired.username); sessionEnded = true }
-            storageError = nil
-        } catch { storageError = error.localizedDescription }
-    }
-    func makeClient(_ id: String) -> JellyfinClient { JellyfinClient(deviceID: id, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC), hevcTranscodeCapabilities: { await AppleHEVCQualification.shared.capabilities() }) }
-    /// Every new authentication gets a fresh device identity. Saved viewers retain theirs.
-    func beginSignIn(server: Server? = nil, username: String = "") {
-        authenticatedClient = makeClient(UUID().uuidString)
-        signInFlow.clear(); signInServer = server; signInUsername = username; showSignIn = true; sessionEnded = false
-    }
-    func signedIn(_ incoming: Account) throws {
-        var changed = snapshot
-        changed.accounts.removeAll { $0.localKey == incoming.localKey }; changed.accounts.append(incoming)
-        changed.servers.removeAll { $0.url == incoming.server.url }; changed.servers.append(incoming.server)
-        changed.selected = incoming.localKey
-        try AccountVault.saveSnapshot(changed)
-        snapshot = changed; accountGeneration += 1; resetCatalogOwnership(); pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = incoming
-        authenticatedClient = makeClient(incoming.deviceID)
-        signInFlow.clear(); rows = []; homeError = nil; showSignIn = false; signInServer = nil; signInUsername = ""; sessionEnded = false
-    }
-    func select(_ saved: Account) async {
-        if saved.accessToken.isEmpty { beginSignIn(server: saved.server, username: saved.username); return }
-        do { var changed = snapshot; changed.selected = saved.localKey; try AccountVault.saveSnapshot(changed); snapshot = changed }
-        catch { storageError = error.localizedDescription; return }
-        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = saved; authenticatedClient = makeClient(saved.deviceID)
-        rows = []; homeError = nil; showSignIn = false; refreshID = UUID(); await loadHome()
-    }
-    func signOut() async {
-        guard let oldAccount = account else { return }
-        do {
-            var changed = snapshot; changed.accounts.removeAll { $0.localKey == oldAccount.localKey }; changed.selected = nil
-            try AccountVault.saveSnapshot(changed); snapshot = changed
-        } catch { storageError = error.localizedDescription; return }
-        let oldClient = client
-        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1
-        pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil
-        account = nil; rows = []; homeError = nil; loading = false; sessionEnded = false; showSignIn = false
-        try? await oldClient.logout(account: oldAccount)
-    }
-    func remove(account removed: Account? = nil, server: Server? = nil) throws {
-        var changed = snapshot
-        let forgotten = changed.accounts.filter { candidate in removed.map { candidate.localKey == $0.localKey } ?? (candidate.server.url == server?.url) }
-        changed.accounts.removeAll { candidate in forgotten.contains { $0.localKey == candidate.localKey } }
-        if let server { changed.servers.removeAll { $0.url == server.url } }
-        if forgotten.contains(where: { $0.localKey == changed.selected }) { changed.selected = nil }
-        try AccountVault.saveSnapshot(changed); snapshot = changed
-        if forgotten.contains(where: { $0.localKey == account?.localKey }) { accountGeneration += 1; resetCatalogOwnership(); account = nil; rows = [] }
-        for old in forgotten {
-            SearchHistory.remove(account: old)
-            Task { try? await makeClient(old.deviceID).logout(account: old) }
-        }
-    }
-    func handle(_ error: Error, account failed: Account) {
-        guard case ClientError.invalidCredentials = error, let current = account,
-              current.localKey == failed.localKey, current.accessToken == failed.accessToken else { return }
-        var changed = snapshot
-        if let index = changed.accounts.firstIndex(where: { $0.localKey == failed.localKey && $0.accessToken == failed.accessToken }) { changed.accounts[index].accessToken = "" }
-        changed.selected = failed.localKey
-        do { try AccountVault.saveSnapshot(changed); snapshot = changed }
-        catch { storageError = error.localizedDescription; return }
-        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1; account = nil; rows = []
-        beginSignIn(server: failed.server, username: failed.username); sessionEnded = true
-    }
-    /// Older builds used an installation-wide identity. Move only that viewer to a new
-    /// authorized session; a failed/disabled Quick Connect never destroys its working token.
-    private func migrateLegacyIdentityIfNeeded(_ saved: Account) {
-        guard migrationTask == nil, (saved.deviceID == installationID || snapshot.accounts.filter({ $0.deviceID == saved.deviceID }).count > 1) else { return }
-        let key = "identity-retry-" + SHA256.hash(data: Data(saved.localKey.utf8)).map { String(format: "%02x", $0) }.joined()
-        guard UserDefaults.standard.double(forKey: key) <= Date().timeIntervalSince1970 else { return }
-        UserDefaults.standard.set(Date().addingTimeInterval(1800).timeIntervalSince1970, forKey: key)
-        let generation = accountGeneration, freshClient = makeClient(UUID().uuidString), oldClient = client
-        migrationTask = Task {
-            defer {
-                migrationTask = nil
-                if let current = account, current.localKey != saved.localKey { migrateLegacyIdentityIfNeeded(current) }
-            }
-            do {
-                let renewed = try await withThrowingTaskGroup(of: Account.self) { group in
-                    group.addTask {
-                        let attempt = try await freshClient.initiateQuickConnect(server: saved.server)
-                        try await oldClient.authorizeQuickConnect(account: saved, code: attempt.code)
-                        let result = try await freshClient.authenticateQuickConnect(server: saved.server, secret: attempt.secret)
-                        if Task.isCancelled { try? await freshClient.logout(account: result); throw CancellationError() }
-                        return result
-                    }
-                    group.addTask { try await Task.sleep(for: .seconds(3)); throw CancellationError() }
-                    defer { group.cancelAll() }
-                    guard let result = try await group.next() else { throw CancellationError() }; return result
-                }
-                guard generation == accountGeneration, account?.accessToken == saved.accessToken,
-                      renewed.userId == saved.userId else { try? await freshClient.logout(account: renewed); return }
-                var changed = snapshot
-                guard let index = changed.accounts.firstIndex(where: { $0.localKey == saved.localKey }) else { try? await freshClient.logout(account: renewed); return }
-                changed.accounts[index] = renewed
-                do { try AccountVault.saveSnapshot(changed) }
-                catch { try? await freshClient.logout(account: renewed); return }
-                snapshot = changed; account = renewed; authenticatedClient = freshClient
-                // Do not log out the old shared device: another saved viewer may still use it.
-            } catch { /* Keep the accepted credential; the persisted deadline permits a later retry. */ }
-        }
-    }
-    private func resetCatalogOwnership() {
-        cancelCompletionRead(); detailReadOwners = [:]; playedProjections = [:]; playedChoiceRevisions = [:]; sessionPlayedOwners = [:]
-        loadedHomeRevision = nil; loadedHomeAccount = nil
-        loadingHomeRevision = nil; loadingHomeAccount = nil
-    }
-    func catalogChanged() { catalogRevision += 1 }
-    func loadHomeIfNeeded() async {
-        guard let account, loadedHomeAccount != account.localKey || DetailFeedback.catalogRevisionNeedsRefresh(previous: loadedHomeRevision, current: catalogRevision) else { return }
-        await loadHome()
-    }
-    func loadHome() async {
-        guard let account else { return }
-        let revision = catalogRevision
-        if loadingHomeAccount == account.localKey && loadingHomeRevision == revision { return }
-        loadingHomeAccount = account.localKey; loadingHomeRevision = revision
-        migrateLegacyIdentityIfNeeded(account)
-        let accountVersion = accountGeneration; homeGeneration += 1; let requestVersion = homeGeneration
-        loading = rows.isEmpty; homeError = nil
-        defer {
-            if accountGeneration == accountVersion && homeGeneration == requestVersion {
-                loading = false; loadingHomeAccount = nil; loadingHomeRevision = nil
-            }
-        }
-        do {
-            try await client.validate(account: account)
-            let content = try await client.homeContent(account: account)
-            guard accountGeneration == accountVersion, homeGeneration == requestVersion else { return }
-            rows = content.rows; loadedHomeAccount = account.localKey; loadedHomeRevision = revision
-            homeError = content.warnings.isEmpty ? nil : content.warnings.joined(separator: "\n")
-        } catch {
-            guard accountGeneration == accountVersion, homeGeneration == requestVersion else { return }
-            handle(error, account: account); homeError = error.localizedDescription
-        }
-    }
-    func play(_ item: MediaItem, resume: Bool, audio: Int?, subtitle: Int?) async {
-        guard let account, !preparing, !playbackSaving, player == nil, activePlayback == nil, dismissingPlayback == nil else { return }
-        let accountVersion = accountGeneration; preparing = true; playbackError = nil
-        defer { preparing = false }
-        do {
-            let session = PlaybackSession(client: client, account: account, item: item, preferences: preferences.value)
-            session.onCompletionChoiceRevision = { [weak self] itemID in self?.playedChoiceRevision(for: itemID) ?? 0 }
-            session.onCompletionBegan = { [weak self, weak session] itemID, choiceRevision in
-                guard let self, self.accountGeneration == accountVersion else { return UUID() }
-                let token = self.beginPlayedProjection(itemID, rawPlayed: session?.item.userData.played ?? false, choiceRevision: choiceRevision)
-                if let session { self.sessionPlayedOwners[session.id, default: [:]][itemID] = token }
-                return token
-            }
-            session.onCompletionMayApply = { [weak self] itemID, token in
-                self?.completionMayApply(itemID: itemID, owner: token) ?? true
-            }
-            session.onCompletionReportFinished = { [weak self] itemID, token, success in
-                guard let self, self.accountGeneration == accountVersion else { return }
-                self.finishPlayedReport(itemID, owner: token, success: success)
-            }
-            session.onCompletionFinished = { [weak self] itemID, token, success in
-                guard let self, self.accountGeneration == accountVersion else { return }
-                self.finishPlayedProjection(itemID, owner: token, success: success)
-            }
-            try await session.prepare(startTicks: resume ? item.userData.playbackPositionTicks : 0, audio: audio, subtitle: subtitle)
-            guard accountGeneration == accountVersion, !Task.isCancelled else { await session.stop(); return }
-            activePlayback = session; player = session
-        } catch is CancellationError { } catch { if accountGeneration == accountVersion { handle(error, account: account); playbackError = error.localizedDescription } }
-    }
-    func detailReadStarted(itemID: String) -> Int64 {
-        detailReadRevision += 1
-        // Canceled destinations need no observer forever; active reads are bounded.
-        detailReadOwners = detailReadOwners.filter { $0.key > detailReadRevision - 128 }
-        if let account { detailReadOwners[detailReadRevision] = ReadOwner(account: account.localKey, generation: accountGeneration, item: itemID) }
-        return detailReadRevision
-    }
-    func detailReadIsCurrent(_ read: Int64) -> Bool {
-        guard let owner = detailReadOwners[read] else { return false }
-        return owner.generation == accountGeneration && owner.account == account?.localKey
-    }
-    func detailReadApplied(_ item: MediaItem, read: Int64) {
-        guard detailReadIsCurrent(read) else { return }
-        settlePlayedProjection(item, reporting: playbackSaving)
-        guard let owner = detailReadOwners.removeValue(forKey: read), owner.generation == accountGeneration,
-              owner.account == account?.localKey, owner.item == item.id, let waiting = completionRead,
-              waiting.generation == owner.generation, waiting.account == owner.account,
-              DetailFeedback.readCanReplaceCompletion(completionItem: waiting.item, completionRead: waiting.read, item: item.id, read: read, succeeded: true) else { return }
-        finishCompletionRead(id: waiting.id, item: item)
-    }
-    private func cancelCompletionRead() {
-        guard let waiting = completionRead else { return }
-        completionRead = nil; waiting.transport?.cancel(); waiting.continuation.resume()
-    }
-    private func finishCompletionRead(id: UUID, item: MediaItem?, error: Error? = nil) {
-        guard let waiting = completionRead, waiting.id == id else { return }
-        completionRead = nil
-        // Do not join canceled transport cleanup: it is obsolete, finite work.
-        waiting.transport?.cancel()
-        defer { waiting.continuation.resume() }
-        guard waiting.generation == accountGeneration, waiting.account == account?.localKey else { return }
-        if let item {
-            settlePlayedProjection(item, reporting: false)
-            rows = rows.map { row in
-                let items = row.items.map { value in
-                    var updated = value
-                    if updated.id == item.id { updated.userData = item.userData }
-                    return updated
-                }
-                return HomeRow(id: row.id, title: row.title, items: items, library: row.library, wide: row.wide)
-            }
-            pendingPlaybackSave = nil; playbackSaveError = nil
-            catalogChanged()
-        } else {
-            playbackSaveError = "Progress was saved, but the current item could not be loaded. Retry saving progress to refresh it."
-            if let error, let account { handle(error, account: account) }
-        }
-        playbackSaving = false; refreshID = UUID()
-    }
-    /// Only reads begun after the acknowledged Stop can replace this check.
-    /// The continuation belongs to the account and item, not to its old transport.
-    func refreshAfterPlayback(account: Account, itemID: String) async {
-        guard self.account?.localKey == account.localKey else { return }
-        cancelCompletionRead()
-        playbackSaving = true
-        let version = accountGeneration, id = UUID()
-        detailReadRevision += 1; let revision = detailReadRevision
-        await withCheckedContinuation { continuation in
-            completionRead = CompletionRead(id: id, account: account.localKey, generation: version, item: itemID, read: revision, continuation: continuation)
-            let client = client
-            let transport = Task { [weak self] in
-                do {
-                    let item = try await client.item(account: account, id: itemID)
-                    try Task.checkCancellation()
-                    self?.finishCompletionRead(id: id, item: item)
-                } catch is CancellationError { }
-                catch {
-                    guard !Task.isCancelled else { return }
-                    self?.finishCompletionRead(id: id, item: nil, error: error)
-                }
-            }
-            completionRead?.transport = transport
-        }
-    }
-    func playerClosed(_ session: PlaybackSession) async {
-        guard activePlayback?.id == session.id else { return }
-        session.beginClosing(); activePlayback = nil; playbackSaving = true; playbackSaveError = nil
-        if player?.id == session.id {
-            dismissingPlayback = session
-            var transaction = Transaction()
-            if !DetailFeedback.catalogArrivalUsesAnimation(accessibilityEnabled: UIAccessibility.isVoiceOverRunning,
-                sourceIsPlayback: true, destinationIsCatalog: true, returning: true) {
-                transaction.disablesAnimations = true; transaction.animation = nil
-            }
-            withTransaction(transaction) { player = nil }
-        }
-        refreshID = UUID(); let accountVersion = accountGeneration
-        Task {
-            await session.stop()
-            guard accountGeneration == accountVersion, let account else { return }
-            playbackSaveError = session.reportError
-            if session.completionReportingFailed {
-                for (itemID, token) in sessionPlayedOwners[session.id] ?? [:] { withdrawPlayedProjection(itemID, owner: token) }
-            }
-            pendingPlaybackSave = session
-            if session.reportError == nil {
-                await refreshAfterPlayback(account: account, itemID: session.item.id)
-            } else { playbackSaving = false; refreshID = UUID() }
-        }
-    }
-    func retryPlaybackSave() async {
-        guard let session = pendingPlaybackSave, !playbackSaving, let account else { return }
-        let version = accountGeneration; playbackSaving = true
-        await session.retrySaving()
-        guard version == accountGeneration else { return }
-        playbackSaveError = session.reportError
-        if session.reportError == nil { await refreshAfterPlayback(account: account, itemID: session.item.id) }
-        else { playbackSaving = false; refreshID = UUID() }
-    }
-    func openPlaybackURL(_ url: URL) async {
-        guard url.scheme == "pictureshow" else { return }
-        guard let input = ExternalPlaybackRequest(url: url) else { playbackError = "Could not open this playback request."; return }
-        guard let account else { return }
-        let version = accountGeneration
-        do {
-            var item = try await client.item(account: account, id: input.itemID)
-            guard version == accountGeneration, item.id.lowercased() == input.itemID, ["Movie", "Episode"].contains(item.type), !item.isFolder else { throw ClientError.invalidResponse }
-            if let position = input.positionMs { item.userData.playbackPositionTicks = position * 10_000 }
-            externalDetailID = item.id
-            await play(item, resume: true, audio: nil, subtitle: nil)
-        } catch { handle(error, account: account); playbackError = "This item is unavailable for the current account." }
-    }
-    func presentationDismissed() async {
-        if dismissingPlayback != nil { dismissingPlayback = nil; return }
-        if let activePlayback { await playerClosed(activePlayback) }
-    }
-}
 
-/// One atomic secure snapshot keeps selection and viewer removals consistent across process death.
-enum AccountVault {
-    static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.pictureshow.account", kSecAttrAccount as String: "active"] }
-    private static var snapshotQuery: [String: Any] { var q = query; q[kSecAttrAccount as String] = "accounts-v1"; return q }
-    #if targetEnvironment(simulator)
-    private static var simulatorURL: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("simulator-account.json") }
-    private static var snapshotURL: URL { simulatorURL.deletingLastPathComponent().appendingPathComponent("simulator-accounts-v1.json") }
-    #endif
-    static func loadQuick() -> Data? {
-        var q = snapshotQuery; q[kSecAttrAccount as String] = "quick-v1"
-        #if targetEnvironment(simulator)
-        return try? Data(contentsOf: snapshotURL.deletingLastPathComponent().appendingPathComponent("quick-v1.json"))
-        #else
-        return try? read(q)
-        #endif
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environmentObject(app)
+                .tint(Theme.accent)
+                .preferredColorScheme(app.preferences.appearance.scheme)
+        }
     }
-    static func saveQuick(_ data: Data?) {
-        var q = snapshotQuery; q[kSecAttrAccount as String] = "quick-v1"
-        #if targetEnvironment(simulator)
-        let url = snapshotURL.deletingLastPathComponent().appendingPathComponent("quick-v1.json")
-        if let data { try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true); try? data.write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen]) } else { try? FileManager.default.removeItem(at: url) }
-        #else
-        if let data { try? write(data, query: q) } else { SecItemDelete(q as CFDictionary) }
-        #endif
-    }
-    static func loadSnapshot(simulatorDirectory: URL? = nil) throws -> AccountSnapshot {
-        #if targetEnvironment(simulator)
-        // Unsigned simulator builds have no Keychain entitlement. A missing file
-        // means first launch, not an invitation to query an inaccessible Keychain.
-        let snapshotFile = simulatorDirectory?.appendingPathComponent(snapshotURL.lastPathComponent) ?? snapshotURL
-        let legacyFile = simulatorDirectory?.appendingPathComponent(simulatorURL.lastPathComponent) ?? simulatorURL
-        if FileManager.default.fileExists(atPath: snapshotFile.path) { return try JSONDecoder().decode(AccountSnapshot.self, from: Data(contentsOf: snapshotFile)) }
-        if FileManager.default.fileExists(atPath: legacyFile.path) { let legacy = try JSONDecoder().decode(Account.self, from: Data(contentsOf: legacyFile)); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
-        #else
-        if let data = try read(snapshotQuery) { return try JSONDecoder().decode(AccountSnapshot.self, from: data) }
-        if let data = try read(query) { let legacy = try JSONDecoder().decode(Account.self, from: data); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
-        #endif
-        return AccountSnapshot()
-    }
-    static func saveSnapshot(_ value: AccountSnapshot) throws {
-        let data = try JSONEncoder().encode(value)
-        #if targetEnvironment(simulator)
-        try FileManager.default.createDirectory(at: snapshotURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: snapshotURL, options: [.atomic, .completeFileProtectionUnlessOpen])
-        // Retain the old simulator path for development harnesses, without treating it as authoritative.
-        if let account = value.accounts.first(where: { $0.localKey == value.selected }) { try save(account) } else { remove() }
-        #else
-        try write(data, query: snapshotQuery)
-        SecItemDelete(query as CFDictionary)
-        #endif
-    }
-    private static func read(_ q: [String: Any]) throws -> Data? {
-        var q = q; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?; let status = SecItemCopyMatching(q as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else { throw StorageError.failed }
-        return data
-    }
-    static func load() -> Account? {
-        #if targetEnvironment(simulator)
-        if let data = try? Data(contentsOf: simulatorURL) { return try? JSONDecoder().decode(Account.self, from: data) }
-        #endif
-        guard let data = try? read(query) else { return nil }
-        return try? JSONDecoder().decode(Account.self, from: data)
-    }
-    static func save(_ account: Account) throws {
-        let data = try JSONEncoder().encode(account)
-        #if targetEnvironment(simulator)
-        try FileManager.default.createDirectory(at: simulatorURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: simulatorURL, options: [.atomic, .completeFileProtectionUnlessOpen])
-        #else
-        try write(data, query: query)
-        #endif
-    }
-    private static func write(_ data: Data, query: [String: Any]) throws {
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var q = query; q[kSecValueData as String] = data; q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            guard SecItemAdd(q as CFDictionary, nil) == errSecSuccess else { throw StorageError.failed }
-        } else if status != errSecSuccess { throw StorageError.failed }
-    }
-    static func remove() {
-        SecItemDelete(query as CFDictionary)
-        #if targetEnvironment(simulator)
-        try? FileManager.default.removeItem(at: simulatorURL)
-        #endif
-    }
-    enum StorageError: LocalizedError { case failed; var errorDescription: String? { "Could not read or save your sign-ins securely. Try again." } }
-}
-
-struct ExternalPlaybackRequest {
-    let itemID: String
-    let positionMs: Int64?
-    init?(url: URL) {
-        guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false), c.scheme == "pictureshow", c.host == "play", c.user == nil, c.password == nil, c.port == nil, c.fragment == nil else { return nil }
-        let parts = c.percentEncodedPath.split(separator: "/", omittingEmptySubsequences: false)
-        guard parts.count == 2, parts[0].isEmpty, let id = String(parts[1]).removingPercentEncoding,
-              id.count == 32, id.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0) }) else { return nil }
-        let query = c.queryItems ?? []; guard query.allSatisfy({ $0.name == "positionMs" }), query.count <= 1 else { return nil }
-        if let value = query.first {
-            guard let text = value.value, !text.isEmpty, text.utf8.allSatisfy({ (48...57).contains($0) }), let number = Int64(text), number <= Int64.max / 10_000 else { return nil }; positionMs = number
-        } else { positionMs = nil }
-        itemID = id.lowercased()
-    }
-}
-
-enum AppRoute: Hashable, Codable {
-    case detail(String), library(String, String), search, settings, accounts, information(String)
-}
-
-struct NavigationSnapshot: Codable { var viewer: String; var tab: Int; var paths: [[AppRoute]] }
-enum NavigationMemory {
-    static func read(viewer: String) -> NavigationSnapshot? {
-        guard let data = UserDefaults.standard.data(forKey: "navigation-v1"), let record = try? JSONDecoder().decode(NavigationSnapshot.self, from: data), record.viewer == viewer else { return nil }; return record
-    }
-    static func save(viewer: String, tab: Int, paths: [[AppRoute]]) { if let data = try? JSONEncoder().encode(NavigationSnapshot(viewer: viewer, tab: tab, paths: paths)) { UserDefaults.standard.set(data, forKey: "navigation-v1") } }
 }
 
 struct RootView: View {
-    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var app: AppModel
+
     var body: some View {
         Group {
-            if let error = model.storageError {
-                VStack(spacing: 24) { Text("Sign-in storage unavailable").font(.title); Text(error); Button { model.restore() } label: { Text("Retry").minimumTouchTarget() } }
-                    .padding(Theme.gutter)
-            } else if model.showSignIn { SignInView()
-            } else if model.account != nil {
-                NativeShell().id(model.account?.localKey)
-            } else if model.showSignIn || model.snapshot.accounts.isEmpty { SignInView() }
-            else { NavigationStack { AccountsView() } }
-        }
-        .background(Theme.background.ignoresSafeArea())
-        .onOpenURL { url in Task { await model.openPlaybackURL(url) } }
-        .fullScreenCover(item: $model.player, onDismiss: { Task { await model.presentationDismissed() } }) { session in PlayerScreen(session: session) { await model.playerClosed(session) } }
-        .alert("Playback unavailable", isPresented: Binding(get: { model.playbackError != nil }, set: { if !$0 { model.playbackError = nil } })) { Button("OK") { model.playbackError = nil } } message: { Text(model.playbackError ?? "") }
-    }
-
-}
-
-@ViewBuilder func destination(_ route: AppRoute, open: @escaping (MediaItem) -> Void) -> some View {
-    switch route {
-    case .detail(let id): DetailView(id: id, open: open)
-    case .library(let id, let name): LibraryView(id: id, name: name, open: open)
-    case .search: SearchView(open: open)
-    case .settings: SettingsView()
-    case .accounts: AccountsView()
-    case .information(let kind): InformationView(kind: kind)
-    }
-}
-
-struct NativeShell: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var tab = 0
-    @State private var paths: [[AppRoute]] = [[], [], [], []]
-    private let names = ["Home", "Libraries", "Search", "Settings"]
-    private let icons = ["house", "square.grid.2x2", "magnifyingglass", "gearshape"]
-    var body: some View {
-        Group {
-            if #available(iOS 18.0, tvOS 18.0, *) {
-                TabView(selection: $tab) {
-                    Tab("Home", systemImage: "house", value: 0) { stack(0) }
-                    Tab("Libraries", systemImage: "square.grid.2x2", value: 1) { stack(1) }
-                    Tab("Search", systemImage: "magnifyingglass", value: 2) { stack(2) }
-                    Tab("Settings", systemImage: "gearshape", value: 3) { stack(3) }
-                }
-                #if os(tvOS)
-                .tabViewStyle(.tabBarOnly)
-                #else
-                .tabViewStyle(.sidebarAdaptable)
-                #endif
+            if let account = app.account {
+                MainShell().id(account.key)
             } else {
-                // Earlier systems keep the native platform tab bar.
-                TabView(selection: $tab) {
-                    ForEach(0..<4) { index in
-                        stack(index).tabItem { Label(names[index], systemImage: icons[index]) }.tag(index)
+                NavigationStack { SignInFlowView() }
+            }
+        }
+        .pageBackground()
+        .sheet(isPresented: $app.addingAccount) {
+            NavigationStack { SignInFlowView(isAddingAccount: true) }
+                .environmentObject(app)
+        }
+        #if os(tvOS)
+        .fullScreenCover(item: $app.player) { request in
+            PlayerScreen(request: request).environmentObject(app)
+        }
+        #else
+        .fullScreenCover(item: $app.player) { request in
+            PlayerScreen(request: request).environmentObject(app)
+        }
+        #endif
+    }
+}
+
+enum MainTab: Hashable { case home, libraries, search, settings }
+
+/// Tab bar on iPhone and Apple TV; on iPad the same tabs adapt into a sidebar.
+struct MainShell: View {
+    @EnvironmentObject private var app: AppModel
+    @State private var tab: MainTab = .home
+
+    var body: some View {
+        TabView(selection: $tab) {
+            Tab("Home", systemImage: "house", value: MainTab.home) {
+                RoutedStack { HomeView() }
+            }
+            Tab("Libraries", systemImage: "rectangle.stack", value: MainTab.libraries) {
+                RoutedStack { LibrariesView() }
+            }
+            Tab(value: MainTab.search, role: .search) {
+                RoutedStack { SearchView() }
+            }
+            Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
+                RoutedStack { SettingsView() }
+            }
+        }
+        #if os(iOS)
+        .tabViewStyle(.sidebarAdaptable)
+        #endif
+    }
+}
+
+/// A navigation stack that knows how to open every route the catalog produces.
+struct RoutedStack<Root: View>: View {
+    @ViewBuilder var root: () -> Root
+    var body: some View {
+        NavigationStack {
+            root()
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .item(let item): DetailView(seed: item)
+                    case .library(let library): LibraryView(library: library)
+                    case .person(let id, let name): PersonView(personID: id, name: name)
                     }
                 }
-            }
         }
-        .task {
-            if paths.allSatisfy({ $0.isEmpty }), let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) {
-                if saved.paths.count == 4 { paths = saved.paths; tab = min(3, max(0, saved.tab)) }
-                else if saved.paths.count == 1 { paths[0] = saved.paths[0] }
-            }
-            if let id = model.externalDetailID { tab = 0; paths[0] = [.detail(id)] }
-            await model.loadHomeIfNeeded()
-        }
-        .onChange(of: model.externalDetailID) { _, id in if let id { tab = 0; paths[0] = [.detail(id)] } }
-        .onChange(of: paths) { _, paths in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: tab, paths: paths) } }
-        .onChange(of: tab) { _, tab in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: tab, paths: paths) } }
-        #if DEBUG
-        .onAppear { if let id = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DETAIL_ID"], paths[0].isEmpty { paths[0] = [.detail(id)] } }
-        #endif
-    }
-    private func stack(_ index: Int) -> some View {
-        NavigationStack(path: $paths[index]) {
-            Group {
-                switch index {
-                case 1: LibrariesView(open: { open($0, tab: index) })
-                case 2: SearchView(open: { open($0, tab: index) })
-                case 3: SettingsView()
-                default: HomeView(open: { open($0, tab: index) })
-                }
-            }
-            .navigationDestination(for: AppRoute.self) { route in destination(route, open: { open($0, tab: index) }) }
-        }
-    }
-    private func open(_ item: MediaItem, tab index: Int) { performCatalogNavigation { paths[index].append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
-}
-
-private extension View {
-    /// Explicit test environment projection, never an operating-system setting.
-    @ViewBuilder func pictureshowTestDynamicType() -> some View {
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DYNAMIC_TYPE"] == "accessibility3" {
-            dynamicTypeSize(.accessibility3)
-        } else { self }
-        #else
-        self
-        #endif
     }
 }

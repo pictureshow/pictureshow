@@ -50,17 +50,6 @@
                ReferencedContainer = "container:Pictureshow.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "02536E9F2D377AB93E0A3742"
-               BuildableName = "Pictureshow-tvOS-UITests.xctest"
-               BlueprintName = "Pictureshow-tvOS-UITests"
-               ReferencedContainer = "container:Pictureshow.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
