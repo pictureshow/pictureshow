@@ -253,6 +253,9 @@ fun CatalogHome(
     val profile = remember { FocusRequester() }
     val accountFocus = remember { FocusRequester() }
     var accountMenu by rememberSaveable { mutableStateOf(false) }
+    // AUTH-10: Sign out asks first; the opener ("account" chip or the "profile" button) gets focus back on Cancel.
+    var confirmSignOut by rememberSaveable { mutableStateOf<String?>(null) }
+    val signOutFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
     val customizeFocus = remember { FocusRequester() }
@@ -599,9 +602,9 @@ fun CatalogHome(
                             }
                     ) { Text("Switch user") }
                     Button(
-                        onClick = onSignOut,
+                        onClick = { confirmSignOut = "profile" },
                         enabled = !state.busy,
-                        modifier = target(Modifier, false).testTag("home:sign-out").staysInRow(first = false, last = true).onFocusChanged {
+                        modifier = target(Modifier, false).focusRequester(signOutFocus).testTag("home:sign-out").staysInRow(first = false, last = true).onFocusChanged {
                             if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                         }.onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -631,11 +634,30 @@ fun CatalogHome(
             },
             onSignOut = {
                 accountMenu = false
-                onSignOut()
+                confirmSignOut = "account"
             },
             onSettings = {
                 accountMenu = false
                 onSettings()
+            }
+        )
+    }
+    confirmSignOut?.let { opener ->
+        SignOutConfirmation(
+            user = account.user.name,
+            onCancel = {
+                confirmSignOut = null
+                scope.launch {
+                    if (opener == "account") {
+                        focusAction("header", 0, accountFocus)
+                    } else {
+                        focusAction("profile", rows.size + 1, signOutFocus)
+                    }
+                }
+            },
+            onConfirm = {
+                confirmSignOut = null
+                onSignOut()
             }
         )
     }
@@ -747,6 +769,41 @@ private fun AccountChip(user: String, server: String, enabled: Boolean, onClick:
                 modifier = Modifier.widthIn(max = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) 110.dp else 180.dp)
             )
             Text("▾", modifier = Modifier.clearAndSetSemantics {})
+        }
+    }
+}
+
+/** The words every Android sign-out question uses (AUTH-10); [device] is "TV", "phone" or "tablet". */
+internal fun signOutQuestion(user: String) = "Sign out of $user?"
+
+internal fun signOutConsequence(device: String) =
+    "You'll need the password to sign in again. Your account stays saved on this $device."
+
+/** AUTH-10: Sign out asks first, starting on Cancel. Back is Cancel. */
+@Composable
+internal fun SignOutConfirmation(user: String, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    val cancel = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
+        Column(
+            Modifier.width(480.dp).background(Color(0xFF1B2130), RoundedCornerShape(16.dp)).padding(24.dp)
+                .testTag("sign-out:confirm"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(signOutQuestion(user), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+            Text(signOutConsequence("TV"), color = CatalogMuted)
+            Spacer(Modifier.height(4.dp))
+            Button(
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth().focusRequester(cancel).testTag("sign-out:cancel")
+            ) { Text("Cancel") }
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth().testTag("sign-out:confirm-button")
+            ) { Text("Sign out") }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            cancel.requestFocus()
         }
     }
 }

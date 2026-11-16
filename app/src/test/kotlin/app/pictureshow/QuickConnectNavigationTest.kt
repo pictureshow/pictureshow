@@ -326,7 +326,7 @@ class QuickConnectNavigationTest {
     fun ordinarySignOutAndFirstSignInDoNotClaimTheSessionEnded() {
         runBlocking {
             accounts.remember(account)
-            accounts.signOut(account.key)
+            accounts.removeAccount(account.key)
         }
         launch()
         waitForText("Sign in to Screen room")

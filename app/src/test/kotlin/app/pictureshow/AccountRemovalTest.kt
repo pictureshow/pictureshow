@@ -211,7 +211,7 @@ class AccountRemovalTest {
     @Test
     fun removingLastSignedOutServerPersistsAbsenceWithoutTouchingAnotherAddress() = runTest(dispatcher) {
         accounts.remember(first)
-        accounts.signOut(first.key)
+        accounts.removeAccount(first.key)
         accounts.removeServer(server.copy(url = "https://different.example.test"))
         assertEquals(listOf(server), accounts.load().rememberedServers)
         accounts.removeServer(server)

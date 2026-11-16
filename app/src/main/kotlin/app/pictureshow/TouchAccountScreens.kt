@@ -224,11 +224,13 @@ internal fun TouchAccounts(
             removeServerUrl = null
         }
     }
-    val primary = touchAccountsPrimary(snapshot)
+    val justSignedOut = rememberSaveable { mutableStateOf(SignOutFocus.take()) }.value
+    val primary = justSignedOut?.takeIf { key -> snapshot.accounts.any { it.key == key } } ?: touchAccountsPrimary(snapshot)
     TouchPage("Accounts", onBack) {
         if (snapshot.accounts.isEmpty()) Text("No remembered accounts. Sign in to start watching.")
         snapshot.accounts.forEach { remembered ->
             Text("${remembered.user.name} · ${snapshot.serverLabel(remembered.server)}", style = MaterialTheme.typography.titleMedium)
+            accountCardStatus(remembered)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             val label = when {
                 remembered.expired -> "Sign in again as ${remembered.user.name}"
                 snapshot.currentKey == remembered.key -> "Continue as ${remembered.user.name}"

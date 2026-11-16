@@ -46,6 +46,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -70,6 +71,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -79,6 +81,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -129,7 +132,10 @@ internal fun TouchCatalogHome(
     onCustomize: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null,
     onRefresh: () -> Unit = onRetry,
-    onLibraries: (() -> Unit)? = null
+    onLibraries: (() -> Unit)? = null,
+    serverLabel: String = account.server.name,
+    onSwitchUser: (() -> Unit)? = null,
+    onSignOut: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     // HOME-09: a network arriving, leaving or being swapped may change whether the server answers; read again.
@@ -155,6 +161,9 @@ internal fun TouchCatalogHome(
                     var homeMenu by remember { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         TouchCatalogHeading("Pictureshow", Modifier.weight(1f))
+                        if (onSwitchUser != null && onSignOut != null) {
+                            TouchAccountMenu(account.user.name, serverLabel, state.busy, onSwitchUser, onSignOut)
+                        }
                         if (onCustomize != null) {
                             Box {
                                 IconButton(
@@ -1167,5 +1176,75 @@ internal fun TouchCatalogError(message: String?, onRetry: () -> Unit) {
             Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
         }
+    }
+}
+
+/** AUTH-10 on phones: who is signed in, Switch user, and Sign out after a question that starts on Cancel. */
+@Composable
+private fun TouchAccountMenu(user: String, server: String, busy: Boolean, onSwitchUser: () -> Unit, onSignOut: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .clickable(enabled = !busy, onClickLabel = "Account") { open = true }
+                .semantics { contentDescription = "Account: $user" }
+                .testTag("touch:account"),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.size(34.dp).background(MaterialTheme.colorScheme.secondaryContainer, androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    user.trim().take(1).uppercase().ifEmpty { "?" },
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+        DropdownMenu(open, { open = false }) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(user, style = MaterialTheme.typography.titleMedium)
+                Text("Signed in on $server", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenuItem(
+                text = { Text("Switch user") },
+                onClick = {
+                    open = false
+                    onSwitchUser()
+                },
+                modifier = Modifier.testTag("touch:account:switch-user")
+            )
+            DropdownMenuItem(
+                text = { Text("Sign out") },
+                enabled = !busy,
+                onClick = {
+                    open = false
+                    confirm = true
+                },
+                modifier = Modifier.testTag("touch:account:sign-out")
+            )
+        }
+    }
+    if (confirm) {
+        val device = if (LocalConfiguration.current.smallestScreenWidthDp >= 600) "tablet" else "phone"
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(signOutQuestion(user)) },
+            text = { Text(signOutConsequence(device)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirm = false
+                        onSignOut()
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:confirm-sign-out")
+                ) { Text("Sign out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirm = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            }
+        )
     }
 }

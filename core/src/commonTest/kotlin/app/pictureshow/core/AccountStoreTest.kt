@@ -57,9 +57,9 @@ class AccountStoreTest {
         val store = AccountStore(persistence)
         listOf(first, second, third).forEach { store.remember(it) }
         store.select(second.key)
-        store.signOut(first.key)
+        store.removeAccount(first.key)
         assertEquals(second, store.load().currentAccount)
-        store.signOut(second.key)
+        store.removeAccount(second.key)
         val restored = AccountStore(persistence).load()
         assertEquals(listOf(third), restored.accounts)
         assertNull(restored.currentKey)
@@ -71,7 +71,7 @@ class AccountStoreTest {
         val store = AccountStore(persistence)
         store.remember(first)
         store.recordSearch(first.key, "private search")
-        store.signOut(first.key)
+        store.removeAccount(first.key)
         val restored = AccountStore(persistence).load()
         assertEquals(listOf(first.server), restored.rememberedServers)
         assertEquals(first.server, restored.lastServer)
@@ -96,7 +96,7 @@ class AccountStoreTest {
         store.saveHomePreferences(first.key, HomePreferences(landing = "libraries"), pending = true)
         store.signOutKeepingAccount(first.key)
         val restored = AccountStore(persistence).load()
-        assertEquals(first.copy(accessToken = "", expired = true, deviceId = "new-device"), restored.accounts[0])
+        assertEquals(first.copy(accessToken = "", expired = true, deviceId = "new-device", signedOut = true), restored.accounts[0])
         assertEquals(second, restored.accounts[1])
         assertNull(restored.currentAccount)
         assertEquals(first.server, restored.lastServer)
@@ -128,11 +128,11 @@ class AccountStoreTest {
     fun lastSignedOutServerComesFirstWithoutHidingOtherSavedServersOrDuplicatingEndpoints() = runTest {
         val store = AccountStore(MemoryPersistence())
         listOf(first, second, third).forEach { store.remember(it) }
-        store.signOut(second.key)
+        store.removeAccount(second.key)
         assertEquals(listOf(first.server, third.server), store.load().rememberedServers)
-        store.signOut(third.key)
+        store.removeAccount(third.key)
         assertEquals(listOf(third.server, first.server), store.load().rememberedServers)
-        store.signOut("missing")
+        store.removeAccount("missing")
         assertEquals(third.server, store.load().lastServer)
     }
 
@@ -167,7 +167,7 @@ class AccountStoreTest {
         store.snapshots.test {
             assertEquals(first, awaitItem().currentAccount)
             assertFailsWith<IllegalStateException> { store.remember(second) }
-            assertFailsWith<IllegalStateException> { store.signOut(first.key) }
+            assertFailsWith<IllegalStateException> { store.removeAccount(first.key) }
             expectNoEvents()
             assertEquals(first, store.load().currentAccount)
             assertEquals(first, AccountStore(persistence).load().currentAccount)

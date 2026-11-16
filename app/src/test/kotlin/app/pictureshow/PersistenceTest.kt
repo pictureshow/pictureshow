@@ -44,7 +44,7 @@ class PersistenceTest {
             assertEquals(listOf(first, second), reopened.load().accounts)
             assertEquals(first, reopened.snapshots.value.currentAccount)
             assertEquals(ids.first(), DeviceIdentityStore(preferences).getOrCreate())
-            reopened.signOut(first.key)
+            reopened.removeAccount(first.key)
             assertEquals(listOf(second), reopened.snapshots.value.accounts)
             assertNull(reopened.snapshots.value.currentKey)
         } finally {

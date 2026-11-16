@@ -14,11 +14,20 @@ data class Account(
     val user: User,
     val accessToken: String,
     val expired: Boolean = false,
-    val deviceId: String? = null
+    val deviceId: String? = null,
+    /**
+     * AUTH-10: the viewer chose Sign out and the card stays as "Signed out · Sign in again". Unlike a server-side expiry
+     * (AUTH-12), which keeps downloads for the next sign-in, this ends the session's private local state (OFF-09).
+     */
+    val signedOut: Boolean = false
 ) {
     val key: String get() = "${server.id}:${user.id}"
 
-    override fun toString(): String = "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired)"
+    /** A usable session: neither ended by the viewer nor refused by the server. */
+    val signedIn: Boolean get() = !expired && !signedOut && accessToken.isNotBlank()
+
+    override fun toString(): String =
+        "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired, signedOut=$signedOut)"
 }
 
 data class ClientIdentity(val deviceName: String, val deviceId: String, val version: String = "0.1.0") {

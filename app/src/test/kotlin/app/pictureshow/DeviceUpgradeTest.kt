@@ -201,7 +201,7 @@ class DeviceUpgradeTest {
             model.signOut()
             advanceUntilIdle()
             assertEquals(listOf(fresh, first), revoked)
-            assertEquals(listOf(second), accounts.snapshots.value.accounts)
+            assertEquals(listOf(second, fresh.copy(accessToken = "", expired = true, signedOut = true)), accounts.snapshots.value.accounts)
             assertTrue(accounts.snapshots.value.retiredDeviceAccounts.isEmpty())
             assertTrue(model.state.value.finished)
         } finally {

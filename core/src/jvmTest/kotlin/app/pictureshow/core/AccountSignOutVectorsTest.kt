@@ -76,6 +76,7 @@ class AccountSignOutVectorsTest {
                                 put("id", a.user.id)
                                 put("token", a.accessToken)
                                 put("expired", a.expired)
+                                put("signedOut", a.signedOut)
                             }
                         }
                     )

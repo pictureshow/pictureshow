@@ -269,7 +269,7 @@ internal fun TouchPictureshow(
                     screen,
                     state.snapshot,
                     onSelect = { account ->
-                        if (account.expired && account.key == state.snapshot.currentKey) {
+                        if (account.expired || account.signedOut) {
                             nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}")
                         } else {
                             vm.select(account.key)
@@ -392,7 +392,10 @@ internal fun TouchPictureshow(
                                     editing = true
                                 }
                             },
-                            onWatchDownloads = watchDownloads
+                            onWatchDownloads = watchDownloads,
+                            serverLabel = state.snapshot.serverLabel(account.server),
+                            onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
+                            onSignOut = profile::signOut
                         )
                     }
                 }

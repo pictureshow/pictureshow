@@ -531,7 +531,7 @@ class OfflineEngineTest {
         val bytesB = mediaFile(engine, viewerB, "2")
         assertNotEquals(mediaFile(engine, viewerA, "1").parentFile, bytesB.parentFile)
         val dirA = engine.files.accountDir(viewerA.key)
-        accounts.signOut(viewerA.key)
+        accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
         assertFalse(dirA.exists())
         assertTrue(bytesB.exists())
@@ -556,7 +556,7 @@ class OfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
         logoutStatus = 500
         val dirA = engine.files.accountDir(viewerA.key)
-        accounts.signOut(viewerA.key)
+        accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
         assertFalse(dirA.exists())
         withTimeout(10_000) {
@@ -567,6 +567,44 @@ class OfflineEngineTest {
         engine.syncAll()
         val sessions = engine.files.sessions().readText()
         assertFalse(sessions, sessions.contains("set-viewer-a"))
+    }
+
+    @Test
+    fun `removing a viewer's card also takes their downloads`() = runBlocking<Unit> {
+        signIn(viewerA, viewerB)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val dirA = engine.files.accountDir(viewerA.key)
+        accounts.removeAccount(viewerA.key)
+        withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
+        assertFalse(dirA.exists())
+    }
+
+    @Test
+    fun `a session the server expired keeps its downloads for the next sign-in`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val bytes = mediaFile(engine, viewerA, "1")
+        accounts.expire(viewerA.key, viewerA.accessToken)
+        delay(200)
+        assertTrue(viewerA.key in engine.libraries.value)
+        assertTrue(bytes.exists())
+    }
+
+    @Test
+    fun `a signed-out card kept on the device owns no downloads at next start`() = runBlocking<Unit> {
+        signIn(viewerA, viewerB)
+        val dir = OfflineFiles(context.noBackupFilesDir).accountDir(viewerA.key)
+        dir.mkdirs()
+        File(dir, "manifest.json").writeText("{}")
+        accounts.signOutKeepingAccount(viewerA.key)
+        val engine = started()
+        assertFalse(dir.exists())
+        assertFalse(viewerA.key in engine.libraries.value)
+        assertTrue(viewerB.key in engine.libraries.value)
     }
 
     @Test
@@ -810,7 +848,7 @@ class OfflineEngineTest {
         engine.enqueue(viewerA, item("1"), choice("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
         logoutStatus = 500
-        accounts.signOut(viewerA.key)
+        accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) {
             while (!engine.files.sessions().readText().contains("pending-revoke")) delay(5)
         }
@@ -1282,7 +1320,7 @@ class OfflineEngineTest {
         val store = engine.progressStore(viewerA)
         val sequence = store.newSequence()
         val dir = engine.files.accountDir(viewerA.key)
-        accounts.signOut(viewerA.key)
+        accounts.signOutKeepingAccount(viewerA.key)
         withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
         store.viewing("1", sequence, 50)
         engine.progressStore(viewerA).viewing("1", sequence, 60)

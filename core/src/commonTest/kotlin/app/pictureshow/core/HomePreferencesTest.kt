@@ -239,7 +239,7 @@ class HomePreferencesTest {
             assertEquals(synced.preferences, readHomePreferences(remote))
             assertEquals("retain", remote["CustomPrefs"]!!.jsonObject["unrelated"]!!.toString().trim('"'))
             assertFalse(viewer.key in accounts.load().pendingHomePreferences)
-            accounts.signOut(viewer.key)
+            accounts.removeAccount(viewer.key)
             assertNull(accounts.load().homePreferences[viewer.key])
         }
     }

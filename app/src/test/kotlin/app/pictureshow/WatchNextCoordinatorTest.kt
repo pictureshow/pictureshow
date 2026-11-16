@@ -96,7 +96,7 @@ class WatchNextCoordinatorTest {
         CatalogSession(service, accounts, coordinator::refresh).refresh()
         runCurrent()
         assertEquals(4, service.resumeCalls)
-        accounts.signOut(account.key)
+        accounts.removeAccount(account.key)
         runCurrent()
         assertTrue(provider.programs.isEmpty())
     }

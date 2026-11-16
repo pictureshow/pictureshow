@@ -637,7 +637,7 @@ internal fun Pictureshow(
             val vm: AccountsViewModel = koinViewModel()
             val screen by vm.state.collectAsStateWithLifecycle()
             SignInCompletion(screen.selected, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-            var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
+            var returnFocus by rememberSaveable { mutableStateOf<String?>(SignOutFocus.take()) }
             var removalOpenerLabel by rememberSaveable { mutableStateOf<String?>(null) }
             var returningFromRemoval by rememberSaveable { mutableStateOf(false) }
             var removeKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -739,12 +739,15 @@ internal fun Pictureshow(
                             val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
                             state.snapshot.accounts.forEach { account ->
                                 Action(
-                                    "${account.user.name} on ${state.snapshot.serverLabel(account.server)}",
+                                    "${account.user.name} on ${state.snapshot.serverLabel(account.server)}" +
+                                        accountCardStatus(account)?.let { " · $it" }.orEmpty(),
                                     initial = returnFocus == account.key ||
                                         (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
                                     enabled = !screen.busy
                                 ) {
-                                    if (account.expired && account.key == state.snapshot.currentKey) {
+                                    // A card with no session opens sign-in with its name filled; selecting it first
+                                    // would make it current and show the expired-session warning (AUTH-10).
+                                    if (account.expired || account.signedOut) {
                                         returnFocus = account.key
                                         nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}") {
                                             launchSingleTop = true
@@ -823,21 +826,32 @@ internal fun Pictureshow(
             var quickFocus by rememberSaveable { mutableStateOf(false) }
             val sessionEnded = state.snapshot.currentAccount?.let {
                 it.expired &&
+                    !it.signedOut &&
                     it.server.id == server.id &&
                     it.server.url == server.url &&
                     it.user.name == entry.arguments?.getString("username")
             } == true
             BackHandler(enabled = nav.previousBackStackEntry == null) { leaveLogin(nav) }
             Page("Sign in to ${state.snapshot.serverLabel(server)}") {
+                // Sign in again (AUTH-10): the saved name is filled, so Password is where the viewer starts.
+                val knownUser = !entry.arguments?.getString("username").isNullOrBlank()
                 RemoteField(
                     "Username",
                     screen.username,
                     vm::username,
-                    initial = !quickFocus,
+                    initial = !quickFocus && !knownUser,
                     enabled = !screen.busy,
                     onDone = { focusManager.moveFocus(FocusDirection.Down) }
                 )
-                RemoteField("Password", screen.password, vm::password, password = true, enabled = !screen.busy, onDone = vm::signIn)
+                RemoteField(
+                    "Password",
+                    screen.password,
+                    vm::password,
+                    password = true,
+                    initial = !quickFocus && knownUser,
+                    enabled = !screen.busy,
+                    onDone = vm::signIn
+                )
                 Action(
                     if (screen.busy) "Signing in…" else "Sign in",
                     enabled = !screen.busy,

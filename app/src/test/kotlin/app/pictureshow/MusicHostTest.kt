@@ -427,7 +427,7 @@ class MusicHostTest {
         music.setRepeat("all")
         music.request(album("a", "b"))
         until("playing") { "start a" in log }
-        runBlocking { accounts.signOut(account.key) }
+        runBlocking { accounts.removeAccount(account.key) }
         until("the sign-out") { music.state.value.account == null }
         assertFalse(music.state.value.outputActive)
         assertNull(music.state.value.current)
