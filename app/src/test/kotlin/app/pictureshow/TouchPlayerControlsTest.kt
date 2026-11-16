@@ -41,7 +41,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -2202,7 +2201,8 @@ class TouchPlayerControlsTest {
         val marks = compose.onAllNodesWithTag("touch:live-seek-mark", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(2, marks.size)
         compose.onNodeWithTag("touch:syncplay").performClick()
-        compose.onNodeWithTag("touch:note").assertTextContains("Watch together is unavailable for live streams.")
+        compose.onNodeWithTag("touch:note").assertIsDisplayed()
+        compose.onNodeWithText("Watch together is unavailable for live streams.", useUnmergedTree = true).assertIsDisplayed()
         val toggle = compose.onNodeWithTag("touch:toggle")
         val scale = toggle.fetchSemanticsNode().layoutInfo.density.density
         val box = toggle.getBoundsInRoot()
