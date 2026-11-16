@@ -30,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
+import app.pictureshow.core.JellyfinService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.serverLabel
@@ -698,6 +699,7 @@ internal fun TouchPictureshow(
                         onSyncPlay = sync::show,
                         onThisDevice = { nav.navigate("this-device") },
                         onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                        onApproveSignIn = { nav.navigate("approve-sign-in") }.takeIf { account.signedIn },
                         supportedPassthrough = supportedPassthrough,
                         castEnabled = castSwitchState(castState.capability, castStored),
                         onCastEnabled = cast::setEnabled,
@@ -707,6 +709,16 @@ internal fun TouchPictureshow(
                         separateNextUp = separateNextUp.first,
                         onSeparateNextUp = separateNextUp.second
                     )
+                }
+            }
+            composable("approve-sign-in") {
+                state.snapshot.currentAccount?.let { account ->
+                    val service: JellyfinService = koinInject()
+                    TouchQuickConnectApproval(
+                        account,
+                        state.snapshot.serverLabel(account.server),
+                        service::authorizeQuickConnect
+                    ) { nav.popBackStack() }
                 }
             }
             composable("this-device") { TouchThisDevice(koinInject()) { nav.popBackStack() } }
