@@ -403,7 +403,7 @@ internal fun castLoadData(request: CastLoadRequest): MediaLoadRequestData {
         .setAutoplay(request.autoplay)
         .setActiveTrackIds(request.items.getOrNull(request.startIndex)?.activeTracks?.toLongArray())
     if (request.items.getOrNull(request.startIndex)?.live != true) builder.setCurrentTime(request.startMs)
-    if (request.items.size == 1 && request.repeat == "off") {
+    if (request.items.size == 1 && request.repeat == "off" && !request.items.single().music) {
         builder.setMediaInfo(mediaInfo(request.items.single()))
     } else {
         builder.setQueueData(

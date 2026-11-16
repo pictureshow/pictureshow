@@ -1442,6 +1442,7 @@ internal class CastSenderHost(
 
     private var queueEdit: Job? = null
     private fun saveQueueSnapshot(status: CastStatus, order: List<String>) {
+        if (pendingViewing != null) return
         val record = viewing ?: return
         val next = record.copy(
             order = order,
@@ -1512,6 +1513,7 @@ internal class CastSenderHost(
         if (!attached() || state.value.changingTrack || items.isEmpty() || queueEdit?.isActive == true) return
         val record = viewing ?: return
         val active = session ?: return
+        val binding = sessionBinding
         val target = cast?.owner?.owner ?: return
         val ui = state.value
         val before = if (next) ui.queue.getOrNull(ui.queue.indexOfFirst { it.entry == ui.cast?.observed?.entry } + 1)?.entry else null
@@ -1521,7 +1523,7 @@ internal class CastSenderHost(
             for (item in items) {
                 val result = gateway.prepare(active, item.id, CastPlayRequest(listOf(item), continueEpisodes = false), 0)
                 val decision = ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
-                if (decision != null) rememberLiveSource(sessionBinding, item.entry ?: "pending-append", item.id, decision)
+                if (decision != null) rememberLiveSource(binding, item.entry ?: "pending-append", item.id, decision)
                 if (decision == null || viewing?.nonce != record.nonce || !attached()) {
                     mutable.update { it.copy(queueError = true) }
                     return@launch
@@ -1596,6 +1598,7 @@ internal class CastSenderHost(
         val ordered = mutable.value.queue.mapNotNull { uiItem -> record.items.firstOrNull { it.entry == uiItem.entry } }
         val current = record.items.firstOrNull { it.entry == observed.entry } ?: return
         val active = session ?: return
+        val binding = sessionBinding
         val target = cast?.owner?.owner ?: return
         val plan = app.pictureshow.core.control.castTrackReload(
             app.pictureshow.core.control.CastTrackReloadInput(
@@ -1630,7 +1633,7 @@ internal class CastSenderHost(
             )
             val outcome = gateway.prepare(active, item.id, request, position)
             val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
-            if (decision != null) rememberLiveSource(sessionBinding, current.entry, item.id, decision)
+            if (decision != null) rememberLiveSource(binding, current.entry, item.id, decision)
             if (viewing?.nonce != record.nonce || cast?.observed?.entry != current.entry || !attached()) {
                 mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
                 return@launch
@@ -1661,7 +1664,7 @@ internal class CastSenderHost(
                         ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
                     }
                 }
-                if (source != null) rememberLiveSource(sessionBinding, saved.entry, saved.itemId, source)
+                if (source != null) rememberLiveSource(binding, saved.entry, saved.itemId, source)
                 if (source == null || viewing?.nonce != record.nonce || cast?.observed?.entry != current.entry || !attached()) {
                     mutable.update { it.copy(changingTrack = false, trackError = "audio-unavailable") }
                     return@launch

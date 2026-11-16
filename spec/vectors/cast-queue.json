@@ -267,6 +267,36 @@
           }
         }
       ]
+    },
+    {
+      "id": "cast-queue.single-song-retains-queue-identity-for-repeat",
+      "operation": "cast-queue",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              "song-entry"
+            ],
+            "media": [
+              "song"
+            ],
+            "current": "song-entry",
+            "receiverOrder": [
+              "song-entry"
+            ],
+            "repeat": "all"
+          },
+          "expected": {
+            "order": [
+              "song-entry"
+            ],
+            "item": "song",
+            "next": "song-entry",
+            "repeat": "all"
+          }
+        }
+      ]
     }
   ]
 }

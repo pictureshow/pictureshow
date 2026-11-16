@@ -442,7 +442,7 @@ internal fun castSwitchState(capability: CastCapability, stored: Boolean): Boole
     else -> stored
 }
 
-/** Only a Pictureshow TV takes a queue today, so Cast holding this viewing leaves nothing to send one to unless a TV is attached. */
+/** Queue actions may discover a Pictureshow TV even while a Cast receiver is playing. */
 @Suppress("UNUSED_PARAMETER")
 internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = true
 
@@ -598,23 +598,25 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                     modifier = Modifier.heightIn(min = 48.dp).testTag("cast:forward30")
                 ) { Text("Forward 30 s") }
             }
+            val volumeLabel = stringResource(R.string.cast_volume)
+            val muteLabel = stringResource(R.string.cast_mute)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("cast:volume")) {
-                Text(stringResource(R.string.cast_volume), style = MaterialTheme.typography.titleSmall)
+                Text(volumeLabel, style = MaterialTheme.typography.titleSmall)
                 Slider(
                     value = (ui.volume ?: 0.0).toFloat(),
                     onValueChange = { host.setVolume(it.toDouble()) },
                     enabled = ready && controls?.volume == true && ui.volume != null,
                     modifier = Modifier.fillMaxWidth().testTag("cast:volume-slider").semantics {
-                        contentDescription = "Cast device volume"
+                        contentDescription = volumeLabel
                     }
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.cast_mute))
+                    Text(muteLabel)
                     Switch(
                         checked = ui.muted,
                         onCheckedChange = host::setMuted,
                         enabled = ready && controls?.volume == true,
-                        modifier = Modifier.testTag("cast:mute").semantics { contentDescription = "Mute Cast device" }
+                        modifier = Modifier.testTag("cast:mute").semantics { contentDescription = muteLabel }
                     )
                 }
                 if (controls?.volume ==
@@ -679,7 +681,7 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                 ui.queue.forEach { item ->
                     TextButton(
                         onClick = { host.jump(item.entry) },
-                        enabled = ready,
+                        enabled = ready && !ui.changingTrack,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:queue:${item.entry}")
                     ) {
                         Text(if (item.entry == observed?.entry) "${item.title.orEmpty()} (on)" else item.title.orEmpty())

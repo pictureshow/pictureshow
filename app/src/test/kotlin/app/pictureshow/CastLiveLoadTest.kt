@@ -69,6 +69,17 @@ class CastLiveLoadTest {
         assertEquals(listOf(4L), loaded.activeTrackIds!!.toList())
     }
 
+    @Test fun aSingleSongStillLoadsARealQueueSoRepeatCanChangeLater() {
+        val song = CastLoadItem(
+            "https://example.test/song.mp3", "audio/mpeg", "Song", null,
+            60_000, false, emptyList(), mapOf("entry" to "song"), music = true
+        )
+        val data = castLoadData(CastLoadRequest(listOf(song), 0, 3_000, true))
+        assertNull(data.mediaInfo)
+        assertEquals(1, data.queueData!!.items!!.size)
+        assertEquals(3_000L, data.currentTime)
+    }
+
     @Test fun onDemandStillLoadsRequestedPosition() {
         val data = castLoadData(CastLoadRequest(listOf(item(false)), 0, 50_000, true))
         assertEquals(50_000L, data.currentTime)

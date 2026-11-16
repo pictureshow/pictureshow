@@ -78,7 +78,7 @@ class TouchCastScreenTest {
             (bitmap.height * scale).toInt(),
             true
         )
-        val folder = java.io.File("build/reports/cast-ui").apply { mkdirs() }
+        val folder = java.io.File("build/reports/tests/cast-ui").apply { mkdirs() }
         java.io.File(folder, "$name.jpg").outputStream().use { small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 55, it) }
         java.io.File(folder, "$name.txt").writeText(compose.onRoot().printToString())
     }

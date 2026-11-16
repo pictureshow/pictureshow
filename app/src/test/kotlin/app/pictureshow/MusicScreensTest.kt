@@ -5,14 +5,17 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -21,9 +24,11 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
@@ -152,6 +157,34 @@ class MusicScreensTest {
         until { upNext() == ids }
         compose.waitForIdle()
     }
+
+    private fun captureCastEntry(name: String) {
+        queueOf("a", "b", "c")
+        compose.setContent { TouchTheme { TouchMusicNow(host) {} } }
+        compose.onNodeWithTag("music:play-on").assertIsDisplayed().assertIsEnabled()
+        compose.waitForIdle()
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val scale = 900.0 / maxOf(bitmap.width, bitmap.height)
+        val small = android.graphics.Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt(),
+            (bitmap.height * scale).toInt(),
+            true
+        )
+        val folder = File("build/reports/tests/cast-ui").apply { mkdirs() }
+        File(folder, "$name.jpg").outputStream().use { small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 55, it) }
+        File(folder, "$name.txt").writeText(compose.onRoot().printToString())
+    }
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w400dp-h800dp-port-xhdpi")
+    fun castNowPlayingPhone() = captureCastEntry("phone-music-play-on")
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w840dp-h800dp-land-hdpi")
+    fun castNowPlayingTablet() = captureCastEntry("tablet-music-play-on")
 
     @Test fun tvQueueRowsMoveAndRemoveWithButtons() {
         queueOf("a", "b", "c", "d")
