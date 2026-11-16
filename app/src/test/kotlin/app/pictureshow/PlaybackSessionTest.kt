@@ -482,7 +482,8 @@ class PlaybackSessionTest {
         val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
         session.start(0)
         runCurrent()
-        assertEquals("Server unreachable", session.state.value.error)
+        // A request that never got an answer says the server was not reached (area A, P-1), not the transport's own words.
+        assertEquals(PLAYBACK_SERVER_UNREACHED, session.state.value.error)
         session.close()
         runCurrent()
         assertTrue(gateway.stops.isEmpty())

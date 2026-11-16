@@ -181,6 +181,7 @@ class TrackPanelResponsivenessTest {
         assertEquals("English · SRT · Commentary", requireNotNull(menu).choices[1].second)
         compose.runOnIdle { type = MediaStreamType.Audio }
         compose.waitForIdle()
-        assertEquals(listOf(-1 to "Off", 44 to "English · AAC"), requireNotNull(menu).choices)
+        // Audio has no Off choice (operator decision, leg 143); Subtitles keeps it.
+        assertEquals(listOf(44 to "English · AAC"), requireNotNull(menu).choices)
     }
 }

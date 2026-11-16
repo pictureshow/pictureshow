@@ -205,7 +205,10 @@ class OfflineDetailTest {
         compose.waitForIdle()
         // A notice clears after six seconds, and an idle wait would run the clock past it.
         compose.mainClock.autoAdvance = false
+        // "Play on TV" is the menu button for the TV's actions; its first item is the action that has to explain itself.
         compose.onNodeWithText("Play on TV").assertIsEnabled().performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithTag("touch:detail:on-tv").assertIsEnabled().performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag("touch:detail:status").assertTextEquals(DETAIL_TV_NEEDS_SERVER)
         compose.onNodeWithTag("touch:detail:offline:stream").performScrollTo().performClick()
