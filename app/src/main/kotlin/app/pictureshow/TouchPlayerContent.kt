@@ -920,8 +920,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                 )
                             }
                             if (host.engineSwitchable) {
-                                val next = if (host.engineChoice == PlaybackEngineChoice.Mpv) PlaybackEngineChoice.Automatic else PlaybackEngineChoice.Mpv
-                                val label = if (next == PlaybackEngineChoice.Mpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
+                                val toMpv = host.engineChoice != PlaybackEngineChoice.Mpv
+                                val next = if (toMpv) PlaybackEngineChoice.Mpv else PlaybackEngineChoice.Automatic
+                                val label = if (toMpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
                                 DropdownMenuItem(
                                     text = { Text(stringResource(label)) },
                                     modifier = Modifier.testTag("touch:engine"),
