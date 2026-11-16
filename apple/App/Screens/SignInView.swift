@@ -84,7 +84,7 @@ struct SignInFlowView: View {
     private var addressForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: app.servers.isEmpty ? "Server address" : "Another server")
-            TextField("jellyfin.example.com or 192.168.1.20:8096", text: $address)
+            TextField("jellyfin.example.com or its IP address and port", text: $address)
                 .textContentType(.URL)
                 #if os(iOS)
                 .keyboardType(.URL)
