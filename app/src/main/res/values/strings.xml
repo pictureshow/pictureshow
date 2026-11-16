@@ -202,6 +202,7 @@
     <string name="pin_new_title">Choose a PIN</string>
     <string name="pin_confirm_title">Type the PIN again</string>
     <string name="pin_new_subtitle">%2$d to %3$d digits. Pictureshow asks for it before anyone opens %1$s on this device.</string>
+    <string name="pin_confirm_subtitle">Type the same PIN again to turn it on for %1$s.</string>
     <string name="pin_settings_title">Profile PIN</string>
     <string name="pin_settings_off">Off. Anyone using this device can open %1$s.</string>
     <string name="pin_settings_on">On. Asked when switching to %1$s.</string>

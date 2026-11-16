@@ -84,8 +84,11 @@ internal fun ProfilePinPad(
     lockedOut: Boolean = false,
     actions: @Composable () -> Unit = {}
 ) {
+    val palette = pinPalette(tv)
     var pin by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
+    // During a wait the keys rest too, so nobody types a PIN that would be thrown away.
+    val keysOn = !busy && waitSeconds == 0
     LaunchedEffect(clearSignal) { pin = "" }
     LaunchedEffect(lockedOut) { runCatching { first.requestFocus() } }
     fun type(digit: Char) {
@@ -122,7 +125,7 @@ internal fun ProfilePinPad(
             }
         }.testTag("pin:pad"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 12.dp)
     ) {
         Text(
             title,
@@ -130,7 +133,7 @@ internal fun ProfilePinPad(
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
-        subtitle?.let { Text(it, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        subtitle?.let { Text(it, textAlign = TextAlign.Center, color = palette.variant, minLines = 2) }
         val entered = stringResource(R.string.pin_entered, pin.length)
         Text(
             if (pin.isEmpty()) "–" else "●".repeat(pin.length),
@@ -139,7 +142,7 @@ internal fun ProfilePinPad(
         )
         Text(
             noteText,
-            color = MaterialTheme.colorScheme.error,
+            color = palette.error,
             textAlign = TextAlign.Center,
             modifier = Modifier.heightIn(min = 24.dp).testTag("pin:note").semantics { liveRegion = LiveRegionMode.Polite }
         )
@@ -158,7 +161,7 @@ internal fun ProfilePinPad(
                     PinKey(
                         digit.toString(),
                         tv,
-                        !busy,
+                        keysOn,
                         Modifier.testTag("pin:key:$digit").then(if (index == 0 && digit == '1') Modifier.focusRequester(first) else Modifier)
                     ) { type(digit) }
                 }
@@ -167,11 +170,11 @@ internal fun ProfilePinPad(
         val clearLabel = stringResource(R.string.pin_delete)
         val okLabel = stringResource(R.string.pin_ok)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PinKey("⌫", tv, !busy && pin.isNotEmpty(), Modifier.testTag("pin:delete").semantics { contentDescription = clearLabel }) {
+            PinKey("⌫", tv, keysOn && pin.isNotEmpty(), Modifier.testTag("pin:delete").semantics { contentDescription = clearLabel }) {
                 pin = pin.dropLast(1)
             }
-            PinKey("0", tv, !busy, Modifier.testTag("pin:key:0")) { type('0') }
-            PinKey(okLabel, tv, !busy && pin.isNotEmpty(), Modifier.testTag("pin:ok"), primary = true) { submit() }
+            PinKey("0", tv, keysOn, Modifier.testTag("pin:key:0")) { type('0') }
+            PinKey(okLabel, tv, keysOn && pin.isNotEmpty(), Modifier.testTag("pin:ok"), primary = true) { submit() }
         }
         actions()
     }
@@ -193,10 +196,10 @@ private fun pinDigit(key: Key): Char? = when (key) {
 
 @Composable
 private fun PinKey(label: String, tv: Boolean, enabled: Boolean, modifier: Modifier, primary: Boolean = false, onClick: () -> Unit) {
-    val size = if (tv) Modifier.size(width = 88.dp, height = 56.dp) else Modifier.size(width = 80.dp, height = 56.dp)
+    val size = if (tv) Modifier.size(width = 80.dp, height = 44.dp) else Modifier.size(width = 80.dp, height = 56.dp)
     if (tv) {
         androidx.tv.material3.Button(onClick = onClick, enabled = enabled, modifier = modifier.then(size)) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { androidx.tv.material3.Text(label) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.tv.material3.Text(label) }
         }
     } else if (primary) {
         Button(onClick = onClick, enabled = enabled, modifier = modifier.then(size)) { Text(label) }
@@ -287,10 +290,7 @@ internal fun ProfilePinDialog(
 ) {
     val (check, submit) = rememberPinCheck(store, key, onUnlocked)
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        PinSurface(tv, Modifier) {
             ProfilePinPad(
                 stringResource(R.string.pin_enter_for, name),
                 null,
@@ -325,10 +325,7 @@ internal fun ProfileLockScreen(
 ) {
     val (check, submit) = rememberPinCheck(store, key, onUnlocked)
     BackHandler(onBack = onSwitch)
-    Box(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(24.dp).testTag("pin:lock"),
-        contentAlignment = Alignment.Center
-    ) {
+    PinSurface(tv, Modifier.testTag("pin:lock")) {
         ProfilePinPad(
             stringResource(R.string.pin_enter_for, name),
             stringResource(R.string.pin_lock_subtitle),
@@ -353,13 +350,15 @@ internal fun ProfilePinSetup(tv: Boolean, name: String, onDone: (String) -> Unit
     var note by remember { mutableStateOf(PinPadNote.NONE) }
     var tries by remember { mutableStateOf(0) }
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(24.dp).testTag("pin:setup"),
-            contentAlignment = Alignment.Center
-        ) {
+        PinSurface(tv, Modifier.testTag("pin:setup")) {
             ProfilePinPad(
                 stringResource(if (firstPin == null) R.string.pin_new_title else R.string.pin_confirm_title),
-                if (firstPin == null) stringResource(R.string.pin_new_subtitle, name, PROFILE_PIN_MIN, PROFILE_PIN_MAX) else null,
+                // Both steps keep a subtitle so the keys stay where they were.
+                if (firstPin == null) {
+                    stringResource(R.string.pin_new_subtitle, name, PROFILE_PIN_MIN, PROFILE_PIN_MAX)
+                } else {
+                    stringResource(R.string.pin_confirm_subtitle, name)
+                },
                 tv,
                 busy = false,
                 note = note,
@@ -411,7 +410,7 @@ internal fun profileLockGate(
     val saved = snapshot.accounts.map { it.key }.toSet()
     LaunchedEffect(ready, saved) { if (ready) store.retain(saved) }
     if (!ready) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+        PinSurface(tv) {}
         return true
     }
     val account = snapshot.currentAccount?.takeUnless { it.expired || it.signedOut }
@@ -497,3 +496,36 @@ internal fun ProfilePinSettings(
         )
     }
 }
+
+/** The PIN screens draw on the host's theme: TV Material on a TV, Material 3 on touch (TV leaves M3 at its light default). */
+private data class PinPalette(
+    val surface: androidx.compose.ui.graphics.Color,
+    val content: androidx.compose.ui.graphics.Color,
+    val variant: androidx.compose.ui.graphics.Color,
+    val error: androidx.compose.ui.graphics.Color
+)
+
+@Composable
+private fun pinPalette(tv: Boolean): PinPalette = if (tv) {
+    val c = androidx.tv.material3.MaterialTheme.colorScheme
+    PinPalette(c.surface, c.onSurface, c.onSurfaceVariant, c.error)
+} else {
+    val c = MaterialTheme.colorScheme
+    PinPalette(c.surface, c.onSurface, c.onSurfaceVariant, c.error)
+}
+
+/** A full-screen PIN surface with the right colors for [tv]. */
+@Composable
+private fun PinSurface(tv: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val palette = pinPalette(tv)
+    Box(
+        modifier.fillMaxSize().background(palette.surface).padding(if (tv) 16.dp else 24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalContentColor provides palette.content,
+            content = content
+        )
+    }
+}
+
