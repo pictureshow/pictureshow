@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
@@ -75,6 +76,21 @@ class HomeBrowseVectorsTest {
                         input["exact"]?.jsonPrimitive?.content != "false"
                     )
                 )
+                "home-notice" -> homeNotice(
+                    input.getValue("unreachable").jsonPrimitive.content == "true",
+                    input["error"]?.jsonPrimitive?.contentOrNull,
+                    input.getValue("hasContent").jsonPrimitive.content == "true",
+                    input.getValue("hasDownloads").jsonPrimitive.content == "true",
+                    input["serverName"]?.jsonPrimitive?.contentOrNull
+                ).let { notice ->
+                    buildJsonObject {
+                        put("kind", notice.kind.name)
+                        put("text", notice.text)
+                        put("watchDownloads", notice.watchDownloads)
+                        put("retry", notice.retry)
+                    }
+                }
+                "home-row-destination" -> Json.encodeToJsonElement(homeRowDestination(input.getValue("key").jsonPrimitive.content))
                 "resolution-summary" -> Json.encodeToJsonElement(
                     VideoResolution.valueOf(input.getValue("resolution").jsonPrimitive.content).summary()
                 )

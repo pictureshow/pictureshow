@@ -11,18 +11,24 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 
 internal val touchTabs = listOf("home" to "Home", "libraries" to "Libraries", "search" to "Search", "settings" to "Settings")
@@ -33,6 +39,34 @@ internal fun touchTabFor(route: String?): String? = when {
     route?.startsWith("search?") == true -> "search"
     route in listOf("settings", "accounts", "about", "licenses", "supporter") || route?.startsWith("license/") == true -> "settings"
     else -> null
+}
+
+/** Where the root a page was opened under is kept with the page itself (TOUCH-02), so it survives Back and restoration. */
+internal const val TOUCH_OWNER_KEY = "touch.owner"
+
+/**
+ * TOUCH-02: the lit root. A root page owns itself; any other page keeps the root that was lit when it opened (a title
+ * opened from Home stays under Home), which is [stored] once it has been recorded. Returns the lit root and whether
+ * [previous] should be recorded as this page's owner now.
+ */
+internal fun touchOwner(route: String?, stored: String?, previous: String?): Pair<String?, Boolean> {
+    touchTabFor(route)?.let { return it to false }
+    stored?.let { return it to false }
+    return previous to (previous != null)
+}
+
+/** The tab to light for the page on screen; see [touchOwner]. */
+@Composable
+internal fun rememberTouchLitTab(entry: NavBackStackEntry?): String? {
+    // The tab lit for the page before this one. Plain memory, not state: it is only read when a page first opens.
+    val last = remember { arrayOfNulls<String>(1) }
+    val handle = entry?.let { runCatching { it.savedStateHandle }.getOrNull() }
+    val (lit, record) = touchOwner(entry?.destination?.route, handle?.get<String>(TOUCH_OWNER_KEY), last[0])
+    SideEffect {
+        if (record) handle?.set(TOUCH_OWNER_KEY, lit)
+        last[0] = lit
+    }
+    return lit
 }
 
 internal fun selectTouchTab(nav: NavHostController, tab: String) {
@@ -52,6 +86,29 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
         // destination above it, so an explicit Home selection must reveal the root itself.
         restoreState = tab != "home"
     }
+}
+
+/**
+ * A bar or rail label never breaks inside a word. Material 3 keeps the whole label visible up to 2x text, so it stays
+ * on one line at the viewer's size when that fits, and steps down only as far as the item's width needs, never below
+ * its 1x size. Screen readers still hear the whole label from the text.
+ */
+@Composable
+internal fun TouchNavLabel(label: String) {
+    val style = LocalTextStyle.current
+    val floor = with(LocalDensity.current) { style.fontSize.value.dp.toSp() }
+    BasicText(
+        label,
+        style = style.copy(color = LocalContentColor.current),
+        maxLines = 1,
+        softWrap = false,
+        // At or below 1x text there is nothing to step down to.
+        autoSize = if (floor.value < style.fontSize.value) {
+            TextAutoSize.StepBased(minFontSize = floor, maxFontSize = style.fontSize, stepSize = 0.5.sp)
+        } else {
+            null
+        }
+    )
 }
 
 /** Chrome is absent from playback and sign-in. Insets are applied once, outside scrollable screens. */
@@ -77,7 +134,7 @@ internal fun TouchShell(
                             selected = selected == route,
                             onClick = { onTab(route) },
                             icon = { Icon(touchNavIcon(route), contentDescription = null) },
-                            label = { Text(label) }
+                            label = { TouchNavLabel(label) }
                         )
                     }
                 }
@@ -92,7 +149,7 @@ internal fun TouchShell(
                                 selected = selected == route,
                                 onClick = { onTab(route) },
                                 icon = { Icon(touchNavIcon(route), contentDescription = null) },
-                                label = { Text(label) }
+                                label = { TouchNavLabel(label) }
                             )
                         }
                     }

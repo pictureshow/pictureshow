@@ -166,7 +166,7 @@ internal fun TouchPictureshow(
         item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
-    TouchShell(showNavigation, touchTabFor(route), {
+    TouchShell(showNavigation, rememberTouchLitTab(backStackEntry), {
         if (it == "home") landingApplied = true
         selectTouchTab(nav, it)
     }, fullscreen = inPlayer, above = {
@@ -368,7 +368,7 @@ internal fun TouchPictureshow(
                             }
                         }
                         if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
-                        val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
+                        val watchDownloads = rememberTouchHomeDownloads(account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                             profileState.account.copy(server = account.server),
@@ -377,6 +377,11 @@ internal fun TouchPictureshow(
                                 profile.verify()
                                 vm.reload()
                             },
+                            onRefresh = {
+                                profile.verify()
+                                vm.refresh()
+                            },
+                            onLibraries = { selectTouchTab(nav, "libraries") },
                             onResume = vm::resumed,
                             librariesOnly = destination == "libraries",
                             onLiveTv = { nav.navigate("live-tv") },
