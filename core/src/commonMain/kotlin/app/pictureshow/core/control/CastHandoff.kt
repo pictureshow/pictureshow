@@ -519,7 +519,24 @@ private fun observe(state: CastState, event: CastEvent): CastState {
         "active" -> if (idle) {
             receiverEnded(bound, endedNotice(o.idleReason), endedAt, endedOn)
         } else {
-            bound.copy(commands = observeCommands(bound.commands ?: freshCommands(target, o), o, event.nowMs))
+            val commands = observeCommands(bound.commands ?: freshCommands(target, o), o, event.nowMs)
+            bound.copy(
+                commands = commands,
+                owner = bound.owner.copy(
+                    intent = bound.owner.intent.copy(
+                        entry = o.entry ?: bound.owner.intent.entry,
+                        ticks = o.ticks,
+                        queue = o.queue.ifEmpty { bound.owner.intent.queue },
+                        paused = if (commands.pending?.result ==
+                            "sent"
+                        ) {
+                            commands.pending?.paused ?: commands.observed.paused
+                        } else {
+                            pausedOf(o) ?: bound.owner.intent.paused
+                        }
+                    )
+                )
+            )
         }
 
         else -> bound
@@ -620,5 +637,21 @@ private fun command(s: CastState, event: CastEvent): CastState {
         commands,
         CommandEvent("intent", owner = commands.owner, id = event.id, nowMs = event.nowMs, value = event.value, entry = event.entry)
     )
-    return s.copy(commands = after, effect = if (after.effect == "dispatch") "send-command" else "none", reason = after.rejection)
+    return s.copy(
+        commands = after,
+        owner = s.owner.copy(
+            intent = s.owner.intent.copy(
+                paused =
+                after.pending?.paused ?: after.observed.paused
+            )
+        ),
+        effect = if (after.effect ==
+            "dispatch"
+        ) {
+            "send-command"
+        } else {
+            "none"
+        },
+        reason = after.rejection
+    )
 }

@@ -77,6 +77,7 @@ class ControlVectorsTest {
             "cast-handoff",
             "cast-capability",
             "cast-session",
+            "cast-queue",
             // Packaged with these and run by MusicVectorsTest.
             "music-catalog",
             "music-queue",
@@ -99,6 +100,8 @@ class ControlVectorsTest {
     @Test fun castHandoff() = run("cast-handoff")
 
     @Test fun castCapability() = run("cast-capability")
+
+    @Test fun castQueue() = run("cast-queue")
 
     @Test fun castSession() = run("cast-session")
 
@@ -207,6 +210,16 @@ class ControlVectorsTest {
             reduceCastSession(json.decodeFromJsonElement<TemporaryState>(state), json.decodeFromJsonElement<CastSessionEvent>(event))
         )
 
+        "cast-queue" -> json.encodeToJsonElement(
+            app.pictureshow.core.control.castQueue(json.decodeFromJsonElement<app.pictureshow.core.control.CastQueueInput>(event))
+        )
+
+        "track-reload" -> json.encodeToJsonElement(
+            app.pictureshow.core.control.castTrackReload(
+                json.decodeFromJsonElement<app.pictureshow.core.control.CastTrackReloadInput>(event)
+            )
+        )
+
         "reattach" -> json.encodeToJsonElement(castReattach(json.decodeFromJsonElement<CastReattachInput>(event)))
 
         "capability" -> json.encodeToJsonElement(castCapability(json.decodeFromJsonElement<CastCapabilityInput>(event)))
@@ -214,6 +227,8 @@ class ControlVectorsTest {
         "controls" -> json.encodeToJsonElement(castControls(json.decodeFromJsonElement<CastControlsInput>(event)))
 
         "reach" -> json.encodeToJsonElement(castReach(json.decodeFromJsonElement<CastReachInput>(event)))
+
+        "profile-music" -> PlaybackJson.encodeToJsonElement(DeviceProfile.serializer(), castDeviceProfile(music = true))
 
         "profile" -> PlaybackJson.encodeToJsonElement(DeviceProfile.serializer(), castDeviceProfile())
 

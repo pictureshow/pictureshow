@@ -141,7 +141,7 @@ internal fun TouchPictureshow(
         )
     }
     val music: MusicHost = koinInject()
-    LaunchedEffect(music, cast) { music.castAttached = { cast.state.value.deviceName } }
+    LaunchedEffect(music, cast) { music.bindCast(cast) }
     TouchMusicPrompts(music) { play ->
         val tracks = play.tracks.drop(play.start ?: 0)
         if (remoteState.controller?.phase == "attached") {
@@ -149,7 +149,21 @@ internal fun TouchPictureshow(
         } else {
             cast.openChooser(
                 CastPlayRequest(
-                    tracks.map { CastPlayItem(it.id, it.title, it.artUrl, it.durationTicks?.let { ticks -> ticks / 10_000 }) },
+                    tracks.map {
+                        CastPlayItem(
+                            it.id,
+                            it.title,
+                            it.artUrl,
+                            it.durationTicks?.let { ticks ->
+                                ticks / 10_000
+                            },
+                            music = true,
+                            artist = it.artist,
+                            album = it.album
+                        )
+                    },
+                    shuffled = play.shuffle,
+                    continueEpisodes = false,
                     onThisDevice = { music.playHere(play) }
                 )
             )
@@ -160,6 +174,12 @@ internal fun TouchPictureshow(
     // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
     LaunchedEffect(castState.localStart?.serial) {
         val start = castState.localStart ?: return@LaunchedEffect
+        if (start.music) {
+            music.resumeCast(start)
+            nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true }
+            cast.localStartHandled(start.serial)
+            return@LaunchedEffect
+        }
         val account = state.snapshot.currentAccount
         val item = account?.let { catalogService.item(it, start.itemId) } as? app.pictureshow.core.ClientResult.Success
         cast.localStartHandled(start.serial)
@@ -573,14 +593,14 @@ internal fun TouchPictureshow(
                                 ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
                             onPlayNext = { playable ->
-                                if (remoteState.controller?.phase == "attached") {
+                                if (remote.state.value.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = true)
                                 } else {
                                     chooseRemote(then = { remote.queue(listOf(playable.id), next = true) })
                                 }
                             },
                             onAddToQueue = { playable ->
-                                if (remoteState.controller?.phase == "attached") {
+                                if (remote.state.value.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = false)
                                 } else {
                                     chooseRemote(then = { remote.queue(listOf(playable.id), next = false) })

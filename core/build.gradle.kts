@@ -60,6 +60,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
             "cast-handoff.json",
             "cast-capability.json",
             "cast-session.json",
+            "cast-queue.json",
             "music-catalog.json",
             "music-queue.json",
             "music-session.json",

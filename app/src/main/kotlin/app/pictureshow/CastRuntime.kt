@@ -140,6 +140,28 @@ internal class AndroidCastEnvironment(private val context: Context, private val 
 
     override val viewing: CastViewingRecord? get() = viewingNow.value
 
+    private var controls: com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    override fun controlsChanged(ui: CastUi) {
+        if (tvInterface) return
+        val attached = ui.cast?.let { it.owner.owner.kind == "cast" && it.owner.phase == "active" && it.link == "connected" } == true
+        if (attached && controls == null) {
+            val connecting = androidx.media3.session.MediaController.Builder(
+                context,
+                androidx.media3.session.SessionToken(context, android.content.ComponentName(context, MusicPlaybackService::class.java))
+            )
+                .setConnectionHints(android.os.Bundle().apply { putBoolean(CAST_SESSION_HINT, true) }).buildAsync()
+            controls = connecting
+            connecting.addListener({
+                if (runCatching { connecting.get() }.isFailure && controls === connecting) controls = null
+            }, androidx.core.content.ContextCompat.getMainExecutor(context))
+        } else if (!attached) {
+            controls?.let(androidx.media3.session.MediaController::releaseFuture)
+            controls = null
+        }
+    }
+
     override suspend fun saveViewing(record: CastViewingRecord) {
         viewingNow = lazyOf(record)
         withContext(storage) {
@@ -171,6 +193,13 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
     private suspend fun clientIdentity() = ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME)
 
     private suspend fun client() = PlaybackClient(http, clientIdentity())
+
+    override suspend fun following(account: Account, item: CastPlayItem): List<CastPlayItem> {
+        val extras = app.pictureshow.core.PlaybackExtrasClient(http, clientIdentity())
+        val current = (extras.item(account, item.id) as? ClientResult.Success)?.value ?: return emptyList()
+        val next = (extras.nextEpisode(account, current) as? ClientResult.Success)?.value ?: return emptyList()
+        return listOf(castPlayItem(account.server, next))
+    }
 
     override suspend fun sessionDevice(account: Account, route: String): String {
         val seed = listOf(identity.getOrCreate(), route, account.server.id, account.user.id).joinToString("|")
@@ -228,13 +257,17 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
             val result = client().prepareFor(
                 account,
                 itemId,
-                castDeviceProfile(),
+                castDeviceProfile(music = request.items.firstOrNull { it.id == itemId }?.music == true),
                 CastReceiverFormats.MAX_BITRATE,
                 PlaybackRequest(
                     startPosition = startMs.milliseconds,
                     mediaSourceId = request.mediaSourceId,
                     audioStreamIndex = request.audioStreamIndex,
-                    subtitleStreamIndex = request.subtitleStreamIndex
+                    subtitleStreamIndex = request.subtitleStreamIndex,
+                    audio = request.items.firstOrNull { it.id == itemId }?.music == true,
+                    // A progressive file leaves embedded audio choice to DMR. Force a server-selected output for explicit audio.
+                    enableDirectPlay = request.audioStreamIndex == null,
+                    enableDirectStream = request.audioStreamIndex == null
                 )
             )
             val decision = ((result as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
