@@ -695,6 +695,7 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                     ui.queue.forEach { item ->
                         TextButton(
                             onClick = { host.jump(item.entry) },
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
                             enabled = ready && !ui.changingTrack,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:queue:${item.entry}")
                                 .semantics { selected = item.entry == observed?.entry }

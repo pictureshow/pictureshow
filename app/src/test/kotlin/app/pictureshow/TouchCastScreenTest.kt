@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -116,6 +117,10 @@ class TouchCastScreenTest {
         compose.onNodeWithTag("cast:track:9").performScrollTo().assertIsDisplayed()
         capture("phone-tracks")
         compose.onNodeWithTag("cast:queue:b").performScrollTo().assertIsDisplayed()
+        assertEquals(
+            compose.onNodeWithText("Queue", useUnmergedTree = true).getUnclippedBoundsInRoot().left,
+            compose.onNodeWithText("Next episode", useUnmergedTree = true).getUnclippedBoundsInRoot().left
+        )
         capture("phone-queue")
         compose.onNodeWithTag("cast:disconnect").performScrollTo().assertIsDisplayed()
         capture("phone-actions")
