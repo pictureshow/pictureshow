@@ -71,6 +71,8 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -722,6 +724,10 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
     var dragging by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var picking by rememberSaveable { mutableStateOf(false) }
+    val window = LocalWindowInfo.current.containerSize
+    val artSide = with(LocalDensity.current) { minOf(window.width.toDp() * 0.72f, window.height.toDp() * 0.32f, 420.dp) }
+    val destination = host.castDestination()
+    val destinationLabel = destination?.let { androidx.compose.ui.res.stringResource(R.string.cast_change_destination, it) }
     LazyColumn(
         Modifier.fillMaxSize().testTag("music:now"),
         state = listState,
@@ -732,15 +738,29 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { TouchBack(onBack) }
-                    TextButton(onClick = host::openCastChooser, modifier = Modifier.heightIn(min = 48.dp).testTag("music:play-on")) {
-                        Text(androidx.compose.ui.res.stringResource(R.string.cast_play_on))
+                    TextButton(
+                        onClick = host::openCastChooser,
+                        contentPadding = PaddingValues(start = 12.dp, end = 0.dp),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("music:play-on").semantics {
+                            if (destinationLabel != null) contentDescription = destinationLabel
+                        }
+                    ) {
+                        Icon(
+                            touchActionIcon(if (destination == null) "cast" else "casting"),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            destination ?: androidx.compose.ui.res.stringResource(R.string.cast_play_on),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
                     }
                 }
                 AsyncImage(
                     model = row.track.artUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth(0.72f).widthIn(max = 420.dp).aspectRatio(1f).clip(MaterialTheme.shapes.large)
+                    modifier = Modifier.size(artSide).testTag("music:art").clip(MaterialTheme.shapes.large)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

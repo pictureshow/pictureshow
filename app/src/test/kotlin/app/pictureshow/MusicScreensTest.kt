@@ -162,6 +162,8 @@ class MusicScreensTest {
         queueOf("a", "b", "c")
         compose.setContent { TouchTheme { TouchMusicNow(host) {} } }
         compose.onNodeWithTag("music:play-on").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("music:toggle").assertIsDisplayed()
+        assertTrue(compose.onNodeWithTag("music:art").getUnclippedBoundsInRoot().width <= 420.dp)
         compose.waitForIdle()
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         val scale = 900.0 / maxOf(bitmap.width, bitmap.height)

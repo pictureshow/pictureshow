@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.captureToImage
@@ -52,7 +53,12 @@ class TouchCastScreenTest {
             entry = "a",
             commands = listOf("play", "pause", "seek", "stop", "tracks") + if (volume) listOf("volume") else emptyList()
         )
-        val state = viewing.copy(owner = viewing.owner.copy(phase = "active"), link = "connected", observed = observed)
+        val state = viewing.copy(
+            owner = viewing.owner.copy(phase = "active"),
+            link = "connected",
+            observed = observed,
+            commands = app.pictureshow.core.control.CommandState(viewing.owner.owner)
+        )
         val controls = app.pictureshow.core.control.castControls(
             app.pictureshow.core.control.CastControlsInput(
                 commands = observed.commands,
@@ -65,7 +71,17 @@ class TouchCastScreenTest {
                 activeTracks = listOf(-2, -3, 4)
             )
         )
-        return CastUi(cast = state, deviceName = "Living room", title = "An episode", controls = controls, volume = 0.45)
+        return CastUi(
+            cast = state,
+            deviceName = "Living room",
+            title = "An episode",
+            controls = controls,
+            volume = 0.45,
+            queue = listOf(
+                app.pictureshow.core.control.CastViewedItem("a", "episode", title = "An episode"),
+                app.pictureshow.core.control.CastViewedItem("b", "next", title = "Next episode")
+            )
+        )
     }
 
     private fun capture(name: String) {
@@ -84,24 +100,38 @@ class TouchCastScreenTest {
     }
 
     @Test fun volumeUnavailableIsDisabledWithReasonAndUnavailableAudioIsNeverSelected() {
-        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(false), inertCastSender(), {}) } }
+        compose.setContent { TouchTheme { TouchCastScreen(controlsUi(false), inertCastSender(), {}) } }
         compose.onNodeWithTag("cast:volume-slider").assertIsNotEnabled()
         compose.onNodeWithTag("cast:mute").assertIsNotEnabled()
         compose.onNodeWithTag("cast:volume-reason").assertIsDisplayed()
         capture("phone-fixed-volume")
         compose.onNodeWithTag("cast:track:-3").performScrollTo().assertIsNotEnabled().assertIsNotSelected()
         capture("phone-tracks")
+        compose.onNodeWithTag("cast:queue:b").performScrollTo().assertIsDisplayed()
+        capture("phone-queue")
+    }
+
+    @Test fun waitingForFreshReceiverCommandsExplainsDisabledControls() {
+        val ui = controlsUi(true)
+        val waiting = ui.copy(cast = ui.cast!!.copy(commands = ui.cast.commands!!.copy(fresh = false)))
+        compose.setContent { TouchTheme { TouchCastScreen(waiting, inertCastSender(), {}) } }
+        compose.onNodeWithTag("cast:waiting").assertIsDisplayed()
+        compose.onNodeWithTag("cast:volume-slider").assertIsNotEnabled()
+        capture("phone-waiting")
     }
 
     @Test fun castDeviceVolumeLayout() {
-        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        compose.setContent { TouchTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        compose.onNodeWithTag("cast:volume-slider").assertIsEnabled()
+        compose.onNodeWithTag("cast:toggle").assertIsEnabled()
         capture("phone-volume")
     }
 
     @Test
     @Config(qualifiers = "w840dp-h800dp-land-hdpi")
     fun tabletCastControlsLayout() {
-        compose.setContent { MaterialTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        compose.setContent { TouchTheme { TouchCastScreen(controlsUi(true), inertCastSender(), {}) } }
+        compose.onNodeWithTag("cast:volume-slider").assertIsEnabled()
         capture("tablet-volume")
     }
 
@@ -110,7 +140,7 @@ class TouchCastScreenTest {
         var backs = 0
         val ui = androidx.compose.runtime.mutableStateOf(CastUi(cast = viewing, deviceName = "Den"))
         val host = inertCastSender()
-        compose.setContent { MaterialTheme { TouchCastScreen(ui.value, host, onBack = { backs += 1 }) } }
+        compose.setContent { TouchTheme { TouchCastScreen(ui.value, host, onBack = { backs += 1 }) } }
         compose.waitForIdle()
         assertEquals(0, backs)
         ui.value = CastUi()
@@ -121,7 +151,7 @@ class TouchCastScreenTest {
     // SET-12: off stops this device reaching for Cast devices, so there's nothing the button could do.
     @Test fun reconnectIsOfferedOnlyWhileGoogleCastIsOn() {
         val host = inertCastSender()
-        compose.setContent { MaterialTheme { TouchCastScreen(CastUi(cast = viewing, deviceName = "Den"), host, onBack = {}) } }
+        compose.setContent { TouchTheme { TouchCastScreen(CastUi(cast = viewing, deviceName = "Den"), host, onBack = {}) } }
         compose.onNodeWithTag("cast:reconnect").assertExists()
         host.setEnabled(false)
         compose.waitForIdle()

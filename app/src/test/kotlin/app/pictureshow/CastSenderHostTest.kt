@@ -2988,6 +2988,7 @@ class CastSystemSessionTest {
             )
         )
         runCurrent()
+        assertEquals("Room", music.castDestination())
         assertEquals("b", music.state.value.queue!!.current)
         assertEquals("Song", music.state.value.current!!.track.title)
         assertEquals(9_000, music.positionMs())

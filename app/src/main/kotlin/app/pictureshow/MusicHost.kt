@@ -238,6 +238,8 @@ internal class MusicHost(
             ui.queue.any { it.music && it.entry == (ui.cast.observed?.entry ?: ui.cast.owner.intent.entry) }
     }
 
+    internal fun castDestination(): String? = remoteMusic()?.state?.value?.deviceName
+
     fun bindCast(host: CastSenderHost) {
         if (castHost === host) return
         castHost = host
