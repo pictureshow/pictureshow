@@ -35,8 +35,8 @@ final class NowPlayingBridge {
             }
             removals.append { command.removeTarget(token) }
         }
-        on(center.playCommand) { c, _ in c.player.play() }
-        on(center.pauseCommand) { c, _ in c.player.pause() }
+        on(center.playCommand) { c, _ in c.userPlay() }
+        on(center.pauseCommand) { c, _ in c.userPause() }
         on(center.togglePlayPauseCommand) { c, _ in c.togglePlay() }
         center.skipForwardCommand.preferredIntervals = [10]
         center.skipBackwardCommand.preferredIntervals = [10]

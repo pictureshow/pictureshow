@@ -87,6 +87,7 @@ struct DetailPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.shelfSpacing) {
                 header
+                SyncStayBanner(sync: app.syncPlay)
                 if item.type == "Season" || item.type == "Series" {
                     SeasonBrowser(series: item, seasons: content.seasons, initialSeasonID: item.type == "Season" ? item.id : (content.nextUp?.seasonId))
                 }
@@ -226,6 +227,8 @@ struct DetailPage: View {
         if playable { DownloadControl(item: item) }
         if let target = playTarget { PlayOnButton(remote: app.remote, item: target) }
         #endif
+        // SYN-11: live and infinite sources have no shared timeline to watch together.
+        if let target = playTarget, !["TvChannel", "Program"].contains(target.type) { WatchTogetherButton(item: target) }
         Button { Task { await toggleWatched() } } label: {
             Label(item.isWatched ? "Watched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle")
         }

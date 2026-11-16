@@ -32,6 +32,8 @@ import PictureshowCore
     private(set) var remoteTarget: RemoteTarget!
     /// This phone or tablet as a remote for one of the viewer's TVs (REM-01).
     private(set) var remote: RemoteControl!
+    /// Watch together for the selected viewer (SYN-01..11).
+    private(set) var syncPlay: SyncPlaySession!
 
     deinit {
         let socket = socket
@@ -47,6 +49,7 @@ import PictureshowCore
         downloads.start(accounts: snapshot.accounts)
         remoteTarget = RemoteTarget(app: self)
         remote = RemoteControl(app: self)
+        syncPlay = SyncPlaySession(app: self)
         socket.follow(account)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
@@ -95,9 +98,11 @@ import PictureshowCore
     /// unreachable must not keep a viewer signed in on this device.
     /// A viewer whose session already expired is signed out too: its downloads and download token still go (OFF-09).
     func signOut(_ account: Account) {
+        // SYN-08: the group is left before the session ends, so the server doesn't keep a member that can't answer.
+        let leaving = syncPlay.signingOut(account)
         if account.isSignedIn {
             let client = client(for: account)
-            Task { try? await client.logout(account: account) }
+            Task { await leaving?.value; try? await client.logout(account: account) }
         }
         // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
         if player?.account.key == account.key { player = nil }
@@ -151,6 +156,11 @@ import PictureshowCore
             Task { await playContainer(item, account: account, fromStart: fromStart, stream: stream) }
             return
         }
+        // SYN-03: in a group, a chosen title becomes the group's queue; the server opens it on every device.
+        if syncPlay.participating {
+            syncPlay.queue(item, fromStart: fromStart)
+            return
+        }
         let ready = downloads.local(account, itemID: item.id)
         if offlineDetailPlaySource(ready: ready != nil, server: .unknown, explicitStream: stream) == .local, let ready {
             playLocal(ready, item: item, fromStart: fromStart)
@@ -177,6 +187,7 @@ import PictureshowCore
         socket.follow(account)
         remoteTarget.accountChanged()
         remote.accountChanged()
+        syncPlay?.accountChanged()
     }
 
     func persist() {
@@ -193,6 +204,8 @@ struct PlayerRequest: Identifiable {
     var local: LocalMedia? = nil
     /// Where a remote Play command asked to start (REM-03); nil uses the viewer's resume point.
     var startTicks: Int64? = nil
+    /// Set when Watch together opened this viewing for the group's current entry.
+    var sync: SyncStamp? = nil
 }
 
 enum AppInfo {

@@ -245,4 +245,123 @@ final class SyncSessionEngineTests: XCTestCase {
             XCTAssertEqual(engine.server, expected, "\(outcome)")
         }
     }
+
+    // MARK: Live-check regressions (AVPlayer reports its state synchronously while a command is applied)
+
+    /// Applies a playing Unpause at position 0 in a Playing group and returns the bound renderer.
+    private func playingGroup(_ world: SyncFakeWorld) -> (SyncSessionEngine, SyncFakeRenderer) {
+        let engine = joinedEngine(world, state: "Playing")
+        let player = renderer(generation: engine.membership.generation)
+        engine.bind(player)
+        engine.receive(SyncFakeWorld.command("Unpause", whenMillis: world.wallMillis + 200, positionTicks: 0, emittedMillis: world.wallMillis))
+        world.advance(200)
+        XCTAssertEqual(player.applied.last?.playing, true)
+        return (engine, player)
+    }
+
+    func testRendererCallbacksDuringAnUnpauseDoNotReportBuffering() {
+        let world = SyncFakeWorld()
+        let engine = joinedEngine(world, state: "Playing")
+        let player = renderer(generation: engine.membership.generation)
+        engine.bind(player)
+        player.onApply = { _, _ in engine.rendererChanged() }
+        world.posted.removeAll()
+        engine.receive(SyncFakeWorld.command("Unpause", whenMillis: world.wallMillis + 200, positionTicks: 0, emittedMillis: world.wallMillis))
+        world.advance(200)
+        XCTAssertEqual(player.applied.count, 1)
+        XCTAssertFalse(world.operations.contains("Buffering"), "The applied command is no longer due when the player reports back")
+    }
+
+    func testACorrectionSeekIsNotABufferWaitButALongStallStillReports() {
+        let world = SyncFakeWorld()
+        let (engine, player) = playingGroup(world)
+        world.posted.removeAll()
+        // The player lags 400 ms behind the group's timeline: one seek correction.
+        world.advance(400)
+        player.onApply = { renderer, position in if position != nil { renderer.syncFacts.prepared = false; renderer.syncFacts.buffering = true } }
+        engine.tick()
+        XCTAssertEqual(engine.driftSeeks, 1)
+        engine.rendererChanged()
+        XCTAssertFalse(world.operations.contains("Buffering"), "The seek and its refill don't pause the group")
+        player.syncFacts.prepared = true; player.syncFacts.buffering = false
+        engine.rendererChanged()
+        XCTAssertEqual(world.operations.filter { $0 == "Ready" }.count, 1, "The landing reports the new position once")
+        // A second correction whose refill outlasts the grace reports the stall.
+        world.posted.removeAll()
+        world.advance(2_500)
+        engine.tick()
+        XCTAssertEqual(engine.driftSeeks, 2, "The frozen player is now 2.5 s behind")
+        engine.rendererChanged()
+        XCTAssertFalse(world.operations.contains("Buffering"))
+        world.advance(SyncSessionEngine.correctionGraceMillis)
+        XCTAssertEqual(world.operations.filter { $0 == "Buffering" }.count, 1)
+    }
+
+    func testACommandedSeekReportsOnlyItsLandingSoAWaitingServerDoesNotLoop() {
+        let world = SyncFakeWorld()
+        let engine = joinedEngine(world)
+        let player = renderer(generation: engine.membership.generation)
+        engine.bind(player)
+        engine.rendererChanged()
+        world.posted.removeAll()
+        player.onApply = { renderer, position in if position != nil { renderer.syncFacts.prepared = false } }
+        engine.receive(SyncFakeWorld.update("StateUpdate", data: "{\"State\":\"Waiting\",\"Reason\":\"Seek\"}"))
+        engine.receive(SyncFakeWorld.command("Pause", whenMillis: world.wallMillis, positionTicks: 600_000_000, emittedMillis: world.wallMillis))
+        XCTAssertEqual(player.applied.last?.positionTicks, 600_000_000)
+        engine.rendererChanged()
+        XCTAssertFalse(world.operations.contains("Buffering"), "The engine's own seek isn't a buffer wait")
+        player.syncFacts.prepared = true; player.syncFacts.positionTicks = 600_000_000
+        engine.rendererChanged()
+        XCTAssertEqual(world.operations, ["Ready"], "The landing reports Ready once")
+    }
+
+    func testAPauseAtThePositionAPausedPlayerHoldsNeitherSeeksNorReportsAgain() {
+        let world = SyncFakeWorld()
+        let engine = joinedEngine(world)
+        let player = renderer(generation: engine.membership.generation)
+        player.syncFacts.positionTicks = 667_580_000
+        engine.bind(player)
+        engine.rendererChanged()
+        world.posted.removeAll()
+        player.onApply = { renderer, position in if position != nil { renderer.syncFacts.prepared = false } }
+        for _ in 0..<3 { // A Paused server answers each Ready with a Pause at the group position.
+            engine.receive(SyncFakeWorld.command("Pause", whenMillis: world.wallMillis, positionTicks: 667_580_000, emittedMillis: world.wallMillis))
+            engine.rendererChanged()
+        }
+        XCTAssertTrue(player.applied.allSatisfy { $0.positionTicks == nil && !$0.playing }, "No seek to where the player already is")
+        XCTAssertTrue(world.posted.isEmpty, "Readiness was already reported, so nothing repeats")
+        engine.receive(SyncFakeWorld.command("Pause", whenMillis: world.wallMillis, positionTicks: 700_000_000, emittedMillis: world.wallMillis))
+        XCTAssertEqual(player.applied.last?.positionTicks, 700_000_000, "A Pause elsewhere still seeks")
+    }
+
+    func testAFutureUnpauseForAPreparedAlignedPlayerNeverSeeksForTimerLateness() {
+        let world = SyncFakeWorld()
+        let engine = joinedEngine(world)
+        let player = renderer(generation: engine.membership.generation)
+        player.syncFacts.positionTicks = 100_000_000
+        engine.bind(player)
+        engine.receive(SyncFakeWorld.update("StateUpdate", data: "{\"State\":\"Playing\",\"Reason\":\"Ready\"}"))
+        engine.receive(SyncFakeWorld.command("Unpause", whenMillis: world.wallMillis + 500, positionTicks: 100_000_000, emittedMillis: world.wallMillis))
+        world.advance(650) // the timer fires 150 ms late
+        XCTAssertEqual(player.applied.count, 1)
+        XCTAssertNil(player.applied.first?.positionTicks, "Lateness alone doesn't seek a prepared source")
+        XCTAssertEqual(player.applied.first?.playing, true)
+    }
+
+    func testCorrectionSeeksLearnToLeadByTheRenderersResumeLatency() {
+        let world = SyncFakeWorld()
+        let (engine, player) = playingGroup(world)
+        world.advance(400)
+        engine.tick()
+        XCTAssertEqual(engine.driftSeeks, 1)
+        XCTAssertEqual(engine.seekLeadTicks, 0, "Nothing learned before a correction lands")
+        let firstTarget = player.applied.last?.positionTicks ?? 0
+        // Playback resumes 300 ms late: the next tick after landing still measures that lag and learns half of it.
+        world.advance(2_100)
+        player.syncFacts.positionTicks = firstTarget + 18_000_000
+        engine.tick()
+        XCTAssertEqual(engine.seekLeadTicks, 1_500_000)
+        XCTAssertEqual(engine.driftSeeks, 2)
+        XCTAssertEqual(player.applied.last?.positionTicks, firstTarget + 21_000_000 + 1_500_000, "The second seek aims ahead by the learned lead")
+    }
 }

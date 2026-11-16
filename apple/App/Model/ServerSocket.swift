@@ -21,6 +21,14 @@ final class ServerSocket: ObservableObject {
 
     @Published private(set) var state: State = .closed
     private(set) var account: Account?
+    /// Which socket is current: bumped by every new connection, so a late heartbeat from a retired one is ignored.
+    private(set) var connection: Int64 = 0
+    /// SYN-08: whether the server has attached this connection to the viewer's session (a valid ForceKeepAlive on the
+    /// current connection). An open transport alone is not enough for SyncPlay membership requests.
+    private(set) var registration = SyncSocketRegistration()
+    enum Lifecycle: Equatable { case opened(Int64), keepAlive(Int64, valid: Bool), closed(Int64) }
+    /// Told about every connection, registration heartbeat and close, in order, on the main actor.
+    var onLifecycle: [@MainActor (Lifecycle) -> Void] = []
     /// Runs after each successful connect, before messages are delivered (e.g. re-posting capabilities).
     var onOpen: [@MainActor (Account) async -> Void] = []
 
@@ -53,7 +61,21 @@ final class ServerSocket: ObservableObject {
         keepAlive?.cancel(); keepAlive = nil
         task?.cancel(with: .goingAway, reason: nil); task = nil
         state = .closed
+        lifecycle(.closed(connection))
     }
+
+    private func lifecycle(_ event: Lifecycle) {
+        switch event {
+        case let .opened(id): registration.opened(id)
+        case let .keepAlive(id, valid): registration.keepAlive(id, valid: valid)
+        case let .closed(id): registration.closed(id)
+        }
+        for hook in onLifecycle { hook(event) }
+    }
+
+    /// For tests: a new connection opened, as `run` reports it.
+    func openForTesting() { connection += 1; lifecycle(.opened(connection)) }
+    func closeForTesting() { lifecycle(.closed(connection)) }
 
     /// Sends a message of the server's socket protocol (`{"MessageType": …, "Data": …}`).
     func send(type: String, data: Any? = nil) {
@@ -71,10 +93,13 @@ final class ServerSocket: ObservableObject {
             let socket = session.webSocketTask(with: request)
             task = socket
             socket.resume()
+            connection += 1
+            let mine = connection
             do {
                 let first = try await socket.receive()
                 state = .open; delay = 1
                 log.info("socket open")
+                lifecycle(.opened(mine))
                 for hook in onOpen { await hook(account) }
                 // An account switch while the hooks ran cancelled this loop; a newer socket owns everything now.
                 guard !Task.isCancelled, task === socket else { socket.cancel(with: .goingAway, reason: nil); return }
@@ -91,6 +116,7 @@ final class ServerSocket: ObservableObject {
             keepAlive?.cancel(); keepAlive = nil
             task = nil
             state = .connecting
+            lifecycle(.closed(mine))
             try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
             delay = min(delay * 2, 30)
         }
@@ -106,6 +132,7 @@ final class ServerSocket: ObservableObject {
         guard let data = text.data(using: .utf8), let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let type = object["MessageType"] as? String else { return }
         if type == "ForceKeepAlive" {
+            lifecycle(.keepAlive(connection, valid: Self.validKeepAlive(object["Data"])))
             let interval = Self.keepAliveNanoseconds(object["Data"])
             keepAlive?.cancel()
             keepAlive = Task { [weak self] in
@@ -125,6 +152,12 @@ final class ServerSocket: ObservableObject {
         let raw = (data as? NSNumber)?.doubleValue ?? 60
         let seconds = raw.isFinite ? min(max(5, raw), 3600) : 60
         return UInt64(seconds / 2 * 1_000_000_000)
+    }
+
+    /// The server's period must be a positive finite number for the heartbeat to count as registration.
+    nonisolated static func validKeepAlive(_ data: Any?) -> Bool {
+        guard let number = data as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
+        return number.doubleValue.isFinite && number.doubleValue > 0
     }
 
     /// For tests: delivers a message as if it had arrived on the socket.

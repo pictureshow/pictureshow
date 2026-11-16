@@ -174,7 +174,12 @@ public final class SyncSessionEngine {
     public private(set) var lastDriftTicks: Int64?
 
     private weak var renderer: SyncRenderer?
-    private struct Pending { let command: SyncCommand; let intendedPlaying: Bool; let generation: Int64 }
+    private struct Pending {
+        let command: SyncCommand; let intendedPlaying: Bool; let generation: Int64
+        /// A future Unpause accepted while this renderer sat paused, ready and aligned with its base position: timer
+        /// lateness at When alone must not seek it (syncplay.md, prepared Unpause).
+        var preparedUnpause = false
+    }
     private struct Applied { let command: SyncCommand; let playing: Bool }
     private var pending: Pending?
     private var applied: Applied?
@@ -182,6 +187,27 @@ public final class SyncSessionEngine {
     private var registrationTimer: SyncScheduled?
     private var readiness = SyncReadinessState()
     private var drift = SyncDriftState()
+    /// A seek this engine made (a server command's position or an autonomous drift correction) is in flight until this
+    /// monotonic deadline: the seek and the buffer refill it causes aren't a buffer wait, and the landing reports Ready
+    /// once. Reporting Buffering for a commanded seek makes a Waiting server answer with the same Pause, whose seek
+    /// reports Buffering again: a loop (OBSERVED live 2026-11-16 after a paused group Seek).
+    private var correctionSeekUntil: Int64?
+    private var correctionSeekInFlight: Bool {
+        get { correctionSeekUntil != nil }
+        set {
+            correctionTimer?.cancel(); correctionTimer = nil
+            correctionSeekUntil = newValue ? clock.monotonicMillis + Self.correctionGraceMillis : nil
+        }
+    }
+    /// How long an engine seek may take (seek plus refill) before a still-unready renderer reports Buffering.
+    static let correctionGraceMillis: Int64 = 3_000
+    /// A paused renderer within 1 ms of a commanded position is already there.
+    static let alignedTicks: Int64 = 10_000
+    private var correctionTimer: SyncScheduled?
+    /// Learned per renderer: how far ahead a correction seek aims so playback resumes on the group's timeline, bounded.
+    public private(set) var seekLeadTicks: Int64 = 0
+    private var measureSeekLead = false
+    static let maxSeekLeadTicks: Int64 = 5_000_000
     private var stoppedEntryId: String?
     private var openedEntryId: String?
     private var calibrating = false
@@ -201,6 +227,7 @@ public final class SyncSessionEngine {
     public var participating: Bool { intent != nil || membership.active }
     public var groupName: String? { membership.group?.name }
     public var rendererBound: Bool { renderer != nil }
+    public func isBound(_ candidate: SyncRenderer?) -> Bool { candidate != nil && renderer === candidate }
     public var clockUsable: Bool { anchor != nil }
     public var stayReminder: SyncStayReminder? {
         SyncStay.reminder(SyncStayFacts(groupId: participating ? (membership.groupId ?? membership.group?.id) : nil, groupName: groupName,
@@ -429,6 +456,13 @@ public final class SyncSessionEngine {
         }
         let intended = command.command == "Unpause" || (command.command == "Seek" && phaseBefore == "Playing")
         pending = Pending(command: command, intendedPlaying: intended, generation: membership.generation)
+        if command.command == "Unpause", let renderer, let now = serverNow() {
+            let facts = renderer.syncFacts
+            pending?.preparedUnpause = facts.entryId == command.playlistItemId && SyncTiming.preparedUnpause(
+                command: command.command, acceptedFuture: command.whenMs * SyncMath.ticksPerMillisecond > now, ready: facts.prepared,
+                buffering: facts.buffering, unpaused: facts.unpaused, positionApplicationPending: false,
+                currentTicks: facts.positionTicks, baseTicks: command.positionTicks ?? -1)
+        }
         applied = nil
         schedule()
     }
@@ -470,21 +504,32 @@ public final class SyncSessionEngine {
         guard let target = SyncTiming.target(positionTicks: pending.command.positionTicks ?? 0, whenUtcMillis: pending.command.whenMs,
                                              serverNowTicks: now, playing: playing, durationTicks: durationBound) else { return }
         if target.delayMillis > 0 { schedule(); return }
-        let position = SyncTiming.scheduledPosition(command: playing ? pending.command.command : "Pause", currentTicks: facts.positionTicks, targetTicks: target.positionTicks)
-        renderer.syncApply(positionTicks: position, playing: playing)
+        let stillPrepared = pending.preparedUnpause && playing && !facts.buffering && !facts.unpaused
+        let scheduled = stillPrepared ? nil
+            : SyncTiming.scheduledPosition(command: playing ? pending.command.command : "Pause", currentTicks: facts.positionTicks, targetTicks: target.positionTicks)
+        // A paused player already holding the target issues no seek (syncplay.md: an aligned scheduled command that
+        // issues no renderer seek). A Paused server answers each Ready with a Pause at the group position; seeking for
+        // it would report Ready again and loop (OBSERVED live 2026-11-16).
+        let aligned = !playing && !facts.unpaused && !facts.buffering && scheduled.map { abs($0 - facts.positionTicks) <= Self.alignedTicks } == true
+        let position = aligned ? nil : scheduled
+        // State first: the renderer reports its changes back synchronously, and those reports must see this command as
+        // applied rather than still due.
         appliedCommands += 1
         applied = Applied(command: pending.command, playing: playing)
         // A playing intent held by Waiting stays pending until the barrier lifts.
         self.pending = pending.intendedPlaying && !playing ? pending : nil
         drift = SyncTiming.transportApplied(drift, nowMonotonicMillis: clock.monotonicMillis, positionChanged: position != nil)
         readiness = readiness.afterPositionApplied(changed: position != nil)
+        correctionSeekInFlight = position != nil
         lastDriftTicks = nil
+        renderer.syncApply(positionTicks: position, playing: playing)
         host?.syncChanged()
     }
 
     private func cancelTimeline() {
         timer?.cancel(); timer = nil
         pending = nil; applied = nil
+        correctionSeekInFlight = false
         drift = SyncTiming.stoppedDrift()
         readiness = SyncReadinessState()
         lastDriftTicks = nil
@@ -501,6 +546,7 @@ public final class SyncSessionEngine {
         guard participating, !terminated else { return }
         renderer = next
         following = true
+        seekLeadTicks = 0; measureSeekLead = false
         readiness = SyncReadinessState()
         if let entry = next.syncFacts.entryId { openedEntryId = entry }
         if ignoreWait && waitForMe { ignoreWait = false; send(SyncRequest.ignoreWait(false)) }
@@ -558,6 +604,19 @@ public final class SyncSessionEngine {
         let facts = renderer.syncFacts
         guard facts.entryId == entry, facts.eligible, let now = serverNow() else { return }
         let due = pending.map { $0.command.whenMs * SyncMath.ticksPerMillisecond <= now && $0.command.playlistItemId == entry } ?? false
+        if let until = correctionSeekUntil {
+            // A correction seek that hasn't landed isn't a buffer wait (SYN-06 counts them apart); reporting Buffering
+            // here would pause the whole group after every correction. A stall that outlasts the grace still reports.
+            if !(facts.prepared && !facts.buffering) && clock.monotonicMillis < until {
+                if correctionTimer == nil {
+                    correctionTimer = scheduler.after(until - clock.monotonicMillis) { [weak self] in
+                        self?.correctionTimer = nil; self?.rendererChanged()
+                    }
+                }
+                return
+            }
+            correctionSeekInFlight = false
+        }
         let ready = facts.prepared && !facts.buffering && !due
         let (state, report) = readiness.observe(entryId: entry, ready: ready)
         readiness = state
@@ -579,14 +638,21 @@ public final class SyncSessionEngine {
         guard let target = SyncTiming.target(positionTicks: applied.command.positionTicks ?? 0, whenUtcMillis: applied.command.whenMs,
                                              serverNowTicks: now, playing: true, durationTicks: durationBound) else { return }
         lastDriftTicks = facts.positionTicks - target.positionTicks
+        if measureSeekLead { // `rendering` above: the correction seek has landed
+            // What the last correction left behind is this renderer's seek-to-output latency: lead the next one by it.
+            measureSeekLead = false
+            seekLeadTicks = min(max(seekLeadTicks - (lastDriftTicks ?? 0) / 2, 0), Self.maxSeekLeadTicks)
+        }
         // Apple: seek correction. AVPlayer exposes a rate setter but not proof that 0.97/1.03 reach the output exactly.
         let decision = SyncTiming.drift(state: drift, currentTicks: facts.positionTicks, targetTicks: target.positionTicks, playing: true,
                                         nowMonotonicMillis: clock.monotonicMillis, durationTicks: durationBound, sourceAllowsRate: false, engineRates: [])
         drift = decision.state
         if decision.action == .SEEK {
-            renderer.syncApply(positionTicks: decision.targetTicks, playing: true)
             driftSeeks += 1
             readiness = readiness.afterPositionApplied(changed: true)
+            correctionSeekInFlight = true
+            measureSeekLead = true
+            renderer.syncApply(positionTicks: min(decision.targetTicks + seekLeadTicks, durationBound), playing: true)
         }
     }
 

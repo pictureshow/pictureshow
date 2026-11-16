@@ -62,7 +62,7 @@ struct PlayerOverlays: View {
                     .allowsHitTesting(false)
             }
             if let error = controller.error {
-                PlayerError(message: error, retry: controller.retry, close: controller.close)
+                PlayerError(message: error, retry: controller.retry, close: { controller.close(reason: .ERROR_BACK) })
             }
         }
     }
@@ -177,10 +177,11 @@ struct NextEpisodeCard: View {
 /// Audio and subtitle choices are the server's tracks (not the stream's), so they go in custom transport-bar menus.
 struct PlayerContent: View {
     @ObservedObject var controller: PlaybackController
+    @State private var syncRevision = 0
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            SystemPlayer(controller: controller)
+            SystemPlayer(controller: controller, syncRevision: syncRevision)
             PlayerOverlays(controller: controller, controlsVisible: false)
             VStack(alignment: .trailing, spacing: 20) {
                 if let notice = controller.notice, !controller.noticeDismissed {
@@ -195,11 +196,14 @@ struct PlayerContent: View {
             }
         }
         .ignoresSafeArea()
+        .onReceive(controller.app.syncPlay.$revision) { syncRevision = $0 }
     }
 }
 
 struct SystemPlayer: UIViewControllerRepresentable {
     @ObservedObject var controller: PlaybackController
+    /// Redraws the transport bar's Watch together menu when the group changes.
+    var syncRevision = 0
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let vc = AVPlayerViewController()
@@ -242,6 +246,14 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }))
         }
         menus.append(UIAction(title: controller.methodDescription, image: UIImage(systemName: "info.circle"), attributes: .disabled) { _ in })
+        // Watch together on Apple TV: the group's state and Leave, reachable from the transport bar with the remote.
+        let sync = controller.app.syncPlay!
+        if controller.sync != nil, sync.participating {
+            let status = UIAction(title: "\(sync.groupName ?? "Group") · \(SyncLabels.phase(sync.phase))", subtitle: SyncLabels.quality(sync.quality), attributes: .disabled) { _ in }
+            let wait = UIAction(title: "Wait for me", state: sync.waitForMe ? .on : .off) { _ in sync.setWaitForMe(!sync.waitForMe) }
+            let leave = UIAction(title: "Leave group", image: UIImage(systemName: "rectangle.portrait.and.arrow.right"), attributes: .destructive) { _ in sync.leave() }
+            menus.append(UIMenu(title: "Watch together", image: UIImage(systemName: "person.2"), children: [status, wait, leave]))
+        }
         return menus
     }
 
@@ -262,6 +274,7 @@ struct PlayerContent: View {
     @State private var controlsVisible = true
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubbing: Double?
+    @State private var showingGroup = false
 
     var body: some View {
         ZStack {
@@ -339,8 +352,17 @@ struct PlayerContent: View {
                 if let subtitle = controller.subtitle { Text(subtitle).font(.caption).opacity(0.8).lineLimit(1) }
             }
             Spacer()
+            if controller.sync != nil, controller.app.syncPlay.participating {
+                SyncGroupChip(sync: controller.app.syncPlay) { showingGroup = true }
+            }
             trackMenu
-            RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            // SYN-10: AirPlay can't follow a group's timeline at launch; it returns once the viewer leaves.
+            if !(controller.sync != nil && controller.app.syncPlay.participating) {
+                RoutePicker().frame(width: 44, height: 44).accessibilityLabel("AirPlay")
+            }
+        }
+        .sheet(isPresented: $showingGroup) {
+            WatchTogetherSheet(sync: controller.app.syncPlay, item: nil).environmentObject(controller.app)
         }
     }
 

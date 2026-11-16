@@ -226,10 +226,13 @@ extension SyncVectorRunner {
 final class SyncFakeRenderer: SyncRenderer {
     var syncFacts: SyncRendererFacts
     var applied: [(positionTicks: Int64?, playing: Bool)] = []
+    /// Runs after each application, as a native player's synchronous state callbacks would.
+    var onApply: ((SyncFakeRenderer, Int64?) -> Void)?
     init(_ facts: SyncRendererFacts) { syncFacts = facts }
     func syncApply(positionTicks: Int64?, playing: Bool) {
         applied.append((positionTicks, playing))
         if let positionTicks { syncFacts.positionTicks = positionTicks }
         syncFacts.unpaused = playing
+        onApply?(self, positionTicks)
     }
 }

@@ -58,6 +58,23 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     private var nextCardDismissed = false
     private var countdownTask: Task<Void, Never>?
 
+    // Watch together (SYN-03..10).
+    /// The group entry this viewing was opened for; nil for a solo viewing.
+    let sync: SyncStamp?
+    /// What the shared engine reads and moves; nil for a solo viewing.
+    private(set) var syncRenderer: SyncRendererBox?
+    /// The play state the group last asked for. A native rate change that disagrees came from the viewer.
+    private var syncExpectPlaying = false
+    /// Seeks this controller started; a time jump while any is in flight is ours, not the viewer's.
+    private var ownSeeks = 0
+    private var lastOwnSeek = Date.distantPast
+    private var seekGate = SyncSeekGate()
+    private var replacedBySync = false
+    private var rateObserver: NSObjectProtocol?
+    private var jumpObserver: NSObjectProtocol?
+    /// Where the last play-state change came from, so a group's barrier pause doesn't reveal the controls.
+    private(set) var lastControlOrigin: SyncControlOrigin = .native
+
     init(app: AppModel, request: PlayerRequest) {
         self.app = app
         self.account = request.account
@@ -66,12 +83,22 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         self.fromStart = request.fromStart
         self.requestedStartTicks = request.startTicks
         self.local = request.local
-        player.allowsExternalPlayback = true
+        self.sync = request.local == nil ? request.sync : nil
+        // SYN-10: AirPlay can't carry a group's timeline at launch; the viewer leaves the group to use it.
+        player.allowsExternalPlayback = sync == nil
         player.appliesMediaSelectionCriteriaAutomatically = false
         attachObservers()
         app.activeController = self
         nowPlaying.attach(self)
+        if sync != nil {
+            let box = SyncRendererBox(self)
+            syncRenderer = box
+            app.syncPlay.engine.bind(box)
+        }
     }
+
+    /// In a group right now: transport controls become group requests and the server owns continuation.
+    var grouped: Bool { syncRenderer != nil && !finished && app.syncPlay.engine.participating && app.syncPlay.engine.isBound(syncRenderer) }
 
     /// Lock screen, Control Center and AirPlay receiver controls (CAST-07): the same viewing, the same reports.
     let nowPlaying = NowPlayingBridge()
@@ -156,7 +183,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         observe(playerItem)
         player.replaceCurrentItem(with: playerItem)
         player.isMuted = next.audioIndex == -1
-        player.play()
+        // A group viewing starts paused; the server's command starts it on every device at once.
+        if grouped { syncExpectPlaying = false; player.pause() } else { player.play() }
         if let previous, previous.playSessionId != next.playSessionId {
             try? await client.stopEncoding(account: account, decision: previous)
         }
@@ -166,8 +194,13 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     /// Ends the viewing: reports where the viewer stopped, tells the server to stop converting, refreshes the catalog.
-    func close() {
+    /// In a group the device stays a member (SYN-08) unless `reason` leaves.
+    func close(reason: SyncCloseReason = .CLOSE) {
         guard !finished else { return }
+        if let box = syncRenderer {
+            if replacedBySync { app.syncPlay.engine.unbind(box) } else { app.syncPlay.engine.closeViewing(box, reason: reason) }
+            app.syncPlay.changed()
+        }
         finished = true
         generation += 1
         let decision = self.decision
@@ -208,13 +241,50 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         return t.isFinite ? t : position
     }
 
-    func togglePlay() { isPlaying ? player.pause() : player.play() }
+    /// The group's newer entry replaces this viewing; that isn't the viewer closing playback.
+    func closeReplacedBySync() { replacedBySync = true; close() }
 
-    func seek(to seconds: Double) {
+    /// Native play intent (Jellyfin's IsPlaying): set while buffering too.
+    var isUnpaused: Bool { player.rate != 0 }
+
+    func togglePlay() { isUnpaused || isPlaying ? userPause() : userPlay() }
+
+    /// The viewer's own Play and Pause. In a group they ask the server, which moves every device (SYN-03).
+    func userPlay(origin: SyncControlOrigin = .viewer) {
+        lastControlOrigin = origin
+        if grouped { app.syncPlay.engine.requestUnpause(); return }
+        player.play()
+    }
+
+    func userPause(origin: SyncControlOrigin = .viewer) {
+        lastControlOrigin = origin
+        if grouped { app.syncPlay.engine.requestPause(); return }
+        player.pause()
+    }
+
+    func seek(to seconds: Double, origin: SyncControlOrigin = .viewer) {
         let target = max(0, duration > 0 ? min(seconds, duration - 1) : seconds)
+        let ready = player.currentItem?.status == .readyToPlay && pendingSeek == nil
+        switch seekGate.seek(millis: Int64(target * 1000), origin: origin, grouped: grouped, ready: ready || !grouped) {
+        case let .native(ms)?: nativeSeek(Double(ms) / 1000)
+        case let .group(ms)?: app.syncPlay.engine.requestSeek(ticks: (decision?.serverPositionTicks(playerSeconds: Double(ms) / 1000)) ?? ms * 10_000)
+        case nil: break
+        }
+    }
+
+    private func nativeSeek(_ target: Double, then: (() -> Void)? = nil) {
         position = target
+        ownSeeks += 1
+        lastOwnSeek = Date()
         player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            Task { @MainActor in self?.reportProgress(force: true) }
+            Task { @MainActor in
+                guard let self else { return }
+                self.ownSeeks = max(0, self.ownSeeks - 1)
+                self.lastOwnSeek = Date()
+                then?()
+                self.reportProgress(force: true)
+                self.syncNotify()
+            }
         }
     }
 
@@ -266,6 +336,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     func playNext() {
         if local != nil { playNextLocal(); return }
+        if grouped { app.syncPlay.engine.requestNext(); return }
         guard let next = nextEpisode else { return }
         countdownTask?.cancel()
         let decision = self.decision
@@ -317,10 +388,40 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             let status = player.timeControlStatus
             Task { @MainActor in self?.statusChanged(status) }
         })
+        rateObserver = NotificationCenter.default.addObserver(forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main) { [weak self] note in
+            let reason = note.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
+            MainActor.assumeIsolated { self?.rateChanged(reason) }
+        }
+    }
+
+    /// In a group, a play or pause the system player made on its own controls (Apple TV's transport bar, a headset
+    /// button) is the viewer asking the group: the local player goes back to the group's state and the request goes out.
+    private func rateChanged(_ reason: AVPlayer.RateDidChangeReason?) {
+        guard grouped, reason == .setRateCalled else { syncNotify(); return }
+        let unpaused = player.rate != 0
+        defer { syncNotify() }
+        guard unpaused != syncExpectPlaying else { return }
+        if duration > 0, currentSeconds >= duration - 0.5 { return }
+        lastControlOrigin = .viewer
+        if unpaused {
+            player.pause()
+            app.syncPlay.engine.requestUnpause()
+        } else {
+            app.syncPlay.engine.requestPause()
+        }
+    }
+
+    /// A jump this controller didn't start, in a group, is the viewer scrubbing on the system controls: ask the group.
+    private func timeJumped() {
+        guard grouped, ownSeeks == 0, Date().timeIntervalSince(lastOwnSeek) > 0.5, player.currentItem?.status == .readyToPlay else { return }
+        let ticks = decision?.serverPositionTicks(playerSeconds: currentSeconds) ?? Ticks.from(seconds: currentSeconds)
+        app.syncPlay.engine.requestSeek(ticks: ticks)
     }
 
     private func externalRouteChanged(_ active: Bool) {
         guard active else { externalRoute = nil; return }
+        // SYN-10: an external route can't follow the group's timeline; leave before it takes the picture.
+        if let box = syncRenderer, grouped { app.syncPlay.engine.closeViewing(box, reason: .EXTERNAL_ROUTE); app.syncPlay.changed() }
         let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
         externalRoute = (outputs.first { $0.portType == .airPlay } ?? outputs.first)?.portName ?? "AirPlay"
     }
@@ -332,6 +433,10 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         observations = []
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = nil
+        if let rateObserver { NotificationCenter.default.removeObserver(rateObserver) }
+        rateObserver = nil
+        if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) }
+        jumpObserver = nil
     }
 
     private func observe(_ playerItem: AVPlayerItem) {
@@ -348,17 +453,29 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: playerItem, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reachedEnd() }
         }
+        if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) }
+        jumpObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.timeJumpedNotification, object: playerItem, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.timeJumped() }
+        }
+        observations.append(playerItem.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.syncNotify() }
+        })
     }
 
     private func itemStatusChanged(_ status: AVPlayerItem.Status, message: String?) {
         switch status {
         case .readyToPlay:
-            if let seek = pendingSeek {
-                pendingSeek = nil
-                player.seek(to: CMTime(seconds: seek, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                position = seek
-            }
             if duration == 0, let ticks = item.runTimeTicks { duration = Ticks.seconds(ticks) }
+            if let seek = pendingSeek {
+                // The start position lands before the group sees this renderer as prepared.
+                nativeSeek(seek) { [weak self] in self?.pendingSeek = nil }
+            }
+            switch seekGate.becameReady(grouped: grouped) {
+            case let .native(ms)?: nativeSeek(Double(ms) / 1000)
+            case let .group(ms)?: app.syncPlay.engine.requestSeek(ticks: decision?.serverPositionTicks(playerSeconds: Double(ms) / 1000) ?? ms * 10_000)
+            case nil: break
+            }
+            syncNotify()
         case .failed:
             log.error("Item failed method=\(self.decision?.method.rawValue ?? "none", privacy: .public)")
             // A file the server said would play directly can still trip AVPlayer; ask the server to convert it instead.
@@ -386,6 +503,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
             if status != .waitingToPlayAtSpecifiedRate { reportProgress(force: true) }
             viewingChanged()
         }
+        syncNotify()
+    }
+
+    /// Tells the group engine the renderer's facts may have changed (prepared, buffering, paused, moved).
+    private func syncNotify() {
+        guard let box = syncRenderer, !finished else { return }
+        app.syncPlay.engine.rendererChanged()
+        _ = box
     }
 
     /// Tells the remote target and the Now Playing card that the viewing moved on (ready, paused, playing).
@@ -402,12 +527,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         updateSegment(ms)
         updateNextCard(ms)
         reportProgress(force: false)
+        if grouped { app.syncPlay.engine.tick() }
     }
 
     private func updateSegment(_ ms: Int64) {
         let modes = app.preferences.playback.segmentModes
         let active = PlaybackExtras.activeSegment(segments, positionMs: ms, modes: modes)
-        if let active, modes[active.type] == .automatic, !autoSkipped.contains(active.id) {
+        // SYN-09: no independent automatic skip in a group; the Skip button still asks the group to seek.
+        if let active, modes[active.type] == .automatic, !autoSkipped.contains(active.id), !grouped {
             autoSkipped.insert(active.id)
             seek(to: Double(active.endMs) / 1000)
             skippable = nil
@@ -419,7 +546,8 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     private func updateNextCard(_ ms: Int64) {
-        guard let _ = nextEpisode, !nextCardDismissed, duration > 0 else { return }
+        // SYN-09: the group's queue owns continuation; no local next-episode countdown.
+        guard let _ = nextEpisode, !nextCardDismissed, duration > 0, !grouped else { return }
         let durationMs = Int64(duration * 1000)
         guard let trigger = PlaybackExtras.nextTrigger(durationMs: durationMs, segments: segments), ms >= trigger else {
             if nextCountdown != nil { nextCountdown = nil; countdownTask?.cancel() }
@@ -440,6 +568,12 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     private func reachedEnd() {
+        if let box = syncRenderer, grouped {
+            // SYN-09: the server owns continuation. The last entry ends the viewing and the device stays in the group.
+            let current = box.syncFacts.entryId == app.syncPlay.engine.membership.queue?.current?.playlistItemId
+            if app.syncPlay.engine.naturalCompletion(box, current: current, unpaused: true) == .FINISH { close(reason: .NATURAL_END) }
+            return
+        }
         if let local {
             app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId)
             // Read again at the end, so an episode that finished downloading during this one follows it.
@@ -608,5 +742,61 @@ enum LocalTracks {
         }
         guard let data = try? JSONSerialization.data(withJSONObject: rows) else { return [] }
         return (try? JSONDecoder().decode([MediaStream].self, from: data)) ?? []
+    }
+}
+
+// MARK: - Watch together renderer
+
+extension PlaybackController {
+    /// What the group engine reads: the actual native state, never a guess.
+    var syncFacts: SyncRendererFacts {
+        let playerItem = player.currentItem
+        let prepared = playerItem?.status == .readyToPlay && pendingSeek == nil && decision != nil && ownSeeks == 0
+        // Playing is never buffering, even when HLS reports a pessimistic keep-up estimate. AVPlayer also passes through
+        // "waiting" (evaluating the buffering rate) on every start: only a wait to minimise stalls is a real stall, or the
+        // group would see Buffering after each Unpause and wait again. A paused player is buffering until it can keep up.
+        let buffering: Bool
+        switch player.timeControlStatus {
+        case .playing: buffering = false
+        case .waitingToPlayAtSpecifiedRate: buffering = player.reasonForWaitingToPlay != .evaluatingBufferingRate
+        default: buffering = playerItem.map { !($0.isPlaybackLikelyToKeepUp || $0.isPlaybackBufferFull) } ?? true
+        }
+        let durationTicks = duration > 0 ? Ticks.from(seconds: duration) : (item.runTimeTicks ?? 0)
+        let eligible = SyncTiming.sourceEligible(durationTicks: durationTicks, seekable: durationTicks > 0, live: item.type == "TvChannel",
+                                                 infinite: source?.isInfiniteStream ?? false, offline: local != nil)
+        return SyncRendererFacts(entryId: sync?.playlistItemId, generation: sync?.generation ?? -1, prepared: prepared, buffering: buffering,
+                                 unpaused: isUnpaused, positionTicks: decision?.serverPositionTicks(playerSeconds: currentSeconds) ?? Ticks.from(seconds: currentSeconds),
+                                 durationTicks: durationTicks, eligible: eligible)
+    }
+
+    /// Server-origin application: moves only this player, never a group request.
+    func syncApply(positionTicks: Int64?, playing: Bool) {
+        guard !finished else { return }
+        log.debug("sync apply seek=\(positionTicks != nil, privacy: .public) playing=\(playing, privacy: .public)")
+        lastControlOrigin = .server
+        syncExpectPlaying = playing
+        if let positionTicks {
+            let offsetTicks = (decision?.serverPositionTicks(playerSeconds: 0)) ?? 0
+            nativeSeek(Double(max(0, positionTicks - offsetTicks)) / 10_000_000)
+        }
+        if playing { player.play() } else { player.pause() }
+    }
+}
+
+/// Lets the shared engine (which isn't actor-bound) read and move a main-actor controller. The engine is only ever
+/// driven from the main actor.
+final class SyncRendererBox: SyncRenderer {
+    private weak var controller: PlaybackController?
+    init(_ controller: PlaybackController) { self.controller = controller }
+
+    var syncFacts: SyncRendererFacts {
+        MainActor.assumeIsolated {
+            controller?.syncFacts ?? SyncRendererFacts(entryId: nil, generation: -1, prepared: false, buffering: true, unpaused: false,
+                                                       positionTicks: 0, durationTicks: 0, eligible: false)
+        }
+    }
+
+    func syncApply(positionTicks: Int64?, playing: Bool) {
+        MainActor.assumeIsolated { controller?.syncApply(positionTicks: positionTicks, playing: playing) }
     }
 }

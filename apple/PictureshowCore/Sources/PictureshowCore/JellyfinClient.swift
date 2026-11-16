@@ -445,3 +445,52 @@ public final class JellyfinClient: @unchecked Sendable {
         return data
     }
 }
+
+// SyncPlay HTTP (spec/features/syncplay.md). Bodies are sent exactly as SyncRequest renders them, so 64-bit ticks keep
+// their lexemes.
+extension JellyfinClient {
+    /// One viewer-scoped SyncPlay POST. Only a 2xx is `.ok`; a status is reported as `.http`, anything else `.failed`.
+    public func syncPlay(account: Account, _ sync: SyncRequest) async -> SyncPostOutcome {
+        do {
+            var request = URLRequest(url: try ServerURLs.endpoint(account.server, path: sync.path, query: []), timeoutInterval: 15)
+            request.httpMethod = "POST"
+            request.setValue(AuthorizationHeader.build(deviceID: account.deviceID, deviceName: deviceName, version: version, token: account.accessToken), forHTTPHeaderField: "Authorization")
+            if let body = sync.body {
+                request.httpBody = Data(body.rendered.utf8)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            _ = try await responseData(for: request, server: account.server)
+            return .ok
+        } catch ClientError.server(let code) {
+            return .http(code)
+        } catch ClientError.invalidCredentials {
+            return .http(401)
+        } catch {
+            return .failed
+        }
+    }
+
+    /// The groups this viewer may see. Malformed rows are dropped rather than shown half-parsed.
+    public func syncPlayGroups(account: Account) async throws -> [SyncGroup] {
+        let data = try await request(account: account, path: "SyncPlay/List", includeUserID: false)
+        guard let rows = try SyncJSON.parse(data).items else { throw ClientError.invalidResponse }
+        return rows.compactMap { try? SyncPlay.parseGroup($0) }
+    }
+
+    /// One GetUtcTime exchange as UTC milliseconds (reception, transmission).
+    public func serverUtcTime(account: Account) async throws -> (receivedMillis: Int64, transmittedMillis: Int64) {
+        let data = try await request(server: account.server, path: "GetUtcTime", token: account.accessToken, identity: account.deviceID, timeout: 5)
+        let value = try SyncJSON.parse(data)
+        guard let received = value["RequestReceptionTime"]?.content.flatMap(SyncPlay.timestampMillis),
+              let sent = value["ResponseTransmissionTime"]?.content.flatMap(SyncPlay.timestampMillis) else { throw ClientError.invalidResponse }
+        return (received, sent)
+    }
+
+    /// The current viewer's `Policy.SyncPlayAccess` (CreateAndJoinGroups, JoinGroups or None).
+    public func syncPlayAccess(account: Account) async throws -> String {
+        let data = try await request(account: account, path: "Users/Me", includeUserID: false)
+        guard let policy = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["Policy"] as? [String: Any],
+              let access = policy["SyncPlayAccess"] as? String else { throw ClientError.invalidResponse }
+        return access
+    }
+}
