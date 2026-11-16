@@ -61,6 +61,7 @@ class PictureshowApplication : Application() {
                 module {
                     single { preferences }
                     single { AccountStore(AccountPersistence(get())) }
+                    single { SeerrStore(get()) }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
                     single { AndroidOfflineForeground(this@PictureshowApplication) }
