@@ -597,6 +597,8 @@ data class CatalogDetailState(
     val playbackReportFinished: Boolean = false,
     // Failure category and attempt identity survive StateFlow coalescing a fast loading frame.
     val readFailed: Boolean = false,
+    // The failed read never got an answer (no route, refused, timed out): the server is out of reach, not refusing.
+    val readUnreachable: Boolean = false,
     // An authoritative read may succeed before the playback report finishes.
     val readSucceeded: Boolean = false,
     val readAttempt: Long = 0,
@@ -704,6 +706,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                     loading = false,
                     error = "The server took too long to respond. Try again.",
                     readFailed = true,
+                    readUnreachable = true,
                     readSucceeded = false
                 )
             }
@@ -725,9 +728,11 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         retryDeadline = null
     }
 
-    private fun readFailure(message: String) {
+    private fun readFailure(message: String, unreachable: Boolean = false) {
         if (!parentReadPending) readFinished()
-        mutableState.update { it.copy(loading = false, error = message, readFailed = true, readSucceeded = false) }
+        mutableState.update {
+            it.copy(loading = false, error = message, readFailed = true, readUnreachable = unreachable, readSucceeded = false)
+        }
     }
 
     private fun reload(retainRows: Boolean) {
@@ -741,6 +746,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                     loading = !retainRows || retryDeadline != null,
                     error = null,
                     readFailed = false,
+                    readUnreachable = false,
                     readSucceeded = false,
                     readAttempt =
                     it.readAttempt + 1
@@ -765,7 +771,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             when (result) {
                 is ClientResult.Failure -> {
                     parentReadPending = false
-                    readFailure(result.error.message)
+                    readFailure(result.error.message, result.error.kind == app.pictureshow.core.ErrorKind.NETWORK)
                 }
                 is ClientResult.Success -> {
                     val item = result.value

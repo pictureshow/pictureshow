@@ -121,7 +121,7 @@ internal fun OfflineDownloadsTouchScreen(
 }
 
 @Composable
-private fun offlineDestructiveTouchColors() = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+internal fun offlineDestructiveTouchColors() = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

@@ -25,6 +25,7 @@ Snapshot 2026-11-13 after merging main `81f73948`: all 45 shared JSON contracts 
 | `negotiation.json` | 3 | `ReferenceParityVectorsTest` |
 | `network.json` | 36 | `ReferenceParityVectorsTest` |
 | `offline-budget.json` | 40 | `OfflineVectorsTest` |
+| `offline-detail-source.json` | 20 | `OfflineVectorsTest` |
 | `offline-fmp4.json` | 43 | `OfflineVectorsTest` |
 | `offline-job.json` | 283 | `OfflineVectorsTest` |
 | `offline-manifest.json` | 98 | `OfflineVectorsTest` |

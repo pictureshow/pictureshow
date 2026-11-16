@@ -23,6 +23,7 @@ import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflineReconnectFacts
 import app.pictureshow.core.offline.OfflineRequest
 import app.pictureshow.core.offline.OfflineResponse
+import app.pictureshow.core.offline.OfflineServerReach
 import app.pictureshow.core.offline.OfflineServerSource
 import app.pictureshow.core.offline.OfflineTrack
 import app.pictureshow.core.offline.OfflineUserData
@@ -41,6 +42,8 @@ import app.pictureshow.core.offline.offlineBodyEnd
 import app.pictureshow.core.offline.offlineCleanupRequest
 import app.pictureshow.core.offline.offlineDecodeManifest
 import app.pictureshow.core.offline.offlineDefaultCap
+import app.pictureshow.core.offline.offlineDetailPlaySource
+import app.pictureshow.core.offline.offlineDetailStartTicks
 import app.pictureshow.core.offline.offlineDownloadSetDevice
 import app.pictureshow.core.offline.offlineDurableOffset
 import app.pictureshow.core.offline.offlineEncodeManifest
@@ -118,6 +121,8 @@ class OfflineVectorsTest {
     @Test fun next() = run("offline-next")
 
     @Test fun fmp4() = run("offline-fmp4")
+
+    @Test fun detailSource() = run("offline-detail-source")
 
     @Test fun unknownOperationsFail() {
         assertFails { execute("unknown", JsonObject(emptyMap()), JsonObject(emptyMap())) }
@@ -394,6 +399,23 @@ class OfflineVectorsTest {
         "reconnect-tracks" -> buildJsonObject {
             val tracks = event.decoded<OfflineEntry>("entry")!!.undownloadedTracks(event.need("type"))
             put("indexes", JsonArray(tracks.map { JsonPrimitive(it.serverIndex) }))
+        }
+        "detail-source" -> buildJsonObject {
+            val source = offlineDetailPlaySource(
+                event.bool("ready")!!,
+                OfflineServerReach.valueOf(event.need("server")),
+                event.bool("explicitStream")!!
+            )
+            put("source", source.name)
+        }
+        "detail-start" -> buildJsonObject {
+            val ticks = offlineDetailStartTicks(
+                event.bool("fromStart")!!,
+                event.decoded<OfflineOutboxEntry>("outbox"),
+                event.decoded<OfflineUserData>("lastKnown"),
+                event.decoded<OfflineUserData>("server")
+            )
+            put("startTicks", ticks.toString())
         }
         "next-episode" -> buildJsonObject {
             val next = offlineNextEpisode(

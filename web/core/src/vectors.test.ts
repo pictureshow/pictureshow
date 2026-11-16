@@ -88,6 +88,8 @@ const pendingPortSuites = new Set([
     "offline-plan",
     "offline-reconnect",
     "offline-next",
+    // Web has no in-app downloads at launch (OFF-PD04); owed with OFF-14.
+    "offline-detail-source",
     "offline-fmp4",
     "cast-handoff",
     "cast-capability",

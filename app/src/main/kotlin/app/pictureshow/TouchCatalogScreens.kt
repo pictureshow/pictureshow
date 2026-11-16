@@ -508,7 +508,8 @@ internal fun TouchCatalogDetail(
     origin: MediaItem? = null,
     onPlayedRequest: () -> Unit = {},
     onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
-    offerTvQueue: Boolean = true
+    offerTvQueue: Boolean = true,
+    download: TouchDetailDownload? = null
 ) {
     val page = rememberTouchDetailPresentation(
         state,
@@ -521,7 +522,9 @@ internal fun TouchCatalogDetail(
         onPlayNext,
         onAddToQueue,
         onPlayedRequest,
-        offerTvQueue
+        offerTvQueue,
+        download?.local,
+        download?.server ?: app.pictureshow.core.offline.OfflineServerReach.unknown
     )
     // Back abandons at once, before the navigation transition has released this composition.
     val leave = {
@@ -568,16 +571,26 @@ internal fun TouchCatalogDetail(
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
                                         // Under the grid, so it moves none of the actions the grid holds still.
-                                        if (onDownload != null && offlineOffersDownload(item)) {
+                                        val startDownload: () -> Unit = {
+                                            val season = if (item.type == "Season") {
+                                                item
+                                            } else {
+                                                state.seasons.firstOrNull { it.id == state.selectedSeasonId }
+                                            }
+                                            onDownload?.invoke(item, season?.id, season?.name)
+                                        }
+                                        // A download already here shows itself in Download's place: state, Remove, streaming instead.
+                                        if (download?.offline != null) {
+                                            TouchDetailDownloadPanel(
+                                                item.name,
+                                                download,
+                                                page.streamInstead,
+                                                !state.busy && !state.loading,
+                                                startDownload
+                                            )
+                                        } else if (onDownload != null && offlineOffersDownload(item)) {
                                             OutlinedButton(
-                                                onClick = {
-                                                    val season = if (item.type == "Season") {
-                                                        item
-                                                    } else {
-                                                        state.seasons.firstOrNull { it.id == state.selectedSeasonId }
-                                                    }
-                                                    onDownload(item, season?.id, season?.name)
-                                                },
+                                                onClick = startDownload,
                                                 enabled = !state.busy && !state.loading,
                                                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:download")
                                             ) { Text("Download") }
@@ -743,7 +756,11 @@ internal fun TouchCatalogDetail(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        if (page.recovery) detailReadBandText(retrying, failure) else failure,
+                        when {
+                            page.recovery && page.localPlay && !retrying -> failure.trimEnd() + " Your download still plays."
+                            page.recovery -> detailReadBandText(retrying, failure)
+                            else -> failure
+                        },
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
                             .testTag(if (page.recovery) "touch:detail:read-error" else "touch:detail:write-error")
@@ -754,8 +771,9 @@ internal fun TouchCatalogDetail(
                         }
                     }
                     val retryLabel = if (retrying) "Retrying…" else "Retry"
-                    // A read failure has disabled Play, so Retry is the page's one primary; a write failure has Play beside it.
-                    if (page.recovery) {
+                    // A read failure has disabled Play, so Retry is the page's one primary; a write failure has Play beside it,
+                    // and so does a read failure when Play uses the download.
+                    if (page.recovery && !page.localPlay) {
                         Button(onClick = page.onRetry, modifier = retryModifier) { Text(retryLabel) }
                     } else {
                         FilledTonalButton(onClick = page.onRetry, modifier = retryModifier) { Text(retryLabel) }

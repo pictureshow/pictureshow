@@ -40,6 +40,9 @@ import app.pictureshow.core.detailRequestedActionLabel
 import app.pictureshow.core.detailUnavailableActionLabel
 import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
+import app.pictureshow.core.offline.OfflineDetailSource
+import app.pictureshow.core.offline.OfflineServerReach
+import app.pictureshow.core.offline.offlineDetailPlaySource
 import app.pictureshow.core.presentDetailFailure
 import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
@@ -55,6 +58,15 @@ private const val NOT_LOADED = "The server has not finished loading. Retry to re
 private const val NO_EPISODES = "No playable episodes are available."
 private const val CHANGES_LATER = "Changes will be available when loading finishes."
 private const val RELOAD_FIRST = "Reload the item before changing it."
+
+/** Said by a server-only action when the server is known to be out of reach: it explains rather than failing or looking live. */
+internal const val DETAIL_TV_NEEDS_SERVER = "Play on TV needs your server, and Pictureshow can't reach it right now."
+internal const val DETAIL_STREAM_NEEDS_SERVER =
+    "Streaming needs your server, and Pictureshow can't reach it right now. The download still plays."
+internal const val DETAIL_STREAM_NOT_LOADED = "The server hasn't answered yet. Try again in a moment, or play the download."
+
+/** A ready download of this title: the page's Play, Resume and Play from start use it, starting at [startTicks]. */
+internal data class TouchDetailLocal(val startTicks: Long, val play: (fromStart: Boolean) -> Unit)
 
 /** Why a Play is disabled once another was accepted: the label keeps its plain name, so a reader hears the reason here. */
 private const val TOUCH_OTHER_PLAY_REQUESTED = "Disabled, another play is already requested"
@@ -84,6 +96,10 @@ internal data class TouchDetailPresentation(
     val additions: List<String>,
     val actions: List<TouchDetailAction>,
     val onRetry: () -> Unit,
+    /** Play uses the download, so a failed read leaves Play live and Retry is no longer the page's one primary. */
+    val localPlay: Boolean = false,
+    /** Stream from server instead: deliberate, and it explains itself when it can't work. Null without a ready download. */
+    val streamInstead: (() -> Unit)? = null,
     val abandon: () -> Unit
 )
 
@@ -106,7 +122,9 @@ internal fun rememberTouchDetailPresentation(
     onPlayNext: (MediaItem) -> Unit,
     onAddToQueue: (MediaItem) -> Unit,
     onPlayedRequest: () -> Unit,
-    offerTvQueue: Boolean = true
+    offerTvQueue: Boolean = true,
+    local: TouchDetailLocal? = null,
+    server: OfflineServerReach = OfflineServerReach.unknown
 ): TouchDetailPresentation {
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val resumed = lifecycle == Lifecycle.State.RESUMED
@@ -402,6 +420,8 @@ internal fun rememberTouchDetailPresentation(
         }
     }
 
+    val serverOut = server == OfflineServerReach.unreachable
+
     /** A remote action has no core wording: it says "when ready" and "requested" in the same form. */
     fun held(name: String, requested: Boolean, otherPlayQueued: Boolean) = when {
         !pendingEnabled -> name
@@ -421,11 +441,21 @@ internal fun rememberTouchDetailPresentation(
         target = target,
         label = held(name, requested, inPlaySlot && playQueued != null),
         reserve = listOf(name, "$name when ready", "$name requested"),
-        enabled = if (pendingEnabled) captureOpen && !(inPlaySlot && playQueued != null && !requested) else fresh && playItem != null,
-        state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && inPlaySlot && playQueued != null && !requested },
+        enabled = when {
+            // Tappable so it can say why; a dead control on a page that otherwise works reads as broken.
+            serverOut -> true
+            pendingEnabled -> captureOpen && !(inPlaySlot && playQueued != null && !requested)
+            else -> fresh && playItem != null
+        },
+        state = if (serverOut) {
+            "Needs your server"
+        } else {
+            TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && inPlaySlot && playQueued != null && !requested }
+        },
         requested = requested,
         onClick = {
             when {
+                serverOut -> commandNotice = DETAIL_TV_NEEDS_SERVER
                 pendingEnabled && inPlaySlot -> capturePlay(target, "$name requested") { latestOnPlayOnTv(it, fromStart) }
                 pendingEnabled -> captureQueue(target, "$name requested", freshAction)
                 else -> playItem?.let(freshAction)
@@ -450,17 +480,22 @@ internal fun rememberTouchDetailPresentation(
             TouchDetailAction(
                 target = "primary",
                 label = when {
+                    local != null -> if (local.startTicks > 0) resumeLabel(local.startTicks) else "Play"
                     !pendingEnabled -> primaryFresh
                     playQueued != null && playQueued != "primary" -> plain("primary")
                     else -> label("primary", playQueued == "primary", primaryPending)
                 },
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
                 reserve = listOf("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable"),
-                enabled = if (pendingEnabled) playOpen("primary") else canFreshPlay,
-                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && playQueued != null && playQueued != "primary" },
-                requested = pendingEnabled && playQueued == "primary",
+                enabled = local != null || if (pendingEnabled) playOpen("primary") else canFreshPlay,
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
+                    local == null && pendingEnabled && playQueued != null && playQueued != "primary"
+                },
+                requested = local == null && pendingEnabled && playQueued == "primary",
                 onClick = {
-                    if (pendingEnabled) {
+                    if (local != null) {
+                        local.play(false)
+                    } else if (pendingEnabled) {
                         capturePlay("primary", detailRequestedActionLabel("primary", true)) {
                             latestOnPlay(it, it.userData.playbackPositionTicks > 0)
                         }
@@ -503,7 +538,7 @@ internal fun rememberTouchDetailPresentation(
             TouchDetailAction(
                 target = "from-start",
                 label = when {
-                    !pendingEnabled -> "Play from start"
+                    local != null || !pendingEnabled -> "Play from start"
                     playQueued != null && playQueued != "from-start" -> "Play from start"
                     else -> label(
                         "from-start",
@@ -521,13 +556,21 @@ internal fun rememberTouchDetailPresentation(
                     "Start requested",
                     "Start unavailable"
                 ),
-                enabled = if (pendingEnabled) playOpen("from-start") else canFreshPlay,
-                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && playQueued != null && playQueued != "from-start" },
-                requested = pendingEnabled && playQueued == "from-start",
+                enabled = local != null || if (pendingEnabled) playOpen("from-start") else canFreshPlay,
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf {
+                    local == null && pendingEnabled && playQueued != null && playQueued != "from-start"
+                },
+                requested = local == null && pendingEnabled && playQueued == "from-start",
                 // CAT: a resume-only action; the returning layout keeps its place until the fresh position is known.
-                visible = (returning && waiting) || recoveryActive || position > 0 || pendingPosition > 0 || playQueued == "from-start",
+                visible = if (local != null) {
+                    local.startTicks > 0
+                } else {
+                    (returning && waiting) || recoveryActive || position > 0 || pendingPosition > 0 || playQueued == "from-start"
+                },
                 onClick = {
-                    if (pendingEnabled) {
+                    if (local != null) {
+                        local.play(true)
+                    } else if (pendingEnabled) {
                         capturePlay("from-start", detailRequestedActionLabel("from-start", true)) { latestOnPlay(it, false) }
                     } else {
                         playItem?.let { onPlay(it, false) }
@@ -573,6 +616,8 @@ internal fun rememberTouchDetailPresentation(
     val writeFailure = presented?.message?.takeIf { failureKey?.startsWith("write:") == true }
 
     val status = when {
+        // The reason a server-only action can't work is the page's state, even beside a failed read.
+        commandNotice in setOf(DETAIL_TV_NEEDS_SERVER, DETAIL_STREAM_NEEDS_SERVER, DETAIL_STREAM_NOT_LOADED) -> commandNotice
         recoveryActive -> null
         commandNotice != null -> commandNotice
         !waiting || !(state.playbackPending || heldLabels || header == null) -> null
@@ -660,7 +705,19 @@ internal fun rememberTouchDetailPresentation(
         emptyList()
     }
 
+    val streamInstead: (() -> Unit)? = local?.let {
+        {
+            when {
+                offlineDetailPlaySource(true, server, explicitStream = true) == OfflineDetailSource.unavailable ->
+                    commandNotice = DETAIL_STREAM_NEEDS_SERVER
+                canFreshPlay -> playItem?.let { onPlay(it, it.userData.playbackPositionTicks > 0) }
+                else -> commandNotice = DETAIL_STREAM_NOT_LOADED
+            }
+        }
+    }
     return TouchDetailPresentation(
+        localPlay = local != null,
+        streamInstead = streamInstead,
         header = header,
         recovery = recoveryActive,
         retryWorking = retryWorking,

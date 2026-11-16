@@ -14,6 +14,7 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -107,6 +108,12 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
     suspend fun resumeTicks(itemId: String): Long = mutex.withLock {
         val saved = load()
         offlineResumeTicks(saved.outbox[itemId], saved.lastKnown[itemId])
+    }
+
+    /** The outbox record and last-known server data for [itemId], for a title's own page to work out where its local Play starts. */
+    suspend fun place(itemId: String): Pair<OfflineOutboxEntry?, OfflineUserData?> = mutex.withLock {
+        val saved = load()
+        saved.outbox[itemId] to saved.lastKnown[itemId]
     }
 
     suspend fun watched(itemIds: List<String>): Set<String> = mutex.withLock {
@@ -259,4 +266,40 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
 
     private fun Map<String, OfflineOutboxEntry>.withEntry(itemId: String, entry: OfflineOutboxEntry?) =
         if (entry == null) this - itemId else this + (itemId to entry)
+}
+
+/** What a viewer hears after leaving a local viewing (P-11): progress reached the server, or it's kept here until the server is back. */
+internal const val OFFLINE_PROGRESS_KEPT = "Progress saved on this phone. It syncs when your server is back."
+
+/**
+ * A local viewing's last word, sent now when the server answers. Calls for one item run in order and only the newest reports: a viewing
+ * that ends writes its stop and then its completion, and the viewer should hear one result, for the completion. [settle] is
+ * [OfflineProgressStore.settle] bounded by a deadline, or Failed at once with no network.
+ */
+internal class OfflineViewingSettler(
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val settle: suspend (Account, String) -> OfflineSettleResult
+) {
+    private val latest = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val revisions = MutableStateFlow(0L)
+
+    /** Bumps after every settle, whatever it found, so a page showing a local place reads it again. */
+    val revision: StateFlow<Long> = revisions
+
+    fun ended(account: Account, itemId: String, onResult: (OfflineSettleResult) -> Unit) {
+        val key = "${account.key}|$itemId"
+        synchronized(latest) {
+            val previous = latest[key]
+            lateinit var job: kotlinx.coroutines.Job
+            job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                previous?.join()
+                val result = settle(account, itemId)
+                revisions.value = revisions.value + 1
+                val newest = synchronized(latest) { (latest[key] === job).also { if (it) latest.remove(key) } }
+                if (newest) onResult(result)
+            }
+            latest[key] = job
+            job.start()
+        }
+    }
 }

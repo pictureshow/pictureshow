@@ -534,6 +534,15 @@ internal fun TouchPictureshow(
                                 awaitCancellation()
                             }
                         }
+                        // A ready download is what this page plays, with or without the server (offline.md, the detail page).
+                        val download = rememberTouchDetailDownload(
+                            account,
+                            item.id,
+                            screen.item?.type ?: item.type,
+                            screen,
+                            play = { ready, startMs -> nav.navigate(offlinePlayerRoute(ready, startMs)) },
+                            openDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) { launchSingleTop = true } }
+                        )
                         TouchCatalogDetail(
                             screen,
                             { nav.navigate(itemRoute(it)) },
@@ -542,6 +551,7 @@ internal fun TouchPictureshow(
                             vm::favorite,
                             vm::reload,
                             onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) },
+                            download = download,
                             // Without a position the TV applies this viewer's own resume, which is newer than this screen.
                             onPlayOnTv = { playable, fromStart ->
                                 val startMs = if (fromStart) 0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
@@ -549,7 +559,10 @@ internal fun TouchPictureshow(
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, playable)),
                                         startMs = startMs,
-                                        onThisDevice = { nav.navigate(playerRoute(playable, !fromStart)) }
+                                        // On this phone a ready download is what plays, as the page's own Play does.
+                                        onThisDevice = {
+                                            download?.local?.play?.invoke(fromStart) ?: nav.navigate(playerRoute(playable, !fromStart))
+                                        }
                                     )
                                 ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },

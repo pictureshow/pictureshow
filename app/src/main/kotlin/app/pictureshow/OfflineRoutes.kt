@@ -33,7 +33,37 @@ import org.koin.core.context.GlobalContext
 internal const val OFFLINE_DOWNLOADS_ROUTE = "downloads"
 private const val OFFLINE_STORAGE_ROUTE = "downloads-storage"
 
-internal fun offlinePlayerRoute(entry: OfflineEntry) = "offline-player?entry=${Uri.encode(entry.id)}"
+/** [startMs] is where a title's own page said Play starts; without it the player resumes from the device's own place, as Downloads does. */
+internal fun offlinePlayerRoute(entry: OfflineEntry, startMs: Long? = null) =
+    "offline-player?entry=${Uri.encode(entry.id)}" + (startMs?.let { "&start=${it.coerceAtLeast(0)}" } ?: "")
+
+internal const val OFFLINE_PLAYER_ROUTE = "offline-player?entry={entry}&start={start}"
+
+private val offlinePlayerArguments = listOf(
+    navArgument("entry") { type = NavType.StringType },
+    navArgument("start") {
+        type = NavType.LongType
+        defaultValue = -1L
+    }
+)
+
+/** P-11: a settled viewing refreshes what the catalog shows; one the server didn't take says it's kept here. */
+private fun offlineViewingSettled(
+    context: Context,
+    nav: NavController,
+    catalog: () -> CatalogSession,
+    notify: Boolean
+): (OfflineSettleResult) -> Unit = { result ->
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+        when (result) {
+            OfflineSettleResult.Settled, OfflineSettleResult.Conflict -> catalog().refresh()
+            // Said once the viewer has left: the next downloaded episode of a binge on a plane doesn't need it each time.
+            OfflineSettleResult.Failed -> if (notify && !isPlayerRoute(nav.currentDestination?.route)) {
+                android.widget.Toast.makeText(context, OFFLINE_PROGRESS_KEPT, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+}
 
 /** Movies and episodes download as themselves; a series offers the season on screen. */
 internal fun offlineOffersDownload(item: MediaItem): Boolean = item.type != "Recording" &&
@@ -101,6 +131,8 @@ private fun NavController.openLibrary() = navigate("home") {
 private fun OfflineLocalPlayer(
     account: Account?,
     entryId: String,
+    startMs: Long,
+    onSettled: (OfflineSettleResult) -> Unit,
     onGone: () -> Unit,
     onLeave: (String) -> Unit,
     content: @Composable (Account, MediaItem, Long) -> Unit
@@ -123,9 +155,11 @@ private fun OfflineLocalPlayer(
             file(media.path),
             { id -> entry.resources.firstOrNull { it.id == id }?.let { file(it.path) } },
             store,
-            store.newSequence(),
-            engine::syncSoon
-        )
+            store.newSequence()
+        ) {
+            engine.syncSoon()
+            engine.viewings.ended(current, entry.itemId, onSettled)
+        }
         val api = offlineInteractiveApi(context, current, identity)
         val reconnect = OfflineReconnect(
             entry,
@@ -141,7 +175,7 @@ private fun OfflineLocalPlayer(
             onGone
         )
         val binding = OfflinePlaybackBinding(gateway, entry.sidecarAudio(file), offlineUndownloadedStreams(entry), reconnect, next)
-        ready = Triple(entry, binding, store.resumeTicks(entry.itemId) / 10_000)
+        ready = Triple(entry, binding, startMs.takeIf { it >= 0 } ?: (store.resumeTicks(entry.itemId) / 10_000))
     }
     val loaded = ready ?: return
     val current = account ?: return
@@ -284,11 +318,15 @@ internal fun NavGraphBuilder.offlineTvScreens(
             onBack = { nav.popBackStack() }
         )
     }
-    composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
+    composable(OFFLINE_PLAYER_ROUTE, offlinePlayerArguments) { entry ->
         LaunchedEffect(entry) { beforeVideo() }
+        val context = LocalContext.current.applicationContext
         OfflineLocalPlayer(
             account(),
             entry.text("entry").orEmpty(),
+            entry.arguments?.getLong("start") ?: -1L,
+            // TV refreshes what it shows; Downloads already says what the server kept there.
+            offlineViewingSettled(context, nav, catalog, notify = false),
             { nav.popBackStack() },
             { nav.leaveLocalPlayer(entry, it) }
         ) { current, item, start ->
@@ -341,13 +379,16 @@ internal fun NavGraphBuilder.offlineTouchScreens(
             onBack = { nav.popBackStack() }
         )
     }
-    composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
+    composable(OFFLINE_PLAYER_ROUTE, offlinePlayerArguments) { entry ->
         LaunchedEffect(entry) { beforeVideo() }
+        val context = LocalContext.current.applicationContext
         // Held from the route, not the player: the seconds it takes to load the next episode mustn't rotate the screen and back.
         TouchPlayerWindow()
         OfflineLocalPlayer(
             account(),
             entry.text("entry").orEmpty(),
+            entry.arguments?.getLong("start") ?: -1L,
+            offlineViewingSettled(context, nav, catalog, notify = true),
             { nav.popBackStack() },
             { nav.leaveLocalPlayer(entry, it) }
         ) { current, item, start ->
