@@ -163,6 +163,7 @@ class PictureshowApplication : Application() {
                         )
                     }
                     viewModel { (account: Account) -> LiveTvViewModel(account, get()) }
+                    viewModel { (account: Account) -> SeerrViewModel(account, get()) }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
                     single<app.pictureshow.core.music.MusicService> { get<JellyfinService>() as app.pictureshow.core.music.MusicService }
                     single {

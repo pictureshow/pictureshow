@@ -50,7 +50,10 @@ internal fun TouchSearchScreen(
     onRecent: (String) -> Unit,
     onClear: () -> Unit,
     onRetry: () -> Unit,
-    onOpen: (MediaItem) -> Unit
+    onOpen: (MediaItem) -> Unit,
+    /** Rows after the library's own, such as Seerr's "Not in your library", with art from outside the server. */
+    extraRows: List<HomeRow> = emptyList(),
+    artwork: (MediaItem) -> String? = { null }
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -133,6 +136,12 @@ internal fun TouchSearchScreen(
             }
             items(state.rows, key = HomeRow::key) { row ->
                 TouchCatalogShelf(row.title, row.items, account, row.wide) {
+                    finishInput()
+                    onOpen(it)
+                }
+            }
+            items(extraRows, key = HomeRow::key) { row ->
+                SeerrTouchShelf(row.title, row.items, account, artwork, { row.captions[it.id] }) {
                     finishInput()
                     onOpen(it)
                 }

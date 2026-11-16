@@ -1,0 +1,1348 @@
+{
+  "schemaVersion": 1,
+  "suite": "seerr",
+  "cases": [
+    {
+      "id": "seerr.url.bare-host-https",
+      "operation": "url",
+      "input": {
+        "value": "requests.example.com"
+      },
+      "expected": "https://requests.example.com"
+    },
+    {
+      "id": "seerr.url.http-port-kept",
+      "operation": "url",
+      "input": {
+        "value": "http://seerr.home.example:5055"
+      },
+      "expected": "http://seerr.home.example:5055"
+    },
+    {
+      "id": "seerr.url.default-port-dropped",
+      "operation": "url",
+      "input": {
+        "value": "https://Requests.Example.com:443/"
+      },
+      "expected": "https://requests.example.com"
+    },
+    {
+      "id": "seerr.url.api-suffix-removed",
+      "operation": "url",
+      "input": {
+        "value": "https://example.com/seerr/api/v1/"
+      },
+      "expected": "https://example.com/seerr"
+    },
+    {
+      "id": "seerr.url.trims-space",
+      "operation": "url",
+      "input": {
+        "value": "  seerr.example.com:5055  "
+      },
+      "expected": "https://seerr.example.com:5055"
+    },
+    {
+      "id": "seerr.url.refuses-credentials",
+      "operation": "url",
+      "input": {
+        "value": "https://user:pass@example.com"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.url.refuses-query",
+      "operation": "url",
+      "input": {
+        "value": "https://example.com/?next=1"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.url.refuses-fragment",
+      "operation": "url",
+      "input": {
+        "value": "https://example.com/#x"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.url.refuses-other-scheme",
+      "operation": "url",
+      "input": {
+        "value": "ftp://example.com"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.url.refuses-blank",
+      "operation": "url",
+      "input": {
+        "value": "   "
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.url.refuses-inner-space",
+      "operation": "url",
+      "input": {
+        "value": "example .com"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.query.unreserved-kept",
+      "operation": "query",
+      "input": {
+        "value": "Big-Buck_Bunny.~"
+      },
+      "expected": "Big-Buck_Bunny.~"
+    },
+    {
+      "id": "seerr.query.space-and-reserved",
+      "operation": "query",
+      "input": {
+        "value": "Ocean's Eleven (2001)!"
+      },
+      "expected": "Ocean%27s%20Eleven%20%282001%29%21"
+    },
+    {
+      "id": "seerr.query.utf8",
+      "operation": "query",
+      "input": {
+        "value": "Amélie"
+      },
+      "expected": "Am%C3%A9lie"
+    },
+    {
+      "id": "seerr.poster.tmdb-path",
+      "operation": "poster",
+      "input": {
+        "path": "/abc123_X-y.jpg"
+      },
+      "expected": "https://image.tmdb.org/t/p/w342/abc123_X-y.jpg"
+    },
+    {
+      "id": "seerr.poster.absent",
+      "operation": "poster",
+      "input": {
+        "path": null
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.poster.refuses-url",
+      "operation": "poster",
+      "input": {
+        "path": "https://evil.example/x.jpg"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.poster.refuses-traversal",
+      "operation": "poster",
+      "input": {
+        "path": "/../x.jpg"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.poster.refuses-slash",
+      "operation": "poster",
+      "input": {
+        "path": "/a/b.jpg"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.media-status.1",
+      "operation": "media-status",
+      "input": {
+        "value": 1
+      },
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "seerr.media-status.2",
+      "operation": "media-status",
+      "input": {
+        "value": 2
+      },
+      "expected": "PENDING"
+    },
+    {
+      "id": "seerr.media-status.3",
+      "operation": "media-status",
+      "input": {
+        "value": 3
+      },
+      "expected": "PROCESSING"
+    },
+    {
+      "id": "seerr.media-status.4",
+      "operation": "media-status",
+      "input": {
+        "value": 4
+      },
+      "expected": "PARTIAL"
+    },
+    {
+      "id": "seerr.media-status.5",
+      "operation": "media-status",
+      "input": {
+        "value": 5
+      },
+      "expected": "AVAILABLE"
+    },
+    {
+      "id": "seerr.media-status.6",
+      "operation": "media-status",
+      "input": {
+        "value": 6
+      },
+      "expected": "BLOCKED"
+    },
+    {
+      "id": "seerr.media-status.7",
+      "operation": "media-status",
+      "input": {
+        "value": 7
+      },
+      "expected": "DELETED"
+    },
+    {
+      "id": "seerr.media-status.99",
+      "operation": "media-status",
+      "input": {
+        "value": 99
+      },
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "seerr.request-status.1",
+      "operation": "request-status",
+      "input": {
+        "value": 1
+      },
+      "expected": "PENDING"
+    },
+    {
+      "id": "seerr.request-status.2",
+      "operation": "request-status",
+      "input": {
+        "value": 2
+      },
+      "expected": "APPROVED"
+    },
+    {
+      "id": "seerr.request-status.3",
+      "operation": "request-status",
+      "input": {
+        "value": 3
+      },
+      "expected": "DECLINED"
+    },
+    {
+      "id": "seerr.request-status.4",
+      "operation": "request-status",
+      "input": {
+        "value": 4
+      },
+      "expected": "FAILED"
+    },
+    {
+      "id": "seerr.request-status.5",
+      "operation": "request-status",
+      "input": {
+        "value": 5
+      },
+      "expected": "COMPLETED"
+    },
+    {
+      "id": "seerr.request-display.pending",
+      "operation": "request-display",
+      "input": {
+        "status": 1,
+        "mediaStatus": 2
+      },
+      "expected": "PENDING"
+    },
+    {
+      "id": "seerr.request-display.approved-waiting",
+      "operation": "request-display",
+      "input": {
+        "status": 2,
+        "mediaStatus": 2
+      },
+      "expected": "APPROVED"
+    },
+    {
+      "id": "seerr.request-display.downloading",
+      "operation": "request-display",
+      "input": {
+        "status": 2,
+        "mediaStatus": 3
+      },
+      "expected": "PROCESSING"
+    },
+    {
+      "id": "seerr.request-display.partial",
+      "operation": "request-display",
+      "input": {
+        "status": 2,
+        "mediaStatus": 4
+      },
+      "expected": "PARTIAL"
+    },
+    {
+      "id": "seerr.request-display.in-library",
+      "operation": "request-display",
+      "input": {
+        "status": 2,
+        "mediaStatus": 5
+      },
+      "expected": "AVAILABLE"
+    },
+    {
+      "id": "seerr.request-display.completed",
+      "operation": "request-display",
+      "input": {
+        "status": 5,
+        "mediaStatus": 3
+      },
+      "expected": "AVAILABLE"
+    },
+    {
+      "id": "seerr.request-display.declined",
+      "operation": "request-display",
+      "input": {
+        "status": 3,
+        "mediaStatus": 1
+      },
+      "expected": "DECLINED"
+    },
+    {
+      "id": "seerr.request-display.failed",
+      "operation": "request-display",
+      "input": {
+        "status": 4,
+        "mediaStatus": 1
+      },
+      "expected": "FAILED"
+    },
+    {
+      "id": "seerr.can-request.admin-movie",
+      "operation": "can-request",
+      "input": {
+        "permissions": 2,
+        "type": "movie"
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.can-request.request-tv",
+      "operation": "can-request",
+      "input": {
+        "permissions": 32,
+        "type": "tv"
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.can-request.movie-only-tv",
+      "operation": "can-request",
+      "input": {
+        "permissions": 262144,
+        "type": "tv"
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.can-request.movie-only-movie",
+      "operation": "can-request",
+      "input": {
+        "permissions": 262144,
+        "type": "movie"
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.can-request.tv-only-tv",
+      "operation": "can-request",
+      "input": {
+        "permissions": 524288,
+        "type": "tv"
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.can-request.none",
+      "operation": "can-request",
+      "input": {
+        "permissions": 0,
+        "type": "movie"
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.can-request.person",
+      "operation": "can-request",
+      "input": {
+        "permissions": 2,
+        "type": "person"
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.unknown-media",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": null
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.movie-requestable.1",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 1
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.movie-requestable.2",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 2
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.3",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 3
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.4",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 4
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.5",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 5
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.6",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 6
+      },
+      "expected": false
+    },
+    {
+      "id": "seerr.movie-requestable.7",
+      "operation": "movie-requestable",
+      "input": {
+        "mediaStatus": 7
+      },
+      "expected": true
+    },
+    {
+      "id": "seerr.seasons.nothing-known",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ]
+        }
+      },
+      "expected": {
+        "selectable": [
+          1,
+          2,
+          3
+        ],
+        "taken": {}
+      }
+    },
+    {
+      "id": "seerr.seasons.pending-request-only-in-requests",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "tmdbId": 1399,
+            "mediaType": "tv",
+            "status": 2,
+            "seasons": [],
+            "requests": [
+              {
+                "id": 5,
+                "status": 1,
+                "is4k": false,
+                "seasons": [
+                  {
+                    "seasonNumber": 1,
+                    "status": 1
+                  },
+                  {
+                    "seasonNumber": 2,
+                    "status": 1
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          3
+        ],
+        "taken": {
+          "1": "PENDING",
+          "2": "PENDING"
+        }
+      }
+    },
+    {
+      "id": "seerr.seasons.approved-request",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "status": 3,
+            "requests": [
+              {
+                "status": 2,
+                "seasons": [
+                  {
+                    "seasonNumber": 3
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          1,
+          2
+        ],
+        "taken": {
+          "3": "APPROVED"
+        }
+      }
+    },
+    {
+      "id": "seerr.seasons.declined-and-completed-free",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "status": 1,
+            "requests": [
+              {
+                "status": 3,
+                "seasons": [
+                  {
+                    "seasonNumber": 1
+                  }
+                ]
+              },
+              {
+                "status": 5,
+                "seasons": [
+                  {
+                    "seasonNumber": 2
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          1,
+          2,
+          3
+        ],
+        "taken": {}
+      }
+    },
+    {
+      "id": "seerr.seasons.4k-request-ignored",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "status": 2,
+            "requests": [
+              {
+                "status": 1,
+                "is4k": true,
+                "seasons": [
+                  {
+                    "seasonNumber": 1
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          1,
+          2,
+          3
+        ],
+        "taken": {}
+      }
+    },
+    {
+      "id": "seerr.seasons.media-season-status",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "status": 4,
+            "seasons": [
+              {
+                "seasonNumber": 1,
+                "status": 5
+              },
+              {
+                "seasonNumber": 2,
+                "status": 7
+              },
+              {
+                "seasonNumber": 3,
+                "status": 1
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          2,
+          3
+        ],
+        "taken": {
+          "1": "AVAILABLE"
+        }
+      }
+    },
+    {
+      "id": "seerr.seasons.media-status-wins-over-request",
+      "operation": "seasons",
+      "input": {
+        "title": {
+          "id": 1399,
+          "mediaType": "tv",
+          "seasons": [
+            {
+              "seasonNumber": 0,
+              "episodeCount": 300
+            },
+            {
+              "seasonNumber": 1,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 2,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 3,
+              "episodeCount": 10
+            },
+            {
+              "seasonNumber": 4,
+              "episodeCount": 0
+            }
+          ],
+          "mediaInfo": {
+            "status": 4,
+            "seasons": [
+              {
+                "seasonNumber": 2,
+                "status": 3
+              }
+            ],
+            "requests": [
+              {
+                "status": 1,
+                "seasons": [
+                  {
+                    "seasonNumber": 2
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "selectable": [
+          1,
+          3
+        ],
+        "taken": {
+          "2": "PROCESSING"
+        }
+      }
+    },
+    {
+      "id": "seerr.offers.drops-people-and-available",
+      "operation": "offers",
+      "input": {
+        "titles": [
+          {
+            "id": 603,
+            "mediaType": "movie",
+            "title": "The Matrix",
+            "releaseDate": "1999-05-01"
+          },
+          {
+            "id": 6384,
+            "mediaType": "person",
+            "name": "Keanu Reeves"
+          },
+          {
+            "id": 10681,
+            "mediaType": "movie",
+            "title": "Big Buck Bunny",
+            "releaseDate": "2008-05-01",
+            "mediaInfo": {
+              "status": 5
+            }
+          },
+          {
+            "id": 1399,
+            "mediaType": "tv",
+            "name": "Game of Thrones",
+            "firstAirDate": "2011-05-01",
+            "mediaInfo": {
+              "status": 2
+            }
+          }
+        ],
+        "library": []
+      },
+      "expected": [
+        "movie-603",
+        "tv-1399"
+      ]
+    },
+    {
+      "id": "seerr.offers.drops-library-match",
+      "operation": "offers",
+      "input": {
+        "titles": [
+          {
+            "id": 603,
+            "mediaType": "movie",
+            "title": "The Matrix",
+            "releaseDate": "1999-05-01"
+          },
+          {
+            "id": 604,
+            "mediaType": "movie",
+            "title": "The Matrix Reloaded",
+            "releaseDate": "2003-05-01"
+          }
+        ],
+        "library": [
+          {
+            "name": "the matrix ",
+            "year": 1999
+          }
+        ]
+      },
+      "expected": [
+        "movie-604"
+      ]
+    },
+    {
+      "id": "seerr.offers.same-name-other-year-kept",
+      "operation": "offers",
+      "input": {
+        "titles": [
+          {
+            "id": 1,
+            "mediaType": "movie",
+            "title": "Dune",
+            "releaseDate": "2021-05-01"
+          }
+        ],
+        "library": [
+          {
+            "name": "Dune",
+            "year": 1984
+          }
+        ]
+      },
+      "expected": [
+        "movie-1"
+      ]
+    },
+    {
+      "id": "seerr.offers.partial-series-offered",
+      "operation": "offers",
+      "input": {
+        "titles": [
+          {
+            "id": 1399,
+            "mediaType": "tv",
+            "name": "Game of Thrones",
+            "firstAirDate": "2011-05-01",
+            "mediaInfo": {
+              "status": 4
+            }
+          }
+        ],
+        "library": []
+      },
+      "expected": [
+        "tv-1399"
+      ]
+    },
+    {
+      "id": "seerr.offers.duplicate-once",
+      "operation": "offers",
+      "input": {
+        "titles": [
+          {
+            "id": 603,
+            "mediaType": "movie",
+            "title": "The Matrix",
+            "releaseDate": "1999-05-01"
+          },
+          {
+            "id": 603,
+            "mediaType": "movie",
+            "title": "The Matrix",
+            "releaseDate": "1999-05-01"
+          }
+        ],
+        "library": []
+      },
+      "expected": [
+        "movie-603"
+      ]
+    },
+    {
+      "id": "seerr.error.login-wrong-password",
+      "operation": "error",
+      "input": {
+        "status": 401,
+        "body": "{\"message\":\"INVALID_CREDENTIALS\"}",
+        "login": true
+      },
+      "expected": "PASSWORD"
+    },
+    {
+      "id": "seerr.error.login-forbidden",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{}",
+        "login": true
+      },
+      "expected": "PASSWORD"
+    },
+    {
+      "id": "seerr.error.login-not-seerr",
+      "operation": "error",
+      "input": {
+        "status": 404,
+        "body": "Not Found",
+        "login": true
+      },
+      "expected": "ADDRESS"
+    },
+    {
+      "id": "seerr.error.redirect",
+      "operation": "error",
+      "input": {
+        "status": 307,
+        "body": ""
+      },
+      "expected": "ADDRESS"
+    },
+    {
+      "id": "seerr.error.key-wrong",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{\"message\":\"You do not have permission to access this endpoint.\"}",
+        "apiKey": true
+      },
+      "expected": "API_KEY"
+    },
+    {
+      "id": "seerr.error.key-not-seerr",
+      "operation": "error",
+      "input": {
+        "status": 404,
+        "body": "",
+        "apiKey": true
+      },
+      "expected": "ADDRESS"
+    },
+    {
+      "id": "seerr.error.session-missing",
+      "operation": "error",
+      "input": {
+        "status": 401,
+        "body": "{\"message\":\"cookie 'connect.sid' required\"}"
+      },
+      "expected": "EXPIRED"
+    },
+    {
+      "id": "seerr.error.no-permission",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{\"message\":\"You do not have permission to make movie requests.\"}"
+      },
+      "expected": "PERMISSION"
+    },
+    {
+      "id": "seerr.error.movie-quota",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{\"message\":\"Movie Quota exceeded.\"}"
+      },
+      "expected": "QUOTA"
+    },
+    {
+      "id": "seerr.error.series-quota",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{\"message\":\"Series Quota exceeded.\"}"
+      },
+      "expected": "QUOTA"
+    },
+    {
+      "id": "seerr.error.blocklisted",
+      "operation": "error",
+      "input": {
+        "status": 403,
+        "body": "{\"message\":\"This media is blocklisted.\"}"
+      },
+      "expected": "BLOCKED"
+    },
+    {
+      "id": "seerr.error.duplicate",
+      "operation": "error",
+      "input": {
+        "status": 409,
+        "body": "{\"message\":\"Request for this media already exists.\"}"
+      },
+      "expected": "ALREADY_REQUESTED"
+    },
+    {
+      "id": "seerr.error.no-seasons-left",
+      "operation": "error",
+      "input": {
+        "status": 202,
+        "body": "{\"message\":\"No seasons available to request\"}"
+      },
+      "expected": "ALREADY_REQUESTED"
+    },
+    {
+      "id": "seerr.error.server-error",
+      "operation": "error",
+      "input": {
+        "status": 500,
+        "body": "{}"
+      },
+      "expected": "SERVER"
+    },
+    {
+      "id": "seerr.error.bad-query",
+      "operation": "error",
+      "input": {
+        "status": 400,
+        "body": "{\"message\":\"Parameter 'query' must be url encoded.\"}"
+      },
+      "expected": "SERVER"
+    },
+    {
+      "id": "seerr.headers.jellyfin-cookie",
+      "operation": "headers",
+      "input": {
+        "mode": "JELLYFIN",
+        "cookie": "connect.sid=s%3Aabc",
+        "userId": 2
+      },
+      "expected": [
+        [
+          "Cookie",
+          "connect.sid=s%3Aabc"
+        ]
+      ]
+    },
+    {
+      "id": "seerr.headers.jellyfin-no-cookie",
+      "operation": "headers",
+      "input": {
+        "mode": "JELLYFIN",
+        "userId": 2
+      },
+      "expected": []
+    },
+    {
+      "id": "seerr.headers.key-names-viewer",
+      "operation": "headers",
+      "input": {
+        "mode": "API_KEY",
+        "apiKey": "k",
+        "userId": 2
+      },
+      "expected": [
+        [
+          "X-Api-Key",
+          "k"
+        ],
+        [
+          "X-API-User",
+          "2"
+        ]
+      ]
+    },
+    {
+      "id": "seerr.headers.key-without-viewer-refused",
+      "operation": "headers",
+      "input": {
+        "mode": "API_KEY",
+        "apiKey": "k",
+        "userId": 0
+      },
+      "expected": "NOT_LINKED"
+    },
+    {
+      "id": "seerr.headers.key-negative-viewer-refused",
+      "operation": "headers",
+      "input": {
+        "mode": "API_KEY",
+        "apiKey": "k",
+        "userId": -1
+      },
+      "expected": "NOT_LINKED"
+    },
+    {
+      "id": "seerr.headers.key-lookup-only",
+      "operation": "headers",
+      "input": {
+        "mode": "API_KEY",
+        "apiKey": "k",
+        "userId": 0,
+        "lookup": true
+      },
+      "expected": [
+        [
+          "X-Api-Key",
+          "k"
+        ]
+      ]
+    },
+    {
+      "id": "seerr.link.match",
+      "operation": "link",
+      "input": {
+        "users": [
+          {
+            "id": 1,
+            "displayName": "admin",
+            "jellyfinUserId": "ab3c4f85f313450683238943da5e73b9",
+            "permissions": 2
+          },
+          {
+            "id": 2,
+            "displayName": "pilot",
+            "jellyfinUserId": "db7d5bcbc3cf4c0d88a2ff7e124a2c4b",
+            "permissions": 32
+          },
+          {
+            "id": 3,
+            "displayName": "local",
+            "permissions": 32
+          }
+        ],
+        "jellyfinUserId": "db7d5bcbc3cf4c0d88a2ff7e124a2c4b"
+      },
+      "expected": 2
+    },
+    {
+      "id": "seerr.link.dashed-uppercase",
+      "operation": "link",
+      "input": {
+        "users": [
+          {
+            "id": 1,
+            "displayName": "admin",
+            "jellyfinUserId": "ab3c4f85f313450683238943da5e73b9",
+            "permissions": 2
+          },
+          {
+            "id": 2,
+            "displayName": "pilot",
+            "jellyfinUserId": "db7d5bcbc3cf4c0d88a2ff7e124a2c4b",
+            "permissions": 32
+          },
+          {
+            "id": 3,
+            "displayName": "local",
+            "permissions": 32
+          }
+        ],
+        "jellyfinUserId": "DB7D5BCB-C3CF-4C0D-88A2-FF7E124A2C4B"
+      },
+      "expected": 2
+    },
+    {
+      "id": "seerr.link.no-match-never-admin",
+      "operation": "link",
+      "input": {
+        "users": [
+          {
+            "id": 1,
+            "displayName": "admin",
+            "jellyfinUserId": "ab3c4f85f313450683238943da5e73b9",
+            "permissions": 2
+          },
+          {
+            "id": 2,
+            "displayName": "pilot",
+            "jellyfinUserId": "db7d5bcbc3cf4c0d88a2ff7e124a2c4b",
+            "permissions": 32
+          },
+          {
+            "id": 3,
+            "displayName": "local",
+            "permissions": 32
+          }
+        ],
+        "jellyfinUserId": "00000000000000000000000000000000"
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.link.empty-id",
+      "operation": "link",
+      "input": {
+        "users": [
+          {
+            "id": 1,
+            "displayName": "admin",
+            "jellyfinUserId": "ab3c4f85f313450683238943da5e73b9",
+            "permissions": 2
+          },
+          {
+            "id": 2,
+            "displayName": "pilot",
+            "jellyfinUserId": "db7d5bcbc3cf4c0d88a2ff7e124a2c4b",
+            "permissions": 32
+          },
+          {
+            "id": 3,
+            "displayName": "local",
+            "permissions": 32
+          }
+        ],
+        "jellyfinUserId": ""
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.cookie.session",
+      "operation": "session-cookie",
+      "input": {
+        "setCookie": [
+          "connect.sid=s%3Aabc.def; Path=/; Expires=Wed, 16 Dec 2026 08:00:00 GMT; HttpOnly; SameSite=Lax"
+        ]
+      },
+      "expected": "connect.sid=s%3Aabc.def"
+    },
+    {
+      "id": "seerr.cookie.other-only",
+      "operation": "session-cookie",
+      "input": {
+        "setCookie": [
+          "theme=dark; Path=/"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "seerr.cookie.empty-value",
+      "operation": "session-cookie",
+      "input": {
+        "setCookie": [
+          "connect.sid=; Path=/"
+        ]
+      },
+      "expected": null
+    }
+  ]
+}

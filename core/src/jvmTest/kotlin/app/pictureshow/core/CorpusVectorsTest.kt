@@ -41,7 +41,9 @@ class CorpusVectorsTest {
                     "quality-auto-floor",
                     "playback-info-reasons",
                     "settings-presentation",
-                    "recovery"
+                    "recovery",
+                    // SeerrVectorsTest executes the Seerr request rules.
+                    "seerr"
                 ),
             "control-vectors" to
                 setOf(

@@ -63,7 +63,9 @@ fun CatalogCard(
     artworkProgress: Float? = null,
     showProgress: Boolean = true,
     /** Replaces the default line under the title, e.g. Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
-    subtitle: String? = null
+    subtitle: String? = null,
+    /** Art from outside the server (a Seerr title's TMDB poster), loaded without any server credentials. */
+    artworkUrl: String? = null
 ) {
     Card(
         onClick = onClick,
@@ -82,7 +84,8 @@ fun CatalogCard(
                 Modifier.fillMaxWidth().height(artHeight)
             } else {
                 Modifier.fillMaxWidth().aspectRatio(if (poster) 2f / 3f else 16f / 9f)
-            }
+            },
+            artworkUrl = artworkUrl
         )
         // Always 4 dp tall, so progress on one card doesn't step it out of its row.
         Box(Modifier.fillMaxWidth().height(4.dp)) {
@@ -134,10 +137,12 @@ fun CatalogArtwork(
     account: Account,
     wide: Boolean,
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    artworkUrl: String? = null
 ) {
     Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-        val url = imageUrl(account.server, item, 720, wide = wide)
+        // Outside art never falls back to the server: an empty override means none (a Seerr title without a poster).
+        val url = if (artworkUrl != null) artworkUrl.takeIf(String::isNotBlank) else imageUrl(account.server, item, 720, wide = wide)
         var failed by remember(url) { mutableStateOf(false) }
         if (url != null) {
             AsyncImage(

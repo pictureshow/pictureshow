@@ -17,7 +17,9 @@ import app.pictureshow.core.seerr.SeerrClient
 import app.pictureshow.core.seerr.SeerrConfig
 import app.pictureshow.core.seerr.SeerrError
 import app.pictureshow.core.seerr.SeerrFailure
+import app.pictureshow.core.seerr.SeerrMode
 import app.pictureshow.core.seerr.SeerrSecret
+import app.pictureshow.core.seerr.normalizeSeerrUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -26,8 +28,9 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -64,43 +67,64 @@ private fun seerrKey(): SecretKey {
 @Serializable
 internal data class SeerrSaved(val config: SeerrConfig, val encryptedSecret: String)
 internal val SEERR_CONNECTIONS = stringPreferencesKey("seerr_connections_v1")
-private val seerrJson = Json { ignoreUnknownKeys = true }
+internal val seerrJson = Json { ignoreUnknownKeys = true }
 
 /** Called in the same DataStore transaction that signs out or forgets the Jellyfin account. */
 internal fun retainSeerrAccounts(values: MutablePreferences, snapshot: AccountSnapshot) {
-    val existing = values[SEERR_CONNECTIONS] ?: return
-    val saved = seerrJson.decodeFromString<Map<String, SeerrSaved>>(existing)
+    if (values[SEERR_CONNECTIONS] == null) return
+    val saved = decodeSeerrConnections(values)
     val retained = snapshot.accounts.filter { !it.signedOut }.map { it.key }.toSet()
     values[SEERR_CONNECTIONS] = seerrJson.encodeToString(saved.filterKeys { it in retained })
 }
 
-internal class SeerrStore(private val preferences: DataStore<Preferences>, private val cipher: SeerrCipher = SeerrCipher()) {
-    private val http = HttpClient(OkHttp) {
-        followRedirects = false
-        engine { config { followRedirects(false); followSslRedirects(false) } }
-        install(HttpTimeout) { requestTimeoutMillis = 30_000; connectTimeoutMillis = 10_000 }
-    }
-    val connections = preferences.data.map { decode(it).mapValues { entry -> entry.value.config } }
-    private fun decode(values: Preferences): Map<String, SeerrSaved> =
-        values[SEERR_CONNECTIONS]?.let { seerrJson.decodeFromString(it) } ?: emptyMap()
+internal class SeerrStore(
+    private val preferences: DataStore<Preferences>,
+    private val cipher: SeerrCipher = SeerrCipher(),
+    private val http: HttpClient = seerrHttpClient()
+) {
+    /** Each Pictureshow account's Seerr connection (never the secret), keyed by [Account.key]. */
+    val connections: Flow<Map<String, SeerrConfig>> = preferences.data.map { decode(it).mapValues { entry -> entry.value.config } }
 
+    fun connection(key: String): Flow<SeerrConfig?> = connections.map { it[key] }
+
+    private fun decode(values: Preferences): Map<String, SeerrSaved> = decodeSeerrConnections(values)
+
+    /**
+     * Signs in (Jellyfin name and password) or links the API key to the viewer's own Seerr user, checks who Seerr
+     * says that is, and only then saves the connection for [account]. Throws [SeerrFailure].
+     */
     suspend fun connect(account: Account, url: String, apiKey: String?, username: String, password: String): SeerrConfig {
+        val address = try {
+            normalizeSeerrUrl(url)
+        } catch (_: IllegalArgumentException) {
+            throw SeerrFailure(SeerrError.ADDRESS)
+        }
         val secret: SeerrSecret
         val config: SeerrConfig
         if (apiKey != null) {
-            config = SeerrClient.apiKey(http, url, apiKey.trim(), account.user.id)
+            config = SeerrClient.apiKey(http, address, apiKey.trim(), account.user.id)
             secret = SeerrSecret(apiKey = apiKey.trim())
         } else {
-            val login = SeerrClient.login(http, url, username.trim(), password)
-            config = SeerrConfig(app.pictureshow.core.seerr.normalizeSeerrUrl(url), app.pictureshow.core.seerr.SeerrMode.JELLYFIN, login.first)
+            val login = SeerrClient.login(http, address, username.trim(), password)
+            config = SeerrConfig(address, SeerrMode.JELLYFIN, login.first)
             secret = login.second
         }
-        // Test the effective identity, including X-API-User, before publishing the connection.
+        // The effective identity, including X-API-User, before the connection is published.
         val verified = config.copy(user = SeerrClient(http, config, secret).me())
-        val encrypted = cipher.encrypt(account.key, seerrJson.encodeToString(secret))
+        if (apiKey != null && verified.user.id != config.user.id) throw SeerrFailure(SeerrError.NOT_LINKED)
+        val encrypted = try {
+            cipher.encrypt(account.key, seerrJson.encodeToString(secret))
+        } catch (_: Exception) {
+            throw SeerrFailure(SeerrError.STORAGE)
+        }
         preferences.edit { values ->
-            val snapshot = values[stringPreferencesKey("accounts_v1")]?.let { seerrJson.decodeFromString<AccountSnapshot>(it) }
-            if (snapshot != null && snapshot.accounts.none { it.key == account.key && !it.signedOut }) throw SeerrFailure(SeerrError.EXPIRED)
+            val snapshot = values[ACCOUNTS_KEY]?.let { runCatching { seerrJson.decodeFromString<AccountSnapshot>(it) }.getOrNull() }
+            // Signed out while this was in flight: never attach a Seerr sign-in to an account that is gone.
+            if (snapshot != null &&
+                snapshot.accounts.none { it.key == account.key && !it.signedOut }
+            ) {
+                throw SeerrFailure(SeerrError.EXPIRED)
+            }
             values[SEERR_CONNECTIONS] = seerrJson.encodeToString(decode(values) + (account.key to SeerrSaved(verified, encrypted)))
         }
         return verified
@@ -121,7 +145,7 @@ internal class SeerrStore(private val preferences: DataStore<Preferences>, priva
             val encrypted = cipher.encrypt(key, seerrJson.encodeToString(renewed))
             preferences.edit { values ->
                 val current = decode(values)
-                // A response from before Disconnect/sign-out cannot restore a connection.
+                // A renewal that finishes after Disconnect or sign-out can't bring the connection back.
                 if (current[key]?.encryptedSecret == expected) {
                     values[SEERR_CONNECTIONS] = seerrJson.encodeToString(current + (key to saved.copy(encryptedSecret = encrypted)))
                     expected = encrypted
@@ -130,8 +154,30 @@ internal class SeerrStore(private val preferences: DataStore<Preferences>, priva
         }
     }
 
+    /** The client for [key]'s saved connection, or null when that account hasn't connected Seerr. */
     suspend fun client(key: String): SeerrClient? {
         val values = preferences.data.first()
         return decode(values)[key]?.let { client(key, it) }
+    }
+}
+
+private val ACCOUNTS_KEY = stringPreferencesKey("accounts_v1")
+
+/** A corrupt entry reads as no connections rather than failing every screen that asks. */
+internal fun decodeSeerrConnections(values: Preferences): Map<String, SeerrSaved> =
+    values[SEERR_CONNECTIONS]?.let { runCatching { seerrJson.decodeFromString<Map<String, SeerrSaved>>(it) }.getOrNull() } ?: emptyMap()
+
+/** Seerr's own client: no redirects (a redirect could carry the cookie or key elsewhere), no shared headers or cookies. */
+internal fun seerrHttpClient(): HttpClient = HttpClient(OkHttp) {
+    followRedirects = false
+    engine {
+        config {
+            followRedirects(false)
+            followSslRedirects(false)
+        }
+    }
+    install(HttpTimeout) {
+        requestTimeoutMillis = 30_000
+        connectTimeoutMillis = 10_000
     }
 }

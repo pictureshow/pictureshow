@@ -63,6 +63,8 @@ const pendingPortSuites = new Set([
     "cast-queue",
     // AUTH-10 retained-card sign-out: desktop/core implementation; web runtime port owed.
     "account-sign-out",
+    // SEERR: Seerr requests are on Android first; web port owed.
+    "seerr",
     // Search presentation (CAT-14..16 desktop contract); web search runs its own CAT-14a cases.
     "search-presentation",
     // CAT-30..32, PHOTO-01/02, PLAY-30, SAVER-01 detail discovery (Android leg 160): web port owed.

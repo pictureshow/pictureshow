@@ -155,6 +155,9 @@ internal fun PlaybackSettingsScreen(
     /** HOME-12: null hides the switch until the Home layout is read. */
     separateNextUp: Boolean? = null,
     onSeparateNextUp: (Boolean) -> Unit = {},
+    /** Seerr requests: null hides the row (no account yet); otherwise the connected name, or "" when not connected. */
+    seerrUser: String? = null,
+    onSeerr: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -165,6 +168,7 @@ internal fun PlaybackSettingsScreen(
     val thisTvFocus = remember { FocusRequester() }
     val aboutFocus = remember { FocusRequester() }
     val supportFocus = remember { FocusRequester() }
+    val seerrFocus = remember { FocusRequester() }
     val advancedFocus = remember { mutableMapOf<String, FocusRequester>() }
     var restoreEntry by rememberSaveable { mutableStateOf("") }
     var restoreAdvanced by remember { mutableStateOf<String?>(null) }
@@ -356,6 +360,21 @@ internal fun PlaybackSettingsScreen(
                 navigation = true,
                 onClick = onSyncPlay
             )
+            if (seerrUser != null) {
+                TvSettingsActionRow(
+                    stringResource(R.string.seerr_settings_title),
+                    Modifier.focusRequester(seerrFocus).testTag("settings:seerr"),
+                    supportingText = if (seerrUser.isEmpty()) {
+                        stringResource(R.string.seerr_settings_off)
+                    } else {
+                        stringResource(R.string.seerr_settings_on, seerrUser)
+                    },
+                    navigation = true
+                ) {
+                    restoreEntry = "seerr"
+                    onSeerr()
+                }
+            }
             TvSettingsActionRow(
                 stringResource(R.string.supporter_title),
                 Modifier.focusRequester(supportFocus).testTag("settings:supporter"),
@@ -389,6 +408,7 @@ internal fun PlaybackSettingsScreen(
             "this-tv" -> thisTvFocus.requestFocus()
             "about" -> aboutFocus.requestFocus()
             "supporter" -> supportFocus.requestFocus()
+            "seerr" -> seerrFocus.requestFocus()
             "switch-user" -> if (account != null) switchUserFocus.requestFocus() else first.requestFocus()
             else -> first.requestFocus()
         }
