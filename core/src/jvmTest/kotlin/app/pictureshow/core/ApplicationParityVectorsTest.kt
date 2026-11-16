@@ -65,6 +65,21 @@ class ApplicationParityVectorsTest {
                     "runtime-label" -> JsonPrimitive(runtimeLabel(input.getValue("ticks").jsonPrimitive.long))
                     "catalog-placeholder-kind" -> catalogPlaceholderKind(Json.decodeFromJsonElement(input.getValue("item")))
                         ?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull
+                    "media-badges" -> JsonArray(
+                        mediaBadges(
+                            input.getValue("source").takeUnless { it is JsonNull }?.let {
+                                app.pictureshow.core.playback.PlaybackJson.decodeFromJsonElement<
+                                    app.pictureshow.core.playback.MediaSourceInfo
+                                    >(it)
+                            }
+                        ).map(::JsonPrimitive)
+                    )
+                    "detail-play-label" -> JsonPrimitive(
+                        detailPlayLabel(
+                            Json.decodeFromJsonElement(input.getValue("item")),
+                            input.getValue("playItem").takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<MediaItem>(it) }
+                        )
+                    )
                     "detail-play-item" -> detailPlayItem(
                         Json.decodeFromJsonElement(input.getValue("item")),
                         Json.decodeFromJsonElement(input.getValue("nextUp")),

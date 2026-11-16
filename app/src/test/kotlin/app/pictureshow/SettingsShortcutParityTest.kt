@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -79,28 +78,37 @@ class SettingsShortcutParityTest {
     ).jsonObject.getValue("cases").jsonArray.map { it.jsonObject }
         .single { it.getValue("operation").jsonPrimitive.content == "main-settings-contextual-copy" }
 
-    @Test fun mainTvShortcutsUseContextualNamesAndOneSegmentCaption() {
-        val case = mainCopyCase()
+    private fun tvGroupsCase() = Json.parseToJsonElement(
+        listOf(File("../spec/vectors/playback-settings-layout.json"), File("spec/vectors/playback-settings-layout.json"))
+            .single { it.isFile }.readText()
+    ).jsonObject.getValue("cases").jsonArray.map { it.jsonObject }
+        .single { it.getValue("operation").jsonPrimitive.content == "main-settings-tv-groups" }
+
+    @Test fun mainTvSettingsShowEachSettingOnceWithGroupSummariesAndOneSegmentCaption() {
+        val case = tvGroupsCase()
         compose.setContent {
             MaterialTheme { PlaybackSettingsScreen(PlaybackSettingsState(loading = false), "PCM only", {}, { _, _ -> }, {}, onBack = {}) }
         }
-        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
-        case.getValue("input").jsonObject.getValue("rows").jsonArray.forEach { item ->
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
+        val input = case.getValue("input").jsonObject
+        assertEquals(tvSettingsGroups, input.getValue("groups").jsonArray.map { it.jsonPrimitive.content })
+        input.getValue("removedTags").jsonArray.forEach { compose.onNodeWithTag(it.jsonPrimitive.content).assertDoesNotExist() }
+        input.getValue("summaries").jsonArray.forEach { item ->
             val row = item.jsonObject
             val node = compose.onNodeWithTag(row.getValue("tag").jsonPrimitive.content)
             node.performSemanticsAction(SemanticsActions.RequestFocus)
-            node.assertIsDisplayed().assert(hasText(row.getValue("title").jsonPrimitive.content))
-                .assert(hasText(row.getValue("supporting").jsonPrimitive.content))
+            node.assertIsDisplayed().assert(hasText(row.getValue("contains").jsonPrimitive.content, substring = true))
         }
         val expected = case.getValue("expected").jsonObject
+        assertEquals(
+            expected.getValue("alsoInCopyCount").jsonPrimitive.int,
+            compose.onAllNodesWithText("Also in", substring = true).fetchSemanticsNodes().size
+        )
         assertEquals(
             expected.getValue("segmentCaptionCount").jsonPrimitive.int,
             compose.onAllNodesWithText(expected.getValue("segmentCaption").jsonPrimitive.content).fetchSemanticsNodes().size
         )
-        assertEquals(
-            expected.getValue("shortcutMetaCopyCount").jsonPrimitive.int,
-            compose.onAllNodesWithText("Shortcut to", substring = true).fetchSemanticsNodes().size
-        )
+        assertEquals(0, compose.onAllNodesWithText("Shortcut to", substring = true).fetchSemanticsNodes().size)
         assertEquals(0, compose.onAllNodesWithText("Ask shows a skip button.", substring = true).fetchSemanticsNodes().size)
     }
 
@@ -127,7 +135,8 @@ class SettingsShortcutParityTest {
         )
     }
 
-    @Test fun homeAndSubtitleShortcutsAndTheirPanelsEditTheSamePreferencesInBothDirections() {
+    @Test fun homeLimitSubtitleSizeAndBackgroundAreReachedThroughTheirGroupsWhoseRowsShowTheNewValues() {
+        // T-9 removed the shortcuts above the groups; each value is still one group away and the group row says what it is.
         var state by mutableStateOf(PlaybackSettingsState(loading = false))
         compose.setContent {
             MaterialTheme {
@@ -136,41 +145,26 @@ class SettingsShortcutParityTest {
                 }, { _, _ -> }, {}, onBack = {})
             }
         }
-        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
-        step("settings:bitrate")
-        compose.runOnIdle { assertEquals(120, state.local.bitrateMbps) }
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
         openGroup("Network quality")
-        panelChoice("Home limit").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "120 Mbps"))
+        panelChoice("Home limit").performSemanticsAction(SemanticsActions.RequestFocus)
+        panelChoice("Home limit").performKeyInput { pressKey(Key.DirectionRight) }
         panelChoice("Home limit").performKeyInput { pressKey(Key.DirectionRight) }
         compose.runOnIdle { assertEquals(80, state.local.bitrateMbps) }
         closePanel()
         compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
-        compose.onNodeWithTag("settings:bitrate").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "80 Mbps"))
-        step("settings:size")
-        compose.runOnIdle { assertEquals(SubtitleSize.Small, state.local.subtitleSize) }
+            .assert(hasText("Home ${bitrateLabel(80)}", substring = true))
         openGroup("Subtitle appearance")
-        panelChoice(
-            "Font size"
-        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, subtitleSizeLabel(SubtitleSize.Small)))
+        panelChoice("Font size").performSemanticsAction(SemanticsActions.RequestFocus)
         panelChoice("Font size").performKeyInput { pressKey(Key.DirectionRight) }
-        compose.runOnIdle { assertEquals(SubtitleSize.Normal, state.local.subtitleSize) }
-        closePanel()
-        compose.onNodeWithTag(
-            "settings:size"
-        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, subtitleSizeLabel(SubtitleSize.Normal)))
-        step("settings:background")
-        compose.runOnIdle { assertEquals(SubtitleBackground.None, state.local.subtitleBackground) }
-        openGroup("Subtitle appearance")
-        panelChoice(
-            "Background"
-        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, subtitleBackgroundLabel(SubtitleBackground.None)))
+        compose.runOnIdle { assertEquals(SubtitleSize.Small, state.local.subtitleSize) }
         panelChoice("Background").performSemanticsAction(SemanticsActions.RequestFocus)
         panelChoice("Background").performKeyInput { pressKey(Key.DirectionRight) }
-        compose.runOnIdle { assertEquals(SubtitleBackground.Shadow, state.local.subtitleBackground) }
+        compose.runOnIdle { assertEquals(SubtitleBackground.None, state.local.subtitleBackground) }
         closePanel()
-        compose.onNodeWithTag(
-            "settings:background"
-        ).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, subtitleBackgroundLabel(SubtitleBackground.Shadow)))
+        compose.onNodeWithTag("settings:advanced:Subtitle appearance").assertIsFocused()
+            .assert(hasText("Size ${subtitleSizeLabel(SubtitleSize.Small)}", substring = true))
+            .assert(hasText("Background ${subtitleBackgroundLabel(SubtitleBackground.None)}", substring = true))
     }
 
     @Test fun detectedRouteFormatsReachAudioPanelAndDisconnectionDoesNotDiscardStoredPreferences() {
@@ -269,6 +263,7 @@ class SettingsShortcutParityTest {
         panelChoice("Audio passthrough").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
         verifyDisabledRows()
         closePanel()
-        compose.onNodeWithTag("settings:passthrough").assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
+        compose.onNodeWithTag("settings:advanced:Audio output")
+            .assert(hasText("Downmix is on, so passthrough is not used.", substring = true))
     }
 }

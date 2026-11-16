@@ -158,12 +158,60 @@
             "panelTitle": "Background",
             "supporting": "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
           }
+        ],
+        "surfaces": [
+          "touch"
         ]
       },
       "expected": {
         "segmentCaption": "Changes apply the next time you open the player.",
         "segmentCaptionCount": 1,
         "shortcutMetaCopyCount": 0
+      }
+    },
+    {
+      "id": "playback-settings-layout.tv-main-settings-groups",
+      "operation": "main-settings-tv-groups",
+      "input": {
+        "surfaces": [
+          "tv"
+        ],
+        "note": "TV Settings (real-user review T-9): headed groups, each setting once. The group rows summarise the values they hold, so the shortcuts that repeated them on the page, and their “Also in” copy, are gone.",
+        "groups": [
+          "Account",
+          "Playback & quality",
+          "Subtitles",
+          "Audio & video output",
+          "Skip segments",
+          "Your server preferences",
+          "Pictureshow"
+        ],
+        "removedTags": [
+          "settings:bitrate",
+          "settings:passthrough",
+          "settings:size",
+          "settings:background"
+        ],
+        "summaries": [
+          {
+            "tag": "settings:advanced:Network quality",
+            "contains": "Home "
+          },
+          {
+            "tag": "settings:advanced:Subtitle appearance",
+            "contains": "Size "
+          },
+          {
+            "tag": "settings:advanced:Audio output",
+            "contains": "Passthrough: "
+          }
+        ]
+      },
+      "expected": {
+        "alsoInCopyCount": 0,
+        "segmentCaption": "Changes apply the next time you open the player.",
+        "segmentCaptionCount": 1,
+        "thisTvGroup": "Audio & video output"
       }
     }
   ]

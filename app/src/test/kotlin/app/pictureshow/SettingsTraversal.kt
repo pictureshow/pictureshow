@@ -12,15 +12,27 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import app.pictureshow.core.SegmentType
 
-/** The same remote path exercised by the page-order and all entry-restoration regressions. */
-internal val settingsViewerTags = listOf("settings:bitrate", "settings:passthrough", "settings:conversion-notice") +
-    listOf("settings:music-quality", "settings:phone-remote", "settings:size", "settings:background") +
-    playbackGroups.map { "settings:advanced:$it" } +
-    SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
-    listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode", "settings:syncplay")
+/**
+ * The TV Settings rows in page order, as the remote walks them (T-9): Playback & quality, Subtitles, Audio & video output
+ * (This TV ends it), Skip segments, Your server preferences, then the Pictureshow rows. Each setting appears once.
+ * Screens opened with a signed-in account put [settingsAccountTags] first.
+ */
+internal val settingsViewerTags =
+    listOf("settings:advanced:Network quality", "settings:advanced:Playback", "settings:conversion-notice") +
+        listOf("settings:music-quality", "settings:phone-remote") +
+        listOf("settings:advanced:Subtitle appearance", "settings:advanced:Subtitle conversion") +
+        listOf("settings:advanced:Audio output", "settings:advanced:Video output", "settings:this-tv") +
+        SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
+        listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode", "settings:syncplay")
+
+/** The Account group's rows, first on the page whenever someone is signed in. */
+internal val settingsAccountTags = listOf("settings:switch-user", "settings:sign-out")
+
+/** Every row after the viewer settings, through Back. */
+internal val settingsTrailingTags = listOf("settings:supporter", "settings:about", "settings:back")
 
 internal fun ComposeContentTestRule.walkSettingsFromHomeTo(tag: String) {
-    val path = settingsViewerTags + listOf("settings:supporter", "settings:about", "settings:this-tv", "settings:back")
+    val path = settingsViewerTags + settingsTrailingTags
     val target = path.indexOf(tag)
     require(target >= 0)
     path.drop(1).take(target).forEach { next ->

@@ -171,7 +171,7 @@ class CatalogRevisionPresentationTest {
             }
         }
         compose.onNodeWithText("No movies match these filters").assertExists()
-        compose.onNodeWithText("This library is empty.").assertDoesNotExist()
+        compose.onNodeWithText("This library is empty. Items appear here when your server adds them.").assertDoesNotExist()
         compose.onNodeWithText("Filters (3)").assertExists()
         compose.onNodeWithTag("grid:filters").assertIsSelected()
         compose.onNodeWithTag("grid:clear-filters").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)

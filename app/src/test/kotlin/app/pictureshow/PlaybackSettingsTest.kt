@@ -65,7 +65,7 @@ class PlaybackSettingsTest {
                 )
             }
         }
-        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
         fun center() {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitForIdle()
@@ -82,11 +82,9 @@ class PlaybackSettingsTest {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             compose.onNodeWithTag(tag).assertIsFocused()
         }
-        chooseNext()
-        assertEquals(120, state.local.bitrateMbps)
-        down("settings:passthrough")
-        center()
-        assertEquals(false, state.local.passthrough)
+        // Home limit, passthrough, subtitle size and background live in their groups (T-9), changed in
+        // SettingsShortcutParityTest and AccessibilitySemanticsTest; this walk changes every row on the page itself.
+        down("settings:advanced:Playback")
         down("settings:conversion-notice")
         center()
         assertEquals(false, state.local.conversionNotice)
@@ -97,13 +95,8 @@ class PlaybackSettingsTest {
         down("settings:phone-remote")
         chooseNext()
         assertEquals("server-allowed", state.local.remoteReceiver)
-        down("settings:size")
-        chooseNext()
-        assertEquals(SubtitleSize.Small, state.local.subtitleSize)
-        down("settings:background")
-        chooseNext()
-        assertEquals(SubtitleBackground.None, state.local.subtitleBackground)
-        playbackGroups.forEach { down("settings:advanced:$it") }
+        listOf("Subtitle appearance", "Subtitle conversion", "Audio output", "Video output").forEach { down("settings:advanced:$it") }
+        down("settings:this-tv")
         app.pictureshow.core.SegmentType.entries.filter { it != app.pictureshow.core.SegmentType.Unknown }.forEach { type ->
             down("settings:segment:$type")
             chooseNext()

@@ -26,7 +26,7 @@ internal fun emptyGridLabel(parent: MediaItem, filters: LibraryFilters = Library
     filteredEmptyLabel(parent.collectionType)
 } else {
     when (parent.type) {
-        "CollectionFolder", "UserView" -> "This library is empty."
+        "CollectionFolder", "UserView" -> "This library is empty. Items appear here when your server adds them."
         "BoxSet" -> "This collection is empty."
         "Playlist" -> "This playlist is empty."
         "Folder" -> "This folder is empty."

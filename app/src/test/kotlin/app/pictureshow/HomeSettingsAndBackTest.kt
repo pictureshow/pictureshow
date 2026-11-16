@@ -7,15 +7,23 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -33,6 +41,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -57,6 +66,7 @@ class HomeSettingsAndBackTest {
         loading = false
     )
     private var signOuts = 0
+    private var switchUsers = 0
 
     @Composable
     private fun Harness(state: CatalogHomeState = home) {
@@ -64,7 +74,7 @@ class HomeSettingsAndBackTest {
             val nav = rememberNavController()
             NavHost(nav, startDestination = "home") {
                 composable("home") {
-                    CatalogHome(state, account, {}, {}, {}, { signOuts++ }, onSettings = { nav.navigate("settings") })
+                    CatalogHome(state, account, {}, {}, { switchUsers++ }, { signOuts++ }, onSettings = { nav.navigate("settings") })
                 }
                 composable("settings") {
                     PlaybackSettingsScreen(PlaybackSettingsState(), "PCM only", {}, { _, _ -> }, {}) { nav.popBackStack() }
@@ -95,7 +105,7 @@ class HomeSettingsAndBackTest {
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionCenter)
-        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
         key(Key.Back)
         compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionDown)
@@ -196,5 +206,113 @@ class HomeSettingsAndBackTest {
         compose.onNodeWithTag("home:sign-out").assertIsFocused()
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:sign-out").assertIsFocused()
+    }
+
+    /** The account chip opens its own window, so keys go to the topmost root. */
+    private fun menuKey(key: Key) {
+        compose.onAllNodes(isRoot()).onLast().performKeyInput { pressKey(key) }
+        compose.waitForIdle()
+    }
+
+    private fun openAccountMenu() {
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("home:search").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:account").assertIsFocused().assertIsDisplayed()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("home:account-menu").assertIsDisplayed()
+        compose.onNodeWithTag("home:account:switch-user").assertIsFocused()
+    }
+
+    @Test
+    fun atLargeTypeTheChipStaysNarrowAndTheHeaderKeepsOneLine() {
+        // At 1.3x type on 960x540 "user · server" pushed the header's last button onto two lines.
+        // The scale is process-wide under Robolectric, so later test classes would inherit it without the reset.
+        RuntimeEnvironment.setFontScale(1.3f)
+        try {
+            compose.setContent { Harness() }
+            compose.onNodeWithTag("home:account")
+                .assert(hasContentDescription("Account: Jamie · Screen room"))
+            val chip = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
+            assertTrue(chip.right - chip.left <= 200.dp, "the chip ellipsizes sooner at large type")
+            val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
+            val settings = compose.onNodeWithTag("home:settings").getUnclippedBoundsInRoot()
+            assertEquals(search.bottom - search.top, settings.bottom - settings.top, "header buttons keep one line")
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
+    fun theAccountChipLeadsTheHeaderAndSaysWhoIsSignedInWhere() {
+        // T-1: two of three viewers searched the header for Sign out and gave up. Who is signed in leads it, and takes focus.
+        compose.setContent { Harness() }
+        val chip = compose.onNodeWithTag("home:account").getUnclippedBoundsInRoot()
+        val search = compose.onNodeWithTag("home:search").getUnclippedBoundsInRoot()
+        assertEquals(chip.top, search.top)
+        assertTrue(chip.right <= search.left, "the account chip comes first in the header row")
+        compose.onNodeWithTag("home:account").assert(hasContentDescription("Account: Jamie · Screen room"))
+        key(Key.DirectionUp)
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:account").assertIsFocused()
+        // Nothing lies left of it.
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:account").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
+    }
+
+    @Test
+    fun theAccountMenuOffersSwitchUserSignOutAndSettingsInThatOrder() {
+        compose.setContent { Harness() }
+        openAccountMenu()
+        compose.onNodeWithText("Signed in on Screen room").assertIsDisplayed()
+        menuKey(Key.DirectionDown)
+        compose.onNodeWithTag("home:account:sign-out").assertIsFocused()
+        menuKey(Key.DirectionDown)
+        compose.onNodeWithTag("home:account:settings").assertIsFocused()
+        menuKey(Key.DirectionCenter)
+        compose.onNodeWithTag("home:account-menu").assertDoesNotExist()
+        compose.onNodeWithTag("settings:advanced:Network quality").assertIsFocused()
+        assertEquals(0, signOuts)
+        assertEquals(0, switchUsers)
+    }
+
+    @Test
+    fun signOutFromTheAccountMenuSignsOutOnce() {
+        compose.setContent { Harness() }
+        openAccountMenu()
+        menuKey(Key.DirectionDown)
+        menuKey(Key.DirectionCenter)
+        compose.onNodeWithTag("home:account-menu").assertDoesNotExist()
+        assertEquals(1, signOuts)
+        assertEquals(0, switchUsers)
+    }
+
+    @Test
+    fun switchUserFromTheAccountMenuOpensTheAccountChoice() {
+        compose.setContent { Harness() }
+        openAccountMenu()
+        menuKey(Key.DirectionCenter)
+        compose.onNodeWithTag("home:account-menu").assertDoesNotExist()
+        assertEquals(1, switchUsers)
+        assertEquals(0, signOuts)
+    }
+
+    @Test
+    fun backClosesTheAccountMenuAndReturnsToTheChip() {
+        compose.setContent { Harness() }
+        openAccountMenu()
+        val top = compose.onAllNodes(isRoot()).onLast().fetchSemanticsNode().root as ViewRootForTest
+        val window = (top.view.parent as DialogWindowProvider).window
+        compose.runOnIdle {
+            window.callback.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
+            window.callback.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("home:account-menu").assertDoesNotExist()
+        compose.onNodeWithTag("home:account").assertIsFocused()
+        assertFalse(compose.activity.isFinishing)
+        assertEquals(0, signOuts + switchUsers)
     }
 }

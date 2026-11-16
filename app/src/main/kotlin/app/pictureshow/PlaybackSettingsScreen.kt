@@ -122,6 +122,20 @@ internal val subtitleModes = listOf("Default", "Always", "OnlyForced", "None", "
 internal fun <T> nextSetting(values: List<T>, current: T): T = values[(values.indexOf(current) + 1).mod(values.size)]
 internal fun preferenceLanguageLabel(value: String): String = if (value.isBlank()) "No preference" else trackLanguage(value) ?: value
 
+/** Who is signed in on this TV, for the Account group at the top of Settings. */
+internal data class SettingsAccount(val user: String, val server: String)
+
+/** The TV Settings groups in page order (T-9). Each group has a visible heading; nothing appears twice on the page. */
+internal val tvSettingsGroups = listOf(
+    "Account",
+    "Playback & quality",
+    "Subtitles",
+    "Audio & video output",
+    "Skip segments",
+    "Your server preferences",
+    "Pictureshow"
+)
+
 @Composable
 internal fun PlaybackSettingsScreen(
     state: PlaybackSettingsState,
@@ -134,10 +148,15 @@ internal fun PlaybackSettingsScreen(
     onSupport: () -> Unit = {},
     onSyncPlay: () -> Unit = {},
     supportedPassthrough: Set<PassthroughEncoding> = emptySet(),
+    account: SettingsAccount? = null,
+    onSwitchUser: () -> Unit = {},
+    onSignOut: () -> Unit = {},
+    signingOut: Boolean = false,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
+    val switchUserFocus = remember { FocusRequester() }
     val thisTvFocus = remember { FocusRequester() }
     val aboutFocus = remember { FocusRequester() }
     val supportFocus = remember { FocusRequester() }
@@ -147,6 +166,35 @@ internal fun PlaybackSettingsScreen(
     var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val local = state.local
     val configuration = state.configuration
+
+    @Composable
+    fun group(name: String, modifier: Modifier = Modifier) {
+        val requester = remember(name) { FocusRequester() }
+        advancedFocus[name] = requester
+        TvSettingsActionRow(
+            name,
+            modifier.focusRequester(requester).testTag("settings:advanced:$name"),
+            navigation = true,
+            summary = when (name) {
+                "Network quality" ->
+                    "Home ${bitrateLabel(local.bitrateMbps)} · Away ${bitrateLabel(local.tuning.remoteBitrateMbps)} · " +
+                        "Metered ${bitrateLabel(local.tuning.meteredBitrateMbps)}"
+                "Subtitle appearance" ->
+                    "Size ${subtitleSizeLabel(local.subtitleSize)} · Background ${subtitleBackgroundLabel(local.subtitleBackground)}, " +
+                        "with a live preview"
+                "Subtitle conversion" -> "When the server draws subtitles into the picture"
+                "Playback" -> "After credits and returning to a saved position"
+                "Audio output" ->
+                    "Passthrough: " + app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
+                        local.passthrough,
+                        supportedPassthrough,
+                        checking = acceptedAudio.startsWith("Checking"),
+                        downmix = local.tuning.downmix
+                    )
+                else -> "Refresh rate and HDR compatibility"
+            }
+        ) { advanced = name }
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(horizontal = 36.dp, vertical = 24.dp)) {
         Text(
             "Settings",
@@ -156,27 +204,29 @@ internal fun PlaybackSettingsScreen(
             }
         )
         TvSettingsList(Modifier.weight(1f)) {
-            TvSettingsChoiceRow(
-                "Home quality limit",
-                local.bitrateMbps,
-                PlaybackPreferences.BITRATES,
-                label = ::bitrateLabel,
-                modifier = Modifier.focusRequester(first).testTag("settings:bitrate"),
-                supportingText = "For streaming on your home network. Also in Network quality.",
-                optionSupportingText = ::bitrateOptionSupporting
-            ) { value -> onLocal { it.copy(bitrateMbps = value) } }
-            TvSettingsToggleRow(
-                "Audio passthrough",
-                local.passthrough,
-                Modifier.testTag("settings:passthrough"),
-                supportingText =
-                app.pictureshow.core.playback.PlaybackSettingsPresentation.passthroughSummary(
-                    local.passthrough,
-                    supportedPassthrough,
-                    checking = acceptedAudio.startsWith("Checking"),
-                    downmix = local.tuning.downmix
+            if (account != null) {
+                TvSettingsSectionHeader("Account", supportingText = "${account.user} on ${account.server}")
+                TvSettingsActionRow(
+                    "Switch user",
+                    Modifier.focusRequester(first).focusRequester(switchUserFocus).testTag("settings:switch-user"),
+                    supportingText = "Sign in as someone else, or pick another saved account.",
+                    enabled = !signingOut,
+                    navigation = true
+                ) {
+                    restoreEntry = "switch-user"
+                    onSwitchUser()
+                }
+                TvSettingsActionRow(
+                    if (signingOut) "Signing out…" else "Sign out",
+                    Modifier.testTag("settings:sign-out"),
+                    supportingText = "Signs ${account.user} out of this TV.",
+                    enabled = !signingOut,
+                    onClick = onSignOut
                 )
-            ) { value -> onLocal { it.copy(passthrough = value) } }
+            }
+            TvSettingsSectionHeader("Playback & quality")
+            group("Network quality", if (account == null) Modifier.focusRequester(first) else Modifier)
+            group("Playback")
             TvSettingsToggleRow(
                 "Conversion notice",
                 local.conversionNotice,
@@ -206,38 +256,20 @@ internal fun PlaybackSettingsScreen(
                 supportingText = "Who can play and control things on this TV from their phone while Pictureshow is open.",
                 optionSupportingText = { if (it == "server-allowed") "Anyone this server allows" else null }
             ) { value -> onLocal { it.copy(remoteReceiver = value) } }
-            TvSettingsChoiceRow(
-                "Subtitle size",
-                local.subtitleSize,
-                SubtitleSize.entries,
-                ::subtitleSizeLabel,
-                Modifier.testTag("settings:size"),
-                supportingText = "Sets subtitle text size. Also in Subtitle appearance, with a live preview."
-            ) { value -> onLocal { it.copy(subtitleSize = value) } }
-            TvSettingsChoiceRow(
-                "Subtitle background",
-                local.subtitleBackground,
-                SubtitleBackground.entries,
-                ::subtitleBackgroundLabel,
-                Modifier.testTag("settings:background"),
-                supportingText = "Sets the background behind subtitles. Also in Subtitle appearance, with a live preview."
-            ) { value -> onLocal { it.copy(subtitleBackground = value) } }
-            playbackGroups.forEach { group ->
-                val requester = remember(group) { FocusRequester() }
-                advancedFocus[group] = requester
-                TvSettingsActionRow(
-                    group,
-                    Modifier.focusRequester(requester).testTag("settings:advanced:$group"),
-                    navigation = true,
-                    summary = when (group) {
-                        "Network quality" -> "Home, remote and metered quality limits"
-                        "Subtitle appearance" -> "A live preview of text and image subtitles"
-                        "Subtitle conversion" -> "When the server draws subtitles into the picture"
-                        "Playback" -> "After credits and returning to a saved position"
-                        "Audio output" -> "Sound channels and connected receiver formats"
-                        else -> "Refresh rate and HDR compatibility"
-                    }
-                ) { advanced = group }
+            TvSettingsSectionHeader("Subtitles")
+            group("Subtitle appearance")
+            group("Subtitle conversion")
+            TvSettingsSectionHeader("Audio & video output")
+            group("Audio output")
+            group("Video output")
+            TvSettingsActionRow(
+                "This TV",
+                Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv"),
+                supportingText = "A technical report of the video and audio formats this TV can play.",
+                navigation = true
+            ) {
+                restoreEntry = "this-tv"
+                onThisTv()
             }
             TvSettingsSectionHeader("Skip segments", supportingText = "Changes apply the next time you open the player.")
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
@@ -309,16 +341,6 @@ internal fun PlaybackSettingsScreen(
                 restoreEntry = "about"
                 onAbout()
             }
-            TvSettingsSectionHeader("Troubleshooting")
-            TvSettingsActionRow(
-                "This TV",
-                Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv"),
-                supportingText = "A technical report of the video and audio formats this TV can play.",
-                navigation = true
-            ) {
-                restoreEntry = "this-tv"
-                onThisTv()
-            }
             TvSettingsActionRow("Back", Modifier.testTag("settings:back"), onClick = onBack)
         }
     }
@@ -340,6 +362,7 @@ internal fun PlaybackSettingsScreen(
             "this-tv" -> thisTvFocus.requestFocus()
             "about" -> aboutFocus.requestFocus()
             "supporter" -> supportFocus.requestFocus()
+            "switch-user" -> if (account != null) switchUserFocus.requestFocus() else first.requestFocus()
             else -> first.requestFocus()
         }
     }

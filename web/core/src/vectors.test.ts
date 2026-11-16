@@ -163,6 +163,23 @@ const pendingApplicationCases = new Map([
     ["placeholder-kind-unknown-library", "catalog-placeholder-kind"],
     ["placeholder-kind-boxset", "catalog-placeholder-kind"],
     ["placeholder-kind-title", "catalog-placeholder-kind"],
+    // Detail media badges and the series Play label (Android TV review T-11/T-13): web port owed.
+    ["media-badges-uhd-hdr10-51", "media-badges"],
+    ["media-badges-sdr-stereo-empty", "media-badges"],
+    ["media-badges-scope-4k-dolby-vision-atmos", "media-badges"],
+    ["media-badges-hdr10plus", "media-badges"],
+    ["media-badges-hlg", "media-badges"],
+    ["media-badges-invalid-dolby-vision-claims-nothing", "media-badges"],
+    ["media-badges-default-audio-track-wins", "media-badges"],
+    ["media-badges-older-server-profile-dtsx", "media-badges"],
+    ["media-badges-spatial-format-none-overrides-profile", "media-badges"],
+    ["media-badges-no-source", "media-badges"],
+    ["detail-play-label-series-next", "detail-play-label"],
+    ["detail-play-label-series-resume", "detail-play-label"],
+    ["detail-play-label-season-untitled", "detail-play-label"],
+    ["detail-play-label-movie", "detail-play-label"],
+    ["detail-play-label-movie-resume", "detail-play-label"],
+    ["detail-play-label-series-nothing-to-play", "detail-play-label"],
 ]);
 const homeBrowse: Record<string, (i: any) => unknown> = {
     "library-filter-parameters": (i) => browse.filterParameters(i),
