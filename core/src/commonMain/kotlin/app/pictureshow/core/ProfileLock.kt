@@ -92,6 +92,28 @@ fun profilePinAttempt(lock: ProfileLock, now: Long, correct: Boolean): ProfileLo
     else -> lock.copy(failures = lock.failures + 1, failedAt = now)
 }
 
+/** Time away after which coming back to Pictureshow counts as opening it again (AUTH-18). */
+const val PROFILE_PIN_RELOCK_AFTER_MS = 5L * 60_000
+
+/**
+ * Whether returning to the foreground locks again (AUTH-18). [backgroundedAt] is the monotonic clock when Pictureshow
+ * left the screen, null if it never did. Five minutes away counts as opening it again; a clock below the saved time
+ * means the device restarted in between, which is always long enough.
+ */
+fun profilePinRelock(backgroundedAt: Long?, now: Long): Boolean = when {
+    backgroundedAt == null -> false
+    now < backgroundedAt -> true
+    else -> now - backgroundedAt >= PROFILE_PIN_RELOCK_AFTER_MS
+}
+
+/**
+ * Whether Settings may change, turn off or stop asking for a viewer's PIN (AUTH-19). Setting the first PIN is free.
+ * Once there is one, the current PIN has to be typed first (counted like any other try), or the viewer has just
+ * proven itself with the server password (the Forgot PIN path).
+ */
+fun profilePinChangeAllowed(lock: ProfileLock?, pinConfirmed: Boolean, passwordProven: Boolean): Boolean =
+    lock == null || pinConfirmed || passwordProven
+
 /** LOCKED_OUT: the hard limit was reached and only the server password opens this viewer now. */
 enum class ProfilePinResult { UNLOCKED, WRONG, WAIT, LOCKED_OUT }
 
@@ -121,6 +143,53 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     /** The viewer the gate last let in. Unlocking someone else doesn't lock it again; only leaving it does. */
     private var admitted: String? = null
 
+    /** A right current PIN typed in Settings, good for one change (AUTH-19). Process memory only. */
+    private var changeGrant: String? = null
+
+    /** The viewer that signed in with its server password in this run, which may change its PIN without the old one. */
+    private var passwordKey: String? = null
+
+    /** Monotonic time Pictureshow left the screen, while it is away (AUTH-18). */
+    private var backgroundedAt: Long? = null
+
+    /** Pictureshow left the screen (the process stopped being visible). [now] is the monotonic clock. */
+    fun backgrounded(now: Long) {
+        backgroundedAt = now
+    }
+
+    /**
+     * Pictureshow is back on screen. After [PROFILE_PIN_RELOCK_AFTER_MS] away it counts as opening it again: every
+     * unlock, change grant and password proof is dropped, and the viewer on screen is asked like at a fresh start
+     * (following its "ask when Pictureshow opens" choice). Returns whether it locked.
+     */
+    fun foregrounded(now: Long): Boolean {
+        val relock = profilePinRelock(backgroundedAt, now)
+        backgroundedAt = null
+        if (relock) {
+            admitted = null
+            changeGrant = null
+            passwordKey = null
+            openedSeen = false
+            opened = null
+            unlockedKey.value = null
+        }
+        return relock
+    }
+
+    /** Ends a one-change permission unused: the new-PIN screen was cancelled or left (AUTH-19). */
+    fun dropChangeGrant() {
+        changeGrant = null
+    }
+
+    /** A password or Quick Connect sign-in: the viewer is open and may set a new PIN without the old one. */
+    fun provenByPassword(key: String) {
+        passwordKey = key
+        unlockedKey.value = key
+    }
+
+    /** Whether Settings has to ask for the current PIN before changing [key]'s PIN or its opening choice. */
+    fun changeNeedsPin(key: String): Boolean = !profilePinChangeAllowed(lock(key), changeGrant == key, passwordKey == key)
+
     /**
      * The app-wide check, run whenever the current viewer changes. The viewer Pictureshow opened on follows its
      * "ask when Pictureshow opens" choice; any other viewer that becomes current, by whatever route (the chooser,
@@ -131,6 +200,8 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
             opened = key
             openedSeen = true
         }
+        // A change permission belongs to the viewer it was typed for; becoming anyone else ends it.
+        if (changeGrant != null && changeGrant != key) changeGrant = null
         if (key == null || unlockedKey.value == key) {
             admitted = key
             return false
@@ -145,15 +216,26 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
 
     /** A viewer with no PIN, or one proven another way (its password at sign-in), is simply open. */
     fun markUnlocked(key: String?) {
+        if (changeGrant != key) changeGrant = null
         unlockedKey.value = key
     }
 
     /** [now] is the monotonic clock (elapsedRealtime on Android), never the wall clock. */
-    suspend fun verify(key: String, pin: String, now: Long): ProfilePinResult = mutex.withLock {
+    suspend fun verify(key: String, pin: String, now: Long): ProfilePinResult = mutex.withLock { attemptLocked(key, pin, now) }
+
+    /**
+     * The current PIN typed in Settings before a change (AUTH-19). Same count, waits and hard limit as unlocking; a
+     * right one allows one change.
+     */
+    suspend fun confirmForChange(key: String, pin: String, now: Long): ProfilePinResult = mutex.withLock {
+        attemptLocked(key, pin, now).also { if (it == ProfilePinResult.UNLOCKED) changeGrant = key }
+    }
+
+    private suspend fun attemptLocked(key: String, pin: String, now: Long): ProfilePinResult = run {
         loadLocked()
-        val old = mutable.value[key] ?: return@withLock ProfilePinResult.UNLOCKED.also { unlockedKey.value = key }
-        if (profilePinLockedOut(old)) return@withLock ProfilePinResult.LOCKED_OUT
-        if (profilePinCooldown(old, now) > 0) return@withLock ProfilePinResult.WAIT
+        val old = mutable.value[key] ?: return@run ProfilePinResult.UNLOCKED.also { unlockedKey.value = key }
+        if (profilePinLockedOut(old)) return@run ProfilePinResult.LOCKED_OUT
+        if (profilePinCooldown(old, now) > 0) return@run ProfilePinResult.WAIT
         val correct = validProfilePin(pin) && hasher.matches(pin, old.hash)
         val next = profilePinAttempt(old, now, correct)
         if (next != old) saveLocked(mutable.value + (key to next))
@@ -173,6 +255,7 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
     suspend fun set(key: String, pin: String, askOnStart: Boolean) = mutex.withLock {
         loadLocked()
         check(unlockedKey.value == key || mutable.value[key] == null) { "Unlock this viewer first." }
+        checkChangeAllowed(key)
         require(validProfilePin(pin)) { "A PIN is 4 to 8 digits." }
         saveLocked(mutable.value + (key to ProfileLock(hasher.create(pin), askOnStart)))
         unlockedKey.value = key
@@ -182,12 +265,14 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         loadLocked()
         check(unlockedKey.value == key) { "Unlock this viewer first." }
         val old = mutable.value[key] ?: return@withLock
+        checkChangeAllowed(key)
         saveLocked(mutable.value + (key to old.copy(askOnStart = askOnStart)))
     }
 
     suspend fun remove(key: String) = mutex.withLock {
         loadLocked()
         check(unlockedKey.value == key) { "Unlock this viewer first." }
+        checkChangeAllowed(key)
         saveLocked(mutable.value - key)
     }
 
@@ -203,6 +288,12 @@ class ProfileLockStore(private val persistence: TextPersistence, private val has
         val kept = mutable.value.filterKeys { it in keys }
         if (kept.size != mutable.value.size) saveLocked(kept)
         if (unlockedKey.value != null && unlockedKey.value !in keys) unlockedKey.value = null
+    }
+
+    /** A change uses up the PIN typed for it; a password proof lasts until Pictureshow locks again. */
+    private fun checkChangeAllowed(key: String) {
+        check(profilePinChangeAllowed(mutable.value[key], changeGrant == key, passwordKey == key)) { "Type the current PIN first." }
+        if (changeGrant == key) changeGrant = null
     }
 
     private suspend fun loadLocked() {

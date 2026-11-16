@@ -9773,6 +9773,100 @@
       }
     },
     {
+      "id": "profile-pin-relock-never-left",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": null,
+        "now": 9000000
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-relock-four-minutes-away-stays-open",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": 1000000,
+        "now": 1240000
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-relock-just-under-five-minutes-stays-open",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": 1000000,
+        "now": 1299999
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-relock-five-minutes-away-locks",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": 1000000,
+        "now": 1300000
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-relock-an-hour-away-locks",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": 1000000,
+        "now": 4600000
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-relock-restart-while-away-locks",
+      "operation": "profile-pin-relock",
+      "input": {
+        "backgroundedAt": 5000000,
+        "now": 20000
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-change-first-pin-is-free",
+      "operation": "profile-pin-change",
+      "input": {
+        "hasPin": false,
+        "pinConfirmed": false,
+        "passwordProven": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-change-open-viewer-is-not-enough",
+      "operation": "profile-pin-change",
+      "input": {
+        "hasPin": true,
+        "pinConfirmed": false,
+        "passwordProven": false
+      },
+      "expected": false
+    },
+    {
+      "id": "profile-pin-change-current-pin-typed",
+      "operation": "profile-pin-change",
+      "input": {
+        "hasPin": true,
+        "pinConfirmed": true,
+        "passwordProven": false
+      },
+      "expected": true
+    },
+    {
+      "id": "profile-pin-change-password-sign-in",
+      "operation": "profile-pin-change",
+      "input": {
+        "hasPin": true,
+        "pinConfirmed": false,
+        "passwordProven": true
+      },
+      "expected": true
+    },
+    {
       "id": "access-refusal-sign-in",
       "operation": "access-refusal",
       "input": {

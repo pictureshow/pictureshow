@@ -259,6 +259,9 @@ class PictureshowApplication : Application() {
         if (usesTvInterface(this)) {
             watchNext = WatchNextCoordinator(this, dependencyGraph.koin.get(), dependencyGraph.koin.get()).also { it.start() }
         }
+        // AUTH-18: five minutes with no Pictureshow screen visible locks again. The process lifecycle stops only when
+        // nothing of ours is on screen, so the in-app screensaver and picture-in-picture never count as away.
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(ProfileRelockObserver(dependencyGraph.koin.get()))
     }
 }
 

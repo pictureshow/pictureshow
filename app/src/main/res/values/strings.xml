@@ -189,6 +189,7 @@
     <string name="qc_approve_failed">The server couldn\'t approve the code. Try again in a moment.</string>
     <!-- AUTH-16 profile PIN -->
     <string name="pin_enter_for">Enter the PIN for %1$s</string>
+    <string name="pin_confirm_current">Enter the current PIN for %1$s</string>
     <string name="pin_lock_subtitle">This viewer has a PIN on this device.</string>
     <string name="pin_wrong">That PIN didn\'t match. Try again.</string>
     <string name="pin_wait">Too many tries. Try again in %1$d s.</string>

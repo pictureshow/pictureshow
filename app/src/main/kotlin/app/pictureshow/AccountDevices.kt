@@ -43,8 +43,8 @@ internal suspend fun retireDeviceCredentials(accounts: AccountStore, service: Je
 
 internal suspend fun rememberSignedIn(accounts: AccountStore, service: JellyfinService, account: Account) = withContext(NonCancellable) {
     // A password or Quick Connect sign-in proves who this is, so it opens a viewer with a PIN (AUTH-16), before
-    // the account becomes current and the app-wide lock would ask.
-    org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<app.pictureshow.core.ProfileLockStore>()?.markUnlocked(account.key)
+    // the account becomes current and the app-wide lock would ask. It also allows a new PIN without the old one (AUTH-19).
+    org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<app.pictureshow.core.ProfileLockStore>()?.provenByPassword(account.key)
     accounts.remember(account)
     retireDeviceCredentials(accounts, service)
 }

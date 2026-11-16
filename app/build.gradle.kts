@@ -112,6 +112,7 @@ dependencies {
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.process)
     implementation(libs.koin.android)
     implementation(libs.koin.compose)
     implementation(libs.datastore.preferences)

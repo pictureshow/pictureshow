@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
@@ -66,7 +67,7 @@ class ProfileLockStoreTest {
         assertEquals(ProfilePinResult.LOCKED_OUT, store.verify("parent", "2468", now + 365L * 24 * 3_600_000))
         assertNull(store.unlocked.value)
         // The password sign-in unlocks the viewer, and a new PIN starts the count again.
-        store.markUnlocked("parent")
+        store.provenByPassword("parent")
         store.set("parent", "1357", askOnStart = true)
         assertEquals(0, store.lock("parent")!!.failures)
     }
@@ -96,9 +97,11 @@ class ProfileLockStoreTest {
         assertFailsWith<IllegalStateException> { store.set("parent", "1357", askOnStart = true) }
         assertFailsWith<IllegalStateException> { store.setAskOnStart("parent", false) }
         store.verify("parent", "2468", 0)
+        store.confirmForChange("parent", "2468", 0)
         store.setAskOnStart("parent", false)
         assertFalse(store.needed("parent", ProfileUnlockReason.START))
         assertTrue(store.needed("parent", ProfileUnlockReason.SWITCH))
+        store.confirmForChange("parent", "2468", 0)
         store.remove("parent")
         assertNull(store.lock("parent"))
     }
@@ -173,5 +176,87 @@ class ProfileLockStoreTest {
         assertEquals(PROFILE_PIN_HARD_LIMIT, failing.lock("parent")!!.failures)
         assertEquals(ProfilePinResult.LOCKED_OUT, failing.verify("parent", "2468", now))
         assertNull(failing.unlocked.value)
+    }
+
+    @Test
+    fun fiveMinutesAwayLocksAgainAndShorterDoesNot() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = true)
+        assertFalse(store.gateNeeded("parent"))
+        // Four minutes in another app, or a screensaver over Pictureshow: still open.
+        store.backgrounded(1_000_000)
+        assertFalse(store.foregrounded(1_000_000 + 4 * 60_000))
+        assertFalse(store.gateNeeded("parent"))
+        // Five minutes away is opening it again.
+        store.backgrounded(2_000_000)
+        assertTrue(store.foregrounded(2_000_000 + PROFILE_PIN_RELOCK_AFTER_MS))
+        assertNull(store.unlocked.value)
+        assertTrue(store.gateNeeded("parent"))
+        // Coming back without having left (no ON_STOP first) never locks.
+        store.verify("parent", "2468", 3_000_000)
+        assertFalse(store.foregrounded(9_000_000))
+        assertFalse(store.gateNeeded("parent"))
+    }
+
+    @Test
+    fun relockFollowsTheOpeningChoiceAndDropsAPasswordProof() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = false)
+        store.set("teen", "1357", askOnStart = false)
+        store.provenByPassword("teen")
+        assertFalse(store.gateNeeded("teen"))
+        assertFalse(store.changeNeedsPin("teen"))
+        store.backgrounded(0)
+        assertTrue(store.foregrounded(PROFILE_PIN_RELOCK_AFTER_MS))
+        // Teen turned the opening question off, so coming back is like opening: no PIN, but no password proof either.
+        assertFalse(store.gateNeeded("teen"))
+        assertTrue(store.changeNeedsPin("teen"))
+    }
+
+    @Test
+    fun changingOrTurningOffAPinAsksForTheCurrentOneWithTheSameCount() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = false)
+        // Opened without the PIN ("ask when opening" off): open, but not allowed to change it.
+        assertFalse(store.gateNeeded("parent"))
+        store.markUnlocked("parent")
+        assertTrue(store.changeNeedsPin("parent"))
+        assertFailsWith<IllegalStateException> { store.remove("parent") }
+        assertFailsWith<IllegalStateException> { store.set("parent", "1357", askOnStart = true) }
+        assertFailsWith<IllegalStateException> { store.setAskOnStart("parent", true) }
+        // Wrong current PINs count and wait exactly like unlocking.
+        repeat(4) { assertEquals(ProfilePinResult.WRONG, store.confirmForChange("parent", "0000", 1_000)) }
+        assertEquals(ProfilePinResult.WAIT, store.confirmForChange("parent", "0000", 1_000))
+        assertEquals(ProfilePinResult.WAIT, store.confirmForChange("parent", "2468", 2_000))
+        assertTrue(store.changeNeedsPin("parent"))
+        assertEquals(ProfilePinResult.UNLOCKED, store.confirmForChange("parent", "2468", 31_000))
+        assertFalse(store.changeNeedsPin("parent"))
+        store.set("parent", "1357", askOnStart = false)
+        // One right PIN, one change.
+        assertTrue(store.changeNeedsPin("parent"))
+        assertFailsWith<IllegalStateException> { store.remove("parent") }
+        assertNotNull(store.lock("parent"))
+    }
+
+    @Test
+    fun anUnusedChangePermissionEndsOnCancelOrWhenTheViewerChanges() = runTest {
+        val store = ProfileLockStore(Memory(), hasher)
+        store.set("parent", "2468", askOnStart = true)
+        store.set("teen", "1357", askOnStart = true)
+        store.markUnlocked("parent")
+        assertFalse(store.gateNeeded("parent"))
+        // Typed the current PIN, then cancelled the new-PIN screen.
+        store.confirmForChange("parent", "2468", 0)
+        store.dropChangeGrant()
+        assertTrue(store.changeNeedsPin("parent"))
+        assertFailsWith<IllegalStateException> { store.remove("parent") }
+        // Typed it, then the viewer changed to teen and back.
+        store.confirmForChange("parent", "2468", 0)
+        store.verify("teen", "1357", 0)
+        assertFalse(store.gateNeeded("teen"))
+        store.verify("parent", "2468", 0)
+        assertFalse(store.gateNeeded("parent"))
+        assertTrue(store.changeNeedsPin("parent"))
+        assertFailsWith<IllegalStateException> { store.remove("parent") }
     }
 }

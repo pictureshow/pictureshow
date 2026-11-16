@@ -153,6 +153,19 @@ class ApplicationParityVectorsTest {
                             )
                         )
                     }
+                    "profile-pin-relock" -> JsonPrimitive(
+                        profilePinRelock(
+                            input.getValue("backgroundedAt").jsonPrimitive.longOrNull,
+                            input.getValue("now").jsonPrimitive.long
+                        )
+                    )
+                    "profile-pin-change" -> JsonPrimitive(
+                        profilePinChangeAllowed(
+                            if (input.getValue("hasPin").jsonPrimitive.boolean) ProfileLock("hash") else null,
+                            input.getValue("pinConfirmed").jsonPrimitive.boolean,
+                            input.getValue("passwordProven").jsonPrimitive.boolean
+                        )
+                    )
                     "access-refusal" -> JsonPrimitive(accessRefusal(input.getValue("signIn").jsonPrimitive.boolean).message)
                     "sync-group-list" -> app.pictureshow.core.sync.syncGroupList(
                         input.getValue("accessAllowed").jsonPrimitive.boolean,

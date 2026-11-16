@@ -238,7 +238,13 @@ internal class PinCheck {
 }
 
 @Composable
-internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: () -> Unit): Pair<PinCheck, (String) -> Unit> {
+internal fun rememberPinCheck(
+    store: ProfileLockStore,
+    key: String,
+    onUnlocked: () -> Unit,
+    // Unlocking by default; Settings passes [ProfileLockStore.confirmForChange], which counts the same way (AUTH-19).
+    attempt: suspend (key: String, pin: String, now: Long) -> ProfilePinResult = store::verify
+): Pair<PinCheck, (String) -> Unit> {
     val check = remember(key) { PinCheck() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(key) {
@@ -256,7 +262,7 @@ internal fun rememberPinCheck(store: ProfileLockStore, key: String, onUnlocked: 
             // A save that fails (storage full) must not crash the lock screen or hand back a fresh pad: the store has
             // already counted the try in memory, so the result is read from that count.
             val result = try {
-                withContext(Dispatchers.Default) { store.verify(key, pin, android.os.SystemClock.elapsedRealtime()) }
+                withContext(Dispatchers.Default) { attempt(key, pin, android.os.SystemClock.elapsedRealtime()) }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -317,14 +323,16 @@ internal fun ProfilePinDialog(
     name: String,
     tv: Boolean,
     onUnlocked: () -> Unit,
-    onPassword: () -> Unit,
-    onCancel: () -> Unit
+    onPassword: (() -> Unit)?,
+    onCancel: () -> Unit,
+    title: String = stringResource(R.string.pin_enter_for, name),
+    attempt: suspend (key: String, pin: String, now: Long) -> ProfilePinResult = store::verify
 ) {
-    val (check, submit) = rememberPinCheck(store, key, onUnlocked)
+    val (check, submit) = rememberPinCheck(store, key, onUnlocked, attempt)
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         PinSurface(tv, Modifier) {
             ProfilePinPad(
-                stringResource(R.string.pin_enter_for, name),
+                title,
                 null,
                 tv,
                 check.busy,
@@ -334,7 +342,7 @@ internal fun ProfilePinDialog(
                 clearSignal = check.tries,
                 lockedOut = check.lockedOut
             ) {
-                PinTextAction(stringResource(R.string.pin_use_password), tv, Modifier.testTag("pin:password"), onPassword)
+                onPassword?.let { PinTextAction(stringResource(R.string.pin_use_password), tv, Modifier.testTag("pin:password"), it) }
                 PinTextAction(stringResource(R.string.pin_cancel), tv, Modifier.testTag("pin:cancel"), onCancel)
             }
         }
@@ -472,11 +480,12 @@ internal fun profilePinOnSwitch(store: ProfileLockStore?, key: String, currentKe
     store != null && store.lock(key) != null && !(key == currentKey && store.unlocked.value == key)
 
 /** What the Settings PIN rows are doing: a pad for setting a new PIN, or nothing. */
-private enum class PinSettingsStep { NONE, SETUP }
+/** What Settings is doing with the PIN; the CONFIRM_* steps first ask for the current PIN (AUTH-19). */
+private enum class PinSettingsStep { NONE, CONFIRM_CHANGE, SETUP, CONFIRM_REMOVE, CONFIRM_ASK_ON, CONFIRM_ASK_OFF }
 
 /**
- * AUTH-16 Settings rows for the current viewer: set, change, ask-when-opening and turn off. The current viewer is the
- * unlocked one (the app-wide gate saw to that), so no second PIN prompt is needed here. [row] and [toggle] draw a row
+ * AUTH-16 Settings rows for the current viewer: set, change, ask-when-opening and turn off. Every change but the first
+ * PIN asks for the current PIN (AUTH-19), since the viewer may be open without anyone having typed it. [row] and [toggle] draw a row
  * in the host's style (TV settings rows or touch rows).
  */
 @Composable
@@ -500,17 +509,55 @@ internal fun ProfilePinSettings(
         stringResource(if (lock == null) R.string.pin_set else R.string.pin_change),
         stringResource(if (lock == null) R.string.pin_settings_off else R.string.pin_settings_on, name),
         "settings:pin"
-    ) { step = PinSettingsStep.SETUP }
+    ) { step = if (store.changeNeedsPin(account.key)) PinSettingsStep.CONFIRM_CHANGE else PinSettingsStep.SETUP }
+    fun remove() = scope.launch { runCatching { store.remove(account.key) } }
+    fun askOnStart(value: Boolean) = scope.launch { runCatching { store.setAskOnStart(account.key, value) } }
     if (lock != null) {
         toggle(
             stringResource(R.string.pin_ask_on_open),
             stringResource(if (lock.askOnStart) R.string.pin_ask_on_open_on else R.string.pin_ask_on_open_off, name),
             lock.askOnStart,
             "settings:pin-ask-on-open"
-        ) { value -> scope.launch { runCatching { store.setAskOnStart(account.key, value) } } }
-        row(stringResource(R.string.pin_remove), stringResource(R.string.pin_note), "settings:pin-remove") {
-            scope.launch { runCatching { store.remove(account.key) } }
+        ) { value ->
+            when {
+                !store.changeNeedsPin(account.key) -> askOnStart(value)
+                value -> step = PinSettingsStep.CONFIRM_ASK_ON
+                else -> step = PinSettingsStep.CONFIRM_ASK_OFF
+            }
         }
+        row(stringResource(R.string.pin_remove), stringResource(R.string.pin_note), "settings:pin-remove") {
+            if (store.changeNeedsPin(account.key)) step = PinSettingsStep.CONFIRM_REMOVE else remove()
+        }
+    }
+    if (step in
+        setOf(
+            PinSettingsStep.CONFIRM_CHANGE,
+            PinSettingsStep.CONFIRM_REMOVE,
+            PinSettingsStep.CONFIRM_ASK_ON,
+            PinSettingsStep.CONFIRM_ASK_OFF
+        )
+    ) {
+        val confirming = step
+        ProfilePinDialog(
+            store,
+            account.key,
+            name,
+            tv,
+            onUnlocked = {
+                step = PinSettingsStep.NONE
+                when (confirming) {
+                    PinSettingsStep.CONFIRM_CHANGE -> step = PinSettingsStep.SETUP
+                    PinSettingsStep.CONFIRM_REMOVE -> remove()
+                    PinSettingsStep.CONFIRM_ASK_ON -> askOnStart(true)
+                    PinSettingsStep.CONFIRM_ASK_OFF -> askOnStart(false)
+                    else -> Unit
+                }
+            },
+            onPassword = null,
+            onCancel = { step = PinSettingsStep.NONE },
+            title = stringResource(R.string.pin_confirm_current, name),
+            attempt = store::confirmForChange
+        )
     }
     if (step == PinSettingsStep.SETUP) {
         ProfilePinSetup(
@@ -524,9 +571,14 @@ internal fun ProfilePinSettings(
                     }
                 }
             },
-            onCancel = { step = PinSettingsStep.NONE }
+            onCancel = {
+                step = PinSettingsStep.NONE
+                store.dropChangeGrant()
+            }
         )
     }
+    // Leaving Settings, or the viewer changing, ends a permission the new-PIN screen never used (AUTH-19).
+    androidx.compose.runtime.DisposableEffect(account.key) { onDispose { store.dropChangeGrant() } }
 }
 
 /** The PIN screens draw on the host's theme: TV Material on a TV, Material 3 on touch (TV leaves M3 at its light default). */
@@ -558,5 +610,21 @@ private fun PinSurface(tv: Boolean, modifier: Modifier = Modifier, content: @Com
             androidx.compose.material3.LocalContentColor provides palette.content,
             content = content
         )
+    }
+}
+
+/**
+ * AUTH-18 wiring: tells the store when Pictureshow leaves the screen and comes back, on the monotonic clock. Attach it
+ * to the process lifecycle, which stops only when no Pictureshow activity is visible (a PiP window or the in-app
+ * screensaver keeps it started).
+ */
+internal class ProfileRelockObserver(
+    private val store: ProfileLockStore,
+    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+) : androidx.lifecycle.DefaultLifecycleObserver {
+    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = store.backgrounded(clock())
+
+    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+        store.foregrounded(clock())
     }
 }
