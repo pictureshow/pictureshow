@@ -166,7 +166,7 @@ internal fun TouchQuickConnect(
 ) {
     TouchPage("Quick Connect", onBack) {
         Text(serverLabel, style = MaterialTheme.typography.titleLarge)
-        Text("On another signed-in Jellyfin app, open Settings → Quick Connect and enter this code.")
+        Text(androidx.compose.ui.res.stringResource(R.string.quick_connect_where_touch))
         state.code?.let { code ->
             Text(
                 code,

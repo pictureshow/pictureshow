@@ -10,7 +10,7 @@ enum PendingSpecCaseManifest {
         let reason: String
     }
     static let suites: [String: Suite] = [
-        "application": Suite(count: 62, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
+        "application": Suite(count: 95, reason: "Additional main contracts lack an Apple executor; existing active contracts in this suite continue to execute."),
         "cast-capability": Suite(count: 1, reason: "Audio reload capability awaits the Apple sender port."),
         "cast-handoff": Suite(count: 2, reason: "System commands and receiver intent reconciliation await the Apple sender port."),
         "cast-queue": Suite(count: 11, reason: "DMR queue identity and audio reload contracts await the Apple sender port."),
@@ -1460,6 +1460,39 @@ enum PendingSpecCaseManifest {
         playback-settings.next.countdown-off-during-credits|playback-settings/automatic-next
         playback-settings.json.countdown-and-still-watching|playback-settings/tuning-json
         playback-settings.json.countdown-kept|playback-settings/tuning-json
+        touch-back-sheet-first|application/touch-player-back
+        touch-back-menu-next|application/touch-player-back
+        touch-back-controls-showing-exits|application/touch-player-back
+        touch-pip-playing-video|application/touch-pip-allowed
+        touch-pip-never-on-tv|application/touch-pip-allowed
+        touch-pip-device-without-feature|application/touch-pip-allowed
+        touch-pip-no-video-yet|application/touch-pip-allowed
+        touch-pip-error-card|application/touch-pip-allowed
+        touch-pip-loading-next|application/touch-pip-allowed
+        touch-pip-leaving|application/touch-pip-allowed
+        touch-pip-finished|application/touch-pip-allowed
+        touch-pip-handed-off|application/touch-pip-allowed
+        touch-pip-actions-playing|application/touch-pip-actions
+        touch-pip-actions-paused|application/touch-pip-actions
+        touch-pip-actions-live-no-timeshift|application/touch-pip-actions
+        touch-pip-actions-live-at-edge|application/touch-pip-actions
+        touch-pip-aspect-1080p|application/touch-pip-aspect
+        touch-pip-aspect-unknown|application/touch-pip-aspect
+        touch-pip-aspect-scope-clamped|application/touch-pip-aspect
+        touch-pip-aspect-tall-clamped|application/touch-pip-aspect
+        touch-pip-aspect-anamorphic-dvd|application/touch-pip-aspect
+        touch-pip-aspect-4x3|application/touch-pip-aspect
+        quick-connect-code-pasted-with-spaces|application/quick-connect-code
+        quick-connect-code-too-short|application/quick-connect-code
+        quick-connect-code-too-long|application/quick-connect-code
+        quick-connect-code-punctuation-not-guessed|application/quick-connect-code
+        quick-connect-code-non-ascii-letter|application/quick-connect-code
+        quick-connect-approval-approved|application/quick-connect-approval-result
+        quick-connect-approval-server-said-no|application/quick-connect-approval-result
+        quick-connect-approval-unknown-code|application/quick-connect-approval-result
+        quick-connect-approval-token-refused|application/quick-connect-approval-result
+        quick-connect-approval-server-error|application/quick-connect-approval-result
+        quick-connect-approval-unreadable-body|application/quick-connect-approval-result
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)
