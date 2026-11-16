@@ -504,6 +504,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
             !controlsVisible ||
             noticeBottom == null ||
             controlsTop?.let { noticeBottom <= it - playerTop } == true
+        EngineFallbackNotice(
+            host,
+            shown = host.player != null && foreground && !host.state.preparing,
+            modifier = Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
+            large = false
+        )
         ConversionNoticeHost(
             conversionNotice,
             allowed = !topCues &&
@@ -920,7 +926,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                 )
                             }
                             if (host.engineSwitchable) {
-                                val toMpv = host.engineChoice != PlaybackEngineChoice.Mpv
+                                val toMpv = host.shownEngineChoice != PlaybackEngineChoice.Mpv
                                 val next = if (toMpv) PlaybackEngineChoice.Mpv else PlaybackEngineChoice.Automatic
                                 val label = if (toMpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
                                 DropdownMenuItem(

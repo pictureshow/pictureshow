@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import app.pictureshow.core.Server
+import app.pictureshow.core.playback.FirstFrameAction
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
@@ -104,6 +105,12 @@ internal class Media3PlaybackOutput(
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     var onBandwidthEstimate: (Long, Long) -> Unit = { _, _ -> }
+
+    /**
+     * PLAY-61: mpv showed no picture. The host reopens the viewing where it is: on mpv with audio decoded
+     * ([FirstFrameAction.WithoutPassthrough]), or on the built-in player ([FirstFrameAction.Platform]).
+     */
+    var onEngineStalled: (FirstFrameAction) -> Unit = {}
     var matchFrameRate: Boolean = false
     var disabledPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet()
     private val fdDiagnostics = PlaybackFdDiagnostics()
@@ -684,7 +691,12 @@ internal class Media3PlaybackOutput(
             val delivery = app.pictureshow.core.playback.PlayDecisions.resolve(server, requireNotNull(stream.deliveryUrl))
             proxy.local(delivery)?.let { stream to it }
         }
-        val spdif = if (passthroughEnabled) mpvPassthrough(context, disabledPassthrough) else emptyList()
+        // PLAY-61: after passthrough showed no picture, the rest of this viewing decodes its audio.
+        val spdif = if (passthroughEnabled && decodedAudioFor != decision.itemId) {
+            mpvPassthrough(context, disabledPassthrough)
+        } else {
+            emptyList()
+        }
         val source = MpvSource(
             url = url,
             title = title,
@@ -713,6 +725,19 @@ internal class Media3PlaybackOutput(
             "open",
             "requestedMs=$positionMs method=${decision.method} engine=mpv spdif=${spdif.joinToString(",")}"
         )
+        next.onFirstFrameAction = { action ->
+            if (mpv === next) {
+                val at = position()
+                PlaybackDiagnostics.write(
+                    decision,
+                    "engine-watchdog",
+                    "action=$action hwdec=${next.hwdec} codec=${next.videoCodec} positionMs=${at.milliseconds}"
+                )
+                // Only this title's reopen decodes its audio: the next viewing tries passthrough again.
+                if (action == FirstFrameAction.WithoutPassthrough) decodedAudioFor = decision.itemId
+                onEngineStalled(action)
+            }
+        }
         next.selectStream(MediaStreamType.Audio, audio)
         next.selectStream(MediaStreamType.Subtitle, subtitle)
         val managed = ReopeningPlayer(next, ::playIntent)
@@ -781,6 +806,9 @@ internal class Media3PlaybackOutput(
             existingSession.replacePlayer(exposed)
         }
     }
+
+    /** PLAY-61: the item whose mpv opens decode audio, after passthrough showed no picture. */
+    private var decodedAudioFor: String? = null
 
     /** SET-15's subtitle look, which mpv draws itself (see [mpvSubtitleOptions]). */
     var mpvSubtitles: SubtitleAppearance = SubtitleAppearance()

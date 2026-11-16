@@ -690,6 +690,12 @@ internal fun PlayerItemScreen(
                 interaction++
                 conversionDetailsRequested = true
             }
+            // PLAY-61: mpv gave way to the built-in player; said under the conversion notice's corner, once there's a picture.
+            EngineFallbackNotice(
+                host,
+                shown = player != null && foreground && !state.preparing && error == null && !switching,
+                modifier = Modifier.align(Alignment.TopEnd).padding(horizontal = TV_PLAYER_SIDE_INSET, vertical = 36.dp)
+            )
             if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
@@ -1159,7 +1165,7 @@ internal fun PlayerItemScreen(
                             host.effectiveSettings.maxStreamingBitrate,
                             host.adaptiveQualityNotice,
                             speedState.encodedAudio,
-                            host.engineChoice.takeIf { host.engineSwitchable },
+                            host.shownEngineChoice.takeIf { host.engineSwitchable },
                             { choice -> select({ host.chooseEngine(choice) }, dismiss) }
                         ) {
                             close(dismiss)
