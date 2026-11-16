@@ -205,6 +205,12 @@ class PictureshowApplication : Application() {
                     viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
                         PersonViewModel(account, item, session)
                     }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
+                        DetailDiscoveryViewModel(account, item, session)
+                    }
+                    viewModel { parameters ->
+                        PhotoViewerViewModel(parameters.get(), parameters.get(), parameters[2], parameters[3], parameters.get())
+                    }
                     viewModel { SessionViewModel(get(), get()) }
                     viewModel { (account: Account, item: app.pictureshow.core.MediaItem) ->
                         MusicLibraryViewModel(account, item, get(), get())
@@ -360,6 +366,13 @@ internal class PersistentIdentityService(
     override suspend fun nextUp(account: Account, seriesId: String?) = call(account.deviceId) { it.nextUp(account, seriesId) }
     override suspend fun latest(account: Account, parentId: String) = call(account.deviceId) { it.latest(account, parentId) }
     override suspend fun items(account: Account, query: BrowseQuery) = call(account.deviceId) { it.items(account, query) }
+    override suspend fun localTrailers(account: Account, id: String) = call(account.deviceId) { it.localTrailers(account, id) }
+    override suspend fun specialFeatures(account: Account, id: String) = call(account.deviceId) { it.specialFeatures(account, id) }
+    override suspend fun similar(account: Account, id: String) = call(account.deviceId) { it.similar(account, id) }
+    override suspend fun screensaverItems(account: Account) = call(account.deviceId) { it.screensaverItems(account) }
+    override suspend fun parentalRatings(account: Account) = call(account.deviceId) { it.parentalRatings(account) }
+    override suspend fun photos(account: Account, parentId: String, sortBy: String, descending: Boolean) =
+        call(account.deviceId) { it.photos(account, parentId, sortBy, descending) }
     override suspend fun item(account: Account, id: String) = call(account.deviceId) { it.item(account, id) }
     override suspend fun seasons(account: Account, seriesId: String) = call(account.deviceId) { it.seasons(account, seriesId) }
     override suspend fun episodes(account: Account, seriesId: String, seasonId: String) =

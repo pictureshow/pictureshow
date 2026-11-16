@@ -502,6 +502,28 @@ internal fun TouchPictureshow(
                 }
             }
             composable(MUSIC_NOW_ROUTE) { TouchMusicNow(music) { nav.popBackStack() } }
+            composable(
+                PHOTO_ROUTE_PATTERN,
+                arguments = listOf(
+                    navArgument("item") { type = NavType.StringType },
+                    navArgument("sort") {
+                        type = NavType.StringType
+                        defaultValue = "SortName"
+                    },
+                    navArgument("desc") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) { entry ->
+                state.snapshot.currentAccount?.let { account ->
+                    val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    val sort = entry.arguments?.getString("sort") ?: "SortName"
+                    val descending = entry.arguments?.getBoolean("desc") == true
+                    val vm: PhotoViewerViewModel = koinViewModel(parameters = { parametersOf(account, item, sort, descending, catalog) })
+                    PhotoViewer(account, vm, tv = false) { nav.popBackStack() }
+                }
+            }
             composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
@@ -521,7 +543,7 @@ internal fun TouchPictureshow(
                         if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
                         TouchCatalogGrid(
                             screen,
-                            { nav.navigate(itemRoute(it)) },
+                            { nav.navigate(if (it.type == "Photo") photoRoute(it, screen.sortBy, screen.descending) else itemRoute(it)) },
                             vm::nearEnd,
                             vm::sort,
                             vm::retry,
@@ -533,6 +555,9 @@ internal fun TouchPictureshow(
                     } else {
                         val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
+                        val discoveryVm: DetailDiscoveryViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                        val discovery by discoveryVm.state.collectAsStateWithLifecycle()
+                        val context = LocalContext.current
                         LaunchedEffect(entry) {
                             entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                                 // The model's arrival read and a deliberate Retry own the budget; this only refreshes a real return.
@@ -592,7 +617,11 @@ internal fun TouchPictureshow(
                             onDownload = { shown, season, seasonName ->
                                 offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
                             },
-                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
+                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached"),
+                            discovery = discoveryRows(screen.item ?: item, discovery),
+                            onDiscovery = { chosen ->
+                                openDiscovery(context, chosen, { nav.navigate(it) }) { nav.navigate(itemRoute(it)) }
+                            }
                         )
                     }
                 }

@@ -1302,6 +1302,243 @@
           "resumeTicks": 900000000
         }
       }
+    },
+    {
+      "id": "catalog-local-trailers",
+      "operation": "http",
+      "input": {
+        "action": "catalog.localTrailers",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": []
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film/LocalTrailers",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-special-features",
+      "operation": "http",
+      "input": {
+        "action": "catalog.specialFeatures",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": []
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film/SpecialFeatures",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-similar",
+      "operation": "http",
+      "input": {
+        "action": "catalog.similar",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film/Similar",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "limit": [
+                "16"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-screensaver-items",
+      "operation": "http",
+      "input": {
+        "action": "catalog.screensaverItems",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "includeItemTypes": [
+                "Movie,Series"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "imageTypes": [
+                "Backdrop"
+              ],
+              "sortBy": [
+                "Random"
+              ],
+              "limit": [
+                "40"
+              ],
+              "fields": [
+                "OfficialRating"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-parental-ratings",
+      "operation": "http",
+      "input": {
+        "action": "catalog.parentalRatings",
+        "responses": [
+          {
+            "status": 200,
+            "body": []
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Localization/ParentalRatings",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-photos",
+      "operation": "http",
+      "input": {
+        "action": "catalog.photos",
+        "parentId": "album",
+        "sortBy": "DateCreated",
+        "descending": true,
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "parentId": [
+                "album"
+              ],
+              "includeItemTypes": [
+                "Photo"
+              ],
+              "sortBy": [
+                "DateCreated"
+              ],
+              "sortOrder": [
+                "Descending"
+              ],
+              "limit": [
+                "1000"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
     }
   ]
 }

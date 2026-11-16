@@ -17,6 +17,19 @@ enum class CapabilityOverride { Detected, Force, Disable }
 @Serializable
 enum class PostCredits { KeepScenes, NextEpisode }
 
+/**
+ * PLAY-30: ask "Are you still watching?" instead of starting the next episode once this many episodes have played in a
+ * row, or this many minutes have passed, without a button press. Either threshold is enough.
+ */
+@Serializable
+enum class StillWatching(val episodes: Int, val minutes: Int) {
+    Off(0, 0),
+    TwoEpisodes(2, 60),
+    ThreeEpisodes(3, 90),
+    FiveEpisodes(5, 150),
+    EightEpisodes(8, 240)
+}
+
 /** Portable viewer choices. Detection is retained separately; overrides are a request to try a capability. */
 @Serializable
 data class PlaybackTuning(
@@ -32,7 +45,10 @@ data class PlaybackTuning(
     val preferDolbyVision: Boolean = false,
     val rewindSeconds: Int = 0,
     val postCredits: PostCredits = PostCredits.KeepScenes,
-    val matchFrameRate: Boolean = false
+    val matchFrameRate: Boolean = false,
+    /** PLAY-30: seconds the next-episode card counts during the credits; 0 never starts the next episode by itself. */
+    val nextEpisodeCountdownSeconds: Int = 10,
+    val stillWatching: StillWatching = StillWatching.ThreeEpisodes
 ) {
     /** Reject malformed persisted values individually, preserving other accepted preferences. */
     fun normalized() = copy(
@@ -40,7 +56,8 @@ data class PlaybackTuning(
         meteredBitrateMbps =
         meteredBitrateMbps?.takeIf { it in PlaybackPreferences.BITRATES } ?: if (meteredBitrateMbps == null) null else 4,
         maxAudioChannels = maxAudioChannels?.takeIf { it in listOf(2, 6, 8) },
-        rewindSeconds = rewindSeconds.takeIf { it in listOf(0, 5, 10, 15, 30) } ?: 0
+        rewindSeconds = rewindSeconds.takeIf { it in listOf(0, 5, 10, 15, 30) } ?: 0,
+        nextEpisodeCountdownSeconds = nextEpisodeCountdownSeconds.takeIf { it in NEXT_EPISODE_COUNTDOWNS } ?: 10
     )
 
     /** Explicit overrides suspend automatic reduction for this viewing, but never remove the server ceiling. */
@@ -60,6 +77,7 @@ data class PlaybackTuning(
 
     companion object {
         const val AUTO_FLOOR = 4_000_000
+        val NEXT_EPISODE_COUNTDOWNS = listOf(0, 5, 10, 15, 20, 30)
 
         /** Pick an offered rung, retaining the configured ceiling even if it is below the Auto floor. */
         fun automaticCap(ceiling: Int, estimate: Long): Int {
@@ -76,7 +94,8 @@ data class PlaybackTuning(
         (savedPositionMs.coerceAtLeast(0) - normalized().rewindSeconds.toLong() * 1_000).coerceAtLeast(0)
 
     /** A running remaining-time clock is not proof the stream reached physical end. */
-    fun canAutomaticallyAdvance(ended: Boolean): Boolean = ended || postCredits == PostCredits.NextEpisode
+    fun canAutomaticallyAdvance(ended: Boolean): Boolean =
+        normalized().nextEpisodeCountdownSeconds > 0 && (ended || postCredits == PostCredits.NextEpisode)
 
     /** Keep-scenes prevents the credits card from completing an item before its physical end. */
     fun allowEarlyNext(hasPostCreditsScene: Boolean = true): Boolean = postCredits == PostCredits.NextEpisode || !hasPostCreditsScene

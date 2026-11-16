@@ -536,7 +536,10 @@ internal fun TouchCatalogDetail(
     onPlayedRequest: () -> Unit = {},
     onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
     offerTvQueue: Boolean = true,
-    download: TouchDetailDownload? = null
+    download: TouchDetailDownload? = null,
+    /** Trailers, Extras and More like this (CAT-30..32): they arrive after the page and never hold it. */
+    discovery: List<DiscoveryRow> = emptyList(),
+    onDiscovery: (DiscoveryEntry) -> Unit = {}
 ) {
     val page = rememberTouchDetailPresentation(
         state,
@@ -712,6 +715,9 @@ internal fun TouchCatalogDetail(
             ) {
                 item(key = "empty") { Text("No episodes are available.", modifier = Modifier.padding(horizontal = 20.dp)) }
             }
+            // Trailers and extras sit with the title they belong to; More like this leads away from it, so it comes last.
+            val discoveryShown = if (state.loading || state.error != null) emptyList() else discovery
+            discoveryShown.filter { it.key != "similar" }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
             // Episodes come first on every width: on a series page they are what the viewer came for.
             // The frozen header can be a route card, which has no credits: the fresh read's credits still appear.
             val people = (state.item ?: item)?.people.orEmpty().filter { it.id.isNotBlank() }.distinctBy(MediaPerson::id)
@@ -759,6 +765,7 @@ internal fun TouchCatalogDetail(
                     }
                 }
             }
+            discoveryShown.filter { it.key == "similar" }.forEach { row -> item(key = row.key) { TouchDiscoveryShelf(row, state.account, onDiscovery) } }
         }
         // Both overlays have no layout footprint: status and failure cannot move the action under a finger.
         page.status?.let { status ->
@@ -1041,6 +1048,8 @@ internal fun TouchCatalogShelf(
     reserveLines: Boolean = true,
     onTitle: (() -> Unit)? = null,
     subtitle: (MediaItem) -> String? = { null },
+    /** Reads the subtitle with the card, where it says what the card is (a trailer's source, an extra's kind). */
+    announceSubtitle: Boolean = false,
     onOpen: (MediaItem) -> Unit
 ) {
     val shortWindow = isShortTouchWindow()
@@ -1078,7 +1087,8 @@ internal fun TouchCatalogShelf(
                     { onOpen(item) },
                     Modifier.width(width),
                     reserveLines = reserveLines,
-                    subtitle = subtitle(item)
+                    subtitle = subtitle(item),
+                    announceSubtitle = announceSubtitle
                 )
             }
         }
@@ -1123,7 +1133,8 @@ internal fun TouchCatalogCard(
     caption: (@Composable () -> Unit)? = null,
     artworkProgress: Float? = null,
     showProgress: Boolean = true,
-    subtitle: String? = null
+    subtitle: String? = null,
+    announceSubtitle: Boolean = false
 ) = app.pictureshow.ui.CatalogCard(
     item,
     account,
@@ -1132,7 +1143,7 @@ internal fun TouchCatalogCard(
     modifier,
     artHeight,
     reserveLines,
-    catalogAnnouncement(item),
+    if (announceSubtitle && !subtitle.isNullOrBlank()) "${catalogAnnouncement(item)}, $subtitle" else catalogAnnouncement(item),
     caption = caption,
     artworkProgress = artworkProgress,
     showProgress = showProgress,
@@ -1286,4 +1297,17 @@ private fun TouchAccountMenu(user: String, server: String, busy: Boolean, onSwit
             }
         )
     }
+}
+
+@Composable
+private fun TouchDiscoveryShelf(row: DiscoveryRow, account: Account, onDiscovery: (DiscoveryEntry) -> Unit) {
+    val byId = row.entries.associateBy { it.card.id }
+    TouchCatalogShelf(
+        row.title,
+        row.entries.map(DiscoveryEntry::card),
+        account,
+        row.wide,
+        subtitle = { byId[it.id]?.subtitle },
+        announceSubtitle = row.key != "similar"
+    ) { card -> byId[card.id]?.let(onDiscovery); Unit }
 }

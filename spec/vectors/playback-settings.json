@@ -654,7 +654,9 @@
         "preferDolbyVision": false,
         "rewindSeconds": 15,
         "postCredits": "KeepScenes",
-        "matchFrameRate": false
+        "matchFrameRate": false,
+        "nextEpisodeCountdownSeconds": 10,
+        "stillWatching": "ThreeEpisodes"
       }
     },
     {
@@ -1090,6 +1092,76 @@
           "bytes": 131072
         }
       ]
+    },
+    {
+      "id": "playback-settings.next.countdown-off-never-advances",
+      "operation": "automatic-next",
+      "input": {
+        "ended": true,
+        "tuning": {
+          "postCredits": "KeepScenes",
+          "nextEpisodeCountdownSeconds": 0
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.next.countdown-off-during-credits",
+      "operation": "automatic-next",
+      "input": {
+        "ended": false,
+        "tuning": {
+          "postCredits": "NextEpisode",
+          "nextEpisodeCountdownSeconds": 0
+        }
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.json.countdown-and-still-watching",
+      "operation": "tuning-json",
+      "input": {
+        "raw": "{\"nextEpisodeCountdownSeconds\":7,\"stillWatching\":\"FiveEpisodes\"}"
+      },
+      "expected": {
+        "remoteBitrateMbps": 20,
+        "meteredBitrateMbps": 4,
+        "autoAdjustQuality": true,
+        "subtitleBurnIn": "Automatic",
+        "disabledPassthrough": [],
+        "downmix": false,
+        "hdr": "Detected",
+        "dolbyVision": "Detected",
+        "preferDolbyVision": false,
+        "rewindSeconds": 0,
+        "postCredits": "KeepScenes",
+        "matchFrameRate": false,
+        "nextEpisodeCountdownSeconds": 10,
+        "stillWatching": "FiveEpisodes"
+      }
+    },
+    {
+      "id": "playback-settings.json.countdown-kept",
+      "operation": "tuning-json",
+      "input": {
+        "raw": "{\"nextEpisodeCountdownSeconds\":20,\"stillWatching\":\"Sometimes\"}"
+      },
+      "expected": {
+        "remoteBitrateMbps": 20,
+        "meteredBitrateMbps": 4,
+        "autoAdjustQuality": true,
+        "subtitleBurnIn": "Automatic",
+        "disabledPassthrough": [],
+        "downmix": false,
+        "hdr": "Detected",
+        "dolbyVision": "Detected",
+        "preferDolbyVision": false,
+        "rewindSeconds": 0,
+        "postCredits": "KeepScenes",
+        "matchFrameRate": false,
+        "nextEpisodeCountdownSeconds": 20,
+        "stillWatching": "ThreeEpisodes"
+      }
     }
   ]
 }

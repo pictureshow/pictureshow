@@ -24,6 +24,7 @@ class CorpusVectorsTest {
                     "account-sign-out",
                     "catalog",
                     "catalog-return",
+                    "discovery",
                     "compatibility",
                     "native-regressions",
                     "negotiation",

@@ -81,7 +81,12 @@ data class MediaItem(
     @SerialName("CompletionPercentage") val recordingCompletionPercentage: Double? = null,
     @SerialName("MediaStreams") val mediaStreams: List<app.pictureshow.core.playback.MediaStream> = emptyList(),
     /** Present on the single-item detail read; catalog lists don't request it. Feeds [mediaBadges]. */
-    @SerialName("MediaSources") val mediaSources: List<app.pictureshow.core.playback.MediaSourceInfo> = emptyList()
+    @SerialName("MediaSources") val mediaSources: List<app.pictureshow.core.playback.MediaSourceInfo> = emptyList(),
+    @SerialName("ParentId") val parentId: String? = null,
+    /** Set on special features and local trailers: what kind of extra this is (CAT-31). */
+    @SerialName("ExtraType") val extraType: String? = null,
+    /** Present on the single-item detail read (CAT-30). */
+    @SerialName("RemoteTrailers") val remoteTrailers: List<RemoteTrailer> = emptyList()
 )
 
 /** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */

@@ -934,6 +934,8 @@ internal fun PlayerItemScreen(
                                 paused || playback.buffering || state.preparing || !actionsVisible,
                                 onFocusRemoved = restoreActionFocus, onPlay = { finish(next) },
                                 onCancel = host::cancelNext, visible = actionsVisible, compact = controls,
+                                countdownSeconds = host.localPreferences.tuning.nextEpisodeCountdownSeconds,
+                                stillWatching = host.localPreferences.tuning.stillWatching,
                                 remainingMs = if (!host.creditsCountdown || creditsStartMs(duration, segments) == null) {
                                     (duration - position).coerceAtLeast(0)
                                 } else {
