@@ -68,6 +68,13 @@ public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible
     public var requiredHttpHeaders: [String:String]
     public var defaultAudioStreamIndex: Int?
     public var defaultSubtitleStreamIndex: Int?
+    /// Live TV: the source must be opened with LiveStreams/Open before it can play. Decoded only (never re-encoded,
+    /// so the open token never leaves the client in a cast or handoff payload).
+    public var requiresOpening: Bool = false
+    public var openToken: String? = nil
+    /// Live TV: the opened stream holds a tuner until LiveStreams/Close.
+    public var requiresClosing: Bool = false
+    private enum LiveKeys: String, CodingKey { case requiresOpening = "RequiresOpening", openToken = "OpenToken", requiresClosing = "RequiresClosing" }
     public init(id: String? = nil, container: String? = nil, supportsDirectPlay: Bool = false, supportsDirectStream: Bool = false, transcodingUrl: String? = nil) {
         self.id = id; self.container = container; self.supportsDirectPlay = supportsDirectPlay
         self.supportsDirectStream = supportsDirectStream; self.transcodingUrl = transcodingUrl
@@ -95,6 +102,10 @@ public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible
         requiredHttpHeaders = raw.compactMapValues { $0 }
         defaultAudioStreamIndex = try c.decodeIfPresent(Int.self, forKey: .defaultAudioStreamIndex)
         defaultSubtitleStreamIndex = try c.decodeIfPresent(Int.self, forKey: .defaultSubtitleStreamIndex)
+        let live = try decoder.container(keyedBy: LiveKeys.self)
+        requiresOpening = try live.decodeIfPresent(Bool.self, forKey: .requiresOpening) ?? false
+        openToken = try live.decodeIfPresent(String.self, forKey: .openToken)
+        requiresClosing = try live.decodeIfPresent(Bool.self, forKey: .requiresClosing) ?? false
     }
     public var description: String { "MediaSource(id=\(id ?? ""), container=\(container ?? ""), credentials=REDACTED)" }
     public var debugDescription: String { description }
@@ -129,6 +140,11 @@ public struct PlayDecision: Sendable, CustomStringConvertible, CustomDebugString
     public var audioIndex: Int?
     public var subtitleIndex: Int?
     public var transcodeReasons: [String]
+    /// The live stream this client opened and must close (LiveStreams/Close) when playback ends; nil when it owns none.
+    public var ownedLiveStreamId: String? = nil
+    /// The server's live stream identity, sent back in every progress and stopped report.
+    public var liveStreamId: String? { source.liveStreamId }
+    public var isLive: Bool { source.isInfiniteStream || source.liveStreamId != nil }
     /// Jellyfin VOD HLS advertises the full source timeline, just like a static file.
     /// A server-side progressive seek would need a separate explicit timeline model.
     public var timelineOffsetTicks: Int64 { 0 }
@@ -167,7 +183,7 @@ public enum PlayDecisions {
         let url: URL
         if source.supportsDirectPlay || source.supportsDirectStream {
             method = source.supportsDirectPlay ? .directPlay : .directStream
-            url = try ServerURLs.endpoint(account.server, path: "Videos/\(ServerURLs.encode(itemID))/stream", query: [URLQueryItem(name: "static", value: "true"), URLQueryItem(name: "mediaSourceId", value: source.id), URLQueryItem(name: "playSessionId", value: response.playSessionId), URLQueryItem(name: "tag", value: source.eTag)].filter { $0.value != nil })
+            url = try ServerURLs.endpoint(account.server, path: "Videos/\(ServerURLs.encode(itemID))/stream", query: [URLQueryItem(name: "static", value: "true"), URLQueryItem(name: "mediaSourceId", value: source.id), URLQueryItem(name: "playSessionId", value: response.playSessionId), URLQueryItem(name: "tag", value: source.eTag), URLQueryItem(name: "liveStreamId", value: source.liveStreamId)].filter { $0.value != nil })
         } else {
             method = .transcode
             url = try ServerURLs.resolve(server: account.server, reference: source.transcodingUrl ?? "")
