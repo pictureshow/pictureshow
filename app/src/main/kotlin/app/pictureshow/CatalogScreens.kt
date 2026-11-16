@@ -160,7 +160,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
-private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "customize", "profile")
+private val HEADER_ROWS = setOf("account", "search", "settings", "live-tv", "requests", "customize", "profile")
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -179,8 +179,11 @@ fun CatalogHome(
     onDownloads: (() -> Unit)? = null,
     onWatchDownloads: (() -> Unit)? = null,
     serverLabel: String = account.server.name,
-    onLiveTv: () -> Unit = {}
+    onLiveTv: () -> Unit = {},
+    /** Seerr's Discover and Requests; null (not connected to Seerr) hides the button. */
+    onRequests: (() -> Unit)? = null
 ) {
+    val requestsLabel = androidx.compose.ui.res.stringResource(R.string.seerr_nav)
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
@@ -214,7 +217,7 @@ fun CatalogHome(
     }
     val restoreAction = when {
         state.busy && selectedRow in listOf("account", "settings", "profile") -> "search"
-        selectedRow in listOf("account", "search", "settings", "live-tv", "customize", "profile") -> selectedRow
+        selectedRow in listOf("account", "search", "settings", "live-tv", "requests", "customize", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
@@ -222,6 +225,7 @@ fun CatalogHome(
         "search" -> "Search"
         "settings" -> "Settings"
         "live-tv" -> "Live TV"
+        "requests" -> requestsLabel
         "customize" -> "Customize home"
         "profile" -> "Switch user"
         "account" -> accountChipLabel(account.user.name, serverLabel)
@@ -259,6 +263,7 @@ fun CatalogHome(
     val signOutFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val liveFocus = remember { FocusRequester() }
+    val requestsFocus = remember { FocusRequester() }
     val customizeFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -353,7 +358,7 @@ fun CatalogHome(
     val belowTop =
         rows.isNotEmpty() &&
             selectedRow.isNotEmpty() &&
-            selectedRow !in listOf("account", "search", "settings", "live-tv", "customize", rows.first().key)
+            selectedRow !in listOf("account", "search", "settings", "live-tv", "requests", "customize", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -452,10 +457,22 @@ fun CatalogHome(
                                 onLiveTv()
                             },
                             modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
-                                .staysInRow(first = false, last = onCustomize == null && onDownloads == null)
+                                .staysInRow(first = false, last = onRequests == null && onCustomize == null && onDownloads == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Live TV") }
+                        if (onRequests != null) {
+                            Button(
+                                onClick = {
+                                    selectedRow = "requests"
+                                    onRequests()
+                                },
+                                modifier = target(Modifier, restoreAction == "requests").focusRequester(requestsFocus)
+                                    .testTag("home:requests").staysInRow(first = false, last = onCustomize == null && onDownloads == null)
+                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "requests" }
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text(requestsLabel) }
+                        }
                         if (onCustomize != null) {
                             Button(
                                 enabled = app.pictureshow.core.canOpenHomeEditor(state.preferencesReady),
@@ -687,7 +704,7 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction in listOf("account", "search", "settings", "customize", "live-tv") -> {
+                restoreAction in listOf("account", "search", "settings", "customize", "live-tv", "requests") -> {
                     focusAction(
                         "header",
                         0,
@@ -695,6 +712,7 @@ fun CatalogHome(
                             "account" -> accountFocus
                             "settings" -> settingsFocus
                             "live-tv" -> liveFocus
+                            "requests" -> requestsFocus
                             "customize" -> customizeFocus
                             else -> search
                         }
@@ -727,7 +745,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("account", "profile", "search", "settings", "live-tv", "customize") &&
+            savedRow !in listOf("account", "profile", "search", "settings", "live-tv", "requests", "customize") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -3783,7 +3801,9 @@ internal fun CatalogCard(
     /** Replaces the line under the title: Home's "Show · Library · Next · S1:E2" (HOME-12, HOME-13). */
     subtitle: String? = null,
     /** Reads [subtitle] after the card's own announcement, where the line says what the card is (a trailer's source). */
-    announceSubtitle: Boolean = false
+    announceSubtitle: Boolean = false,
+    /** Art from outside the server (a Seerr title's TMDB poster), loaded without any server credentials. */
+    artworkUrl: String? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     // A missing episode says so wherever its card appears (CAT-21).
@@ -3879,7 +3899,7 @@ internal fun CatalogCard(
                 )
             ) {
                 Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
-                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize(), placeholderName = !nameInArtwork)
+                    CatalogArtwork(item, account, wide, Modifier.fillMaxSize(), placeholderName = !nameInArtwork, artworkUrl = artworkUrl)
                     if (nameInArtwork) {
                         Text(
                             item.name,
@@ -3969,14 +3989,16 @@ internal fun CatalogArtwork(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
     showPlaceholder: Boolean = true,
-    placeholderName: Boolean = true
+    placeholderName: Boolean = true,
+    artworkUrl: String? = null
 ) {
     BoxWithConstraints(
         modifier.clearAndSetSemantics {}.then(if (showPlaceholder) Modifier.background(Color(0xFF262D3D)) else Modifier),
         contentAlignment = Alignment.Center
     ) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
-        val url = imageUrl(account.server, item, pixels, wide = wide)
+        // Outside art never falls back to the server: an empty override means none (a Seerr title without a poster).
+        val url = if (artworkUrl != null) artworkUrl.takeIf(String::isNotBlank) else imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
         if (!loaded && showPlaceholder && placeholderName) {
             Text(item.name, modifier = Modifier.padding(14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)

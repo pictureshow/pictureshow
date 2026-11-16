@@ -22,6 +22,7 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 | Music library and background audio | [Music (launch draft)](music.md) |
 | Guide, live tune, recordings and schedules | [Live TV and DVR (launch draft)](live-tv.md) |
 | Watch together | [SyncPlay (launch draft)](syncplay.md) |
+| Requests to the household's Seerr | [Seerr requests (launch draft)](seerr.md) |
 | Exact server operations and version limits for launch drafts | [Launch API reference](launch-api.md) |
 
 `phone` diverged before several fixes in `main`. Its touch screens are additive UI requirements, **not** permission to regress main's reporting, detail freshness, Retry deadlines, HLS recovery or release ordering. A phone behavior that differs is identified explicitly in the touch manifest. Missing Android behavior is recorded as a gap, rather than silently promoted into an existing feature.

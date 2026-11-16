@@ -104,7 +104,9 @@ class ReferenceParityVectorsTest {
                         "settings-presentation",
                         "playback-settings-layout",
                         "frame-rate-match",
-                        "playback-start"
+                        "playback-start",
+                        // SeerrVectorsTest executes the Seerr request rules.
+                        "seerr"
                     )
             ) {
                 "Unhandled suite $suite in ${file.name}"

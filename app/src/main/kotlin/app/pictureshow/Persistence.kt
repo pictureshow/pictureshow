@@ -12,7 +12,10 @@ class AccountPersistence(private val preferences: DataStore<Preferences>) : Text
     override suspend fun read(): String? = preferences.data.first()[ACCOUNTS]
 
     override suspend fun write(value: String) {
-        preferences.edit { it[ACCOUNTS] = value }
+        preferences.edit {
+            retainSeerrAccounts(it, kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString(value))
+            it[ACCOUNTS] = value
+        }
     }
 
     private companion object {

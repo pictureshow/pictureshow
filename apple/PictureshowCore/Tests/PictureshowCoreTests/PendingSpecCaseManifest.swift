@@ -78,6 +78,7 @@ enum PendingSpecCaseManifest {
         "sync-tv-surfaces": Suite(count: 15, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "touch-player-director-clearance-paint-edges": Suite(count: 13, reason: "Merged on main after the Apple core was last synced; not ported to Apple yet."),
         "subtitle-download": Suite(count: 18, reason: "SUB-DL remote subtitle search and stream adoption are new Android contracts; not ported to Apple yet."),
+        "seerr": Suite(count: 95, reason: "Seerr requests (SEERR) are on Android first; not ported to Apple yet."),
     ]
     static let contracts: [String: String] = {
         let rows = """
@@ -2335,6 +2336,101 @@ enum PendingSpecCaseManifest {
         sub-dl-04.existing-external-kept-apart-from-new|subtitle-download/adopt
         sub-dl-04.not-listed-yet|subtitle-download/adopt
         sub-dl-04.prefers-requested-language-among-new|subtitle-download/adopt
+        seerr.url.bare-host-https|seerr/url
+        seerr.url.http-port-kept|seerr/url
+        seerr.url.default-port-dropped|seerr/url
+        seerr.url.api-suffix-removed|seerr/url
+        seerr.url.trims-space|seerr/url
+        seerr.url.refuses-credentials|seerr/url
+        seerr.url.refuses-query|seerr/url
+        seerr.url.refuses-fragment|seerr/url
+        seerr.url.refuses-other-scheme|seerr/url
+        seerr.url.refuses-blank|seerr/url
+        seerr.url.refuses-inner-space|seerr/url
+        seerr.query.unreserved-kept|seerr/query
+        seerr.query.space-and-reserved|seerr/query
+        seerr.query.utf8|seerr/query
+        seerr.poster.tmdb-path|seerr/poster
+        seerr.poster.absent|seerr/poster
+        seerr.poster.refuses-url|seerr/poster
+        seerr.poster.refuses-traversal|seerr/poster
+        seerr.poster.refuses-slash|seerr/poster
+        seerr.media-status.1|seerr/media-status
+        seerr.media-status.2|seerr/media-status
+        seerr.media-status.3|seerr/media-status
+        seerr.media-status.4|seerr/media-status
+        seerr.media-status.5|seerr/media-status
+        seerr.media-status.6|seerr/media-status
+        seerr.media-status.7|seerr/media-status
+        seerr.media-status.99|seerr/media-status
+        seerr.request-status.1|seerr/request-status
+        seerr.request-status.2|seerr/request-status
+        seerr.request-status.3|seerr/request-status
+        seerr.request-status.4|seerr/request-status
+        seerr.request-status.5|seerr/request-status
+        seerr.request-display.pending|seerr/request-display
+        seerr.request-display.approved-waiting|seerr/request-display
+        seerr.request-display.downloading|seerr/request-display
+        seerr.request-display.partial|seerr/request-display
+        seerr.request-display.in-library|seerr/request-display
+        seerr.request-display.completed|seerr/request-display
+        seerr.request-display.declined|seerr/request-display
+        seerr.request-display.failed|seerr/request-display
+        seerr.can-request.admin-movie|seerr/can-request
+        seerr.can-request.request-tv|seerr/can-request
+        seerr.can-request.movie-only-tv|seerr/can-request
+        seerr.can-request.movie-only-movie|seerr/can-request
+        seerr.can-request.tv-only-tv|seerr/can-request
+        seerr.can-request.none|seerr/can-request
+        seerr.can-request.person|seerr/can-request
+        seerr.movie-requestable.unknown-media|seerr/movie-requestable
+        seerr.movie-requestable.1|seerr/movie-requestable
+        seerr.movie-requestable.2|seerr/movie-requestable
+        seerr.movie-requestable.3|seerr/movie-requestable
+        seerr.movie-requestable.4|seerr/movie-requestable
+        seerr.movie-requestable.5|seerr/movie-requestable
+        seerr.movie-requestable.6|seerr/movie-requestable
+        seerr.movie-requestable.7|seerr/movie-requestable
+        seerr.seasons.nothing-known|seerr/seasons
+        seerr.seasons.pending-request-only-in-requests|seerr/seasons
+        seerr.seasons.approved-request|seerr/seasons
+        seerr.seasons.declined-and-completed-free|seerr/seasons
+        seerr.seasons.4k-request-ignored|seerr/seasons
+        seerr.seasons.media-season-status|seerr/seasons
+        seerr.seasons.media-status-wins-over-request|seerr/seasons
+        seerr.offers.drops-people-and-available|seerr/offers
+        seerr.offers.drops-library-match|seerr/offers
+        seerr.offers.same-name-other-year-kept|seerr/offers
+        seerr.offers.partial-series-offered|seerr/offers
+        seerr.offers.duplicate-once|seerr/offers
+        seerr.error.login-wrong-password|seerr/error
+        seerr.error.login-forbidden|seerr/error
+        seerr.error.login-not-seerr|seerr/error
+        seerr.error.redirect|seerr/error
+        seerr.error.key-wrong|seerr/error
+        seerr.error.key-not-seerr|seerr/error
+        seerr.error.session-missing|seerr/error
+        seerr.error.no-permission|seerr/error
+        seerr.error.movie-quota|seerr/error
+        seerr.error.series-quota|seerr/error
+        seerr.error.blocklisted|seerr/error
+        seerr.error.duplicate|seerr/error
+        seerr.error.no-seasons-left|seerr/error
+        seerr.error.server-error|seerr/error
+        seerr.error.bad-query|seerr/error
+        seerr.headers.jellyfin-cookie|seerr/headers
+        seerr.headers.jellyfin-no-cookie|seerr/headers
+        seerr.headers.key-names-viewer|seerr/headers
+        seerr.headers.key-without-viewer-refused|seerr/headers
+        seerr.headers.key-negative-viewer-refused|seerr/headers
+        seerr.headers.key-lookup-only|seerr/headers
+        seerr.link.match|seerr/link
+        seerr.link.dashed-uppercase|seerr/link
+        seerr.link.no-match-never-admin|seerr/link
+        seerr.link.empty-id|seerr/link
+        seerr.cookie.session|seerr/session-cookie
+        seerr.cookie.other-only|seerr/session-cookie
+        seerr.cookie.empty-value|seerr/session-cookie
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

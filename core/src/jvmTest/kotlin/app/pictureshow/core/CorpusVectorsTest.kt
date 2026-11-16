@@ -43,7 +43,9 @@ class CorpusVectorsTest {
                     "settings-presentation",
                     "recovery",
                     // SubtitleDownloadVectorsTest executes SUB-DL-01..04.
-                    "subtitle-download"
+                    "subtitle-download",
+                    // SeerrVectorsTest executes the Seerr request rules.
+                    "seerr"
                 ),
             "control-vectors" to
                 setOf(
