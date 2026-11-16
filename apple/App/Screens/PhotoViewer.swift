@@ -20,6 +20,7 @@ struct PhotoViewer: View {
     @State private var slideTask: Task<Void, Never>?
     #if os(tvOS)
     @FocusState private var photoFocused: Bool
+    @FocusState private var slideshowFocused: Bool
     #endif
 
     private var current: MediaItem? { photos.indices.contains(index) ? photos[index] : nil }
@@ -40,7 +41,7 @@ struct PhotoViewer: View {
         .statusBarHidden(!controlsShown)
         .navigationBarTitleDisplayMode(.inline)
         #else
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar, .tabBar)
         .onPlayPauseCommand { toggleSlideshow() }
         .onExitCommand {
             if controlsShown { controlsShown = false; photoFocused = true } else { dismiss() }
@@ -114,6 +115,9 @@ struct PhotoViewer: View {
                 }
                 .primaryAction()
                 .disabled(photos.count < 2)
+                #if os(tvOS)
+                .focused($slideshowFocused)
+                #endif
                 Menu {
                     Picker("Speed", selection: $settings.slideshowSeconds) {
                         ForEach(Discovery.slideshowSeconds, id: \.self) { Text("\($0) seconds").tag($0) }
@@ -174,6 +178,10 @@ struct PhotoViewer: View {
 
     private func showControls() {
         withAnimation(.easeOut(duration: 0.2)) { controlsShown = true }
+        #if os(tvOS)
+        // The remote lands on Start slideshow, so OK starts it; Menu hides the controls again.
+        if photos.count > 1 { Task { @MainActor in slideshowFocused = true } }
+        #endif
         fadeTask?.cancel()
         // PHOTO-01: the controls fade after five seconds.
         fadeTask = Task { @MainActor in

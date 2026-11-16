@@ -467,3 +467,24 @@ the 2026-11-16 two-viewer live check on the demo server: iPhone simulator plus a
   output latency converges instead of re-seeking behind; the lead resets with each viewing.
 - The renderer reports buffering only for a real stall (empty buffer or AVPlayer waiting to minimise stalls), not
   AVPlayer's brief "evaluating buffering rate" wait at every start.
+
+## Discovery, still watching, photos and screensaver (legs 156/158/160 on Apple, 2026-11-16)
+
+Shared vectors now active on Apple: `discovery` (59), the six `catalog.*` discovery HTTP reads in the reference suite,
+`catalog-return` (10), `search-presentation` (11) and the `application` operations `detail-play-item`,
+`catalog-announcement`, `runtime-label`, `catalog-placeholder-kind`, `search-duplicate-labels`, `media-badges` and
+`detail-play-label` (44). Rules: `Discovery.swift`, `CatalogPresentationPolicies.swift` (`CatalogRules`). App tests:
+`UnitTests/DiscoveryAppTests.swift`. Simulator evidence (Apple TV 4K and iPad Air simulators, demo server):
+`legs/155-apple-whole-app/evidence/cat-*`.
+
+| ID | Status | Production path and verification source | Remaining acceptance limits |
+|---|---|---|---|
+| AUTH-10 / AUTH-12 / OFF-09 | Implemented (leg 155) | Sign-out keeps the card behind `SignOutConfirmation` and deletes that viewer's downloads; server expiry keeps them. | Unchanged in this pass. |
+| HOME-12 / HOME-13 | Implemented (leg 155) | Merged Continue watching with "Next · S2:E3" captions (seen on iPad after a still-watching Stop); Settings "Separate Next up row"; library name on duplicates. | — |
+| CAT-06 / CAT-21 | Implemented (leg 155) | Season Play; missing episodes show "Not in your library" without Play/Play from start. | — |
+| CAT-30 | Implemented | `DetailView.reload` → `Discovery.trailerChoices`; `TrailersShelf`. Local trailer plays from the start (OBSERVED: Apple TV session "Sintel Teaser"). Online YouTube trailer: iPhone/iPad hand `https://www.youtube.com/watch?v=…` to the system (OBSERVED: Safari opened at youtube.com on the iPad simulator, which has no YouTube app); Apple TV tries the YouTube app's `youtube://` scheme and otherwise shows the spec's "This trailer is online…" alert (OBSERVED alert; no YouTube app in the simulator). | ASSUMED: the tvOS YouTube app accepts `youtube://watch/<id>`; unproven without a device with YouTube installed. Non-YouTube online trailers have no target on Apple TV (no browser) and show the alert. |
+| CAT-31 | Implemented | `ExtrasShelf` with `Discovery.specialFeatureExtras`; label "Behind the scenes · 43 s" (OBSERVED on both). Episodes read extras too. | Playing an extra uses the normal player (not separately observed). |
+| CAT-32 | Implemented | `Discovery.moreLikeThis` replaces the page's own dedupe (OBSERVED row on both). | — |
+| PLAY-30 | Implemented | Settings "Next episode countdown" (Off/5/10/15/20/30; Off is the old autoplay switch) and "Ask if I'm still watching" (`ViewingSettings`); `ViewerInput` counts automatic starts and the last touch/press (window-level `InputWatcher`); `PlaybackController` asks instead of counting down and holds at the end. OBSERVED on Apple TV and iPad: card "Are you still watching? · Next: A Spring Crossing", playback held at the end, Keep watching started the next episode (server session), Stop closed the player. | The 2-hour path was driven by a debug seam (`PICTURESHOW_INPUT_AGE_MIN`); the episode-count path is unit-tested, not watched through three episodes. Offline (downloaded) next-episode playback doesn't ask. |
+| PHOTO-01 / PHOTO-02 | Implemented | `Route.photo` from grids (keeps the grid's sort; random falls back to name) and Search; `PhotoViewer`. OBSERVED: Apple TV grid → "3 of 12" in the photo's folder, Right moves, OK shows controls with focus on Start slideshow, slideshow advances every 5 s, Menu leaves; iPad swipe, fade after 5 s, tap shows controls. | Play/Pause on the Siri Remote and the slideshow wrap aren't driven in the simulator (wrap is vector-covered). |
+| SAVER-01 | Platform-dependent (in-app) | tvOS gives apps no system-screensaver hook, so `ScreensaverHost` covers the app after the chosen idle time (Settings › Screensaver, ratings) outside the player and photo viewer; backdrops crossfade every 12 s with title, time and date. OBSERVED: saver shown, crossfading; the waking OK started nothing; presses keep it away (window watcher); playback started while it shows dismisses it. | The system Aerial screensaver still runs after its own idle setting. Not shown over Live TV specifically because Apple has no Live TV player yet. |

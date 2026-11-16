@@ -22,6 +22,8 @@ struct ScreensaverHost: ViewModifier {
         content
             .fullScreenCover(isPresented: $showing) { ScreensaverView { showing = false }.environmentObject(app) }
             .task(id: settings.screensaverMinutes) { await watch() }
+            // Playback started from elsewhere (a phone's Play on, a resumed group) takes the screen.
+            .onChange(of: app.player != nil) { _, playing in if playing { showing = false } }
         #else
         content
         #endif
