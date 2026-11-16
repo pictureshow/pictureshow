@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0100B807A26C110198528541 /* InformationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62471EE4B103D973C242E55E /* InformationViews.swift */; };
 		01217037B07D1AF498719ECB /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95005E06BDB9445CEF5DEFF1 /* AccountStore.swift */; };
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
 		14686C297522480289D64071 /* AppleHEVCQualificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */; };
@@ -46,6 +47,7 @@
 		CBF45B9F64630DA356AE2AAA /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF5DDDE279B32FAA39F91BA /* SearchView.swift */; };
 		D57E8CA94E9E219A7CB4EC57 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F245C42E5692A041B38D7148 /* HomeView.swift */; };
 		D69FF41621FAC24A0CABFBC8 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9EB7CA269F68C47A9BFBD23 /* SignInView.swift */; };
+		E1C427C64AC1D9451B35ED73 /* InformationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62471EE4B103D973C242E55E /* InformationViews.swift */; };
 		E730A0CB4CA77A5F9B6806F4 /* PictureshowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8DFE48B43481D4DCECA35AE /* PictureshowApp.swift */; };
 		E7EDA4BE89F63FE9E1C1ADAE /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21770514D4CDB9B9A06BAF96 /* LibraryView.swift */; };
 		E9801220B97EB37225013361 /* Artwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B219333841A679C0E18D37B /* Artwork.swift */; };
@@ -83,6 +85,7 @@
 		2F8E5103DB47A19B32019DE1 /* PictureshowCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowCore; path = PictureshowCore; sourceTree = SOURCE_ROOT; };
 		34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-tvOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHEVCQualificationTests.swift; sourceTree = "<group>"; };
+		62471EE4B103D973C242E55E /* InformationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InformationViews.swift; sourceTree = "<group>"; };
 		78A1DE7E5968B6A48C7CCEE2 /* PlayerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerScreen.swift; sourceTree = "<group>"; };
 		7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MPL-2.0.txt"; sourceTree = "<group>"; };
 		88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -225,6 +228,7 @@
 			children = (
 				1888E9F0F445CD4A406416E7 /* DetailView.swift */,
 				F245C42E5692A041B38D7148 /* HomeView.swift */,
+				62471EE4B103D973C242E55E /* InformationViews.swift */,
 				21770514D4CDB9B9A06BAF96 /* LibraryView.swift */,
 				DFF5DDDE279B32FAA39F91BA /* SearchView.swift */,
 				208DC253481C07A7F4E487B8 /* SettingsView.swift */,
@@ -408,6 +412,7 @@
 				2315B71227D493238750EE59 /* DesignTokens.swift in Sources */,
 				6FB7EF793C86BF0504BF8FB8 /* DetailView.swift in Sources */,
 				50CDD1B215A3A84044D439F9 /* HomeView.swift in Sources */,
+				0100B807A26C110198528541 /* InformationViews.swift in Sources */,
 				E7EDA4BE89F63FE9E1C1ADAE /* LibraryView.swift in Sources */,
 				E730A0CB4CA77A5F9B6806F4 /* PictureshowApp.swift in Sources */,
 				EACC66F116D9C5AFB78CD2AB /* PlaybackController.swift in Sources */,
@@ -431,6 +436,7 @@
 				90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */,
 				F28357EE5882DC9A217BDBB9 /* DetailView.swift in Sources */,
 				D57E8CA94E9E219A7CB4EC57 /* HomeView.swift in Sources */,
+				E1C427C64AC1D9451B35ED73 /* InformationViews.swift in Sources */,
 				37842752121AAF97B96C5928 /* LibraryView.swift in Sources */,
 				98481734BB9413BFDC2210F4 /* PictureshowApp.swift in Sources */,
 				4ABA8DA848D8AF9BD02F7E13 /* PlaybackController.swift in Sources */,

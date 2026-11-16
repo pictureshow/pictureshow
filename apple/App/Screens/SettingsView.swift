@@ -35,11 +35,13 @@ struct SettingsView: View {
                 }
             }
             #endif
-            Section("About") {
-                LabeledContent("Version", value: "\(AppInfo.version) (\(AppInfo.build))")
-                NavigationLink("License") { LicenseView() }
-                Text("Pictureshow is free and open source, made by Legitimate LLC.")
-                    .font(.footnote).foregroundStyle(Theme.muted)
+            Section {
+                NavigationLink("About Pictureshow") { AboutView() }
+                NavigationLink(DeviceIdentity.thisDevice) { DeviceInfoView() }
+            } header: {
+                Text("Pictureshow")
+            } footer: {
+                Text("\(DeviceIdentity.thisDevice) shows what plays directly here and what the server converts.")
             }
         }
         .navigationTitle("Settings")
@@ -89,12 +91,31 @@ struct SettingsView: View {
                 }
             }
             Toggle("Play the next episode automatically", isOn: $app.preferences.autoplayNextEpisode)
-            Toggle("Explain when the server converts video", isOn: $app.preferences.playback.showConversionNotice)
+            // Apple devices offer no app-level passthrough switch, so this is a read-only line rather than
+            // a toggle that would do nothing (SET-02).
+            VStack(alignment: .leading, spacing: 4) {
+                LabeledContent("Audio passthrough", value: "Set by \(DeviceIdentity.systemName)")
+                Text(Self.passthroughCaption).font(.footnote).foregroundStyle(Theme.muted)
+            }
+            .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Conversion notice", isOn: $app.preferences.playback.showConversionNotice)
+                Text("Shows a short note when the server has to convert a video for this \(DeviceIdentity.name).")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
         } header: {
             Text("Playback")
         } footer: {
             Text("Lower quality only applies when the server has to convert a file. Files this device plays as they are always play at full quality.")
         }
+    }
+
+    @MainActor private static var passthroughCaption: String {
+        #if os(tvOS)
+        "Apple TV sends Dolby Digital and Dolby Atmos to your receiver when it can. Change it in Settings > Video and Audio."
+        #else
+        "\(DeviceIdentity.systemName) decides how sound reaches your speakers, headphones or AirPlay receiver."
+        #endif
     }
 
     private func segmentBinding(_ type: SegmentType) -> Binding<SegmentMode> {
@@ -126,7 +147,10 @@ struct SettingsView: View {
 struct LanguageSection: View {
     @EnvironmentObject private var app: AppModel
     @State private var configuration: UserConfiguration?
-    @State private var error: String?
+    @State private var loadError: String?
+    @State private var saveError: String?
+    @State private var saving = false
+    @State private var attempt = 0
 
     private static let languages: [(code: String, name: String)] = {
         let codes = ["eng", "spa", "fre", "ger", "ita", "por", "jpn", "kor", "chi", "rus", "ara", "hin", "dut", "swe", "nor", "dan", "fin", "pol", "tur", "heb", "tha", "vie", "ind", "ukr", "ces", "gre", "hun", "ron"]
@@ -137,11 +161,11 @@ struct LanguageSection: View {
         Section {
             if let configuration {
                 Picker("Audio language", selection: binding("AudioLanguagePreference", configuration.audioLanguage)) {
-                    Text("File default").tag("")
+                    Text("No preference").tag("")
                     ForEach(Self.languages, id: \.code) { Text($0.name).tag($0.code) }
                 }
                 Picker("Subtitle language", selection: binding("SubtitleLanguagePreference", configuration.subtitleLanguage)) {
-                    Text("Any").tag("")
+                    Text("No preference").tag("")
                     ForEach(Self.languages, id: \.code) { Text($0.name).tag($0.code) }
                 }
                 Picker("Subtitles", selection: binding("SubtitleMode", configuration.subtitleMode)) {
@@ -151,19 +175,28 @@ struct LanguageSection: View {
                     Text("When audio is another language").tag("Smart")
                     Text("Off").tag("None")
                 }
-            } else if let error {
-                Text(error).foregroundStyle(Theme.warning)
+                if let saveError {
+                    Text("Couldn't save: \(saveError). Your previous choice is kept.").font(.footnote).foregroundStyle(Theme.warning)
+                }
+            } else if let loadError {
+                Text("Couldn't load your language settings: \(loadError)").foregroundStyle(Theme.warning)
+                Button("Retry") { self.loadError = nil; attempt += 1 }
             } else {
-                ProgressView()
+                LabeledContent("Languages", value: "Loading…")
             }
         } header: {
             Text("Languages")
         } footer: {
             Text("Saved to your Jellyfin account, so other Jellyfin apps use them too.")
         }
-        .task(id: app.account?.key) {
+        .disabled(saving)
+        .task(id: "\(app.account?.key ?? "")#\(attempt)") {
             guard let account = app.account, let client = app.client else { return }
-            do { configuration = try await client.configuration(account: account) } catch { self.error = error.localizedDescription }
+            configuration = nil
+            do { configuration = try await client.configuration(account: account) }
+            catch ClientError.invalidCredentials { app.expire(account) }
+            catch is CancellationError {}
+            catch { loadError = error.localizedDescription }
         }
     }
 
@@ -171,10 +204,14 @@ struct LanguageSection: View {
         Binding(get: { value }, set: { newValue in
             guard let current = configuration, let updated = try? current.withPreference(field, value: newValue) else { return }
             configuration = updated
+            saveError = nil
+            saving = true
             Task {
+                defer { saving = false }
                 guard let account = app.account, let client = app.client else { return }
                 do { try await client.saveConfiguration(account: account, configuration: updated) }
-                catch { self.error = error.localizedDescription; configuration = current }
+                catch ClientError.invalidCredentials { configuration = current; app.expire(account) }
+                catch { saveError = error.localizedDescription; configuration = current }
             }
         })
     }

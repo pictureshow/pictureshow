@@ -176,4 +176,13 @@ enum DeviceIdentity {
         return UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
         #endif
     }
+    @MainActor static var systemName: String {
+        #if os(tvOS)
+        return "tvOS"
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS"
+        #endif
+    }
+    /// Troubleshooting page title, as the spec names it per device class.
+    @MainActor static var thisDevice: String { "This \(name)" }
 }
