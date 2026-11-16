@@ -90,10 +90,11 @@ final class SpecVectorTests:XCTestCase {
         let musicSuites:Set<String>=["music-catalog","music-playlists","music-quality","music-queue","music-reports","music-session"]
         let castSuites:Set<String>=["cast-capability","cast-session","cast-handoff"]
         let remoteSuites:Set<String>=["remote-wire","remote-targets","remote-receive","remote-reconnect","remote-queue"]
-        let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites)
+        let offlineSuites = Set(OfflineVectorRunner.operations.keys)
+        let traceSuites = controlSuites.union(musicSuites).union(castSuites).union(remoteSuites).union(offlineSuites)
         let pendingSuites = Set(PendingSpecCaseManifest.suites.keys)
         var discoveredPendingSuites = Set<String>()
-        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation"]).union(traceSuites).union(pendingSuites)
+        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information","track-labels","grid-navigation","home-browse","account-sign-out"]).union(traceSuites).union(pendingSuites)
         var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
@@ -124,7 +125,7 @@ final class SpecVectorTests:XCTestCase {
                     if learnedShape && (vector["operation"] != nil || suite == "live-source") { try PendingSpecCaseManifest.validateEnvelope(vector, suite: suite) }
                     continue
                 }
-                let operation = suite == "live-source" ? "observed-window" : try required(String.self,vector,"operation")
+                let operation = suite == "live-source" ? "observed-window" : (suite == "account-sign-out" ? "case" : try required(String.self,vector,"operation"))
                 guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
                 try SpecCaseManifest.validate(id:id,suite:suite,operation:operation)
                 if traceSuites.contains(suite) {
@@ -140,12 +141,12 @@ final class SpecVectorTests:XCTestCase {
                         "remote-wire":["request","cap-note","parse","capabilities","advertised","socket-url","targets-path","relay-rights"],
                         "remote-targets":["targets","track-selected"], "remote-receive":["receive"], "remote-reconnect":["controller"], "remote-queue":["queue"]
                     ]
-                    guard allowedOperations[suite]?.contains(operation) == true else { throw NSError(domain:"Unknown operation \(suite)/\(operation)",code:1) }
+                    guard (allowedOperations[suite] ?? OfflineVectorRunner.operations[suite])?.contains(operation) == true else { throw NSError(domain:"Unknown operation \(suite)/\(operation)",code:1) }
                     if musicSuites.contains(suite), !["queue", "session", "report", "playlist"].contains(operation) {
                         guard vector["input"] is [String:Any],vector["expected"] != nil,vector["steps"] == nil,vector["state"] == nil else { throw NSError(domain:"Malformed music vector \(id)",code:1) }
                         continue
                     }
-                    guard vector["state"] is [String:Any], let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
+                    guard vector["state"] is [String:Any] || (suite == "offline-outbox" && operation == "outbox" && vector["state"] is NSNull), let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
                           vector["input"] == nil, vector["expected"] == nil else { throw NSError(domain:"Malformed control vector \(id) or unknown operation \(operation)",code:1) }
                     for step in steps {
                         guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
@@ -180,7 +181,8 @@ final class SpecVectorTests:XCTestCase {
                     let id=text(vector,"id")
                     do {
                         let steps: Int
-                        if musicSuites.contains(suite) { steps = try MusicVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
+                        if offlineSuites.contains(suite) { steps = try OfflineVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"]!,steps:vector["steps"] as! [[String:Any]]) }
+                        else if musicSuites.contains(suite) { steps = try MusicVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else if castSuites.contains(suite) { steps = try CastVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else if remoteSuites.contains(suite) { steps = try RemoteVectorRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
                         else { steps = try ControlTraceRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]]) }
@@ -192,9 +194,11 @@ final class SpecVectorTests:XCTestCase {
                 let id=text(vector,"id")
                 do {
                     let result: Any
-                    if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
+                    if suite == "home-browse" { result = try await executeHome(text(vector,"operation"), input:vector["input"] as! [String:Any]) }
+                    else if suite == "account-sign-out" { result = try AccountCatalogState.execute(input: vector["input"] as! [String:Any]) }
+                    else if musicSuites.contains(suite) { result = try MusicVectorRunner.execute(suite:suite,operation:text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
                     else { result = try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]) }
-                    let actual=try json(result),expected=try json(vector["expected"]!)
+                    let actual=try json(result),expected=try json(suite == "home-browse" && text(vector,"operation") == "reset-home-layout" ? HomeVectorRunner.object(decode(HomePreferences.self, vector["expected"]!)) : vector["expected"]!)
                     let matches = musicSuites.contains(suite) && vector["exact"] == nil ? MusicVectorTests.projection(vector["expected"]!,matches:result) : actual == expected
                     if !matches { failures.append("\(id)\n expected: \(expected)\n actual: \(actual)") }
                 } catch { failures.append("\(id): \(error)") }
@@ -204,6 +208,47 @@ final class SpecVectorTests:XCTestCase {
         XCTAssertGreaterThan(count, 0)
         print("\(operations == nil ? "Shared" : "Targeted") vectors: \(count) cases executed \(counts), control trace steps \(stepsBySuite), \(failures.count) failures; no skipped cases within the selected cohort.")
         XCTAssertTrue(failures.isEmpty,failures.joined(separator:"\n"))
+    }
+    func executeHome(_ operation: String, input: [String: Any]) async throws -> Any {
+        let account = Account(server: Server(url: URL(string: "https://media.example.test")!), userId: "v", username: "Viewer", accessToken: "fake", deviceID: "install")
+        if ["catalog-parent-guard", "catalog-latest-authority", "catalog-views-display-hidden"].contains(operation) {
+            let kind = text(input, "kind"), allowed = bool(input, "allowed")
+            let responses: [[String: Any]]
+            if kind == "latest" { responses = [["status": 401, "body": [:]]] }
+            else if kind == "views" { responses = [["status": 200, "body": ["Items": [["Id": "choice", "Name": "Visible choice"]]]]] }
+            else if !allowed { responses = [["status": 404, "body": [:]]] }
+            else { responses = [["status": 200, "body": ["Id": "library", "Type": "CollectionFolder"]], ["status": 200, "body": kind == "facets" ? ["Genres": ["Visible genre"]] : ["Items": [["Id": "choice", "Name": "Visible choice"]]]]] }
+            let client = mockClient(["responses": responses], identity: [:]); var failed = false
+            do {
+                if kind == "latest" { _ = try await client.latest(account: account, parentID: "library") }
+                else if kind == "views" { _ = try await client.views(account: account) }
+                else { _ = try await client.catalogMetadata(account: account, kind: kind, parentID: "library") }
+            } catch { failed = true }
+            var result: [String: Any] = ["paths": VectorProtocol.requests.map { text($0, "path") }, "failed": failed]
+            if kind == "views" { result["includeHidden"] = (VectorProtocol.requests.first?["query"] as? [String: [String]])?["includeHidden"]?.first as Any? ?? NSNull() }
+            return result
+        }
+        if operation == "home-preferences-local-failure" {
+            let afterPost = bool(input, "afterPost")
+            let remote = HomePreferences(mergeWatching: false)
+            let document = try Catalog.homePreferencesDocument(before: [:], preferences: remote)
+            let client = mockClient(["responses": [["status": 200, "body": try HomeVectorRunner.object(document)], ["status": 204, "body": [:]]]], identity: [:])
+            let loaded = try Catalog.readHomePreferences(document: await client.homePreferencesDocument(account: account))!
+            var post = false, pending = false
+            func save(_ p: HomePreferences, _ marker: Bool) throws {
+                if !afterPost || post { throw ClientError.invalidResponse }; pending = marker
+            }
+            let read = HomePreferenceCommit.read(remote: loaded, saveLocal: save)
+            let result: HomePreferenceCommit.Result
+            if afterPost {
+                var next = read.preferences; next.landing = "libraries"
+                result = await HomePreferenceCommit.change(current: read.preferences, next: next, saveLocal: save) {
+                    try await client.saveHomePreferencesDocument(account: account, document: Catalog.homePreferencesDocument(before: document, preferences: next)); post = true
+                }
+            } else { result = read }
+            return ["merged": result.preferences.mergeWatching, "landing": result.preferences.landing, "warned": result.warned, "serverSaved": post, "pending": pending]
+        }
+        return try HomeVectorRunner.execute(operation: operation, input: input)
     }
     func execute(_ operation:String,input i:[String:Any],context:[String:Any])async throws->Any{
         let serverJSON=context["server"] as? [String:Any] ?? [:];let identity=context["identity"] as? [String:Any] ?? [:];let credentials=context["account"] as? [String:Any] ?? [:]

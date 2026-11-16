@@ -5,10 +5,27 @@ import PictureshowCore
 
 struct SettingsView: View {
     @EnvironmentObject private var app: AppModel
+    @State private var signOutAccount: Account?
 
     var body: some View {
         Form {
             accounts
+            Section {
+                Toggle("Separate Next up row", isOn: Binding(
+                    get: { !app.homeLayout.mergeWatching },
+                    set: { separate in Task { await app.setSeparateNextUp(separate) } }
+                ))
+                .disabled(app.homeLayoutSaving)
+                if let error = app.homeLayoutError {
+                    Text("Couldn't save or load Home settings: \(error)").font(.footnote).foregroundStyle(Theme.warning)
+                    Button("Retry") { Task { await app.retryHomeLayout() } }
+                }
+            } header: { Text("Home") } footer: {
+                Text(app.homeLayout.mergeWatching ? "Next up appears in Continue watching, captioned Next." : "Continue watching and Next up appear in separate rows.")
+            }
+            .task(id: app.account?.key) {
+                await app.retryHomeLayout()
+            }
             playback
             Section("Skip segments") {
                 ForEach([SegmentType.intro, .outro, .recap, .preview, .commercial], id: \.self) { type in
@@ -38,12 +55,19 @@ struct SettingsView: View {
             Section {
                 NavigationLink("About Pictureshow") { AboutView() }
                 NavigationLink(DeviceIdentity.thisDevice) { DeviceInfoView() }
+                NavigationLink("Support Pictureshow") { SupportView() }
+                #if os(iOS)
+                NavigationLink("Downloads") { DownloadsView() }
+                #else
+                NavigationLink("Downloads") { DownloadsUnsupportedView() }
+                #endif
             } header: {
                 Text("Pictureshow")
             } footer: {
                 Text("\(DeviceIdentity.thisDevice) shows what plays directly here and what the server converts.")
             }
         }
+        .confirmSignOut(account: $signOutAccount)
         .navigationTitle("Settings")
         #if os(iOS)
         .scrollContentBackground(.hidden)
@@ -73,17 +97,17 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 .swipeActions {
                     Button("Remove", role: .destructive) { app.remove(account) }
-                    if account.isSignedIn { Button("Sign out") { app.signOut(account) }.tint(.orange) }
+                    if account.isSignedIn { Button("Sign out") { signOutAccount = account }.tint(.orange) }
                 }
                 #endif
                 .contextMenu {
-                    if account.isSignedIn { Button("Sign out", role: .destructive) { app.signOut(account) } }
+                    if account.isSignedIn { Button("Sign out", role: .destructive) { signOutAccount = account } }
                     Button("Remove from this device", role: .destructive) { app.remove(account) }
                 }
             }
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
             if let account = app.account {
-                Button(role: .destructive) { app.signOut(account) } label: { Label("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
+                Button(role: .destructive) { signOutAccount = account } label: { Label("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
         } header: {
             Text("Accounts")

@@ -28,12 +28,20 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     @Published private(set) var nextCountdown: Int?
     @Published private(set) var cue: String?
     @Published private(set) var finished = false
+    /// The AirPlay receiver's name while the picture plays there (CAST-07); nil while it plays here.
+    @Published private(set) var externalRoute: String?
 
     let player = AVPlayer()
     let app: AppModel
     let account: Account
     let client: JellyfinClient
     private let fromStart: Bool
+    private let requestedStartTicks: Int64?
+    /// Set when this viewing plays a download from this device: nothing is asked of the server, and the
+    /// place goes to the download's outbox to be brought back later (OFF-07, OFF-11).
+    private(set) var local: LocalMedia?
+    private var localAudio: Int?
+    private var localSubtitle = -1
 
     private var segments: [MediaSegment] = []
     private var autoSkipped: Set<String> = []
@@ -56,18 +64,34 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         self.client = app.client(for: request.account)
         self.item = request.item
         self.fromStart = request.fromStart
+        self.requestedStartTicks = request.startTicks
+        self.local = request.local
         player.allowsExternalPlayback = true
         player.appliesMediaSelectionCriteriaAutomatically = false
         attachObservers()
+        app.activeController = self
+        nowPlaying.attach(self)
     }
+
+    /// Lock screen, Control Center and AirPlay receiver controls (CAST-07): the same viewing, the same reports.
+    let nowPlaying = NowPlayingBridge()
+
+    /// Sends the server the current place right away, so a remote controller sees a command take effect (REM-04).
+    func reportNow() { reportProgress(force: true) }
 
     // MARK: Tracks
 
     var source: MediaSource? { decision?.source ?? item.mediaSources.first }
-    var audioStreams: [MediaStream] { source?.mediaStreams.filter { $0.type == "Audio" } ?? [] }
-    var subtitleStreams: [MediaStream] { source?.mediaStreams.filter { $0.type == "Subtitle" } ?? [] }
-    var selectedAudio: Int? { decision?.audioIndex ?? source?.defaultAudioStreamIndex }
-    var selectedSubtitle: Int { decision?.subtitleIndex ?? -1 }
+    var audioStreams: [MediaStream] {
+        if let local { return LocalTracks.streams(local, type: "audio") }
+        return source?.mediaStreams.filter { $0.type == "Audio" } ?? []
+    }
+    var subtitleStreams: [MediaStream] {
+        if let local { return LocalTracks.streams(local, type: "subtitle") }
+        return source?.mediaStreams.filter { $0.type == "Subtitle" } ?? []
+    }
+    var selectedAudio: Int? { local != nil ? localAudio : (decision?.audioIndex ?? source?.defaultAudioStreamIndex) }
+    var selectedSubtitle: Int { local != nil ? localSubtitle : (decision?.subtitleIndex ?? -1) }
 
     /// Labels come from the whole chooser list, so untitled tracks get their menu number and duplicates stay distinct.
     func label(_ stream: MediaStream) -> String {
@@ -81,12 +105,13 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     func start() async {
         guard !started else { return }
         started = true
+        if let local { await startLocal(local); return }
         do {
             let full = try await client.item(account: account, id: item.id)
             item = full
             async let segments = try? client.segments(account: account, itemID: full.id)
             async let next = try? client.nextEpisode(account: account, item: full)
-            let resumeTicks = fromStart ? 0 : full.userData.playbackPositionTicks
+            let resumeTicks = requestedStartTicks ?? (fromStart ? 0 : full.userData.playbackPositionTicks)
             let defaultSubtitle = full.mediaSources.first.flatMap(Captions.usableDefaultIndex)
             try await load(startTicks: resumeTicks, audio: full.mediaSources.first?.defaultAudioStreamIndex, subtitle: defaultSubtitle ?? -1)
             self.segments = await segments ?? []
@@ -152,13 +177,25 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         player.replaceCurrentItem(with: nil)
         cueTask?.cancel(); countdownTask?.cancel()
         detachObservers()
+        nowPlaying.detach()
+        if app.activeController === self { app.activeController = nil }
         let account = self.account, client = self.client, app = self.app
+        if let local {
+            let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
+            if durationMs > 0 && ms == durationMs { app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId) }
+            else { app.downloads.recordViewing(local.accountKey, itemID: local.entry.itemId, positionTicks: ms * 10_000) }
+            app.player = nil
+            Task { await app.downloads.sync(local.accountKey); app.catalogChanged() }
+            return
+        }
+        let itemID = item.id
         Task {
             if let decision {
                 let ms = PlaybackEndPosition.completed(Int64(seconds * 1000), durationMs: durationMs)
                 try? await client.reportStopped(account: account, decision: decision, positionTicks: ms * 10_000)
                 try? await client.stopEncoding(account: account, decision: decision)
             }
+            app.downloads.onlineViewingStopped(account: account, itemID: itemID)
             app.catalogChanged()
         }
         app.player = nil
@@ -191,11 +228,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     func selectAudio(_ index: Int) {
         guard index != selectedAudio else { return }
+        if local != nil { selectLocalAudio(index); return }
         Task { await renegotiate(audio: index, subtitle: selectedSubtitle) }
     }
 
     func selectSubtitle(_ index: Int) {
-        guard index != selectedSubtitle, let decision else { return }
+        guard index != selectedSubtitle else { return }
+        if let local { localSubtitle = index; loadLocalCues(local); return }
+        guard let decision else { return }
         let current = subtitleStreams.first { $0.index == selectedSubtitle }
         let next = subtitleStreams.first { $0.index == index }
         let currentLocal = current.map(Captions.isText) ?? true
@@ -225,6 +265,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     func playNext() {
+        if local != nil { playNextLocal(); return }
         guard let next = nextEpisode else { return }
         countdownTask?.cancel()
         let decision = self.decision
@@ -266,12 +307,22 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
 
     private func attachObservers() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] time in
-            MainActor.assumeIsolated { self?.tick(time.seconds) }
+            MainActor.assumeIsolated { self?.tick(time.seconds); self?.nowPlaying.refresh() }
         }
+        observations.append(player.observe(\.isExternalPlaybackActive, options: [.initial, .new]) { [weak self] player, _ in
+            let active = player.isExternalPlaybackActive
+            Task { @MainActor in self?.externalRouteChanged(active) }
+        })
         observations.append(player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
             let status = player.timeControlStatus
             Task { @MainActor in self?.statusChanged(status) }
         })
+    }
+
+    private func externalRouteChanged(_ active: Bool) {
+        guard active else { externalRoute = nil; return }
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        externalRoute = (outputs.first { $0.portType == .airPlay } ?? outputs.first)?.portName ?? "AirPlay"
     }
 
     private func detachObservers() {
@@ -291,7 +342,7 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         })
         observations.append(playerItem.observe(\.duration, options: [.new]) { [weak self] item, _ in
             let seconds = item.duration.seconds
-            Task { @MainActor in if seconds.isFinite, seconds > 0 { self?.duration = seconds } }
+            Task { @MainActor in if seconds.isFinite, seconds > 0 { self?.duration = seconds; self?.viewingChanged() } }
         })
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: playerItem, queue: .main) { [weak self] _ in
@@ -333,7 +384,14 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         if playing != isPlaying {
             isPlaying = playing
             if status != .waitingToPlayAtSpecifiedRate { reportProgress(force: true) }
+            viewingChanged()
         }
+    }
+
+    /// Tells the remote target and the Now Playing card that the viewing moved on (ready, paused, playing).
+    private func viewingChanged() {
+        if app.activeController === self { app.remoteTarget.viewingChanged() }
+        nowPlaying.refresh(force: true)
     }
 
     private func tick(_ seconds: Double) {
@@ -382,10 +440,22 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
     }
 
     private func reachedEnd() {
+        if let local {
+            app.downloads.recordCompleted(local.accountKey, itemID: local.entry.itemId)
+            // Read again at the end, so an episode that finished downloading during this one follows it.
+            if app.preferences.autoplayNextEpisode, !nextCardDismissed, app.downloads.next(after: local) != nil { playNextLocal() } else { close() }
+            return
+        }
         if nextEpisode != nil, app.preferences.autoplayNextEpisode, !nextCardDismissed { playNext() } else { close() }
     }
 
     private func reportProgress(force: Bool) {
+        if let local {
+            guard !finished, force || Date().timeIntervalSince(lastReport) >= 10 else { return }
+            lastReport = Date()
+            app.downloads.recordViewing(local.accountKey, itemID: local.entry.itemId, positionTicks: Ticks.from(seconds: currentSeconds))
+            return
+        }
         guard let decision, !finished else { return }
         guard force || Date().timeIntervalSince(lastReport) >= 10 else { return }
         lastReport = Date()
@@ -458,5 +528,85 @@ private let log = Logger(subsystem: "app.pictureshow", category: "Playback")
         case .transcode: return "Converted by the server"
         case nil: return ""
         }
+    }
+}
+
+// MARK: - Playing a download
+
+extension PlaybackController {
+    fileprivate func startLocal(_ media: LocalMedia) async {
+        let account = self.account
+        let ticks = fromStart ? 0 : offlineDetailStartTicks(fromStart: false, outbox: app.downloads.outbox(account, media.entry.itemId),
+                                                             lastKnown: app.downloads.lastKnown(account, media.entry.itemId), server: nil)
+        localAudio = media.entry.tracks.first { $0.type == "audio" && $0.available && $0.isDefault }?.serverIndex
+            ?? media.entry.tracks.first { $0.type == "audio" && $0.available }?.serverIndex
+        localSubtitle = media.subtitles.first { sub in media.entry.tracks.contains { $0.serverIndex == sub.serverIndex && ($0.isDefault || $0.isForced) } }?.serverIndex ?? -1
+        notice = nil
+        let asset = AVURLAsset(url: media.url)
+        let playerItem = AVPlayerItem(asset: asset)
+        playerItem.externalMetadata = metadata()
+        applySubtitleStyle(playerItem)
+        let seconds = Ticks.seconds(ticks)
+        pendingSeek = seconds > 1 ? seconds : nil
+        observe(playerItem)
+        player.replaceCurrentItem(with: playerItem)
+        player.play()
+        lastReport = Date()
+        loadLocalCues(media)
+        nextEpisode = app.downloads.next(after: media)?.entry.offlineItem
+    }
+
+    fileprivate func loadLocalCues(_ media: LocalMedia) {
+        cueTask?.cancel()
+        cues = []; cue = nil
+        guard localSubtitle >= 0, let file = media.subtitles.first(where: { $0.serverIndex == localSubtitle }) else { return }
+        cueTask = Task { [weak self] in
+            guard let data = try? Data(contentsOf: file.url), let parsed = try? TextSubtitles.parse(data: data, format: "vtt"), !Task.isCancelled else { return }
+            self?.cues = parsed
+        }
+    }
+
+    /// An Original keeps its own audio tracks; the player's audible group lists them in the file's order.
+    fileprivate func selectLocalAudio(_ index: Int) {
+        guard let local, let playerItem = player.currentItem else { return }
+        let order = local.entry.tracks.filter { $0.type == "audio" && $0.available }.map(\.serverIndex)
+        guard let position = order.firstIndex(of: index) else { return }
+        localAudio = index
+        Task {
+            guard let group = try? await playerItem.asset.loadMediaSelectionGroup(for: .audible), position < group.options.count else { return }
+            playerItem.select(group.options[position], in: group)
+        }
+    }
+
+    /// The next title opens its own local player, from its own place; an episode that isn't here ends the viewing.
+    fileprivate func playNextLocal() {
+        guard let current = local, let next = app.downloads.next(after: current) else { close(); return }
+        app.downloads.recordCompleted(current.accountKey, itemID: current.entry.itemId)
+        countdownTask?.cancel()
+        finished = true
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        cueTask?.cancel()
+        detachObservers()
+        nowPlaying.detach()
+        if app.activeController === self { app.activeController = nil }
+        app.playLocal(next)
+    }
+}
+
+/// Track rows for a download, in the shape the player menus already draw.
+enum LocalTracks {
+    static func streams(_ media: LocalMedia, type: String) -> [MediaStream] {
+        let tracks = media.entry.tracks.filter { track in track.type == type && track.available && (type == "audio" || media.subtitles.contains { s in s.serverIndex == track.serverIndex }) }
+        let rows: [[String: Any]] = tracks.map { track in
+            var row: [String: Any] = ["Index": track.serverIndex, "Type": type == "audio" ? "Audio" : "Subtitle", "DisplayTitle": track.label,
+                                      "IsDefault": track.isDefault, "IsForced": track.isForced, "IsExternal": type == "subtitle",
+                                      "IsTextSubtitleStream": type == "subtitle"]
+            if let language = track.language { row["Language"] = language }
+            if let codec = track.codec { row["Codec"] = codec }
+            return row
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: rows) else { return [] }
+        return (try? JSONDecoder().decode([MediaStream].self, from: data)) ?? []
     }
 }

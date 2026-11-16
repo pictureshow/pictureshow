@@ -37,6 +37,8 @@ interface JellyfinService {
     fun quickConnect(server: Server, pending: PendingQuickConnect?, onPending: (PendingQuickConnect?) -> Unit): Flow<QuickConnectState> =
         quickConnect(server)
 
+    suspend fun authorizeQuickConnect(account: Account, code: String): QuickConnectApprovalResult = QuickConnectApprovalResult.FAILED
+
     suspend fun me(account: Account): ClientResult<User>
 
     /** Optional same-user credential rotation; unsupported services retain the original account. */
@@ -200,6 +202,9 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         }
     }
 
+    override suspend fun authorizeQuickConnect(account: Account, code: String): QuickConnectApprovalResult =
+        QuickConnectApprovalClient(client, identity).authorize(account, code)
+
     override suspend fun me(account: Account): ClientResult<User> =
         request(account.server.url, "Users/Me", token = account.accessToken, requestIdentity = identity.forAccount(account)) {
             user(json.parseToJsonElement(it).jsonObject)
@@ -305,7 +310,14 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                 401, 404 -> if (expiryStatus) {
                     failure(ErrorKind.EXPIRED, "The Quick Connect code expired.")
                 } else if (response.status.value == 401) {
-                    failure(ErrorKind.INVALID_CREDENTIALS, "Sign-in was refused. Check your username and password or sign in again.")
+                    failure(
+                        ErrorKind.INVALID_CREDENTIALS,
+                        if (path == "Users/AuthenticateByName") {
+                            "That username and password didn't work. Check them and try again."
+                        } else {
+                            "This sign-in has expired. Sign in again."
+                        }
+                    )
                 } else {
                     statusFailure(response.status.value)
                 }

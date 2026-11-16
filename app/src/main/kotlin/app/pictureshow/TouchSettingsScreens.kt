@@ -59,6 +59,8 @@ internal fun TouchSettings(
     onSyncPlay: () -> Unit = {},
     onThisDevice: () -> Unit = {},
     onDownloads: () -> Unit = {},
+    /** AUTH-15: null where this device can't approve another's sign-in. */
+    onApproveSignIn: (() -> Unit)? = null,
     supportedPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet(),
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
@@ -77,6 +79,13 @@ internal fun TouchSettings(
     TouchPage("Settings", onBack) {
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
+            onApproveSignIn?.let {
+                TouchNavRow(
+                    androidx.compose.ui.res.stringResource(R.string.qc_approve_title),
+                    androidx.compose.ui.res.stringResource(R.string.qc_approve_row_supporting),
+                    onClick = it
+                )
+            }
             TouchNavRow("Remote for a TV", onClick = onRemote)
             TouchNavRow("Downloads", onClick = onDownloads)
             separateNextUp?.let {

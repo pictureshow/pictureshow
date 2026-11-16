@@ -148,6 +148,34 @@
     <string name="remote_search_send">Send to TV</string>
     <string name="player_more_actions_right">More actions to the right</string>
     <string name="player_more_actions_left">More actions to the left</string>
+    <!-- Leg 162: phone player (TOUCH-11, TOUCH-15) -->
+    <string name="pip_title">Pictureshow</string>
+    <string name="pip_play">Play</string>
+    <string name="pip_pause">Pause</string>
+    <string name="pip_back10">Back 10 seconds</string>
+    <string name="pip_forward10">Forward 10 seconds</string>
+    <string name="player_pip">Picture in picture</string>
+    <string name="player_close">Close player</string>
+    <string name="player_rotate_portrait">Rotate to portrait</string>
+    <string name="player_rotate_landscape">Rotate to landscape</string>
+    <string name="player_playing_download">Playing the download on %1$s</string>
+    <string name="sync_download_unavailable">Watch together isn\'t available for downloads. Stream it from your server to watch together.</string>
+    <!-- Leg 162: approving another device's Quick Connect code (AUTH-05, AUTH-15) -->
+    <string name="quick_connect_where_tv">On a phone signed in to this server, open Pictureshow → Settings → Approve a TV sign-in. Or in another Jellyfin app, open Settings → Quick Connect. Then enter this code.</string>
+    <string name="quick_connect_where_touch">On another device signed in to this server, open Pictureshow → Settings → Approve a TV sign-in, or Settings → Quick Connect in another Jellyfin app, and enter this code.</string>
+    <string name="qc_approve_title">Approve a TV sign-in</string>
+    <string name="qc_approve_row_supporting">Enter the code a TV shows to sign it in as you</string>
+    <string name="qc_approve_intro">On the TV, choose Use Quick Connect. Enter the 6-character code it shows to sign it in as %1$s on %2$s.</string>
+    <string name="qc_approve_field">Code</string>
+    <string name="qc_approve_action">Approve</string>
+    <string name="qc_approve_busy">Approving…</string>
+    <string name="qc_approve_invalid">Codes are 6 letters and numbers. Check the code on the TV.</string>
+    <string name="qc_approve_done">Approved. The TV signs in as %1$s in a moment.</string>
+    <string name="qc_approve_wrong">That code didn\'t work. It may have expired: the TV shows a new one by itself, so enter the code it shows now.</string>
+    <string name="qc_approve_disabled">Quick Connect is turned off on this server. A server administrator can turn it on in the server\'s Dashboard.</string>
+    <string name="qc_approve_offline">Pictureshow can\'t reach your server right now. Check your connection and try again.</string>
+    <string name="qc_approve_sign_in">Your sign-in on this device has ended. Sign in again, then approve the code.</string>
+    <string name="qc_approve_failed">The server couldn\'t approve the code. Try again in a moment.</string>
     <!-- PLAY-60: player engine, in Settings > Video output, the player menu and Playback info. -->
     <string name="engine_title">Player engine</string>
     <string name="engine_automatic">Automatic</string>

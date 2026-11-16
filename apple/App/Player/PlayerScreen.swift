@@ -269,6 +269,18 @@ struct PlayerContent: View {
                 .ignoresSafeArea()
                 .onTapGesture { toggleControls() }
                 .accessibilityHidden(true)
+            if let route = controller.externalRoute {
+                // The picture is on the receiver; say where, instead of leaving a black screen (CAST-07).
+                VStack(spacing: 10) {
+                    Image(systemName: "airplayvideo").font(.system(size: 44)).foregroundStyle(.secondary)
+                    Text("Playing on \(route)").font(.headline)
+                    Text("Use the controls here, or choose this \(UIDevice.current.model) in AirPlay to bring it back.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .padding(32)
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .combine)
+            }
             PlayerOverlays(controller: controller, controlsVisible: controlsVisible)
             if controlsVisible { controls.transition(.opacity) }
             VStack(alignment: .trailing, spacing: 12) {

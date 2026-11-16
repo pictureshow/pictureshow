@@ -14,14 +14,40 @@ import PictureshowCore
     /// Set while the viewer is adding another account, so the sign-in flow shows over the app.
     @Published var addingAccount = false
     @Published var player: PlayerRequest?
+    /// The viewing on screen, which remote commands (REM-02) act on.
+    weak var activeController: PlaybackController? { didSet { remoteTarget.viewingChanged() } }
+    @Published var homeLayouts: [String: HomePreferences] = HomeLayoutCache.load()
+    var homeLayoutGeneration = 0
+    @Published var homeLayoutPending: Set<String> = HomeLayoutCache.pending()
+    @Published var homeLayoutSaving = false
+    @Published var homeLayoutError: String?
 
     private let store: AccountStore
     private var clients: [String: JellyfinClient] = [:]
+    /// Downloads for offline viewing (iOS and iPadOS; a TV says it can't).
+    let downloads: Downloads
+    /// The selected viewer's push socket, shared by remote control and SyncPlay.
+    let socket: ServerSocket
+    /// This device as a remote-control target for the viewer's other apps (REM-02).
+    private(set) var remoteTarget: RemoteTarget!
+    /// This phone or tablet as a remote for one of the viewer's TVs (REM-01).
+    private(set) var remote: RemoteControl!
+
+    deinit {
+        let socket = socket
+        Task { @MainActor in socket.stop() }
+    }
 
     init(store: AccountStore = AccountStore()) {
         self.store = store
         snapshot = store.load()
         preferences = Preferences.load()
+        downloads = Downloads(deviceName: DeviceIdentity.name, version: AppInfo.version)
+        socket = ServerSocket(requestFor: { Self.makeClient(deviceID: $0.deviceID).socketRequest(account: $0) })
+        downloads.start(accounts: snapshot.accounts)
+        remoteTarget = RemoteTarget(app: self)
+        remote = RemoteControl(app: self)
+        socket.follow(account)
         Task.detached(priority: .utility) { await AppleHEVCQualification.shared.warmUp() }
     }
 
@@ -48,6 +74,7 @@ import PictureshowCore
     func signedIn(_ account: Account) {
         clients[account.key] = nil
         update(AccountBook.signIn(account, into: snapshot))
+        downloads.signedIn(account)
         addingAccount = false
         signingInAgain = nil
     }
@@ -66,38 +93,80 @@ import PictureshowCore
 
     /// Ends the session on the server when it can, but never waits on it: a server that is
     /// unreachable must not keep a viewer signed in on this device.
+    /// A viewer whose session already expired is signed out too: its downloads and download token still go (OFF-09).
     func signOut(_ account: Account) {
-        guard account.isSignedIn else { return }
-        let client = client(for: account)
-        Task { try? await client.logout(account: account) }
+        if account.isSignedIn {
+            let client = client(for: account)
+            Task { try? await client.logout(account: account) }
+        }
+        // OFF-09: the viewer's downloads, their place and the download set's token go with the sign-in.
+        if player?.account.key == account.key { player = nil }
+        downloads.removeViewer(account)
+        homeLayoutGeneration += 1
+        homeLayouts.removeValue(forKey: account.key)
+        homeLayoutPending.remove(account.key)
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         clients[account.key] = nil
         update(AccountBook.signOut(account.key, from: snapshot))
     }
 
     /// Forgets the viewer's card entirely, ending its session first if it still has one.
     func remove(_ account: Account) {
-        if account.isSignedIn { signOut(account) }
+        signOut(account)
         clients[account.key] = nil
+        homeLayoutGeneration += 1
+        homeLayouts.removeValue(forKey: account.key)
+        homeLayoutPending.remove(account.key)
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         update(AccountBook.remove(account.key, from: snapshot))
     }
 
     func forget(_ server: Server) {
-        for account in snapshot.accounts where account.server.url == server.url && account.isSignedIn { signOut(account) }
+        for account in snapshot.accounts where account.server.url == server.url { signOut(account) }
+        homeLayoutGeneration += 1
+        for account in snapshot.accounts where account.server.url == server.url {
+            homeLayouts.removeValue(forKey: account.key)
+            homeLayoutPending.remove(account.key)
+        }
+        HomeLayoutCache.savePending(homeLayoutPending)
+        HomeLayoutCache.save(homeLayouts)
         update(AccountBook.forget(server: server.url, from: snapshot))
     }
 
     /// The server rejected a token: drop it, keeping the card, so the viewer signs in again instead of seeing empty screens.
     func expire(_ account: Account) {
+        guard accounts.contains(where: { $0 == account }) else { return }
         clients[account.key] = nil
-        update(AccountBook.signOut(account.key, from: snapshot))
+        update(AccountBook.expire(account.key, from: snapshot))
     }
 
     func catalogChanged() { catalogRevision += 1 }
 
-    func play(_ item: MediaItem, fromStart: Bool = false) {
-        guard let account else { return }
+    /// A title's own Play uses its ready download, online or not, unless the viewer chose to stream (OFF-04a).
+    func play(_ item: MediaItem, fromStart: Bool = false, stream: Bool = false) {
+        guard let account, !item.isMissing else { return }
+        if ["Season", "Series"].contains(item.type) {
+            Task { await playContainer(item, account: account, fromStart: fromStart, stream: stream) }
+            return
+        }
+        let ready = downloads.local(account, itemID: item.id)
+        if offlineDetailPlaySource(ready: ready != nil, server: .unknown, explicitStream: stream) == .local, let ready {
+            playLocal(ready, item: item, fromStart: fromStart)
+            return
+        }
         player = PlayerRequest(account: account, item: item, fromStart: fromStart)
     }
+
+    /// Plays a download from this device, whether or not the server is reachable (OFF-04a, OFF-11).
+    func playLocal(_ media: LocalMedia, item: MediaItem? = nil, fromStart: Bool = false) {
+        guard let account = accounts.first(where: { $0.key == media.accountKey }) ?? account else { return }
+        player = PlayerRequest(account: account, item: item ?? media.entry.offlineItem, fromStart: fromStart, local: media)
+    }
+
+    /// Opened from Home and Settings, and at a cold start with no network when there are downloads to watch.
+    @Published var showingDownloads = false
 
     /// Set when the sign-in couldn't be stored securely; the app shows it with a Retry.
     @Published var storageError: String?
@@ -105,6 +174,9 @@ import PictureshowCore
     private func update(_ next: AccountSnapshot) {
         snapshot = next
         persist()
+        socket.follow(account)
+        remoteTarget.accountChanged()
+        remote.accountChanged()
     }
 
     func persist() {
@@ -118,6 +190,9 @@ struct PlayerRequest: Identifiable {
     let account: Account
     let item: MediaItem
     let fromStart: Bool
+    var local: LocalMedia? = nil
+    /// Where a remote Play command asked to start (REM-03); nil uses the viewer's resume point.
+    var startTicks: Int64? = nil
 }
 
 enum AppInfo {
