@@ -114,16 +114,28 @@ class MpvHttpProxyTest {
     }
 
     @Test
-    fun connectionsBeyondTheWorkerCapAreClosedAtOnce() {
-        val held = (1..8).map { Socket("127.0.0.1", port()).apply { getOutputStream().write("GET ".toByteArray()) } }
+    fun connectionsWithoutTheSecretCannotTakeTheSlotsMpvNeeds() {
+        // More silent connections than the proven-connection cap: none of them may block a real request.
+        val held = (1..12).map { Socket("127.0.0.1", port()).apply { getOutputStream().write("GET ".toByteArray()) } }
         try {
-            Thread.sleep(300)
-            Socket("127.0.0.1", port()).use { extra ->
-                extra.soTimeout = 2_000
-                assertEquals(-1, extra.getInputStream().read())
-            }
+            upstream.enqueue(MockResponse().setBody("ok"))
+            val connection = URL(requireNotNull(proxy.local(upstream.url("/Videos/1/stream").toString()))).openConnection() as HttpURLConnection
+            connection.readTimeout = 2_000
+            assertEquals(200, connection.responseCode)
+            assertEquals("ok", connection.inputStream.readBytes().decodeToString())
         } finally {
             held.forEach(Socket::close)
+        }
+    }
+
+    @Test
+    fun aSilentConnectionIsDroppedWithinTheRequestLineDeadline() {
+        Socket("127.0.0.1", port()).use { socket ->
+            socket.soTimeout = 5_000
+            socket.getOutputStream().apply { write("GET /".toByteArray()); flush() }
+            val started = System.nanoTime()
+            assertNull(statusLine(socket))
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
         }
     }
 }

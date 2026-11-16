@@ -16,6 +16,7 @@ import java.net.URI
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.Semaphore
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -30,13 +31,15 @@ import okhttp3.Request
  * path secret keeps other apps on the device from borrowing the viewer's sign-in through the open port.
  *
  * The socket binds to 127.0.0.1 only, so nothing off the device can connect. Another app on the device can, so a
- * connection proves the secret on its request line before anything else is read, the headers that follow are capped in
- * count, bytes and time, and at most [MAX_WORKERS] connections are served at once (mpv opens one or two).
+ * connection has [REQUEST_LINE_DEADLINE_MS] to prove the secret on its request line before anything else is read, the
+ * headers that follow are capped in count, bytes and time, and at most [MAX_WORKERS] proven connections are served at
+ * once (mpv opens one or two), so connections without the secret can't take the slots mpv needs.
  */
 internal class MpvHttpProxy(private val server: Server, private val client: OkHttpClient) {
     private val socket = ServerSocket(0, BACKLOG, InetAddress.getByName("127.0.0.1"))
     private val secret = ByteArray(SECRET_BYTES).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
-    private val workers = ThreadPoolExecutor(0, MAX_WORKERS, 30, TimeUnit.SECONDS, SynchronousQueue()) { runnable ->
+    private val authorizedSlots = Semaphore(MAX_WORKERS)
+    private val workers = ThreadPoolExecutor(0, MAX_WORKERS + MAX_UNPROVEN, 30, TimeUnit.SECONDS, SynchronousQueue()) { runnable ->
         Thread(runnable, "mpv-proxy").apply { isDaemon = true }
     }
     private val closed = AtomicBoolean(false)
@@ -77,8 +80,8 @@ internal class MpvHttpProxy(private val server: Server, private val client: OkHt
     private fun serve(connection: Socket) = connection.use { socket ->
         val input = BufferedInputStream(socket.getInputStream())
         val output = socket.getOutputStream()
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(HEADER_DEADLINE_MS)
-        val requestLine = readLine(socket, input, deadline, MAX_LINE) ?: return
+        val lineDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(REQUEST_LINE_DEADLINE_MS)
+        val requestLine = readLine(socket, input, lineDeadline, MAX_LINE) ?: return
         val parts = requestLine.split(' ')
         val method = parts.getOrNull(0).orEmpty()
         val target = parts.getOrNull(1).orEmpty()
@@ -86,6 +89,19 @@ internal class MpvHttpProxy(private val server: Server, private val client: OkHt
             status(output, 404, "Not Found")
             return
         }
+        if (!authorizedSlots.tryAcquire()) {
+            status(output, 503, "Service Unavailable")
+            return
+        }
+        try {
+            forward(socket, input, output, method, target)
+        } finally {
+            authorizedSlots.release()
+        }
+    }
+
+    private fun forward(socket: Socket, input: InputStream, output: OutputStream, method: String, target: String) {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(HEADER_DEADLINE_MS)
         val kept = mutableListOf<Pair<String, String>>()
         var headerBytes = 0
         var count = 0
@@ -164,6 +180,8 @@ internal class MpvHttpProxy(private val server: Server, private val client: OkHt
         const val MAX_HEADER_BYTES = 8 * 1024
         const val HEADER_DEADLINE_MS = 5_000L
         const val MAX_WORKERS = 8
+        const val MAX_UNPROVEN = 32
+        const val REQUEST_LINE_DEADLINE_MS = 500L
         val FORWARDED = listOf("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "ETag")
     }
 }
