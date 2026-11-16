@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -48,6 +49,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -412,7 +414,12 @@ fun CatalogHome(
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Up from the first shelf lands on Search; Settings is beside it. The account chip leads the row
                     // (Switch user · Sign out · Settings), and the same two buttons stay below every shelf.
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // With Requests and Downloads the actions outgrow a 960 dp TV screen; the row scrolls (focus brings
+                    // each button into view) rather than squeezing a label onto three lines.
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         // Who is signed in, and the way to Switch user and Sign out, lead the header (T-1).
                         AccountChip(
                             account.user.name,

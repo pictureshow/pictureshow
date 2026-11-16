@@ -171,7 +171,11 @@ internal class SeerrViewModel(private val account: Account, private val store: S
             mutable.update { it.copy(titleError = SeerrError.SERVER) }
             return
         }
-        mutable.update { it.copy(titleLoading = true, titleError = null, sendError = null) }
+        mutable.update {
+            // "Requested" belongs to the title it was sent for; reopening that title after the request keeps it.
+            val same = it.title?.let { now -> now.mediaType == type && now.id == id } == true
+            it.copy(titleLoading = true, titleError = null, sendError = null, sent = it.sent && same)
+        }
         viewModelScope.launch {
             val result = attempt { it.detail(type, id) }
             mutable.update { now ->
