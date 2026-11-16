@@ -19,7 +19,7 @@ abstract class GenerateLicenseCatalog extends DefaultTask {
 def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
 def catalogModule = { id ->
     if (id instanceof ModuleComponentIdentifier) return true
-    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':ui-shared', ':media3-ffmpeg']) return false
+    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':ui-shared', ':media3-ffmpeg', ':mpv']) return false
     throw new GradleException("Unmapped runtime dependency $id: publish module metadata or add an explicit license mapping.")
 }
 def runtimeArtifacts = providers.provider {
@@ -31,6 +31,7 @@ def desugarArtifacts = providers.provider {
 def nativeLicense = rootProject.file('third_party/ffmpeg/COPYING.LGPLv2.1')
 def extensionLicense = rootProject.file('media3-ffmpeg/LICENSE')
 def kotlinNotice = rootProject.file('third_party/kotlin/NOTICE')
+def mpvLicenses = rootProject.file('third_party/mpv')
 def desugarNotices = rootProject.file('third_party/desugar')
 // Billing's published POM identifies ASDKL, but AboutLibraries has no full text.
 def androidSdkLicense = rootProject.file('third_party/android-sdk/LICENSE')
@@ -61,6 +62,7 @@ def generateLicenseCatalog = tasks.register('generateLicenseCatalog', GenerateLi
     inputs.files(runtimeArtifacts.map { it.artifactFiles }, desugarArtifacts.map { it.artifactFiles })
     inputs.files(nativeLicense, extensionLicense, kotlinNotice)
     inputs.dir(desugarNotices)
+    inputs.dir(mpvLicenses)
     inputs.file(androidSdkLicense)
     doLast {
         def data = new JsonSlurper().parse(metadata.get().asFile)
@@ -124,6 +126,41 @@ https://github.com/pictureshow/pictureshow/blob/main/tools/ffmpeg/build.sh
             text: 'Copyright The Android Open Source Project.\n' +
                 'Source: https://github.com/androidx/media/tree/1.11.1/libraries/decoder_ffmpeg\n\n' + extensionLicense.getText('UTF-8')
         ])
+        // PLAY-60: the libmpv closure in mpv/src/main/jniLibs (third_party/mpv/README.md lists sources and checksums).
+        def mpvSource = '\nSource, checksums and build: https://github.com/pictureshow/pictureshow/blob/main/third_party/mpv/README.md\n\n'
+        def lgpl = new File(mpvLicenses, 'COPYING.LGPLv2.1').getText('UTF-8')
+        [
+            [id: 'mpv', name: 'mpv (libmpv)', version: '0.42.0', license: 'LGPL-2.1-or-later',
+             text: 'mpv, built with -Dgpl=false. Copyright the mpv developers.\n' +
+                 'libmpv.so is a shared library; replace it with your own build as third_party/mpv/README.md describes.' +
+                 mpvSource + new File(mpvLicenses, 'mpv.Copyright').getText('UTF-8') + '\n\n' + lgpl],
+            [id: 'ffmpeg-mpv', name: 'FFmpeg (for mpv)', version: '8.1.3', license: 'LGPL-2.1-or-later',
+             text: 'FFmpeg 8.1.3, built without --enable-gpl, --enable-version3 or --enable-nonfree. Copyright the FFmpeg developers.\n' +
+                 'Shared libraries with the _mpv suffix, dynamically linked by libmpv.so.' + mpvSource + lgpl],
+            [id: 'libplacebo', name: 'libplacebo', version: '7.387.0', license: 'LGPL-2.1-or-later',
+             text: 'Copyright the libplacebo developers.' + mpvSource + lgpl],
+            [id: 'fribidi', name: 'GNU FriBidi', version: '1.0.18', license: 'LGPL-2.1-or-later',
+             text: 'Copyright the FriBidi authors.' + mpvSource + lgpl],
+            [id: 'libass', name: 'libass', version: '0.17.5', license: 'ISC',
+             text: new File(mpvLicenses, 'libass.COPYING').getText('UTF-8')],
+            [id: 'dav1d', name: 'dav1d', version: '1.5.4', license: 'BSD-2-Clause',
+             text: new File(mpvLicenses, 'dav1d.COPYING').getText('UTF-8')],
+            [id: 'freetype', name: 'FreeType', version: '2.15.0', license: 'FTL',
+             text: 'Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.\n\n' +
+                 new File(mpvLicenses, 'freetype.FTL.TXT').getText('UTF-8')],
+            [id: 'harfbuzz', name: 'HarfBuzz', version: '15.1.0', license: 'MIT-Modern-Variant',
+             text: new File(mpvLicenses, 'harfbuzz.COPYING').getText('UTF-8')],
+            [id: 'fontconfig', name: 'Fontconfig', version: '2.18.3', license: 'HPND-sell-variant',
+             text: new File(mpvLicenses, 'fontconfig.COPYING').getText('UTF-8')],
+            [id: 'expat', name: 'Expat', version: '2.10.0', license: 'MIT',
+             text: new File(mpvLicenses, 'expat.COPYING').getText('UTF-8')],
+            [id: 'fast_float', name: 'fast_float (in libplacebo)', version: 'libplacebo 7.387.0', license: 'MIT',
+             text: new File(mpvLicenses, 'fast_float.LICENSE-MIT').getText('UTF-8')],
+            [id: 'glad', name: 'glad OpenGL loader (in libplacebo)', version: 'libplacebo 7.387.0', license: 'MIT',
+             text: new File(mpvLicenses, 'glad.LICENSE').getText('UTF-8')],
+            [id: 'libcxx-ndk', name: 'LLVM libc++ (Android NDK r26b, in libmpv)', version: '26.1.10909125',
+             license: 'Apache-2.0 WITH LLVM-exception', text: new File(mpvLicenses, 'libcxx.LICENSE.TXT').getText('UTF-8')]
+        ].each { row -> rows.add(row + [notices: []]) }
         def target = assetDirectory.file('licenses/catalog.json').get().asFile
         target.parentFile.mkdirs()
         target.setText(JsonOutput.toJson([libraries: rows.sort { a, b ->

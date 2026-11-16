@@ -115,6 +115,7 @@ import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.playback.PictureInPictureState
+import app.pictureshow.core.playback.PlaybackEngineChoice
 import app.pictureshow.core.playback.pictureInPictureAllowed
 import app.pictureshow.core.playback.touchPlayerBack
 import app.pictureshow.core.trickplayTile
@@ -915,6 +916,19 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState, video
                                     onClick = {
                                         moreOpen = false
                                         pip.enterNow()
+                                    }
+                                )
+                            }
+                            if (host.engineSwitchable) {
+                                val toMpv = host.engineChoice != PlaybackEngineChoice.Mpv
+                                val next = if (toMpv) PlaybackEngineChoice.Mpv else PlaybackEngineChoice.Automatic
+                                val label = if (toMpv) R.string.engine_switch_mpv else R.string.engine_switch_automatic
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(label)) },
+                                    modifier = Modifier.testTag("touch:engine"),
+                                    onClick = {
+                                        moreOpen = false
+                                        host.chooseEngine(next)
                                     }
                                 )
                             }

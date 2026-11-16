@@ -34,7 +34,9 @@ data class PlaybackRequest(
     /** Audio recovery after this video already played directly; require copy in the stream URL too. */
     val requireVideoStreamCopy: Boolean = false,
     /** A track: its file is opened from the audio route. */
-    val audio: Boolean = false
+    val audio: Boolean = false,
+    /** PLAY-60: whose device profile to send; the decision carries it back. */
+    val engine: PlaybackEngine = PlaybackEngine.Media3
 )
 
 /** Jellyfin ticks are 100 ns. */
@@ -227,6 +229,8 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                     playback.audio,
                     ownedLiveStream
                 ).let { outcome ->
+                    if (outcome is PlayOutcome.Play) PlayOutcome.Play(outcome.decision.withEngine(playback.engine)) else outcome
+                }.let { outcome ->
                     if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
                         AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)
                     } else {
@@ -362,7 +366,11 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 audioStreamIndex = playback.audioStreamIndex,
                 subtitleStreamIndex = playback.subtitleStreamIndex,
                 mediaSourceId = playback.mediaSourceId,
-                deviceProfile = DeviceProfileBuilder.build(capabilities),
+                deviceProfile = if (playback.engine == PlaybackEngine.Mpv) {
+                    DeviceProfileBuilder.buildMpv(capabilities)
+                } else {
+                    DeviceProfileBuilder.build(capabilities)
+                },
                 maxAudioChannels = if (capabilities.settings.tuning.downmix) {
                     2
                 } else {

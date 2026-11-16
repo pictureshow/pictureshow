@@ -65,12 +65,45 @@ internal fun PlaybackInformationContent(
     activeBitrate: Int? = null,
     adaptiveNotice: String? = null,
     receiverAudio: Boolean = false,
+    /** PLAY-60: this title's engine and the switch, or null where mpv can't play this viewing. */
+    engineChoice: app.pictureshow.core.playback.PlaybackEngineChoice? = null,
+    onEngine: (app.pictureshow.core.playback.PlaybackEngineChoice) -> Unit = {},
     onClose: () -> Unit
 ) {
     val closeFocus = remember { FocusRequester() }
     Text("Playback info", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-    Button(onClick = onClose, scale = playerButtonScale(), modifier = Modifier.focusRequester(closeFocus).playerTouchClick(onClose)) {
-        Text("Close")
+    // Up and Down scroll this panel, so the engine switch sits beside Close where Right reaches it.
+    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Button(onClick = onClose, scale = playerButtonScale(), modifier = Modifier.focusRequester(closeFocus).playerTouchClick(onClose)) {
+            Text("Close")
+        }
+        if (decision != null) {
+            engineChoice?.let { choice ->
+                val next = if (choice == app.pictureshow.core.playback.PlaybackEngineChoice.Mpv) {
+                    app.pictureshow.core.playback.PlaybackEngineChoice.Automatic
+                } else {
+                    app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                }
+                val switch = { onEngine(next) }
+                Button(
+                    onClick = switch,
+                    scale = playerButtonScale(),
+                    modifier = Modifier.testTag("playback:engine-switch").playerTouchClick(switch)
+                ) {
+                    Text(
+                        androidx.compose.ui.res.stringResource(
+                            if (next ==
+                                app.pictureshow.core.playback.PlaybackEngineChoice.Mpv
+                            ) {
+                                R.string.engine_switch_mpv
+                            } else {
+                                R.string.engine_switch_automatic
+                            }
+                        )
+                    )
+                }
+            }
+        }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) { closeFocus.requestFocus() }
     if (decision == null) {
@@ -78,6 +111,13 @@ internal fun PlaybackInformationContent(
         return
     }
     Text(PlaybackInformation.method(decision), style = MaterialTheme.typography.titleMedium)
+    val mpv = decision.engine == app.pictureshow.core.playback.PlaybackEngine.Mpv
+    Text(
+        androidx.compose.ui.res.stringResource(R.string.engine_title) + ": " +
+            androidx.compose.ui.res.stringResource(if (mpv) R.string.engine_info_mpv else R.string.engine_info_media3),
+        modifier = Modifier.testTag("playback:engine")
+    )
+    if (mpv) Text(androidx.compose.ui.res.stringResource(R.string.engine_mpv_missing), style = MaterialTheme.typography.bodySmall)
     Text("↑ / ↓ scroll · Back closes", style = MaterialTheme.typography.labelMedium)
     val tracks = rememberReceivedTracks(player)
     val sections = playbackInformationSections(

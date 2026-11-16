@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Pictureshow"
-include(":core", ":app", ":media3-ffmpeg")
+include(":core", ":app", ":media3-ffmpeg", ":mpv")
 
 include(":desktop")
 

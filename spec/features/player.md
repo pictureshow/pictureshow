@@ -64,7 +64,38 @@ Caption default retention (PLAY-10): before applying the system caption language
 
 Transcoded end (PLAY-02, PLAY-18): Jellyfin's HLS media playlist declares a final segment for the runtime remainder even when it is shorter than one frame (a 60.031 s file in 3 s segments ends with `#EXTINF:0.031`). The running transcode never writes that segment, so the server answers its request with a new transcode seeked about 5 s earlier, whose timestamps run backwards; Chrome's demuxer rejects the append ("Parsed buffers not in DTS sequence") as a fatal media error seconds before the end (observed on Jellyfin 12, 2026-11-15). A client therefore does not request a closed playlist's last segment when it is shorter than 0.1 s and is not the only one. Independently, for a segmented stream the client demuxes itself, a stall or decoder error (not during a seek) with the final fragment buffered, the clock at the buffered end and within 1.5 s of the duration is natural completion, never Still waiting or an error; direct play and platform-native HLS keep the element's own end event. Web plays segmented streams through hls.js wherever Media Source Extensions exist in Chromium, even when Chromium reports native HLS (Chrome 157 does, and its built-in HLS fetches the sub-frame tail and fails about 3 s before the end; observed 2026-11-15); WebKit keeps its native HLS. After any failure the Play/Pause action reads Play. Web: `hls-end.ts` (hls.js playlist loader and end rule); native Safari HLS, Android and Apple are unchecked against the same item.
 
-## Playback settings integration (leg 131)
+## Player engine (PLAY-60, Android leg 164)
+
+Android has two players: Media3 (the default) and mpv (libmpv, LGPL build). Settings → Video output offers "Player
+engine: Automatic or MPV" (SET-22), and the player offers the same choice for the title playing (TV: a button in
+Playback info; touch: the overflow menu), which reopens the viewing at its position and lasts until it ends. mpv plays streamed video only;
+Live TV, downloads, SyncPlay groups and music always use Media3, and a device whose mpv libraries didn't load treats the
+choice as Automatic and says so in Settings.
+
+Automatic negotiates with Media3's profile first. When the server would convert and every TranscodeReason is one mpv's
+FFmpeg removes (container, video codec, audio codec/channels/profile/sample rate/bit depth/bitrate, subtitle codec,
+external or secondary audio, codec tag, anamorphic video, unknown audio info), it asks again with mpv's profile and
+mpv plays only if that answer doesn't convert; otherwise Media3 plays the first answer. Bitrate, resolution, level, bit
+depth, frame rate, HDR range and interlace reasons are the display's or network's limits, which mpv shares, so they
+never switch engines. Choosing mpv negotiates with mpv's profile from the start for every eligible viewing, converting
+or not. The conversion notice (PLAY-27) and Playback info (PLAY-26) explain the answer of the engine that plays, and
+Playback info names the engine.
+
+mpv's profile (`DeviceProfileBuilder.buildMpv`) keeps the device's hardware video codecs with all their guards, lets
+FFmpeg decode older codecs in software at any profile up to 1080p (MPEG-1/2, MPEG-4 ASP, MS-MPEG4, H.263, VC-1, WMV,
+Theora; this replaces the device decoder's limits for those codecs), accepts
+every container and audio codec, embeds every subtitle format and serves text subtitles externally; HLS transcoding is
+the same as Media3's. `playback-engine` vectors freeze the choice; the profile is unit-tested. Under mpv, what the
+platform can't yet do is shown rather than silently missing: Android's Playback info lists it under mpv (subtitle styles
+from the device's caption settings, image subtitle opacity, and automatic quality reduction, which has no bandwidth
+estimate from mpv, so Quality Auto keeps the network ceiling). SET-15's own choices map to mpv's subtitle options. Subtitle delay maps to mpv's `sub-delay`.
+mpv reads the server through a loopback proxy on 127.0.0.1 with a random per-viewing path secret, so its FFmpeg needs
+no TLS and never holds the viewer's token.
+mpv renders with `vo=gpu` on OpenGL ES and decodes with `hwdec=mediacodec,mediacodec-copy`, falling back to software;
+on an emulator it decodes in software only, because the emulator's MediaCodec never returns frames to mpv. HDR video is
+tone-mapped to SDR under mpv for now; the device's passthrough formats go to mpv's `audio-spdif`, and the frame rate mpv
+reports drives the same display refresh-rate switch as Media3's.
+
 
 PLAY-01/09 use SET-13/14/16/19/21 in each PlaybackInfo request and local output selection. A player Quality action
 renegotiates within the same viewing, preserving full-media position, paused state, tracks, and one Start/Stop pair.
