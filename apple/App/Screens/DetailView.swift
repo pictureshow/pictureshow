@@ -82,6 +82,7 @@ struct DetailPage: View {
     /// True once the header has scrolled under the navigation bar: the bar then gets its material and the title,
     /// so scrolled text never runs under the status bar unprotected.
     @State private var pastHeader = false
+    @State private var findingSubtitles = false
 
     var body: some View {
         ScrollView {
@@ -107,6 +108,14 @@ struct DetailPage: View {
         .navigationTitle(pastHeader ? item.name : "")
         .toolbarBackgroundVisibility(pastHeader ? .visible : .hidden, for: .navigationBar)
         #endif
+        .sheet(isPresented: $findingSubtitles) {
+            if let account = app.account, let client = app.client {
+                // SUB-DL-01: from a title page the panel only adds the file; the player picks it up next time.
+                SubtitleDownloadView(client: client, account: account, target: RemoteSubtitleTarget(
+                    itemID: item.id, itemType: item.type, playable: true, mediaSourceID: item.mediaSources.first?.id,
+                    streams: item.mediaSources.first?.mediaStreams ?? []))
+            }
+        }
     }
 
     private var playable: Bool { CatalogPresentation.offersPlayback(item) }
@@ -239,6 +248,10 @@ struct DetailPage: View {
         }
         .secondaryAction()
         .accessibilityLabel(item.userData.isFavorite ? "Remove from favorites" : "Add to favorites")
+        if SubtitleDownloadOffer.offered(item) {
+            Button { findingSubtitles = true } label: { Label("Find subtitles", systemImage: "captions.bubble") }
+                .secondaryAction()
+        }
     }
 
     private func playLabel(_ target: MediaItem) -> String {

@@ -2798,6 +2798,47 @@ enum SpecCaseManifest {
         sync-stay.denial.library-denial-is-not-an-ended-group|sync-stay/case
         sync-stay.open.following-opens-new-entries|sync-stay/case
         sync-stay.open.stayed-device-waits-for-watch|sync-stay/case
+        track-menu-empty-no-subtitles|application/track-menu-empty
+        track-menu-empty-no-audio|application/track-menu-empty
+        track-menu-empty-subtitles-present|application/track-menu-empty
+        track-menu-empty-audio-present|application/track-menu-empty
+        controls-last-action-soon|application/controls-restore-last-action
+        controls-last-action-at-window|application/controls-restore-last-action
+        controls-last-action-too-late|application/controls-restore-last-action
+        controls-last-action-never-hidden|application/controls-restore-last-action
+        controls-last-action-clock-backwards|application/controls-restore-last-action
+        touch-back-sheet-first|application/touch-player-back
+        touch-back-menu-next|application/touch-player-back
+        touch-back-controls-showing-exits|application/touch-player-back
+        quick-connect-code-pasted-with-spaces|application/quick-connect-code
+        quick-connect-code-too-short|application/quick-connect-code
+        quick-connect-code-too-long|application/quick-connect-code
+        quick-connect-code-punctuation-not-guessed|application/quick-connect-code
+        quick-connect-code-non-ascii-letter|application/quick-connect-code
+        quick-connect-approval-approved|application/quick-connect-approval-result
+        quick-connect-approval-server-said-no|application/quick-connect-approval-result
+        quick-connect-approval-unknown-code|application/quick-connect-approval-result
+        quick-connect-approval-token-refused|application/quick-connect-approval-result
+        quick-connect-approval-server-error|application/quick-connect-approval-result
+        quick-connect-approval-unreadable-body|application/quick-connect-approval-result
+        sub-dl-01.offline-copy-unavailable|subtitle-download/access
+        sub-dl-01.no-permission-before-provider|subtitle-download/access
+        sub-dl-01.admin-without-flag-allowed|subtitle-download/access
+        sub-dl-01.no-provider|subtitle-download/access
+        sub-dl-01.unknown-reads-allow-search|subtitle-download/access
+        sub-dl-01.status-meanings|subtitle-download/failure
+        sub-dl-02.subtitle-preference-first|subtitle-download/initial-language
+        sub-dl-02.alternate-code-maps-to-search-code|subtitle-download/initial-language
+        sub-dl-02.device-language-two-letter|subtitle-download/initial-language
+        sub-dl-02.unknown-preference-skipped|subtitle-download/initial-language
+        sub-dl-02.choices-preferred-then-common-then-by-name|subtitle-download/language-choices
+        sub-dl-03.order-hash-human-downloads-rating|subtitle-download/order
+        sub-dl-03.details-tokens|subtitle-download/details
+        sub-dl-03.title-falls-back-to-provider-format|subtitle-download/title
+        sub-dl-04.external-first-renumbering|subtitle-download/adopt
+        sub-dl-04.existing-external-kept-apart-from-new|subtitle-download/adopt
+        sub-dl-04.not-listed-yet|subtitle-download/adopt
+        sub-dl-04.prefers-requested-language-among-new|subtitle-download/adopt
         """
         return Dictionary(uniqueKeysWithValues: rows.split(separator: "\n").map {
             let pair = $0.split(separator: "|", maxSplits: 1)

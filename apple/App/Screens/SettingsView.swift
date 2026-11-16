@@ -106,6 +106,17 @@ struct SettingsView: View {
                 }
             }
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
+            #if os(iOS)
+            if let account = app.account, account.isSignedIn {
+                // AUTH-15: approve the code a TV shows, so nobody types a password with a remote.
+                NavigationLink { QuickConnectApproveView(account: account) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Approve a TV sign-in", systemImage: "tv.badge.wifi")
+                        Text("Enter the code a TV shows to sign it in as you").font(.caption).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+            #endif
             if let account = app.account {
                 Button(role: .destructive) { signOutAccount = account } label: { Label("Sign out of \(account.username)", systemImage: "rectangle.portrait.and.arrow.right") }
             }
