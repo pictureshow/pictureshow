@@ -127,10 +127,11 @@ struct AccountStore {
 
 /// Pure snapshot edits, kept out of the view model so they can be tested without a server.
 enum AccountBook {
+    /// Signing in replaces that viewer's card (a kept signed-out card included) and adds it at the end.
     static func signIn(_ account: Account, into snapshot: AccountSnapshot) -> AccountSnapshot {
         var next = snapshot
         next.accounts.removeAll { $0.key == account.key }
-        next.accounts.insert(account, at: 0)
+        next.accounts.append(account)
         next.servers.removeAll { $0.url == account.server.url }
         next.servers.insert(account.server, at: 0)
         next.selected = account.key
@@ -144,8 +145,18 @@ enum AccountBook {
         return next
     }
 
-    /// Signing out forgets the token. The server stays remembered so signing back in is one step.
+    /// AUTH-10: signing out clears the token and the selection but keeps the viewer's card, so signing
+    /// back in is choosing the card and typing the password. Repeating it, or naming no saved viewer, changes nothing.
     static func signOut(_ key: String, from snapshot: AccountSnapshot) -> AccountSnapshot {
+        var next = snapshot
+        guard let index = next.accounts.firstIndex(where: { $0.key == key }) else { return snapshot }
+        next.accounts[index].accessToken = ""
+        if next.selected == key { next.selected = nil }
+        return next
+    }
+
+    /// Only Remove forgets a viewer.
+    static func remove(_ key: String, from snapshot: AccountSnapshot) -> AccountSnapshot {
         var next = snapshot
         next.accounts.removeAll { $0.key == key }
         if next.selected == key { next.selected = nil }
@@ -160,9 +171,19 @@ enum AccountBook {
         return next
     }
 
+    /// The viewer in use: a signed-out card is never the current account.
     static func selected(in snapshot: AccountSnapshot) -> Account? {
-        snapshot.accounts.first { $0.key == snapshot.selected }
+        snapshot.accounts.first { $0.key == snapshot.selected && $0.isSignedIn }
     }
+}
+
+extension Account: @retroactive Identifiable {
+    public var id: String { key }
+}
+
+extension Account {
+    /// False for a card kept after sign-out or an expired session (AUTH-10).
+    var isSignedIn: Bool { !accessToken.isEmpty }
 }
 
 /// A device id per viewer: Jellyfin keys sessions and Quick Connect approvals by device id,

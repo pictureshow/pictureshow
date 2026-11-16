@@ -58,19 +58,28 @@ struct SettingsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(account.username).font(.body.weight(.semibold))
-                            Text(account.server.name).font(.caption).foregroundStyle(Theme.muted)
+                            Text(account.isSignedIn ? account.server.name : "\(account.server.name) · Signed out · Sign in again")
+                                .font(.caption).foregroundStyle(account.isSignedIn ? Theme.muted : Theme.accent)
                         }
                         Spacer()
                         if account.key == app.account?.key { Image(systemName: "checkmark").foregroundStyle(Theme.accent) }
+                        else if !account.isSignedIn { Image(systemName: "chevron.right").foregroundStyle(Theme.muted) }
                     }
                     .contentShape(Rectangle())
                 }
                 .accessibilityAddTraits(account.key == app.account?.key ? .isSelected : [])
+                .accessibilityHint(account.isSignedIn ? "" : "Signed out. Opens sign-in.")
                 #if os(iOS)
                 .buttonStyle(.plain)
-                .swipeActions { Button("Sign out", role: .destructive) { app.signOut(account) } }
+                .swipeActions {
+                    Button("Remove", role: .destructive) { app.remove(account) }
+                    if account.isSignedIn { Button("Sign out") { app.signOut(account) }.tint(.orange) }
+                }
                 #endif
-                .contextMenu { Button("Sign out", role: .destructive) { app.signOut(account) } }
+                .contextMenu {
+                    if account.isSignedIn { Button("Sign out", role: .destructive) { app.signOut(account) } }
+                    Button("Remove from this device", role: .destructive) { app.remove(account) }
+                }
             }
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
             if let account = app.account {
@@ -79,7 +88,7 @@ struct SettingsView: View {
         } header: {
             Text("Accounts")
         } footer: {
-            Text("Each account keeps its own watch history. Switching doesn't sign anyone out.")
+            Text("Each account keeps its own watch history. Switching doesn't sign anyone out, and a signed-out account stays here until you remove it.")
         }
     }
 

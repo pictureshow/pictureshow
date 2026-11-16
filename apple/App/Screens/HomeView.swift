@@ -231,11 +231,15 @@ struct AccountMenu: View {
             ForEach(app.accounts, id: \.key) { account in
                 Button { app.select(account) } label: {
                     if account.key == app.account?.key { Label("\(account.username) · \(account.server.name)", systemImage: "checkmark") }
+                    else if !account.isSignedIn { Text("\(account.username) · Signed out · Sign in again") }
                     else { Text("\(account.username) · \(account.server.name)") }
                 }
             }
             Divider()
             Button { app.addingAccount = true } label: { Label("Add account", systemImage: "person.badge.plus") }
+            if let current = app.account {
+                Button(role: .destructive) { app.signOut(current) } label: { Label("Sign out of \(current.username)", systemImage: "rectangle.portrait.and.arrow.right") }
+            }
         } label: {
             Image(systemName: "person.crop.circle").font(.title3)
                 .accessibilityLabel("Accounts")

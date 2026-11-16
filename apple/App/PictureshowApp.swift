@@ -41,6 +41,13 @@ struct RootView: View {
         } message: {
             Text(app.storageError ?? "")
         }
+        .sheet(item: $app.signingInAgain) { account in
+            NavigationStack {
+                PasswordView(server: account.server, username: account.username, deviceID: account.deviceID)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { app.signingInAgain = nil } } }
+            }
+            .environmentObject(app)
+        }
         .sheet(isPresented: $app.addingAccount) {
             NavigationStack { SignInFlowView(isAddingAccount: true) }
                 .environmentObject(app)

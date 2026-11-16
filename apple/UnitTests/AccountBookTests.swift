@@ -31,13 +31,56 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(book.servers.count, 1)
     }
 
-    func testSignOutForgetsTokenButKeepsServerAndOtherViewers() {
+    func testSignOutKeepsTheCardWithoutItsTokenAndRemoveForgetsIt() {
         var book = AccountBook.signIn(account(home, "u1"), into: AccountSnapshot())
         book = AccountBook.signIn(account(home, "u2"), into: book)
         book = AccountBook.signOut(account(home, "u2").key, from: book)
         XCTAssertNil(book.selected, "the signed-out viewer must not stay selected")
-        XCTAssertEqual(book.accounts.map(\.userId), ["u1"])
+        XCTAssertNil(AccountBook.selected(in: book))
+        XCTAssertEqual(book.accounts.map(\.userId), ["u1", "u2"])
+        XCTAssertEqual(book.accounts.map(\.accessToken), ["t", ""])
         XCTAssertEqual(book.servers.map(\.url), [home.url])
+        book = AccountBook.remove(account(home, "u2").key, from: book)
+        XCTAssertEqual(book.accounts.map(\.userId), ["u1"])
+    }
+
+    /// Runs spec/vectors/account-sign-out.json (AUTH-10) against AccountBook and the real store's
+    /// persistence. Apple keeps no per-viewer search history, home preferences, pending writes or
+    /// retired credentials, so those Android stores have nothing to compare here.
+    func testAccountSignOutVectors() throws {
+        var spec = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { spec.deleteLastPathComponent() }
+        let file = spec.appendingPathComponent("spec/vectors/account-sign-out.json")
+        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let cases = try XCTUnwrap(document["cases"] as? [[String: Any]])
+        XCTAssertEqual(cases.count, 7)
+        for vector in cases {
+            let id = try XCTUnwrap(vector["id"] as? String)
+            let input = try XCTUnwrap(vector["input"] as? [String: Any])
+            let expected = try XCTUnwrap(vector["expected"] as? [String: Any])
+            func viewer(_ name: String, token: String? = nil) -> Account {
+                Account(server: home, userId: name, username: name, accessToken: token ?? "token-\(name)", deviceID: "d-\(name)")
+            }
+            let (store, _, _) = store(FakeKeychain(status: errSecSuccess), simulator: false)
+            var book = AccountSnapshot()
+            for name in try XCTUnwrap(input["accounts"] as? [String]) { book = AccountBook.signIn(viewer(name), into: book) }
+            book.selected = (input["current"] as? String).map { viewer($0).key }
+            for step in try XCTUnwrap(input["steps"] as? [[String: Any]]) {
+                let name = step["account"] as? String ?? ""
+                switch step["action"] as? String {
+                case "sign-out": book = AccountBook.signOut(viewer(name).key, from: book)
+                case "remove": book = AccountBook.remove(viewer(name).key, from: book)
+                case "sign-in": book = AccountBook.signIn(viewer(name, token: "fresh-\(name)"), into: book)
+                case "reload": try store.save(book); book = store.load()
+                default: XCTFail("\(id): unknown action \(step)")
+                }
+            }
+            let accounts = try XCTUnwrap(expected["accounts"] as? [[String: Any]])
+            XCTAssertEqual(book.accounts.map(\.userId), accounts.map { $0["id"] as? String ?? "" }, id)
+            XCTAssertEqual(book.accounts.map(\.accessToken), accounts.map { $0["token"] as? String ?? "" }, id)
+            XCTAssertEqual(book.accounts.map { !$0.isSignedIn }, accounts.map { $0["expired"] as? Bool ?? false }, id)
+            XCTAssertEqual(AccountBook.selected(in: book)?.userId, expected["current"] as? String, id)
+        }
     }
 
     func testForgettingAServerRemovesItsAccountsOnly() {

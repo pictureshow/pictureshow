@@ -18,6 +18,7 @@ struct SignInFlowView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
+                if !app.accounts.isEmpty && !isAddingAccount { savedAccounts }
                 if !app.servers.isEmpty { rememberedServers }
                 addressForm
             }
@@ -45,6 +46,36 @@ struct SignInFlowView: View {
                 .font(.title2.weight(.semibold))
             Text("Enter the address of your Jellyfin server. It can be on your home network, a VPN, or a domain you run.")
                 .font(.body).foregroundStyle(Theme.muted)
+        }
+    }
+
+    /// Every saved viewer. A signed-in one opens straight away; a signed-out one keeps its card (AUTH-10)
+    /// and asks only for the password.
+    private var savedAccounts: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Your accounts")
+            ForEach(app.accounts, id: \.key) { account in
+                Button { app.select(account) } label: {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.crop.circle").font(.title3).foregroundStyle(Theme.accent).frame(width: 36)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account.username).font(.headline)
+                            Text(account.isSignedIn ? account.server.name : "\(account.server.name) · Signed out · Sign in again").font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Theme.muted)
+                    }
+                    .padding(platformValue(tv: 20, touch: 14))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous).fill(Theme.surface))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if account.isSignedIn { Button("Sign out", role: .destructive) { app.signOut(account) } }
+                    Button("Remove from this device", role: .destructive) { app.remove(account) }
+                }
+            }
         }
     }
 

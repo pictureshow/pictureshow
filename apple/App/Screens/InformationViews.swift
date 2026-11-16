@@ -39,9 +39,15 @@ struct DeviceInfoView: View {
                 Section {
                     Button(showProfile ? "Hide device profile" : "View device profile") { showProfile.toggle() }
                     if showProfile {
-                        // One Text per line keeps a long report scrollable without one giant text layer.
-                        ForEach(Array(report.profileLines.enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        // Chunks of lines keep a long report light to draw; on Apple TV each chunk takes focus
+                        // so the remote can scroll through all of it.
+                        ForEach(Array(report.profileChunks.enumerated()), id: \.offset) { _, chunk in
+                            Text(chunk).font(.system(.caption, design: .monospaced))
+                                #if os(tvOS)
+                                .focusable()
+                                #else
+                                .textSelection(.enabled)
+                                #endif
                         }
                     }
                 } footer: {
@@ -74,6 +80,7 @@ struct DeviceReport {
     var hevcDecode: Bool
     var hevcTranscode: String
     var profileLines: [String]
+    var profileChunks: [String] { stride(from: 0, to: profileLines.count, by: 12).map { profileLines[$0..<min($0 + 12, profileLines.count)].joined(separator: "\n") } }
 
     @MainActor static func current(preferences: PlaybackPreferences, hevcCapabilities: DeviceCapabilities?) -> DeviceReport {
         let device = UIDevice.current

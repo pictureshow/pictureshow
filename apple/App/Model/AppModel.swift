@@ -46,13 +46,19 @@ import PictureshowCore
     }
 
     func signedIn(_ account: Account) {
+        clients[account.key] = nil
         update(AccountBook.signIn(account, into: snapshot))
         addingAccount = false
+        signingInAgain = nil
     }
+
+    /// A signed-out card the viewer chose: sign-in opens for its server with the username filled.
+    @Published var signingInAgain: Account?
 
     func remember(_ server: Server) { update(AccountBook.remember(server, in: snapshot)) }
 
     func select(_ account: Account) {
+        guard account.isSignedIn else { signingInAgain = account; return }
         var next = snapshot
         next.selected = account.key
         update(next)
@@ -61,18 +67,26 @@ import PictureshowCore
     /// Ends the session on the server when it can, but never waits on it: a server that is
     /// unreachable must not keep a viewer signed in on this device.
     func signOut(_ account: Account) {
+        guard account.isSignedIn else { return }
         let client = client(for: account)
         Task { try? await client.logout(account: account) }
         clients[account.key] = nil
         update(AccountBook.signOut(account.key, from: snapshot))
     }
 
+    /// Forgets the viewer's card entirely, ending its session first if it still has one.
+    func remove(_ account: Account) {
+        if account.isSignedIn { signOut(account) }
+        clients[account.key] = nil
+        update(AccountBook.remove(account.key, from: snapshot))
+    }
+
     func forget(_ server: Server) {
-        for account in snapshot.accounts where account.server.url == server.url { signOut(account) }
+        for account in snapshot.accounts where account.server.url == server.url && account.isSignedIn { signOut(account) }
         update(AccountBook.forget(server: server.url, from: snapshot))
     }
 
-    /// The server rejected a token: forget it so the viewer signs in again instead of seeing empty screens.
+    /// The server rejected a token: drop it, keeping the card, so the viewer signs in again instead of seeing empty screens.
     func expire(_ account: Account) {
         clients[account.key] = nil
         update(AccountBook.signOut(account.key, from: snapshot))
