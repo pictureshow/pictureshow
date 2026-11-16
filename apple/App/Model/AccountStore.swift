@@ -18,67 +18,110 @@ extension Account {
     var key: String { server.url.absoluteString + "|" + userId }
 }
 
-/// Persists the snapshot in the Keychain. Unsigned simulator builds have no Keychain entitlement
-/// (`errSecMissingEntitlement`), so they fall back to a complete-protection file in Application Support.
+/// The Keychain operations the store needs, behind a seam so tests can make them fail.
+protocol KeychainBackend {
+    func read(service: String) -> (Data?, OSStatus)
+    func write(_ data: Data, service: String) -> OSStatus
+    func delete(service: String)
+}
+
+struct SystemKeychain: KeychainBackend {
+    private func query(_ service: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "snapshot"]
+    }
+
+    func read(service: String) -> (Data?, OSStatus) {
+        var q = query(service)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        let status = SecItemCopyMatching(q as CFDictionary, &result)
+        return (status == errSecSuccess ? result as? Data : nil, status)
+    }
+
+    func write(_ data: Data, service: String) -> OSStatus {
+        let attributes: [String: Any] = [kSecValueData as String: data,
+                                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let status = SecItemUpdate(query(service) as CFDictionary, attributes as CFDictionary)
+        guard status == errSecItemNotFound else { return status }
+        var add = query(service)
+        add.merge(attributes) { $1 }
+        return SecItemAdd(add as CFDictionary, nil)
+    }
+
+    func delete(service: String) { SecItemDelete(query(service) as CFDictionary) }
+}
+
+enum AccountStoreError: LocalizedError, Equatable {
+    case keychain(OSStatus)
+    var errorDescription: String? {
+        switch self {
+        case .keychain(let status): return "Your sign-in couldn't be saved securely on this device (Keychain error \(status)). You're signed in for now; try again, or you'll need to sign in next time."
+        }
+    }
+}
+
+/// Persists the snapshot (tokens included) in the Keychain, and nowhere else on a real device.
+/// Unsigned simulator builds have no Keychain entitlement, so only there (or when the Keychain reports
+/// exactly `errSecMissingEntitlement`) the snapshot falls back to a protected file (iOS) or defaults (tvOS).
+/// Any other Keychain failure fails closed: nothing is written and the caller gets the error.
 struct AccountStore {
     var service = "app.pictureshow.accounts"
     var fileURL: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("accounts.json")
     }()
+    var keychain: KeychainBackend = SystemKeychain()
+    var defaults: UserDefaults = .standard
+    var isSimulator: Bool = {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }()
+
+    private func fallbackAllowed(_ status: OSStatus) -> Bool { isSimulator || status == errSecMissingEntitlement }
 
     func load() -> AccountSnapshot {
-        if let data = keychainRead() ?? fallbackRead(),
-           let snapshot = try? JSONDecoder().decode(AccountSnapshot.self, from: data) { return snapshot }
+        let (data, status) = keychain.read(service: service)
+        let stored = data ?? (fallbackAllowed(status) ? fallbackRead() : nil)
+        if let stored, let snapshot = try? JSONDecoder().decode(AccountSnapshot.self, from: stored) { return snapshot }
         return AccountSnapshot()
     }
 
-    func save(_ snapshot: AccountSnapshot) {
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        if keychainWrite(data) {
-            try? FileManager.default.removeItem(at: fileURL)
-            UserDefaults.standard.removeObject(forKey: service)
+    func save(_ snapshot: AccountSnapshot) throws {
+        let data = try JSONEncoder().encode(snapshot)
+        let status = keychain.write(data, service: service)
+        if status == errSecSuccess {
+            // A leftover fallback copy could bring back a token the viewer signed out of.
+            deleteFallback()
             return
+        }
+        guard fallbackAllowed(status) else {
+            deleteFallback()
+            throw AccountStoreError.keychain(status)
         }
         #if os(tvOS)
         // tvOS gives apps no durable file storage outside caches; defaults survive.
-        UserDefaults.standard.set(data, forKey: service)
+        defaults.set(data, forKey: service)
         #else
-        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         #endif
+    }
+
+    func deleteFallback() {
+        try? FileManager.default.removeItem(at: fileURL)
+        defaults.removeObject(forKey: service)
     }
 
     private func fallbackRead() -> Data? {
         #if os(tvOS)
-        return UserDefaults.standard.data(forKey: service)
+        return defaults.data(forKey: service)
         #else
         return try? Data(contentsOf: fileURL)
         #endif
-    }
-
-    private var query: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "snapshot"]
-    }
-
-    private func keychainRead() -> Data? {
-        var q = query
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess else { return nil }
-        return result as? Data
-    }
-
-    private func keychainWrite(_ data: Data) -> Bool {
-        let attributes: [String: Any] = [kSecValueData as String: data,
-                                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecSuccess { return true }
-        guard status == errSecItemNotFound else { return false }
-        var add = query
-        add.merge(attributes) { $1 }
-        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 }
 

@@ -85,9 +85,17 @@ import PictureshowCore
         player = PlayerRequest(account: account, item: item, fromStart: fromStart)
     }
 
+    /// Set when the sign-in couldn't be stored securely; the app shows it with a Retry.
+    @Published var storageError: String?
+
     private func update(_ next: AccountSnapshot) {
         snapshot = next
-        store.save(next)
+        persist()
+    }
+
+    func persist() {
+        do { try store.save(snapshot); storageError = nil }
+        catch { storageError = error.localizedDescription }
     }
 }
 

@@ -49,11 +49,47 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(book.servers.map(\.url), [home.url])
     }
 
-    func testStoreRoundTripsTheSnapshot() {
+    private final class FakeKeychain: KeychainBackend {
+        var status: OSStatus
+        var stored: Data?
+        init(status: OSStatus) { self.status = status }
+        func read(service: String) -> (Data?, OSStatus) { status == errSecSuccess ? (stored, stored == nil ? errSecItemNotFound : errSecSuccess) : (nil, status) }
+        func write(_ data: Data, service: String) -> OSStatus { if status == errSecSuccess { stored = data }; return status }
+        func delete(service: String) { stored = nil }
+    }
+
+    private func store(_ keychain: KeychainBackend, simulator: Bool) -> (AccountStore, URL, UserDefaults) {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("accounts-\(UUID().uuidString).json")
-        let store = AccountStore(service: "app.pictureshow.tests.\(UUID().uuidString)", fileURL: file)
+        let suite = "app.pictureshow.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        return (AccountStore(service: suite, fileURL: file, keychain: keychain, defaults: defaults, isSimulator: simulator), file, defaults)
+    }
+
+    func testStoreRoundTripsTheSnapshotThroughTheKeychain() throws {
+        let (store, file, _) = store(FakeKeychain(status: errSecSuccess), simulator: false)
         let book = AccountBook.signIn(account(home, "u1", token: "secret-token"), into: AccountSnapshot())
-        store.save(book)
+        try store.save(book)
         XCTAssertEqual(store.load(), book)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testKeychainFailureOnADeviceFailsClosedAndWritesNoToken() throws {
+        let (store, file, defaults) = store(FakeKeychain(status: errSecInteractionNotAllowed), simulator: false)
+        let book = AccountBook.signIn(account(home, "u1", token: "secret-token"), into: AccountSnapshot())
+        XCTAssertThrowsError(try store.save(book)) { XCTAssertEqual($0 as? AccountStoreError, .keychain(errSecInteractionNotAllowed)) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the token must not land in a plain file")
+        XCTAssertNil(defaults.data(forKey: store.service), "the token must not land in defaults")
+        XCTAssertEqual(store.load(), AccountSnapshot())
+    }
+
+    func testSuccessfulKeychainSaveDeletesALeftoverFallbackCopy() throws {
+        let keychain = FakeKeychain(status: errSecMissingEntitlement)
+        let (store, file, defaults) = store(keychain, simulator: false)
+        try store.save(AccountBook.signIn(account(home, "u1", token: "old-token"), into: AccountSnapshot()))
+        keychain.status = errSecSuccess
+        try store.save(AccountSnapshot())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertNil(defaults.data(forKey: store.service))
+        XCTAssertEqual(store.load(), AccountSnapshot(), "a signed-out token must not come back")
     }
 }

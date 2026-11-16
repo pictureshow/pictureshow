@@ -35,6 +35,12 @@ struct RootView: View {
             }
         }
         .pageBackground()
+        .alert("Sign-in not saved", isPresented: Binding(get: { app.storageError != nil }, set: { if !$0 { app.storageError = nil } })) {
+            Button("Try again") { app.persist() }
+            Button("OK", role: .cancel) { app.storageError = nil }
+        } message: {
+            Text(app.storageError ?? "")
+        }
         .sheet(isPresented: $app.addingAccount) {
             NavigationStack { SignInFlowView(isAddingAccount: true) }
                 .environmentObject(app)
